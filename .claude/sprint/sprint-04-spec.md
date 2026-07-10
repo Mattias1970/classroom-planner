@@ -1,6 +1,9 @@
-# Sprint 04 — Specifikation
+# Sprint 4: Planeringsmotor
 
-**Status:** Ej påbörjad — väntar på att föregående sprint är godkänd.
+**Status:** Klar ✅
 
-Denna spec fylls i när föregående sprint är klar.
-Se MASTERPLAN v2.0 för planerat innehåll.
+## Leverabler
+- packages/core/src/logic/planning.ts (planeringssummering)
+- packages/core/src/logic/index.ts (export)
+- packages/core/test/planning.test.ts (tester)
+- packages/core/test/helpers/fixtures.ts (test-fixture)
