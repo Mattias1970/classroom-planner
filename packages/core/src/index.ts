@@ -19,3 +19,5 @@ export {
   prepareForSave,
   roundTrip,
 } from './document.js';
+
+export * as superteach from './features/superteach/index.js';
