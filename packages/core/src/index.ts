@@ -33,3 +33,8 @@ export { projectToIndex, search, type IndexRow, type SearchQuery } from './logic
 
 // Evidensviktning delas med SuperTeach-modulen
 export { EVIDENCE_WEIGHTS, type EvidenceWeightEntry, type EvidenceWeight } from './features/superteach/types.js';
+
+// LessonRecord + dataadapter (sprint 23/24-om)
+export * from './records/lesson-record.js';
+export * from './records/schedule.js';
+export * from './adapters/subject-loader.js';
