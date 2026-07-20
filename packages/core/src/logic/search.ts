@@ -1,62 +1,47 @@
 import type { LessonTemplate } from '../domain/index.js';
 import { getCurrentVersion } from './versioning.js';
 
-export interface SearchRow {
+export interface IndexRow {
   templateId: string;
   versionId: string;
   rubrik: string;
   mål: string;
-  bookId: string;
-  årskurs: number;
-  subchapterId: string;
+  subject: string;
+  chapterId?: string;
+  subchapterId?: string;
+  bookId?: string;
   conceptIds: string[];
 }
 
-export interface SearchQuery {
-  text?: string;        // matchar rubrik ELLER mål, case-insensitive
-  bookId?: string;
-  årskurs?: number;
-  subchapterId?: string;
-  conceptId?: string;
-}
-
-/**
- * Projicerar mallens aktuella version till en sökrad.
- * REN funktion.
- */
-export function projectToIndex(template: LessonTemplate): SearchRow {
-  const version = getCurrentVersion(template);
-  const content = version.content;
+export function projectToIndex(template: LessonTemplate): IndexRow {
+  const c = getCurrentVersion(template).content;
   return {
     templateId: template.id,
-    versionId: version.id,
-    rubrik: content.rubrik,
-    mål: content.mål,
-    bookId: content.bookId ?? '',
-    årskurs: content.årskurs,
-    subchapterId: content.subchapterId ?? '',
-    conceptIds: content.conceptIds.map(String),
+    versionId: template.currentVersionId,
+    rubrik: c.rubrik,
+    mål: c.mål,
+    subject: c.subject,
+    chapterId: c.chapterId,
+    subchapterId: c.subchapterId,
+    bookId: c.bookId,
+    conceptIds: c.conceptIds.map(String),
   };
 }
 
-/**
- * Filtrerar sökrader mot en query.
- * Alla angivna fält är AND-kombinerade.
- * text matchar rubrik ELLER mål (case-insensitive, delsträng).
- * REN funktion.
- */
-export function search(rows: SearchRow[], query: SearchQuery): SearchRow[] {
-  return rows.filter((row) => {
-    if (query.text !== undefined) {
-      const needle = query.text.toLowerCase();
-      const inRubrik = row.rubrik.toLowerCase().includes(needle);
-      const inMål = row.mål.toLowerCase().includes(needle);
-      if (!inRubrik && !inMål) return false;
-    }
-    if (query.bookId !== undefined && row.bookId !== query.bookId) return false;
-    if (query.årskurs !== undefined && row.årskurs !== query.årskurs) return false;
-    if (query.subchapterId !== undefined && row.subchapterId !== query.subchapterId) return false;
-    if (query.conceptId !== undefined && !row.conceptIds.includes(query.conceptId)) return false;
+export interface SearchQuery {
+  text?: string;
+  subchapterId?: string;
+  bookId?: string;
+  conceptId?: string;
+}
+
+export function search(rows: IndexRow[], q: SearchQuery): IndexRow[] {
+  const text = q.text?.toLowerCase();
+  return rows.filter((r) => {
+    if (text && !r.rubrik.toLowerCase().includes(text) && !r.mål.toLowerCase().includes(text)) return false;
+    if (q.subchapterId !== undefined && r.subchapterId !== q.subchapterId) return false;
+    if (q.bookId !== undefined && r.bookId !== q.bookId) return false;
+    if (q.conceptId !== undefined && !r.conceptIds.includes(q.conceptId)) return false;
     return true;
   });
 }

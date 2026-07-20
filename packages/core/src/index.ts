@@ -21,3 +21,15 @@ export {
 } from './document.js';
 
 export * as superteach from './features/superteach/index.js';
+
+// Domäntyper (sprint 13-om)
+export * from './domain/index.js';
+
+// Ren logik (sprint 13-om)
+export { createTemplate, saveNewVersion, getVersion, getCurrentVersion } from './logic/versioning.js';
+export { validateTimeline, computeTimes, type TimelineValidation } from './logic/timeline.js';
+export { buildFlip, type FlipMessage } from './logic/flip.js';
+export { projectToIndex, search, type IndexRow, type SearchQuery } from './logic/search.js';
+
+// Evidensviktning delas med SuperTeach-modulen
+export { EVIDENCE_WEIGHTS, type EvidenceWeightEntry, type EvidenceWeight } from './features/superteach/types.js';

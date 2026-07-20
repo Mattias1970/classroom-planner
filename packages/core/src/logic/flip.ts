@@ -1,75 +1,39 @@
-import type { ScheduledLesson, LessonTemplate, FlipBlock } from '../domain/index.js';
+import type { LessonTemplate, ScheduledLesson } from '../domain/index.js';
 import { getCurrentVersion } from './versioning.js';
 
-export interface FlipOutput {
+export interface FlipMessage {
+  socrativeRoom: string;
+  socrativeUrl: string;
   subject: string;
   greeting: string;
-  blocksHtml: string[];       // ett HTML-fragment per block
-  homeworkConcepts: string[]; // begreppstermer att öva till nästa lektion
-  socrativeRoom: string;      // t.ex. "Matte8B"
-  socrativeUrl: string;       // "https://socrative.com/"
+  blocksHtml: string[];
+  homeworkConcepts: string[];
 }
 
-/**
- * Bygger flippat-klassrum-innehåll från en schemalagd lektion + dess mall.
- *
- * REN funktion: ingen sändning, ingen I/O.
- * socrativeRoom slås upp via injicerad roomResolver
- * så att kärnan inte känner till klasslogik.
- */
+function esc(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** Ren funktion: bygger flippat klassrum-utskicket för en schemalagd lektion. */
 export function buildFlip(
   scheduled: ScheduledLesson,
   template: LessonTemplate,
-  roomResolver: (classId: string) => string
-): FlipOutput {
-  const version = getCurrentVersion(template);
-  const content = version.content;
-  const socrativeRoom = roomResolver(scheduled.classId);
-
-  const greeting = buildGreeting(content.rubrik, scheduled.date);
-  const blocksHtml = content.flippat.blocks.map(blockToHtml);
-  const homeworkConcepts = content.conceptIds.map(String);
-
+  roomResolver: (classId: string) => string,
+): FlipMessage {
+  const content = getCurrentVersion(template).content;
+  const blocksHtml = content.flippat.blocks.map((b) => {
+    switch (b.typ) {
+      case 'text': return `<p>${esc(b.text)}</p>`;
+      case 'film': return `<p>🎬 <a href="${esc(b.ref.url)}">${esc(b.ref.titel)}</a></p>`;
+      case 'quiz': return `<p>❓ <a href="${esc(b.ref.url)}">${esc(b.ref.titel)}</a></p>`;
+    }
+  });
   return {
-    subject: content.rubrik,
-    greeting,
-    blocksHtml,
-    homeworkConcepts,
-    socrativeRoom,
+    socrativeRoom: roomResolver(scheduled.classId),
     socrativeUrl: 'https://socrative.com/',
+    subject: content.rubrik,
+    greeting: `Hej! Inför lektionen "${content.rubrik}" den ${scheduled.date}:`,
+    blocksHtml,
+    homeworkConcepts: content.conceptIds.map(String),
   };
-}
-
-/** Bygger en hälsningsfras på svenska */
-function buildGreeting(rubrik: string, date: string): string {
-  return `Hej! Inför morgondagens lektion om "${rubrik}" (${date}) ber vi dig titta igenom följande material.`;
-}
-
-/** Omvandlar ett FlipBlock till ett HTML-fragment */
-function blockToHtml(block: FlipBlock): string {
-  switch (block.typ) {
-    case 'text':
-      return `<p>${escapeHtml(block.text ?? '')}</p>`;
-    case 'film': {
-      if (!block.ref || !('url' in block.ref)) return '<p>[Film saknar URL]</p>';
-      const ref = block.ref as { titel: string; url: string; källa: string };
-      return `<p>🎬 <a href="${escapeHtml(ref.url)}">${escapeHtml(ref.titel)}</a> (${escapeHtml(ref.källa)})</p>`;
-    }
-    case 'quiz': {
-      if (!block.ref || !('url' in block.ref)) return '<p>[Quiz saknar URL]</p>';
-      const ref = block.ref as { titel: string; url: string; plattform: string };
-      return `<p>📝 <a href="${escapeHtml(ref.url)}">${escapeHtml(ref.titel)}</a> (${escapeHtml(ref.plattform)})</p>`;
-    }
-    default:
-      return '<p>[Okänt blocktyp]</p>';
-  }
-}
-
-/** Enkel HTML-escape för att undvika XSS i genererade fragment */
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }

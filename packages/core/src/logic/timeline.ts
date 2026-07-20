@@ -1,72 +1,36 @@
-import type { BamRow } from '../domain/index.js';
+import type { BamRow, TimedBamRow } from '../domain/index.js';
 
-export interface ValidationResult {
-  ok: boolean;
-  message?: string;
-}
+export interface TimelineValidation { ok: boolean; message?: string; }
 
-/**
- * Validerar en BAM-tidslinje.
- *
- * Giltig om:
- * - Minst 1 rad
- * - Varje rad: minutes är ett heltal >= 1
- * - Summan av minutes === totalMin
- *
- * Returnerar { ok: false, message: "..." } på svenska vid fel.
- * REN funktion — ingen I/O, ingen mutation.
- */
-export function validateTimeline(
-  rows: BamRow[],
-  totalMin: number
-): ValidationResult {
+export function validateTimeline(rows: BamRow[], totalMinutes: number): TimelineValidation {
   if (rows.length === 0) {
-    return { ok: false, message: 'Tidslinjen måste ha minst en rad.' };
+    return { ok: false, message: 'Tidslinjen är tom — lägg till minst ett moment.' };
   }
-
-  for (const row of rows) {
-    if (!Number.isInteger(row.minutes) || row.minutes < 1) {
-      return {
-        ok: false,
-        message: `Raden "${row.label}" har ogiltig tid: ${row.minutes}. Minuter måste vara ett heltal >= 1.`,
-      };
+  for (const r of rows) {
+    if (!Number.isInteger(r.minutes) || r.minutes <= 0) {
+      return { ok: false, message: `Momentet "${r.label}" måste ha ett positivt heltal antal minuter.` };
     }
   }
-
-  const total = rows.reduce((sum, r) => sum + r.minutes, 0);
-  if (total !== totalMin) {
-    return {
-      ok: false,
-      message: `Tiderna summerar till ${total} minuter men lektionen är ${totalMin} minuter.`,
-    };
+  const sum = rows.reduce((s, r) => s + r.minutes, 0);
+  if (sum !== totalMinutes) {
+    return { ok: false, message: `Tidslinjens summa är ${sum} minuter men lektionens längd är ${totalMinutes} minuter.` };
   }
-
   return { ok: true };
 }
 
-/**
- * Beräknar från- och till-tider för varje BAM-rad.
- * start är i formatet "HH:MM", t.ex. "09:00".
- * REN funktion — ingen I/O, ingen mutation.
- */
-export function computeTimes(
-  rows: BamRow[],
-  start: string
-): Array<BamRow & { from: string; to: string }> {
-  const [startHour, startMin] = start.split(':').map(Number) as [number, number];
-  let currentMinutes = (startHour) * 60 + startMin;
-
-  return rows.map((row) => {
-    const from = minutesToTime(currentMinutes);
-    currentMinutes += row.minutes;
-    const to = minutesToTime(currentMinutes);
-    return { ...row, from, to };
-  });
+function toMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+function toHhmm(min: number): string {
+  const h = Math.floor(min / 60) % 24, m = min % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-/** Hjälpfunktion: omvandlar minuter från midnatt till "HH:MM" */
-function minutesToTime(minutes: number): string {
-  const h = Math.floor(minutes / 60) % 24;
-  const m = minutes % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+export function computeTimes(rows: BamRow[], startTime: string): TimedBamRow[] {
+  let t = toMinutes(startTime);
+  return rows.map((r) => {
+    const from = toHhmm(t); t += r.minutes;
+    return { ...r, from, to: toHhmm(t) };
+  });
 }

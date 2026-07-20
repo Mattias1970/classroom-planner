@@ -1,98 +1,40 @@
-import type {
-  LessonTemplate,
-  LessonVersion,
-  LessonContent,
-  TemplateId,
-  VersionId,
-} from '../domain/index.js';
 import { DomainError } from '../errors.js';
+import type { LessonContent, LessonTemplate, LessonVersion, TemplateId, VersionId } from '../domain/index.js';
 
-/** Injicerbar klocka — samma mönster som i Sprint 1 */
-export type Clock = () => string;
+type Clock = () => string;
+type IdGen = () => string;
 
-/** Injicerbar ID-generator */
-export type IdGen = () => string;
-
-/**
- * Skapar en ny tom LessonTemplate med en initial version.
- * REN funktion — ingen I/O, ingen mutation.
- */
 export function createTemplate(
-  id: TemplateId,
-  initialContent: LessonContent,
-  clock: Clock,
-  idGen: IdGen,
-  label = 'v1'
+  id: TemplateId, content: LessonContent, clock: Clock, idGen: IdGen, label = 'v1',
 ): LessonTemplate {
-  const versionId = idGen() as VersionId;
   const version: LessonVersion = {
-    id: versionId,
-    createdAt: clock(),
-    label,
-    content: initialContent,
+    id: idGen() as VersionId, createdAt: clock(), label, content: structuredClone(content),
   };
-  return {
-    id,
-    currentVersionId: versionId,
-    versions: [version],
-  };
+  return { id, currentVersionId: version.id, versions: [version] };
 }
 
-/**
- * Lägger till en ny version i en LessonTemplate.
- * REN funktion — muterar ALDRIG indata.
- *
- * Regler (testfacit C.1):
- * - Ny version läggs SIST i versions-arrayen
- * - currentVersionId pekas om till den nya versionen
- * - Befintliga versioner rörs aldrig
- * - Indata-templaten är OFÖRÄNDRAD efter anrop
- */
 export function saveNewVersion(
-  template: LessonTemplate,
-  newContent: LessonContent,
-  clock: Clock,
-  idGen: IdGen,
-  label?: string
+  template: LessonTemplate, content: LessonContent, clock: Clock, idGen: IdGen, label?: string,
 ): LessonTemplate {
-  const versionId = idGen() as VersionId;
-  const versionLabel = label ?? `v${template.versions.length + 1}`;
-
-  const newVersion: LessonVersion = {
-    id: versionId,
+  const version: LessonVersion = {
+    id: idGen() as VersionId,
     createdAt: clock(),
-    label: versionLabel,
-    content: newContent,
+    label: label ?? `v${template.versions.length + 1}`,
+    content: structuredClone(content),
   };
-
   return {
     ...template,
-    currentVersionId: versionId,
-    versions: [...template.versions, newVersion],
+    currentVersionId: version.id,
+    versions: [...template.versions, version],
   };
 }
 
-/**
- * Hämtar en specifik version från en template.
- * Kastar DomainError om versionId inte finns.
- */
-export function getVersion(
-  template: LessonTemplate,
-  versionId: string
-): LessonVersion {
-  const found = template.versions.find((v) => v.id === versionId);
-  if (!found) {
-    throw new DomainError(
-      'VERSION_NOT_FOUND',
-      `Version '${versionId}' hittades inte i template '${template.id}'.`
-    );
-  }
-  return found;
+export function getVersion(template: LessonTemplate, versionId: string): LessonVersion {
+  const v = template.versions.find((x) => x.id === versionId);
+  if (!v) throw new DomainError('NOT_FOUND', `Versionen ${versionId} hittades inte i ${template.id}`);
+  return v;
 }
 
-/**
- * Hämtar den aktuella versionen av en template.
- */
 export function getCurrentVersion(template: LessonTemplate): LessonVersion {
   return getVersion(template, template.currentVersionId);
 }
