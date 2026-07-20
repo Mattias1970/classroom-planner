@@ -1,39 +1,38 @@
-# Classroom Planner
+# classroom-planner
 
-Lektionsplaneringsapp med Google Classroom-integration för matematikundervisning i åk 8.
-TypeScript monorepo · Sprint 1 av 22 klar.
+Lektionsplanering för MA/NO/TK — Prio Matematik 8, klasserna 8B och 8F.
+
+## Struktur (ringmodellen)
+
+- **Ring 1** `packages/core/src/{domain,logic,records,fixtures}` — ren domänlogik:
+  versionering, BAM-tidslinje, flip-generering, sök, LessonRecord, schemamotor
+  (svenska röda dagar + lov)
+- **Ring 1.5** `packages/core/src/app-services` + `features/superteach/service.ts`
+- **Ring 2** `packages/core/src/adapters` — `loadSubjectLibrary` mot
+  [classroom-planner-data](https://github.com/Mattias1970/classroom-planner-data)
+  (GitHub Contents API, fine-grained PAT) samt localStorage i webben
+- **Ring 3** `packages/web` — React-UI: planering, kalender, klasser, bibliotek,
+  SuperTeach, inställningar
+- **SuperTeach + AI** `packages/core/src/features/{superteach,ai}` — evidens,
+  CSV-ingest, policy-routad AI-port med läraren i loopen
 
 ## Kom igång
 
 ```bash
-npm install
-npm test        # 30/30 tester gröna
+npm ci && npx vitest run        # kärnan: alla tester
+cd packages/web && npm install
+npx vite dev                    # utvecklingsläge (demodata)
+npx vite build                  # produktion → dist/
 ```
 
-## Installera Claude Code (i Codespaces-terminalen)
+Anslut riktig data under **Bibliotek → Datakällor** (repo + fine-grained PAT,
+Contents: Read). Backup under **Inställningar**. SuperTeach aktiveras med en
+kryssruta under Inställningar.
 
-```bash
-npm install -g @anthropic-ai/claude-code
-claude          # starta Sprint 2
-```
+## Historik
 
-## Arkitektur
-
-```
-Ring 3 — Ytor (web, dashboards)
-Ring 2 — Adaptrar (Google, AI, Socrative, Magma)
-Ring 1.5 — App Services (use cases, DI)
-Ring 1 — Ren kärna (packages/core) ← NOLL externa dependencies
-```
-
-## Sprint-status
-
-| Sprint | Innehåll | Status |
-|--------|----------|--------|
-| 1 | Projektgrund, monorepo, I1/I2, felmodell | ✅ Klar |
-| 2 | Domäntyper (LessonContent, SourceRef) | ⬜ |
-| 3 | Ren kärnlogik (versionering, BAM, sök) | ⬜ |
-| 4 | Planeringsmotor | ⬜ |
-| 5 | App-services / use cases | ⬜ |
-| 6 | Lokal webbapp (B1–B36 paritet) | ⬜ |
-| 7–22 | Se CLAUDE.md | ⬜ |
+Sprint 1–12 enligt ursprungsplanens setup-skript. Sprint 13–24 återuppbyggda
+2026-07-20 efter dataförlust (originalet fanns endast i en chattsession) —
+API:et rekonstruerat från testsviten och dataspecen. Sprint 25–30: SuperTeach,
+ingest, AI-port. Setup-skripten `setup-sprint*.sh` är historiska artefakter;
+källkoden i `packages/` är numera sanningen.

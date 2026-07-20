@@ -123,6 +123,6 @@ export function applyOverrides(kapitel: number, record: LessonRecord, overrides:
     .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
   if (mine.length === 0) return record;
   const out: LessonRecord = { ...record };
-  for (const o of mine) (out as Record<string, unknown>)[o.field] = o.value;
+  for (const o of mine) (out as unknown as Record<string, unknown>)[o.field] = o.value;
   return out;
 }
