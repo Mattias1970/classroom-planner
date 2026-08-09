@@ -39,3 +39,4 @@ export * from './records/lesson-record.js';
 export * from './records/schedule.js';
 export * from './adapters/subject-loader.js';
 export * from './logic/bam-default.js';
+export * from './records/schedule-overrides.js';

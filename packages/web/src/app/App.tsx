@@ -1,12 +1,14 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
-  computeTimes, defaultBamTimeline, diffMinutes, generateSlots,
-  type LessonRecord, type ScheduledSlot, type SubjectFile,
+  computeTimes, defaultBamTimeline, diffMinutes, generateSlots, placeLessons,
+  type LessonRecord, type PlacedLesson, type ScheduledSlot, type SubjectFile,
 } from '@planner/core';
+import Kalender from '../views/Kalender.js';
 import {
   addCustomLesson, composeChapter, demoLibrary, effectiveField, exportBackup, getSettings,
   importBackup, loadFromGithub, nextCustomId, removeLesson, restoreAllRemoved, saveSettings,
   setField, undo, type InsertMode, type LoadedLibrary,
+  addLink, getCalOverrides, getLinks, removeLink, setCalOverride, type LessonLink,
 } from '../state/store.js';
 import { Docx } from './wordExport.js';
 import './styles.css';
@@ -34,14 +36,28 @@ export default function App() {
     () => composeChapter(kapitel, lib.lessons[kapitel] ?? []),
     [lib, kapitel, tick],
   );
-  const slots = useMemo(() => {
-    const total = chapters.reduce((s, k) => s + composeChapter(k, lib.lessons[k] ?? []).length, 0);
-    return generateSlots(lib.subject, classId, total);
-  }, [lib, classId, tick]);
+  const sequence = useMemo(
+    () => chapters.flatMap((k) => composeChapter(k, lib.lessons[k] ?? []).map((lesson) => ({ kapitel: k, lesson }))),
+    [lib, tick],
+  );
+  const placedByClass = useMemo(() => {
+    const out: Record<string, PlacedLesson<LessonRecord>[]> = {};
+    for (const c of lib.subject.meta.klasser.filter((x) => !x.arkiverad)) {
+      const slots = generateSlots(lib.subject, c.id, sequence.length + 20);
+      out[c.id] = placeLessons(sequence, slots, getCalOverrides(c.id));
+    }
+    return out;
+  }, [lib, sequence, tick]);
+  const placed = placedByClass[classId] ?? [];
   const slotFor = (kap: number, idx: number): ScheduledSlot | null => {
     let before = 0;
     for (const k of chapters) { if (k === kap) break; before += composeChapter(k, lib.lessons[k] ?? []).length; }
-    return slots[before + idx] ?? null;
+    return placed[before + idx]?.slot ?? null;
+  };
+  const globalIdxFor = (kap: number, idx: number): number => {
+    let before = 0;
+    for (const k of chapters) { if (k === kap) break; before += composeChapter(k, lib.lessons[k] ?? []).length; }
+    return before + idx;
   };
 
   return (
@@ -71,12 +87,13 @@ export default function App() {
               <button key={c.id} className={`chap ${c.id === classId ? 'active' : ''}`} onClick={() => setClassId(c.id)}>{c.namn}</button>
             ))}
           </nav>
-          <PlaneringView lib={lib} kapitel={kapitel} lessons={lessons} slotFor={slotFor} classId={classId} onChange={refresh} />
+          <PlaneringView lib={lib} kapitel={kapitel} lessons={lessons} slotFor={slotFor}
+            globalIdxFor={globalIdxFor} placed={placed} classId={classId} onChange={refresh} />
         </div>
       )}
 
-      {tab === 'kalender' && <KalenderView lib={lib} chapters={chapters} tick={tick} />}
-      {tab === 'klasser' && <KlasserView subject={lib.subject} slots={slots} classId={classId} lessons={lessons} kapitel={kapitel} />}
+      {tab === 'kalender' && <Kalender subject={lib.subject} placedByClass={placedByClass} onChanged={refresh} />}
+      {tab === 'klasser' && <KlasserView subject={lib.subject} />}
       {tab === 'bibliotek' && <BibliotekView lib={lib} onLoaded={(l) => { setLib(l); refresh(); }} />}
       {tab === 'superteach' && stOn && (
         <Suspense fallback={<main className="main"><p>Laddar SuperTeach…</p></main>}>
@@ -94,9 +111,11 @@ export default function App() {
 // ── Planering: lektionskort, inline edit, BAM, add/remove ─────
 function PlaneringView(props: {
   lib: LoadedLibrary; kapitel: number; lessons: LessonRecord[]; classId: string;
-  slotFor: (kap: number, idx: number) => ScheduledSlot | null; onChange: () => void;
+  slotFor: (kap: number, idx: number) => ScheduledSlot | null;
+  globalIdxFor: (kap: number, idx: number) => number;
+  placed: PlacedLesson<LessonRecord>[]; onChange: () => void;
 }) {
-  const { lib, kapitel, lessons, slotFor, classId, onChange } = props;
+  const { lib, kapitel, lessons, slotFor, globalIdxFor, placed, classId, onChange } = props;
   const meta = lib.subject.kapitelMeta[String(kapitel)];
   const [adding, setAdding] = useState(false);
 
@@ -128,6 +147,8 @@ function PlaneringView(props: {
 
       {lessons.map((l, i) => (
         <LessonCard key={`${l.id}-${i}`} kapitel={kapitel} lesson={l} slot={slotFor(kapitel, i)}
+          globalIdx={globalIdxFor(kapitel, i)} classId={classId}
+          override={placed[globalIdxFor(kapitel, i)]?.override}
           flip={lib.flip[kapitel]?.[l.id]} onChange={onChange} />
       ))}
 
@@ -147,25 +168,45 @@ function Editable(props: { kapitel: number; lesson: LessonRecord; field: keyof L
 
 function LessonCard(props: {
   kapitel: number; lesson: LessonRecord; slot: ScheduledSlot | null;
+  globalIdx: number; classId: string;
+  override?: import('@planner/core').LessonOverride;
   flip?: import('@planner/core').FlipDoc; onChange: () => void;
 }) {
-  const { kapitel, lesson, slot, flip, onChange } = props;
+  const { kapitel, lesson, slot, globalIdx, classId, override, flip, onChange } = props;
+  const [cancelDlg, setCancelDlg] = useState(false);
   const rows = flip?.bamTimeline?.length
     ? flip.bamTimeline
     : slot ? defaultBamTimeline(lesson, diffMinutes(slot.start, slot.end)) : null;
   const timeline = rows && slot ? computeTimes(rows, slot.start) : null;
+  const links: LessonLink[] = [
+    ...(flip?.blocks ?? []).flatMap((b) => b.typ === 'film' || b.typ === 'quiz'
+      ? [{ typ: b.typ, titel: b.ref.titel, url: b.ref.url } as LessonLink] : []),
+    ...getLinks(kapitel, lesson.id),
+  ];
+  const flipCount = (flip?.blocks ?? []).filter((b) => b.typ !== 'text').length;
   return (
-    <article className={`card type-${lesson.type}`}>
+    <article className={`card type-${lesson.type} ${override ? 'ov-' + override.type : ''}`}>
       <div className="card-head">
         <span className="title">
           Lektion {lesson.id} · {effectiveField(kapitel, lesson, 'avsnitt')}
           {flip && <span className="pill flip">Flippat</span>}
           {lesson.exit !== '—' && <span className="pill quiz">Exit</span>}
           {lesson.type !== 'regular' && <span className="pill">{lesson.type}</span>}
+          {override && <span className="pill ov">{override.type === 'cancelled' ? '⛔ Inställd' : override.type === 'shifted' ? '⏭ Framflyttad' : '📍 Flyttad'}</span>}
         </span>
-        <span className="when">{slot ? `v.${slot.week} · ${slot.date} · ${slot.start}` : 'ej schemalagd'}</span>
+        <span className="when">{slot ? `v.${slot.week} · ${slot.date} · ${slot.start}` : override?.type === 'cancelled' ? 'inställd' : 'ej schemalagd'}</span>
+        <button className="icon-btn" title={override ? 'Återställ' : 'Ställ in / flytta'} onClick={() => setCancelDlg(true)}>{override ? '↩' : '⛔'}</button>
         <button className="icon-btn" title="Ta bort lektion" onClick={() => { removeLesson(kapitel, lesson.id); onChange(); }}>🗑</button>
       </div>
+      {timeline && (
+        <div className="bam" aria-label="BAM-tidslinje">
+          {timeline.map((seg) => (
+            <div key={seg.label} className={`seg ${seg.kind}`} style={{ flexGrow: seg.minutes }}>
+              <b>{seg.label}</b><span>{seg.from}–{seg.to}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="rows">
         <label>Genomgång</label><Editable kapitel={kapitel} lesson={lesson} field="genomgang" multiline onChange={onChange} />
         <label>Begrepp</label><Editable kapitel={kapitel} lesson={lesson} field="begrepp" onChange={onChange} />
@@ -178,16 +219,61 @@ function LessonCard(props: {
         </div>
         <label>Läxa</label><Editable kapitel={kapitel} lesson={lesson} field="laxa" onChange={onChange} />
       </div>
-      {timeline && (
-        <div className="bam" aria-label="BAM-tidslinje">
-          {timeline.map((seg) => (
-            <div key={seg.label} className={`seg ${seg.kind}`} style={{ flexGrow: seg.minutes }}>
-              <b>{seg.label}</b><span>{seg.from}–{seg.to}</span>
+      <ResourceRow kapitel={kapitel} lesson={lesson} links={links} flipCount={flipCount} onChange={onChange} />
+      {cancelDlg && (
+        <div className="overlay" role="dialog">
+          <div className="modal">
+            <h3>{override ? 'Återställ lektion?' : `Ställ in lektion ${lesson.id}?`}</h3>
+            {!override && <p className="muted">Gäller klass {classId}.</p>}
+            <div className="modal-actions" style={{ flexWrap: 'wrap' }}>
+              {override ? (
+                <button className="btn" onClick={() => { setCalOverride(classId, globalIdx, null); setCancelDlg(false); onChange(); }}>↩ Återställ till ordinarie</button>
+              ) : (<>
+                <button className="btn" onClick={() => { setCalOverride(classId, globalIdx, { type: 'shifted', reason: 'Inställd — tas nästa pass' }); setCancelDlg(false); onChange(); }}>⏭ Flytta till nästa pass (allt förskjuts)</button>
+                <button className="btn warn" onClick={() => { setCalOverride(classId, globalIdx, { type: 'cancelled', reason: 'Utgår' }); setCancelDlg(false); onChange(); }}>⛔ Lektionen utgår helt</button>
+              </>)}
+              <button className="btn sec" onClick={() => setCancelDlg(false)}>Avbryt</button>
             </div>
-          ))}
+          </div>
         </div>
       )}
     </article>
+  );
+}
+
+function ResourceRow(props: { kapitel: number; lesson: LessonRecord; links: LessonLink[]; flipCount: number; onChange: () => void }) {
+  const { kapitel, lesson, links, flipCount, onChange } = props;
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState<LessonLink>({ typ: 'film', titel: '', url: '' });
+  const ICON: Record<LessonLink['typ'], string> = { film: '🎬', magma: '🧮', quiz: '❓', verktyg: '🔧' };
+  return (
+    <div className="resources">
+      <label>Resurser</label>
+      <div className="reslist">
+        {links.length === 0 && <span className="muted">Inga länkar ännu.</span>}
+        {links.map((l, i) => (
+          <span key={`${l.url}-${i}`} className={`reslink ${l.typ}`}>
+            <a href={l.url} target="_blank" rel="noreferrer">{ICON[l.typ]} {l.titel || l.typ}</a>
+            {i >= flipCount && (
+              <button className="icon-btn" title="Ta bort" onClick={() => { removeLink(kapitel, lesson.id, i - flipCount); onChange(); }}>×</button>
+            )}
+          </span>
+        ))}
+        <button className="icon-btn addres" onClick={() => setAdding(!adding)}>+ länk</button>
+      </div>
+      {adding && (
+        <div className="resform">
+          <select value={form.typ} onChange={(e) => setForm({ ...form, typ: e.target.value as LessonLink['typ'] })}>
+            <option value="film">Film</option><option value="magma">Magma</option>
+            <option value="quiz">Quiz</option><option value="verktyg">Verktyg</option>
+          </select>
+          <input placeholder="Titel" value={form.titel} onChange={(e) => setForm({ ...form, titel: e.target.value })} />
+          <input placeholder="https://…" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
+          <button className="btn" disabled={!form.url.startsWith('http')}
+            onClick={() => { addLink(kapitel, lesson.id, form); setForm({ typ: form.typ, titel: '', url: '' }); setAdding(false); onChange(); }}>Spara</button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -237,49 +323,8 @@ function AddLessonDialog(props: { kapitel: number; lessons: LessonRecord[]; onCl
   );
 }
 
-// ── Kalender (sprint 15-om) ───────────────────────────────────
-function KalenderView(props: { lib: LoadedLibrary; chapters: number[]; tick: number }) {
-  const { lib, chapters } = props;
-  const [weekOffset, setWeekOffset] = useState(0);
-  const perClass = lib.subject.meta.klasser.filter((c) => !c.arkiverad).map((c) => {
-    const seq = chapters.flatMap((k) => composeChapter(k, lib.lessons[k] ?? []).map((lesson) => ({ kapitel: k, lesson })));
-    const slots = generateSlots(lib.subject, c.id, seq.length);
-    return { classId: c.id, items: seq.map((s, i) => ({ ...s, slot: slots[i] })).filter((x) => x.slot) };
-  });
-  const weeks = [...new Set(perClass.flatMap((c) => c.items.map((i) => i.slot!.week)))].sort((a, b) => a - b);
-  const week = weeks[Math.min(Math.max(weekOffset, 0), weeks.length - 1)];
-  const days = ['Mån', 'Tis', 'Ons', 'Tor', 'Fre'];
-  return (
-    <main className="main">
-      <div className="head-row">
-        <h2>Kalender — vecka {week}</h2>
-        <div>
-          <button className="btn sec" onClick={() => setWeekOffset((w) => Math.max(0, w - 1))}>←</button>{' '}
-          <button className="btn sec" onClick={() => setWeekOffset((w) => Math.min(weeks.length - 1, w + 1))}>→</button>
-        </div>
-      </div>
-      <div className="cal">
-        {days.map((label, di) => (
-          <div key={label} className="day">
-            <div className="d">{label}</div>
-            {perClass.flatMap((c) => c.items
-              .filter((i) => i.slot!.week === week && i.slot!.weekday === di + 1)
-              .map((i) => (
-                <div key={`${c.classId}-${i.lesson.id}`} className={`lesson ${c.classId === '8F' ? 'f8' : ''}`}>
-                  {c.classId} · {i.kapitel}.{i.lesson.id} {effectiveField(i.kapitel, i.lesson, 'avsnitt').slice(0, 22)}
-                  <small>{i.slot!.start}</small>
-                </div>
-              )))}
-          </div>
-        ))}
-      </div>
-      <p className="note">Lov och röda dagar schemaläggs aldrig — sekvensen förskjuts automatiskt.</p>
-    </main>
-  );
-}
-
 // ── Klasser (sprint 17-om) ────────────────────────────────────
-function KlasserView(props: { subject: SubjectFile; slots: ScheduledSlot[]; classId: string; lessons: LessonRecord[]; kapitel: number }) {
+function KlasserView(props: { subject: SubjectFile }) {
   const { subject } = props;
   const dayName = ['', 'mån', 'tis', 'ons', 'tor', 'fre'];
   return (

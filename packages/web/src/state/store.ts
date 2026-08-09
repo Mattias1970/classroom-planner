@@ -102,6 +102,8 @@ export function exportBackup(): string {
     schema: 'classroom-planner-backup', version: 1, exportedAt: new Date().toISOString(),
     overrides: getOverrides(), custom: getCustomLessons(), removed: getRemovedIds(), settings: { ...getSettings(), githubToken: '' },
     superteach: localStorage.getItem('classroom-planner.superteach.evidence.v1') ?? null,
+    calOverrides: localStorage.getItem('classroom-planner.cal-overrides.v1') ?? null,
+    lessonLinks: localStorage.getItem('classroom-planner.lesson-links.v1') ?? null,
   }, null, 2);
 }
 export function importBackup(json: string): void {
@@ -111,6 +113,8 @@ export function importBackup(json: string): void {
   write(K.custom, b.custom ?? []);
   write(K.removed, b.removed ?? []);
   if (typeof b.superteach === 'string') localStorage.setItem('classroom-planner.superteach.evidence.v1', b.superteach);
+  if (typeof b.calOverrides === 'string') localStorage.setItem('classroom-planner.cal-overrides.v1', b.calOverrides);
+  if (typeof b.lessonLinks === 'string') localStorage.setItem('classroom-planner.lesson-links.v1', b.lessonLinks);
 }
 
 // ── Bibliotek: demo eller GitHub ──────────────────────────────
@@ -137,4 +141,38 @@ export async function loadFromGithub(): Promise<LoadedLibrary> {
     flip[nr] = Object.fromEntries(kap.flip);
   }
   return { source: 'github', subject: lib.subject, lessons, flip, begrepp: lib.begrepp };
+}
+
+// ── Kalenderöverstyrningar per klass (sprint kalender-komplett) ──
+import type { OverrideMap, LessonOverride } from '@planner/core';
+const OV_KEY = 'classroom-planner.cal-overrides.v1';
+export function getCalOverrides(classId: string): OverrideMap {
+  return read<Record<string, OverrideMap>>(OV_KEY, {})[classId] ?? {};
+}
+export function setCalOverride(classId: string, globalIdx: number, ov: LessonOverride | null): void {
+  const all = read<Record<string, OverrideMap>>(OV_KEY, {});
+  const mine = all[classId] ?? {};
+  if (ov === null) delete mine[globalIdx]; else mine[globalIdx] = ov;
+  all[classId] = mine;
+  write(OV_KEY, all);
+}
+
+// ── Resurslänkar per lektion: filmer, magma, verktyg ─────────
+export interface LessonLink { typ: 'film' | 'magma' | 'quiz' | 'verktyg'; titel: string; url: string; }
+const LINKS_KEY = 'classroom-planner.lesson-links.v1';
+function linkKey(kapitel: number, lektionId: number): string { return `${kapitel}:${lektionId}`; }
+export function getLinks(kapitel: number, lektionId: number): LessonLink[] {
+  return read<Record<string, LessonLink[]>>(LINKS_KEY, {})[linkKey(kapitel, lektionId)] ?? [];
+}
+export function addLink(kapitel: number, lektionId: number, link: LessonLink): void {
+  const all = read<Record<string, LessonLink[]>>(LINKS_KEY, {});
+  const k = linkKey(kapitel, lektionId);
+  all[k] = [...(all[k] ?? []), link];
+  write(LINKS_KEY, all);
+}
+export function removeLink(kapitel: number, lektionId: number, idx: number): void {
+  const all = read<Record<string, LessonLink[]>>(LINKS_KEY, {});
+  const k = linkKey(kapitel, lektionId);
+  all[k] = (all[k] ?? []).filter((_, i) => i !== idx);
+  write(LINKS_KEY, all);
 }
