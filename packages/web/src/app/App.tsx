@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
-  computeTimes, generateSlots, type LessonRecord, type ScheduledSlot, type SubjectFile,
+  computeTimes, defaultBamTimeline, diffMinutes, generateSlots,
+  type LessonRecord, type ScheduledSlot, type SubjectFile,
 } from '@planner/core';
 import {
   addCustomLesson, composeChapter, demoLibrary, effectiveField, exportBackup, getSettings,
@@ -149,8 +150,10 @@ function LessonCard(props: {
   flip?: import('@planner/core').FlipDoc; onChange: () => void;
 }) {
   const { kapitel, lesson, slot, flip, onChange } = props;
-  const timeline = flip?.bamTimeline?.length && slot
-    ? computeTimes(flip.bamTimeline, slot.start) : null;
+  const rows = flip?.bamTimeline?.length
+    ? flip.bamTimeline
+    : slot ? defaultBamTimeline(lesson, diffMinutes(slot.start, slot.end)) : null;
+  const timeline = rows && slot ? computeTimes(rows, slot.start) : null;
   return (
     <article className={`card type-${lesson.type}`}>
       <div className="card-head">
