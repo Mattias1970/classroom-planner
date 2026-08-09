@@ -5,6 +5,7 @@
  */
 import {
   applyOverrides,
+  type BookFile,
   validateFlipDoc,
   validateLessonRecord,
   type FieldOverride,
@@ -37,16 +38,30 @@ export async function loadSubjectLibrary(reader: DataFileReader, slug: string): 
   const overridesText = await reader.readText(`${base}/overrides.json`);
   const overrides = overridesText ? parseJson<FieldOverride[]>(overridesText, `${base}/overrides.json`) : [];
 
-  const perDelkapitelText = await reader.readText(`${base}/begrepp/per-delkapitel.json`);
-  const definitionerText = await reader.readText(`${base}/begrepp/definitioner.json`);
+  // Bokindelning: med bookId bor innehållet (kapitel, lektioner, begrepp)
+  // i books/<bookId>/ — planeringen äger bara klasser/schema/läsår/overrides.
+  let book: BookFile | undefined;
+  let contentBase = base;
+  let kapitelMeta = subject.kapitelMeta;
+  if (subject.bookId) {
+    contentBase = `books/${subject.bookId}`;
+    const bookText = await reader.readText(`${contentBase}/book.json`);
+    if (!bookText) throw new SubjectLoadError(`${contentBase}/book.json saknas (bookId: ${subject.bookId}).`);
+    book = parseJson<BookFile>(bookText, `${contentBase}/book.json`);
+    kapitelMeta = book.kapitelMeta;
+    subject.kapitelMeta = kapitelMeta; // motorn ser alltid kapitelMeta via subject
+  }
+
+  const perDelkapitelText = await reader.readText(`${contentBase}/begrepp/per-delkapitel.json`);
+  const definitionerText = await reader.readText(`${contentBase}/begrepp/definitioner.json`);
   const begrepp = {
     perDelkapitel: perDelkapitelText ? parseJson<Record<string, string[]>>(perDelkapitelText, 'per-delkapitel.json') : {},
     definitioner: definitionerText ? parseJson<Record<string, string>>(definitionerText, 'definitioner.json') : {},
   };
 
   const kapitel = new Map<number, { lektioner: LessonRecord[]; flip: Map<number, FlipDoc> }>();
-  for (const kapNr of Object.keys(subject.kapitelMeta).map(Number).sort((a, b) => a - b)) {
-    const dir = `${base}/kapitel/${kapNr}/lektioner`;
+  for (const kapNr of Object.keys(kapitelMeta).map(Number).sort((a, b) => a - b)) {
+    const dir = `${contentBase}/kapitel/${kapNr}/lektioner`;
     const files = await reader.list(dir);
     const lessonFiles = files.filter((f) => /^\d+\.json$/.test(f))
       .sort((a, b) => parseInt(a) - parseInt(b));
@@ -63,7 +78,7 @@ export async function loadSubjectLibrary(reader: DataFileReader, slug: string): 
     kapitel.set(kapNr, { lektioner, flip });
   }
 
-  return { slug, subject, kapitel, begrepp, overrides };
+  return { slug, subject, book, kapitel, begrepp, overrides };
 }
 
 /** Ring 2: läsare mot GitHub Contents API (privat repo via fine-grained PAT). */

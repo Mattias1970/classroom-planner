@@ -51,8 +51,19 @@ export interface KapitelMeta {
   term: string; sidor_samm: string; prov: string;
 }
 
-/** subject.json */
+/** book.json — en boks metadata (books/<bookId>/book.json). */
+export interface BookFile {
+  id: string;
+  titel: string;
+  förlag: string;
+  ämne: string;
+  årskurs: number;
+  kapitelMeta: Record<string, KapitelMeta>;
+}
+
+/** subject.json — en planering. Med bookId läses innehållet ur books/<bookId>/. */
 export interface SubjectFile {
+  bookId?: string;
   meta: { ämne: string; årskurs: number; lärobok: string; klasser: ClassMeta[] };
   schema: Record<string, SchedulePass[]>;
   läsår: { startdatum: YmdTuple; lov: LovPeriod[] };
@@ -66,6 +77,7 @@ export interface FieldOverride {
 
 export interface SubjectLibrary {
   slug: string;
+  book?: BookFile;
   subject: SubjectFile;
   kapitel: Map<number, { lektioner: LessonRecord[]; flip: Map<number, FlipDoc> }>;
   begrepp: { perDelkapitel: Record<string, string[]>; definitioner: Record<string, string> };
