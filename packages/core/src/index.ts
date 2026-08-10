@@ -44,3 +44,4 @@ export * from './logic/arsoversikt.js';
 export * from './logic/redigering.js';
 export * from './logic/verktyg.js';
 export * from './logic/klasser.js';
+export * from './logic/ical.js';

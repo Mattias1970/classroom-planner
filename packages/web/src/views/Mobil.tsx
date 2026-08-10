@@ -5,6 +5,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { guessScreenSize, isMobileViewport, nextChapterOf, type ScreenSize } from '@planner/core';
+import { lsGet, lsSet } from '../state/store.js';
 
 const SCREEN_SIZE_KEY = 'classroom-planner.phone-screen-size.v1';
 
@@ -28,7 +29,7 @@ export function useMobile(): boolean {
 /** FR-MOB-005…007: applicerar phone-{size}; manuellt val persisteras. */
 export function useScreenSize(): [ScreenSize, (s: ScreenSize) => void] {
   const [size, setSize] = useState<ScreenSize>(() => {
-    const saved = localStorage.getItem(SCREEN_SIZE_KEY) as ScreenSize | null;
+    const saved = lsGet(SCREEN_SIZE_KEY) as ScreenSize | null;
     if (saved === 'compact' || saved === 'standard' || saved === 'large') return saved;
     return guessScreenSize(window.screen.width * (window.devicePixelRatio || 1)); // FR-MOB-006
   });
@@ -36,7 +37,7 @@ export function useScreenSize(): [ScreenSize, (s: ScreenSize) => void] {
     document.documentElement.classList.remove('phone-compact', 'phone-standard', 'phone-large');
     document.documentElement.classList.add(`phone-${size}`);
   }, [size]);
-  const pick = (s: ScreenSize) => { localStorage.setItem(SCREEN_SIZE_KEY, s); setSize(s); }; // FR-MOB-007
+  const pick = (s: ScreenSize) => { lsSet(SCREEN_SIZE_KEY, s); setSize(s); }; // FR-MOB-007
   return [size, pick];
 }
 

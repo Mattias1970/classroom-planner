@@ -430,3 +430,6 @@ html.is-mobile.phone-standard { font-size: 15px; }
 html.is-mobile.phone-large { font-size: 17px; }
 
 @media print { .bottom-nav, .fab-size, .more-menu, .pull-hint { display: none !important; } }
+
+/* ── Del 6 ── */
+.ical-filter { width: 70px; margin-left: 4px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 8px; }

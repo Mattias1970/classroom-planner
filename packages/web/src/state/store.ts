@@ -20,14 +20,28 @@ const K = {
   undo: 'classroom-planner.undo.v1',
 };
 
+/**
+ * NFR-005: all webblagring går genom felskyddade hjälpare — om localStorage
+ * är otillgängligt (privat läge, fullt utrymme, policyspärr) fortsätter
+ * sessionen i minnet utan fatala fel.
+ */
+const memFallback = new Map<string, string>();
+export function lsGet(key: string): string | null {
+  try { return localStorage.getItem(key) ?? memFallback.get(key) ?? null; }
+  catch { return memFallback.get(key) ?? null; }
+}
+export function lsSet(key: string, value: string): void {
+  memFallback.set(key, value);
+  try { localStorage.setItem(key, value); } catch { /* session-only fallback */ }
+}
 function read<T>(key: string, fallback: T): T {
   try {
-    const raw = localStorage.getItem(key);
+    const raw = lsGet(key);
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch { return fallback; }
 }
 function write(key: string, value: unknown): void {
-  localStorage.setItem(key, JSON.stringify(value));
+  lsSet(key, JSON.stringify(value));
 }
 
 // ── Inställningar ─────────────────────────────────────────────
@@ -114,14 +128,14 @@ export function exportBackup(): string {
   return JSON.stringify({
     schema: 'classroom-planner-backup', version: 1, exportedAt: new Date().toISOString(),
     overrides: getOverrides(), custom: getCustomLessons(), removed: getRemovedIds(), settings: { ...getSettings(), githubToken: '' },
-    superteach: localStorage.getItem('classroom-planner.superteach.evidence.v1') ?? null,
-    calOverrides: localStorage.getItem('classroom-planner.cal-overrides.v1') ?? null,
-    lessonLinks: localStorage.getItem('classroom-planner.lesson-links.v1') ?? null,
-    schemaEdits: localStorage.getItem(SCHEMA_KEY) ?? null,
-    magma: localStorage.getItem('classroom-planner.magma.v1') ?? null,
-    prio: localStorage.getItem('classroom-planner.prio.v1') ?? null,
-    classEdits: localStorage.getItem(CLASSES_KEY) ?? null,
-    classNotes: localStorage.getItem(NOTES_KEY) ?? null,
+    superteach: lsGet('classroom-planner.superteach.evidence.v1') ?? null,
+    calOverrides: lsGet('classroom-planner.cal-overrides.v1') ?? null,
+    lessonLinks: lsGet('classroom-planner.lesson-links.v1') ?? null,
+    schemaEdits: lsGet(SCHEMA_KEY) ?? null,
+    magma: lsGet('classroom-planner.magma.v1') ?? null,
+    prio: lsGet('classroom-planner.prio.v1') ?? null,
+    classEdits: lsGet(CLASSES_KEY) ?? null,
+    classNotes: lsGet(NOTES_KEY) ?? null,
   }, null, 2);
 }
 export function importBackup(json: string): void {
@@ -130,14 +144,14 @@ export function importBackup(json: string): void {
   write(K.overrides, b.overrides ?? []);
   write(K.custom, b.custom ?? []);
   write(K.removed, b.removed ?? []);
-  if (typeof b.superteach === 'string') localStorage.setItem('classroom-planner.superteach.evidence.v1', b.superteach);
-  if (typeof b.calOverrides === 'string') localStorage.setItem('classroom-planner.cal-overrides.v1', b.calOverrides);
-  if (typeof b.lessonLinks === 'string') localStorage.setItem('classroom-planner.lesson-links.v1', b.lessonLinks);
-  if (typeof b.schemaEdits === 'string') localStorage.setItem(SCHEMA_KEY, b.schemaEdits);
-  if (typeof b.magma === 'string') localStorage.setItem('classroom-planner.magma.v1', b.magma);
-  if (typeof b.prio === 'string') localStorage.setItem('classroom-planner.prio.v1', b.prio);
-  if (typeof b.classEdits === 'string') localStorage.setItem(CLASSES_KEY, b.classEdits);
-  if (typeof b.classNotes === 'string') localStorage.setItem(NOTES_KEY, b.classNotes);
+  if (typeof b.superteach === 'string') lsSet('classroom-planner.superteach.evidence.v1', b.superteach);
+  if (typeof b.calOverrides === 'string') lsSet('classroom-planner.cal-overrides.v1', b.calOverrides);
+  if (typeof b.lessonLinks === 'string') lsSet('classroom-planner.lesson-links.v1', b.lessonLinks);
+  if (typeof b.schemaEdits === 'string') lsSet(SCHEMA_KEY, b.schemaEdits);
+  if (typeof b.magma === 'string') lsSet('classroom-planner.magma.v1', b.magma);
+  if (typeof b.prio === 'string') lsSet('classroom-planner.prio.v1', b.prio);
+  if (typeof b.classEdits === 'string') lsSet(CLASSES_KEY, b.classEdits);
+  if (typeof b.classNotes === 'string') lsSet(NOTES_KEY, b.classNotes);
 }
 
 // ── Klassregister-overlay (FR-CM-002…008) ─────────────────────

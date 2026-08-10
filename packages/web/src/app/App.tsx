@@ -18,7 +18,7 @@ import {
   addLink, getCalOverrides, getLinks, removeLink, setCalOverride, shiftAllCalOverrides,
   clearMagma, countMagmaForKap, getMagma, setMagma,
   getPrio, setPrio, PRIO_ALL,
-  getClassEdits, getClassNote, setClassNote,
+  getClassEdits, getClassNote, setClassNote, lsGet, lsSet,
   type LessonLink, type ToolTyp,
 } from '../state/store.js';
 import { Docx } from './wordExport.js';
@@ -41,7 +41,7 @@ export default function App() {
   const [kapitel, setKapitel] = useState(1);
   const [tick, bump] = useState(0);
   const refresh = () => bump((t) => t + 1);
-  const stOn = localStorage.getItem(FLAG) === 'true';
+  const stOn = lsGet(FLAG) === 'true';
   const [showEdits, setShowEdits] = useState(false); // FR-EDIT-008
 
   // FR-SCH + FR-CM: lokala schema- och klassändringar appliceras ovanpå datakällan
@@ -639,7 +639,7 @@ function InstallningarView(props: { onChange: () => void }) {
     try { importBackup(await file.text()); props.onChange(); setMsg('✓ Backup importerad.'); }
     catch (e) { setMsg(`✗ ${(e as Error).message}`); }
   };
-  const stOn = localStorage.getItem(FLAG) === 'true';
+  const stOn = lsGet(FLAG) === 'true';
   return (
     <main className="main">
       <h2>Inställningar</h2>
@@ -656,10 +656,28 @@ function InstallningarView(props: { onChange: () => void }) {
         {msg && <p className="status">{msg}</p>}
       </div>
       <div className="card">
+        <div className="title">Datalagring (livslängd per datatyp)</div>{/* NFR-009 */}
+        <table className="tbl">
+          <thead><tr><th>Data</th><th>Lagring</th></tr></thead>
+          <tbody>
+            <tr><td>Bokinnehåll, klasser & schema (grunddata)</td><td>GitHub-datakällan — sanning, skrivskyddad härifrån</td></tr>
+            <tr><td>Fältredigeringar, egna/borttagna lektioner</td><td>Persistent i webbläsaren · ingår i backup</td></tr>
+            <tr><td>Kalenderändringar med anledningar</td><td>Persistent i webbläsaren · ingår i backup</td></tr>
+            <tr><td>Schemaändringar (startdatum, dagar, tider)</td><td>Persistent i webbläsaren · ingår i backup</td></tr>
+            <tr><td>Pedagogiska verktyg, filmer, Magma, Prio</td><td>Persistent i webbläsaren · ingår i backup</td></tr>
+            <tr><td>Klassregister-ändringar & klassanteckningar</td><td>Persistent i webbläsaren · ingår i backup</td></tr>
+            <tr><td>SuperTeach-evidens</td><td>Persistent i webbläsaren · ingår i backup</td></tr>
+            <tr><td>Mobil skärmprofil</td><td>Persistent, endast denna enhet</td></tr>
+            <tr><td>GitHub-token</td><td>Endast denna webbläsare — aldrig i backup</td></tr>
+          </tbody>
+        </table>
+        <p className="note">Om webblagring är blockerad (t.ex. privat läge) fortsätter appen fungera under sessionen; ändringar sparas då inte mellan omladdningar.</p>
+      </div>
+      <div className="card">
         <div className="title">SuperTeach</div>
         <label className="radio">
           <input type="checkbox" checked={stOn}
-            onChange={(e) => { localStorage.setItem(FLAG, String(e.target.checked)); props.onChange(); }} />
+            onChange={(e) => { lsSet(FLAG, String(e.target.checked)); props.onChange(); }} />
           Aktivera SuperTeach-fliken (kunskapsöversikt per elev)
         </label>
       </div>

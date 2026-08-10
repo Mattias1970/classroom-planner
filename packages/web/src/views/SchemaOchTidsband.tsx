@@ -6,7 +6,7 @@
  */
 import { useMemo, useState } from 'react';
 import {
-  isValidPass, parseWeekday, svDateLabel,
+  isValidPass, parseIcsEvents, parseWeekday, suggestSchedulePasses, svDateLabel,
   type LessonRecord, type PlacedLesson, type SchedulePass, type SubjectFile, type YmdTuple,
 } from '@planner/core';
 import { getSchemaEdits, saveSchemaEdits } from '../state/store.js';
@@ -22,7 +22,27 @@ export function SchedulePanel(props: { subject: SubjectFile; onChange: () => voi
   const [classId, setClassId] = useState(classes[0]?.id ?? '8B');
   const [saved, setSaved] = useState(false);
   const [ical, setIcal] = useState('');
+  const [icalFilter, setIcalFilter] = useState('Ma');
   const [icalMsg, setIcalMsg] = useState('');
+
+  const applyIcs = (text: string, källa: string) => {
+    const passes = suggestSchedulePasses(parseIcsEvents(text), icalFilter);
+    if (passes.length === 0) {
+      setIcalMsg(`✗ Inga återkommande mån–fre-pass hittades i ${källa}${icalFilter ? ` (filter: "${icalFilter}")` : ''}. Prova att ändra eller tömma titelfiltret.`);
+      return;
+    }
+    setRows(passes.map((p) => ({ dayText: DAY_LONG[p.day], start: p.start, end: p.end })));
+    setIcalMsg(`✓ ${passes.length} lektionspass hämtade från ${källa} — kontrollera raderna och klicka Spara schema.`);
+  };
+  const importFromUrl = async () => {
+    try {
+      const res = await fetch(ical);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      applyIcs(await res.text(), 'kalenderlänken');
+    } catch {
+      setIcalMsg('✗ Direkthämtning blockerades (Googles kalenderlänkar tillåter oftast inte hämtning från webbläsare). Exportera kalendern som .ics-fil och ladda upp den här i stället.');
+    }
+  };
 
   const sd = subject.läsår.startdatum;
   const [startIso, setStartIso] = useState(
@@ -81,14 +101,20 @@ export function SchedulePanel(props: { subject: SubjectFile; onChange: () => voi
               </div>
             ))}
           </div>
-          <div className="sched-gcal">{/* FR-SCH-006: fält + knapp (import ej implementerad ännu) */}
-            <label>📅 Google Kalender-länk (valfri):</label>
+          <div className="sched-gcal">{/* FR-SCH-006 + del 6 P2: fungerande iCal-import */}
+            <label>📅 Google Kalender:</label>
             <input placeholder="https://calendar.google.com/calendar/ical/…" value={ical}
               onChange={(e) => setIcal(e.target.value)} />
-            <button className="btn sec" onClick={() => setIcalMsg('iCal-import är under utveckling — fyll i tiderna manuellt ovan så länge.')}>Importera</button>
+            <button className="btn sec" disabled={!ical.startsWith('http')} onClick={() => void importFromUrl()}>Importera från länk</button>
+            <label className="btn sec file-btn">⬆ Ladda upp .ics-fil
+              <input type="file" accept=".ics,text/calendar" hidden
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) void f.text().then((t) => applyIcs(t, 'filen')); e.target.value = ''; }} />
+            </label>
+            <label>Filtrera på titel:
+              <input className="ical-filter" placeholder="t.ex. Ma" value={icalFilter} onChange={(e) => setIcalFilter(e.target.value)} /></label>
           </div>
           {icalMsg && <p className="status">{icalMsg}</p>}
-          <p className="note">Exportera ditt schema från Google Kalender som iCal (.ics) och klistra in URL:en ovan, eller fyll i tiderna manuellt.</p>
+          <p className="note">Exportera schemat från Google Kalender (Inställningar → Importera och exportera → Exportera) och ladda upp .ics-filen. Passen fylls i ovan — inget sparas förrän du klickar Spara schema.</p>
           <button className="btn" onClick={save}>{saved ? '✓ Sparat!' : 'Spara schema'}</button>
           <p className="note">Ändringarna sparas i webbläsaren och ligger ovanpå datakällan — de följer med i backupen.</p>
         </div>
