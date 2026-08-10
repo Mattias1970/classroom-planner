@@ -120,6 +120,8 @@ export function exportBackup(): string {
     schemaEdits: localStorage.getItem(SCHEMA_KEY) ?? null,
     magma: localStorage.getItem('classroom-planner.magma.v1') ?? null,
     prio: localStorage.getItem('classroom-planner.prio.v1') ?? null,
+    classEdits: localStorage.getItem(CLASSES_KEY) ?? null,
+    classNotes: localStorage.getItem(NOTES_KEY) ?? null,
   }, null, 2);
 }
 export function importBackup(json: string): void {
@@ -134,6 +136,29 @@ export function importBackup(json: string): void {
   if (typeof b.schemaEdits === 'string') localStorage.setItem(SCHEMA_KEY, b.schemaEdits);
   if (typeof b.magma === 'string') localStorage.setItem('classroom-planner.magma.v1', b.magma);
   if (typeof b.prio === 'string') localStorage.setItem('classroom-planner.prio.v1', b.prio);
+  if (typeof b.classEdits === 'string') localStorage.setItem(CLASSES_KEY, b.classEdits);
+  if (typeof b.classNotes === 'string') localStorage.setItem(NOTES_KEY, b.classNotes);
+}
+
+// ── Klassregister-overlay (FR-CM-002…008) ─────────────────────
+import type { ClassEdits } from '@planner/core';
+const CLASSES_KEY = 'classroom-planner.class-edits.v1';
+export function getClassEdits(): ClassEdits { return read<ClassEdits>(CLASSES_KEY, {}); }
+export function saveClassEdits(e: ClassEdits): void { write(CLASSES_KEY, e); }
+
+// ── Klassanteckningar per klass/kapitel/lektion (FR-CLS-002/003) ──
+const NOTES_KEY = 'classroom-planner.class-notes.v1';
+function noteKey(classId: string, kapitel: number, lektionId: number): string {
+  return `${classId}:${kapitel}:${lektionId}`;
+}
+export function getClassNote(classId: string, kapitel: number, lektionId: number): string {
+  return read<Record<string, string>>(NOTES_KEY, {})[noteKey(classId, kapitel, lektionId)] ?? '';
+}
+export function setClassNote(classId: string, kapitel: number, lektionId: number, text: string): void {
+  const all = read<Record<string, string>>(NOTES_KEY, {});
+  const k = noteKey(classId, kapitel, lektionId);
+  if (text.trim() === '') delete all[k]; else all[k] = text;
+  write(NOTES_KEY, all);
 }
 
 // ── Magma: en aktivitet per lektion (FR-MAG-001…006) ─────────

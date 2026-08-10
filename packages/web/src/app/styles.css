@@ -364,3 +364,69 @@ h2 { margin: 0 0 2px; font-size: 19px; }
   .sel-lesson > .card { outline: none; }
   .inline-edit { border-color: transparent; }
 }
+
+/* ── Del 5: klasshanterare, klassanteckningar, mobil ── */
+.cm-modal { max-width: 560px; }
+.cm-card { display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  background: #fdf6f0; border: 1px solid #ead9c9; border-radius: 10px; padding: 10px 14px; margin: 8px 0; }
+.cm-card.archived { background: #f1f5f9; border-color: var(--line); opacity: .85; }
+.cm-actions { display: flex; gap: 6px; align-items: center; }
+.cm-actions .icon-btn { border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; background: #fff; }
+.cm-actions .icon-btn:disabled { opacity: .4; }
+.cm-h { margin: 14px 0 6px; font-size: 11px; letter-spacing: .1em; color: var(--muted); }
+.cm-add { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cm-add select { grid-column: 1; }
+.cm-add .btn { grid-column: 2; }
+.cm-add input, .cm-add select { border: 1px solid #cbd5e1; border-radius: 8px; padding: 7px 10px; }
+.cm-foot { border-top: 1px solid var(--line); padding-top: 12px; }
+.ins-mode.sel { border-color: var(--navy-2); background: #fdf3ee; }
+
+.cls-cards { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.cls-card { background: var(--card); border: 1.5px solid var(--line); border-radius: 10px;
+  padding: 10px 18px; cursor: pointer; display: flex; flex-direction: column; align-items: flex-start; }
+.cls-card small { color: var(--muted); }
+.cls-card.active { border-color: #b45309; background: #fdf6f0; }
+.cls-note { margin: 10px 0; }
+.cls-note label { display: block; font-size: 12.5px; font-weight: 700; margin-bottom: 3px; }
+.cls-note textarea { width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 7px 10px; }
+
+/* Mobil (FR-MOB-002…008) */
+.bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; z-index: 60; display: none;
+  background: #fff; border-top: 1px solid var(--line); padding: 4px 0 max(4px, env(safe-area-inset-bottom)); }
+.bottom-nav button { flex: 1; background: none; border: none; display: flex; flex-direction: column;
+  align-items: center; gap: 1px; font-size: 9px; letter-spacing: .05em; color: var(--muted); padding: 4px 0; }
+.bottom-nav button span { font-size: 16px; }
+.bottom-nav button .dot { width: 10px; height: 10px; border-radius: 50%; margin: 4px 0 3px; }
+.bottom-nav button.active { color: var(--navy); font-weight: 700; }
+.more-menu { position: fixed; bottom: 56px; right: 8px; z-index: 61; background: #fff;
+  border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.18);
+  display: flex; flex-direction: column; min-width: 210px; overflow: hidden; }
+.more-menu button { background: none; border: none; text-align: left; padding: 11px 16px; font-size: 14px; }
+.more-menu button:active { background: #f1f5f9; }
+.more-menu hr { border: none; border-top: 1px solid var(--line); margin: 2px 0; }
+.fab-size { display: none; position: fixed; right: 14px; bottom: 74px; z-index: 59;
+  width: 44px; height: 44px; border-radius: 50%; border: none; background: #8a4b2d; color: #fff;
+  font-size: 18px; box-shadow: 0 4px 12px rgba(0,0,0,.3); }
+.pull-hint { text-align: center; font-weight: 700; color: var(--navy-2); padding: 14px 0 6px; }
+
+html.is-mobile .bottom-nav { display: flex; }
+html.is-mobile .fab-size { display: block; }
+html.is-mobile .topbar .tab, html.is-mobile .topbar .stat, html.is-mobile .topbar .src { display: none; }
+html.is-mobile .side { display: none; }
+html.is-mobile .wrap { display: block; }
+html.is-mobile .main { padding: 12px 12px 84px; max-width: none; }
+html.is-mobile .plan-sticky { top: 0; }
+html.is-mobile .tb { display: none; }
+html.is-mobile .bam-cols { grid-template-columns: 1fr; }
+html.is-mobile .cal-timegrid { overflow-x: auto; }
+html.is-mobile .yr-grid, html.is-mobile .yr-dates { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+html.is-mobile .toolgroups { grid-template-columns: 1fr; }
+html.is-mobile .head-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+
+/* Skärmstorleksprofiler (FR-MOB-005) */
+html.is-mobile.phone-compact { font-size: 13px; }
+html.is-mobile.phone-compact .main { padding: 8px 8px 84px; }
+html.is-mobile.phone-standard { font-size: 15px; }
+html.is-mobile.phone-large { font-size: 17px; }
+
+@media print { .bottom-nav, .fab-size, .more-menu, .pull-hint { display: none !important; } }

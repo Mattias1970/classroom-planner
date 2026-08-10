@@ -1,11 +1,13 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
-  applySchemaEdits, buildBegreppTabell, computeTimes, defaultBamTimeline, diffMinutes,
+  applyClassEdits, applySchemaEdits, buildBegreppTabell, computeTimes, defaultBamTimeline, diffMinutes,
   distinctEditedFields, generateSlots, normalizeUrl, placeLessons, summarizeEdits,
   weeksLabel, KAP_COLORS,
   type LessonRecord, type PlacedLesson, type ScheduledSlot, type SubjectFile,
 } from '@planner/core';
 import { SchedulePanel, TimeBand } from '../views/SchemaOchTidsband.js';
+import { KlassHanterare } from '../views/KlassHanterare.js';
+import { BottomNav, ScreenSizeModal, useMobile, useScreenSize, useScrollToNextChapter } from '../views/Mobil.js';
 import Kalender from '../views/Kalender.js';
 import Arsoversikt, { type InnerTab } from '../views/Arsoversikt.js';
 import {
@@ -16,6 +18,7 @@ import {
   addLink, getCalOverrides, getLinks, removeLink, setCalOverride, shiftAllCalOverrides,
   clearMagma, countMagmaForKap, getMagma, setMagma,
   getPrio, setPrio, PRIO_ALL,
+  getClassEdits, getClassNote, setClassNote,
   type LessonLink, type ToolTyp,
 } from '../state/store.js';
 import { Docx } from './wordExport.js';
@@ -41,11 +44,15 @@ export default function App() {
   const stOn = localStorage.getItem(FLAG) === 'true';
   const [showEdits, setShowEdits] = useState(false); // FR-EDIT-008
 
-  // FR-SCH-002…005: lokala schemaändringar appliceras ovanpå datakällan
+  // FR-SCH + FR-CM: lokala schema- och klassändringar appliceras ovanpå datakällan
   const libEff = useMemo<LoadedLibrary>(
-    () => ({ ...lib, subject: applySchemaEdits(lib.subject, getSchemaEdits()) }),
+    () => ({ ...lib, subject: applyClassEdits(applySchemaEdits(lib.subject, getSchemaEdits()), getClassEdits()) }),
     [lib, tick],
   );
+  const mobile = useMobile(); // FR-MOB-001/010
+  const [screenSize, setScreenSize] = useScreenSize(); // FR-MOB-005…007
+  const [sizeModal, setSizeModal] = useState(false);
+  const [classMgr, setClassMgr] = useState(false); // FR-CM-001
   const editCount = useMemo(() => distinctEditedFields(getOverrides()), [tick]); // FR-EDIT-007
 
   const chapters = Object.keys(libEff.subject.kapitelMeta).map(Number).sort((a, b) => a - b);
@@ -82,7 +89,10 @@ export default function App() {
     setKapitel(kap); setInner('lektionsplan'); setTab('planering');
     setFocus({ idx: globalIdx - before, token: Date.now() });
   };
-  const placed = placedByClass[classId] ?? [];
+  const activeIds = libEff.subject.meta.klasser.filter((c) => !c.arkiverad).map((c) => c.id);
+  const safeClassId = activeIds.includes(classId) ? classId : (activeIds[0] ?? classId);
+  if (safeClassId !== classId) setTimeout(() => setClassId(safeClassId), 0);
+  const placed = placedByClass[safeClassId] ?? [];
   const slotFor = (kap: number, idx: number): ScheduledSlot | null => {
     let before = 0;
     for (const k of chapters) { if (k === kap) break; before += composeChapter(k, libEff.lessons[k] ?? []).length; }
@@ -135,7 +145,9 @@ export default function App() {
           </nav>
           <PlaneringView lib={libEff} kapitel={kapitel} lessons={lessons} slotFor={slotFor}
             globalIdxFor={globalIdxFor} placed={placed} classId={classId} onChange={refresh}
-            inner={inner} setInner={setInner} focus={focus} onOpenLesson={openLesson} />
+            inner={inner} setInner={setInner} focus={focus} onOpenLesson={openLesson}
+            mobile={mobile} onNextChapter={(k) => { setKapitel(k); }} allChapters={chapters}
+            onOpenClassMgr={() => setClassMgr(true)} />
         </div>
       )}
 
@@ -151,6 +163,18 @@ export default function App() {
         </Suspense>
       )}
       {tab === 'installningar' && <InstallningarView onChange={refresh} />}
+
+      {mobile && (
+        <BottomNav tab={tab} kapitel={kapitel} chapters={chapters}
+          onTab={(t) => setTab(t)} onKapitel={(k) => { setKapitel(k); setInner('lektionsplan'); setTab('planering'); }}
+          extra={[['planering', '📋 Planering'], ['klasser', '🏫 Klasser'], ['bibliotek', '📚 Bibliotek'], ['installningar', '⚙ Inställningar']]}
+          onExtra={(t) => setTab(t as Tab)} />
+      )}{/* FR-MOB-003/004 */}
+      {mobile && (
+        <button className="fab-size" title="Skärmstorlek" onClick={() => setSizeModal(true)}>📱</button>
+      )}
+      {sizeModal && <ScreenSizeModal size={screenSize} onPick={setScreenSize} onClose={() => setSizeModal(false)} />}
+      {classMgr && <KlassHanterare subject={libEff.subject} onClose={() => setClassMgr(false)} onChange={refresh} />}
 
       {showEdits && ( /* FR-EDIT-008 */
         <div className="overlay" role="dialog" onClick={() => setShowEdits(false)}>
@@ -189,8 +213,11 @@ function PlaneringView(props: {
   setInner: (t: import('../views/Arsoversikt.js').InnerTab) => void;
   focus: { idx: number; token: number } | null;
   onOpenLesson: (kapitel: number, globalIdx: number) => void;
+  mobile: boolean; allChapters: number[]; onNextChapter: (k: number) => void;
+  onOpenClassMgr: () => void;
 }) {
-  const { lib, kapitel, lessons, slotFor, globalIdxFor, placed, classId, onChange, inner, setInner, focus, onOpenLesson } = props;
+  const { lib, kapitel, lessons, slotFor, globalIdxFor, placed, classId, onChange, inner, setInner, focus, onOpenLesson, mobile, allChapters, onNextChapter, onOpenClassMgr } = props;
+  const pullHint = useScrollToNextChapter(mobile && inner === 'lektionsplan', allChapters, kapitel, onNextChapter); // FR-MOB-008/009
   const meta = lib.subject.kapitelMeta[String(kapitel)];
   const accent = KAP_COLORS[kapitel] ?? '#555'; // FR-GEN-003
   const [adding, setAdding] = useState(false);
@@ -273,6 +300,7 @@ function PlaneringView(props: {
           <button className="btn sec" onClick={() => gotoLesson(clampSel - 1)} aria-label="Föregående lektion">◀</button>
           <button className="btn sec" onClick={() => gotoLesson(clampSel + 1)} aria-label="Nästa lektion">▶</button>
           <span className="badge" style={{ background: accent }}>Lektion {clampSel + 1} / {lessons.length}</span>
+          <button className="btn sec" onClick={onOpenClassMgr}>⚙ Klasser</button>{/* FR-CM-001 */}
         </div>
         {(() => { /* FR-LES-002: dag, vecka, månad, år + tider för vald lektion/klass */
           const s0 = slotFor(kapitel, clampSel);
@@ -305,6 +333,11 @@ function PlaneringView(props: {
             ))}
           </div>
         </div>
+        {pullHint !== null && ( /* FR-MOB-008 */
+          <div className="pull-hint" style={{ opacity: pullHint / 140 }}>
+            ⬇ Fortsätt dra för Kapitel {allChapters[allChapters.indexOf(kapitel) + 1]} …
+          </div>
+        )}
       </>)}
 
       {inner === 'oversikt' && <OversiktTab kapitel={kapitel} lessons={lessons} slotFor={slotFor}
@@ -520,444 +553,36 @@ function MagmaTab(props: {
 
 function KlasserTab(props: { lib: LoadedLibrary; kapitel: number; placed: PlacedLesson<LessonRecord>[] }) {
   const { lib, kapitel } = props;
+  const active = lib.subject.meta.klasser.filter((c) => !c.arkiverad); // FR-CLS-004: dynamiskt
+  const [selected, setSelected] = useState(active[0]?.id ?? '');
+  const sel = active.find((c) => c.id === selected) ?? active[0];
+  const lessons = composeChapter(kapitel, lib.lessons[kapitel] ?? []);
   const dayName = ['', 'mån', 'tis', 'ons', 'tor', 'fre'];
-  return (
-    <table className="tbl">
-      <thead><tr><th>Klass</th><th>Socrative</th><th>Lektionspass</th><th>Kapitlets period</th></tr></thead>
-      <tbody>
-        {lib.subject.meta.klasser.filter((c) => !c.arkiverad).map((c) => {
-          const seq = Object.keys(lib.subject.kapitelMeta).map(Number).sort((a, b) => a - b)
-            .flatMap((k) => composeChapter(k, lib.lessons[k] ?? []).map((lesson) => ({ kapitel: k, lesson })));
-          const slots = generateSlots(lib.subject, c.id, seq.length + 20);
-          const mine = placeLessons(seq, slots, getCalOverrides(c.id)).filter((p) => p.kapitel === kapitel && p.slot);
-          const first = mine[0]?.slot, last = mine[mine.length - 1]?.slot;
-          return (
-            <tr key={c.id}>
-              <td><b>{c.namn}</b></td><td>{c.socrative}</td>
-              <td>{(lib.subject.schema[c.id] ?? []).map((p) => `${dayName[p.day]} ${p.start}–${p.end}`).join(' · ')}</td>
-              <td>{first && last ? `v.${first.week} (${first.date}) – v.${last.week} (${last.date})` : '—'}</td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  );
-}
-
-/** Höjden följer innehållet så att all text alltid syns (även vid utskrift). */
-function autoGrow(el: HTMLTextAreaElement | null): void {
-  if (!el) return;
-  el.style.height = 'auto';
-  el.style.height = `${el.scrollHeight + 2}px`;
-}
-
-function Editable(props: { kapitel: number; lesson: LessonRecord; field: keyof LessonRecord; multiline?: boolean; rows?: number; onChange: () => void }) {
-  const { kapitel, lesson, field, multiline, rows, onChange } = props;
-  const value = effectiveField(kapitel, lesson, field);
-  const edited = isEdited(kapitel, lesson.id, field); // FR-EDIT-004
-  const [flash, setFlash] = useState(false); // FR-EDIT-006
-  const commit = (el: HTMLInputElement | HTMLTextAreaElement) => {
-    const v = el.value;
-    if (v.trim() === '') { el.value = value; return; } // FR-EDIT-003: tomt sparas inte
-    if (v !== value) {
-      setField(kapitel, lesson.id, field, v);
-      setFlash(true); setTimeout(() => setFlash(false), 1500);
-      onChange();
-    }
-  };
-  return (
-    <span className={`edit-wrap ${edited ? 'has-edit' : ''}`}>
-      {multiline
-        ? <textarea key={value} className="inline-edit grow" defaultValue={value} rows={rows ?? 2}
-            ref={autoGrow} onInput={(e) => autoGrow(e.currentTarget)} onBlur={(e) => commit(e.target)} />
-        : <input key={value} className="inline-edit" defaultValue={value} onBlur={(e) => commit(e.target)} />}
-      {flash && <span className="saved-flash">✓ Sparat</span>}
-      {edited && !flash && (
-        <button className="restore-btn" title="Återställ original"
-          onClick={() => { clearField(kapitel, lesson.id, field); onChange(); }}>↩ Återställ original</button>
-      )}{/* FR-EDIT-005 */}
-    </span>
-  );
-}
-
-function LessonCard(props: {
-  kapitel: number; lesson: LessonRecord; slot: ScheduledSlot | null;
-  globalIdx: number; classId: string; socRoom: string; defs: Record<string, string>;
-  override?: import('@planner/core').LessonOverride;
-  flip?: import('@planner/core').FlipDoc; onChange: () => void; onAddAfter: () => void;
-}) {
-  const { kapitel, lesson, slot, globalIdx, classId, socRoom, defs, override, flip, onChange, onAddAfter } = props;
-  const har = (v: string) => !!v && v !== '—';
-  const begreppList = har(effectiveField(kapitel, lesson, 'begrepp'))
-    ? effectiveField(kapitel, lesson, 'begrepp').split(',').map((b) => b.trim()).filter(Boolean) : [];
-  const [cancelDlg, setCancelDlg] = useState(false);
-  const rows = flip?.bamTimeline?.length
-    ? flip.bamTimeline
-    : slot ? defaultBamTimeline(lesson, diffMinutes(slot.start, slot.end)) : null;
-  const timeline = rows && slot ? computeTimes(rows, slot.start) : null;
-  const segFor = (kind: string) => timeline?.find((t) => t.kind === kind);
-  const links: LessonLink[] = [
-    ...(flip?.blocks ?? []).flatMap((b) => b.typ === 'film' || b.typ === 'quiz'
-      ? [{ typ: b.typ, titel: b.ref.titel, url: b.ref.url } as LessonLink] : []),
-    ...getLinks(kapitel, lesson.id),
-  ];
-  const flipCount = (flip?.blocks ?? []).filter((b) => b.typ !== 'text').length;
-  return (
-    <article className={`card type-${lesson.type} ${override ? 'ov-' + override.type : ''}`}>
-      <div className="card-head">
-        <span className="title">
-          Lektion {lesson.id} · {effectiveField(kapitel, lesson, 'avsnitt')}
-          {flip && <span className="pill flip">Flippat</span>}
-          {har(lesson.sidor_teori) && <span className="pill teori">📖 Teorisidor: {lesson.sidor_teori}</span>}
-          {begreppList.length > 0 && <span className="pill beg">💡 {begreppList.length} begrepp introduceras</span>}
-          {lesson.exit !== '—' && <span className="pill quiz">Exit</span>}
-          {lesson.type !== 'regular' && <span className="pill">{lesson.type}</span>}
-          {override && <span className="pill ov">{override.type === 'cancelled' ? '⛔ Inställd' : override.type === 'shifted' ? '⏭ Framflyttad' : '📍 Flyttad'}</span>}
-        </span>
-        <span className="when">{slot ? `v.${slot.week} · ${slot.date} · ${slot.start}` : override?.type === 'cancelled' ? 'inställd' : 'ej schemalagd'}</span>
-        <button className="icon-btn" title={override ? 'Återställ' : 'Ställ in / flytta'} onClick={() => setCancelDlg(true)}>{override ? '↩' : '⛔'}</button>
-        <button className="icon-btn" title="Ta bort lektion" onClick={() => { removeLesson(kapitel, lesson.id); onChange(); }}>🗑</button>
-      </div>
-      {override && <p className="ov-reason">📝 {override.reason}</p>}
-
-      {slot && ( /* FR-CARD-003: Tavlan */
-        <div className="tavlan">
-          <div className="tavlan-top">🗓 TAVLAN</div>
-          <div className="tavlan-bar">
-            <b>Ma</b>
-            <span className="t">{slot.start} – {slot.end}</span>
-            <small>{['Sön', 'Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör'][new Date(slot.date + 'T00:00:00Z').getUTCDay()]} · v.{slot.week}</small>
-          </div>
-          {timeline && (
-            <div className="bam" aria-label="BAM-tidslinje">{/* FR-CARD-004 */}
-              {timeline.map((seg) => (
-                <div key={seg.label} className={`seg ${seg.kind}`} style={{ flexGrow: seg.minutes }}>
-                  <b>{seg.label}</b><span>{seg.from}–{seg.to}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {har(lesson.soc_start) && segFor('quiz') && ( /* FR-CARD-005 */
-            <div className="soc-block start">
-              <span className="soc-time">⏱ {segFor('quiz')!.from}–{segFor('quiz')!.to} · LÄXFÖRHÖR</span>
-              <span className="soc-room">Socrative.com · Roomname: <b>{socRoom}</b></span>
-              <Editable kapitel={kapitel} lesson={lesson} field="soc_start" onChange={onChange} />
-            </div>
-          )}
-          <div className="bam-cols">{/* göra / lära / exempel — redigerbara (FR-EDIT-001) */}
-            <div className="bam-col gora"><h5>VAD SKA VI GÖRA</h5>
-              <Editable kapitel={kapitel} lesson={lesson} field="bam_gora" multiline rows={3} onChange={onChange} /></div>
-            <div className="bam-col lara"><h5>VAD SKA VI LÄRA OSS</h5>
-              <Editable kapitel={kapitel} lesson={lesson} field="bam_lara" multiline rows={3} onChange={onChange} /></div>
-            <div className="bam-col ex"><h5>EXEMPEL VI RÄKNAR</h5>
-              <Editable kapitel={kapitel} lesson={lesson} field="bam_ex" multiline rows={3} onChange={onChange} /></div>
-          </div>
-        </div>
-      )}
-
-      <div className="rows">
-        <label>Genomgång{segFor('lecture') && <small className="tspan"> {segFor('lecture')!.from}–{segFor('lecture')!.to}</small>}</label>
-        <Editable kapitel={kapitel} lesson={lesson} field="genomgang" multiline onChange={onChange} />{/* FR-CARD-006 */}
-
-        {har(lesson.ex) && (<> {/* FR-CARD-007 */}
-          <label>Bokens exempel</label>
-          <div className="ex-box"><Editable kapitel={kapitel} lesson={lesson} field="ex" multiline onChange={onChange} /></div>
-        </>)}
-
-        {begreppList.length > 0 && (<> {/* FR-CARD-008 */}
-          <label>Begrepp</label>
-          <div className="reslist">
-            {begreppList.map((b) => (
-              <span key={b} className="chip" title={defs[b.toLowerCase()] ?? defs[b] ?? 'Definition saknas'}>{b}</span>
-            ))}
-          </div>
-        </>)}
-
-        {(har(effectiveField(kapitel, lesson, 'grön')) || har(effectiveField(kapitel, lesson, 'blå')) || har(effectiveField(kapitel, lesson, 'röd'))) && (<>
-          <label>Arbete{segFor('work') && <small className="tspan"> {segFor('work')!.from}–{segFor('work')!.to}</small>}</label>
-          <div>{/* FR-CARD-009/010/011 */}
-            {lesson.del === 1 && <span className="pill min">Minimum lektion 1: Grönt klart</span>}
-            {lesson.del === 2 && <span className="pill min">Minimum lektion 2: Blått klart</span>}
-            <div className="ranges">
-              {har(effectiveField(kapitel, lesson, 'grön')) && <span className="rg grön">Grön {effectiveField(kapitel, lesson, 'grön')} · Introduktion · obligatorisk</span>}
-              {har(effectiveField(kapitel, lesson, 'blå')) && <span className="rg blå">Blå {effectiveField(kapitel, lesson, 'blå')} · E-nivå · obligatorisk</span>}
-              {har(effectiveField(kapitel, lesson, 'röd')) && <span className="rg röd">Röd {effectiveField(kapitel, lesson, 'röd')} · C/A-nivå · frivillig</span>}
-            </div>
-            <p className="note">📷 Fotografera dina beräkningar och ladda upp i Google Classroom. Grön + blå är obligatoriska att lämna in; det som inte hinns med görs klart hemma eller på stödtid.</p>
-          </div>
-        </>)}
-
-        <label>Läxa</label>{/* FR-CARD-013 */}
-        <div>
-          {begreppList.length > 0 && <p className="note">💡 Nya begrepp att kunna: {begreppList.join(', ')}</p>}
-          <Editable kapitel={kapitel} lesson={lesson} field="laxa" onChange={onChange} />
-          <p className="note">Kom ihåg: gröna och blå uppgifter ska vara inlämnade i Classroom.</p>
-        </div>
-      </div>
-
-      {har(lesson.exit) && segFor('exit') && ( /* FR-CARD-014 */
-        <div className="soc-block exit">
-          <span className="soc-time">⏱ {segFor('exit')!.from}–{segFor('exit')!.to} · EXIT TICKET</span>
-          <span className="soc-room">Socrative.com · Roomname: <b>{socRoom}</b></span>
-          <Editable kapitel={kapitel} lesson={lesson} field="exit" onChange={onChange} />
-          <p className="note">5 minuter. Visa att du förstår lektionens grundläggande uppgifter. Exit ticket från denna lektion används som läxförhör nästa lektion.</p>
-        </div>
-      )}
-
-      <ResourceRow kapitel={kapitel} lesson={lesson} links={links} flipCount={flipCount} onChange={onChange} />
-      <div className="card-foot no-print">{/* FR-CARD-016 */}
-        <button className="btn sec" onClick={onAddAfter}>+ Lägg till lektion efter denna</button>
-      </div>
-      {cancelDlg && (
-        <div className="overlay" role="dialog">
-          <div className="modal">
-            <h3>{override ? 'Återställ lektion?' : `Ställ in lektion ${lesson.id}?`}</h3>
-            {!override && <p className="muted">Gäller klass {classId}.</p>}
-            <div className="modal-actions" style={{ flexWrap: 'wrap' }}>
-              {override ? (
-                <button className="btn" onClick={() => { setCalOverride(classId, globalIdx, null); setCancelDlg(false); onChange(); }}>↩ Återställ till ordinarie</button>
-              ) : (<>
-                <button className="btn" onClick={() => { setCalOverride(classId, globalIdx, { type: 'shifted', reason: 'Inställd — tas nästa pass' }); setCancelDlg(false); onChange(); }}>⏭ Flytta till nästa pass (allt förskjuts)</button>
-                <button className="btn warn" onClick={() => { setCalOverride(classId, globalIdx, { type: 'cancelled', reason: 'Utgår' }); setCancelDlg(false); onChange(); }}>⛔ Lektionen utgår helt</button>
-              </>)}
-              <button className="btn sec" onClick={() => setCancelDlg(false)}>Avbryt</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </article>
-  );
-}
-
-function ResourceRow(props: { kapitel: number; lesson: LessonRecord; links: LessonLink[]; flipCount: number; onChange: () => void }) {
-  const { kapitel, lesson, links, flipCount, onChange } = props;
-  const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState<LessonLink>({ typ: 'film', platform: 'Binogi', titel: '', url: '' });
-  const ICON: Record<ToolTyp, string> = { laxforhor: '📱', exit: '🎫', ovning: '✏️', film: '🎬', prov: '📝', flippat: '🏠' };
-  const CATS: Array<[ToolTyp, string, string]> = [ /* FR-TOOL-001: specens sex typer */
-    ['laxforhor', 'Läxförhör', 'Quiz som körs i början av lektionen (tidigare exit tickets + begrepp)'],
-    ['exit', 'Exit ticket', 'Kort test i slutet: ca 5 frågor på lektionens koncept + nya begrepp'],
-    ['ovning', 'Övningar', 'Extra övningar och interaktiva uppgifter'],
-    ['film', 'Filmer', 'Genomgångsfilmer och stödmaterial'],
-    ['prov', 'Prov', 'Prov och större bedömningar'],
-    ['flippat', 'Flippat underlag', 'Text, video och quiz som skickas till elever inför lektionen'],
-  ];
-  return (
-    <div className="resources">
-      <label>Pedagogiska verktyg</label>
-      <div className="toolgroups">{/* FR-TOOL-001: sex grupper, alltid synliga */}
-        {CATS.map(([typ, label, desc]) => (
-          <div key={typ} className="toolgroup">
-            <div className="toolgroup-head">
-              <h6>{ICON[typ]} {label}</h6>
-              <button className="icon-btn addres" onClick={() => { setForm({ typ, platform: PLATFORMS[typ][0], titel: '', url: '' }); setAdding(true); }}>+ Lägg till</button>
-            </div>
-            <p className="tool-desc">{desc}</p>
-            <div className="reslist">
-              {links.map((l, i) => l.typ === typ && (
-                <span key={`${l.url}-${i}`} className={`reslink ${l.typ}`}>
-                  {l.platform && <em className="plat">{l.platform.toUpperCase()}</em>}
-                  {l.url
-                    ? <a href={normalizeUrl(l.url)} target="_blank" rel="noopener noreferrer">{l.titel || l.url}</a>
-                    : <span>{l.titel}</span>}{/* FR-TOOL-004/005 */}
-                  {i >= flipCount && (
-                    <button className="icon-btn" title="Ta bort" onClick={() => { removeLink(kapitel, lesson.id, i - flipCount); onChange(); }}>×</button>
-                  )}
-                </span>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-      <MagmaRow kapitel={kapitel} lesson={lesson} onChange={onChange} />
-      <PrioBlock kapitel={kapitel} lesson={lesson} onChange={onChange} />
-      {adding && (
-        <div className="overlay" role="dialog" onClick={() => setAdding(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Lägg till: {ICON[form.typ]} {CATS.find(([t]) => t === form.typ)?.[1]}</h3>
-            <label>Plattform</label>{/* FR-TOOL-002 */}
-            <select value={form.platform} onChange={(e) => setForm({ ...form, platform: e.target.value })}>
-              {PLATFORMS[form.typ].map((pf) => <option key={pf} value={pf}>{pf}</option>)}
-            </select>
-            <label>Titel / beskrivning</label>
-            <input placeholder="t.ex. Quiz 1.1a eller Negativa tal — genomgång" value={form.titel}
-              onChange={(e) => setForm({ ...form, titel: e.target.value })} />
-            <label>Länk (valfri)</label>
-            <input placeholder="https://…" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
-            <div className="modal-actions">
-              <button className="btn sec" onClick={() => setAdding(false)}>Avbryt</button>
-              <button className="btn" disabled={form.titel.trim() === '' && form.url.trim() === ''}
-                onClick={() => { addLink(kapitel, lesson.id, form); setAdding(false); onChange(); }}>Lägg till</button>{/* FR-TOOL-003 */}
-            </div>
-          </div>
-        </div>
-      )}
+  const [savedAt, setSavedAt] = useState(0);
+  if (!sel) return <p className="muted">Inga aktiva klasser.</p>;
+  return (<>
+    <div className="cls-cards">{/* FR-CLS-001 */}
+      {active.map((c) => (
+        <button key={c.id} className={`cls-card ${sel.id === c.id ? 'active' : ''}`} onClick={() => setSelected(c.id)}>
+          <b>{c.namn}</b><small>Klass {c.namn} · {c.läsår}</small>
+        </button>
+      ))}
     </div>
-  );
-}
+    <p className="muted">Schema {sel.namn}: {(lib.subject.schema[sel.id] ?? []).map((p) => `${dayName[p.day]} ${p.start}–${p.end}`).join(' · ')} · Socrative: {sel.socrative}</p>
 
-const PLATFORMS: Record<ToolTyp, string[]> = { /* FR-TOOL-002 */
-  laxforhor: ['Socrative', 'Google Forms', 'Kunskapsmatrisen', 'Annat'],
-  exit: ['Socrative', 'Google Forms', 'Annat'],
-  ovning: ['Magma', 'Kunskapsmatrisen', 'NOMP', 'Annat'],
-  film: ['Binogi', 'YouTube', 'Egen inspelning', 'Annat'],
-  prov: ['Kunskapsmatrisen', 'Papper', 'Annat'],
-  flippat: ['Google Classroom', 'YouTube', 'Socrative', 'Annat'],
-};
-
-// ── Magma: en aktivitet per lektion (FR-MAG-002/003/005) ─────
-function MagmaRow(props: { kapitel: number; lesson: LessonRecord; onChange: () => void }) {
-  const { kapitel, lesson, onChange } = props;
-  const act = getMagma(kapitel, lesson.id);
-  const [editing, setEditing] = useState(false);
-  const [label, setLabel] = useState(act?.label ?? '');
-  const [url, setUrl] = useState(act?.url ?? '');
-  return (
-    <div className="magma-row">
-      <label>🧮 Magma</label>
-      {!editing && (act
-        ? <span className="reslink ovning"><em className="plat">MAGMA</em>
-            <a href={normalizeUrl(act.url)} target="_blank" rel="noopener noreferrer">{act.label || act.url}</a>
-            <button className="icon-btn" title="Ändra" onClick={() => { setLabel(act.label); setUrl(act.url); setEditing(true); }}>✏️</button>
-            <button className="icon-btn" title="Ta bort" onClick={() => { clearMagma(kapitel, lesson.id); onChange(); }}>×</button>
-          </span>
-        : <span className="muted">Ingen Magma-länk tillagd. <button className="icon-btn addres" onClick={() => setEditing(true)}>+ Lägg till Magma-länk</button></span>)}
-      {editing && (
-        <span className="resform">
-          <input placeholder="Etikett, t.ex. Negativa tal — övning" value={label} onChange={(e) => setLabel(e.target.value)} />
-          <input placeholder="https://magma.se/…" value={url} onChange={(e) => setUrl(e.target.value)} />
-          <button className="btn" disabled={url.trim() === ''} onClick={() => { setMagma(kapitel, lesson.id, { label, url }); setEditing(false); onChange(); }}>Spara</button>
-          <button className="btn sec" onClick={() => setEditing(false)}>Avbryt</button>
-        </span>
-      )}
-    </div>
-  );
-}
-
-// ── Prio Övningsrum (FR-PRIO-001…003) ────────────────────────
-function PrioBlock(props: { kapitel: number; lesson: LessonRecord; onChange: () => void }) {
-  const { kapitel, lesson, onChange } = props;
-  const state = getPrio(kapitel, lesson.id);
-  const toggle = (room: string) => {
-    const cur = state[room] ?? { active: false, desc: '' };
-    setPrio(kapitel, lesson.id, { ...state, [room]: { ...cur, active: !cur.active } });
-    onChange();
-  };
-  const setDesc = (room: string, desc: string) => {
-    const cur = state[room] ?? { active: true, desc: '' };
-    setPrio(kapitel, lesson.id, { ...state, [room]: { ...cur, desc } });
-    onChange();
-  };
-  return (
-    <div className="prio-block">
-      <label>🚪 Prio Övningsrum</label>
-      <div className="prio-rooms">
-        {PRIO_ALL.map((room) => {
-          const r = state[room];
-          return (
-            <span key={room} className="prio-room">
-              <button className={`prio-pill ${r?.active ? 'on' : ''}`} onClick={() => toggle(room)}>{room}</button>
-              {r?.active && (
-                <input className="prio-desc" placeholder="Vad innehåller rummet? (t.ex. Uppgifter 1.1–1.3 repetition)"
-                  defaultValue={r.desc} onBlur={(e) => setDesc(room, e.target.value)} />
-              )}
-            </span>
-          );
-        })}
-      </div>
-      <p className="note">Klicka ett rum för att aktivera det och lägg till beskrivning.</p>
-    </div>
-  );
-}
-
-function AddLessonDialog(props: {
-  kapitel: number; lessons: LessonRecord[]; onClose: () => void; initialAfterId?: number;
-  insertGlobalIdx?: number;
-}) {
-  const { kapitel, lessons, onClose, initialAfterId, insertGlobalIdx } = props;
-  const afterId = initialAfterId ?? lessons[lessons.length - 1]?.id ?? null;
-  const source = lessons.find((l) => l.id === afterId) ?? null;
-  const srcIdx = source ? lessons.findIndex((l) => l.id === source.id) : -1;
-  const next = srcIdx >= 0 ? lessons[srcIdx + 1] ?? null : null;
-
-  const blank = (id: number): LessonRecord => ({
-    id, type: source?.type ?? 'regular', avsnitt: 'Ny lektion', del: 0,
-    grön: '—', blå: '—', röd: '—', sidor_teori: '—', begrepp: '—', soc_start: '—', exit: '—',
-    genomgang: '', bam_gora: '', bam_lara: '', bam_ex: '', ex: '', laxa: '—',
-  });
-
-  const finish = () => { /* FR-STR-005: håll kalenderöverstyrningar i synk */
-    if (insertGlobalIdx !== undefined) shiftAllCalOverrides(insertGlobalIdx + 1, 1);
-    onClose();
-  };
-
-  const addBlank = () => { /* FR-STR-002 */
-    addCustomLesson({ kapitel, afterId, mode: 'skjut-fram', lesson: blank(nextCustomId(lessons)) });
-    finish();
-  };
-  const addCopy = () => { /* FR-STR-003: djupkopiera föregående */
-    if (!source) return;
-    addCustomLesson({ kapitel, afterId, mode: 'skjut-fram', lesson: { ...source, id: nextCustomId(lessons) } });
-    finish();
-  };
-  const pullNext = () => { /* FR-STR-004: nästa lektions innehåll hit; donatorn blir tomt skal */
-    if (!source || !next) return;
-    const id1 = nextCustomId(lessons);
-    addCustomLesson({ kapitel, afterId, mode: 'skjut-fram', lesson: { ...next, id: id1 } });
-    addCustomLesson({ kapitel, afterId: next.id, mode: 'ersätt', lesson: { ...blank(id1 + 1), avsnitt: 'Tomt skal (flyttad)' } });
-    finish();
-  };
-
-  return (
-    <div className="overlay" role="dialog" aria-label="Lägg till lektion" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Lägg till lektion efter "Lektion {srcIdx + 1} — {source?.avsnitt ?? '—'}"</h3>
-        {next && <p className="muted">Nästa lektion är just nu "Lektion {srcIdx + 2} — {next.avsnitt}".</p>}
-        <div className="ins-modes">{/* FR-STR-001 */}
-          <button className="ins-mode" onClick={addBlank}>
-            <b>📄 Tomt innehåll</b>
-            <span>Skapa en ny, tom lektion som du fyller i själv.</span>
-          </button>
-          <button className="ins-mode" onClick={addCopy} disabled={!source}>
-            <b>📋 Samma som föregående</b>
-            <span>Kopiera hela innehållet från lektionen du utgick ifrån, redigera sedan det som skiljer.</span>
-          </button>
-          {next && (
-            <button className="ins-mode warn" onClick={pullNext}>
-              <b>⏩ Flytta in nästa lektion hit</b>
-              <span>Innehållet i lektionen som annars hade legat direkt efter flyttas in i den nya platsen. Den lektionen blir då ett tomt skal.</span>
-            </button>
-          )}
+    <div className="card">
+      <div className="title">🗒 Anteckningar för klass {sel.namn} — Kapitel {kapitel}</div>
+      {lessons.map((l, i) => (
+        <div key={`${l.id}-${i}`} className="cls-note">
+          <label>Lek. {i + 1}: {effectiveField(kapitel, l, 'avsnitt')}</label>
+          <textarea key={`${sel.id}-${l.id}`} placeholder={`Anteckningar om ${sel.namn}…`} rows={2}
+            defaultValue={getClassNote(sel.id, kapitel, l.id)}
+            onBlur={(e) => { setClassNote(sel.id, kapitel, l.id, e.target.value); setSavedAt(Date.now()); }} />{/* FR-CLS-002/003 */}
         </div>
-        <div className="modal-actions">
-          <button className="btn sec" onClick={onClose}>Avbryt</button>
-        </div>
-      </div>
+      ))}
+      {savedAt > 0 && <p className="status">✓ Anteckningar sparas automatiskt (kvar efter omladdning).</p>}
     </div>
-  );
-}
-
-// ── Klasser (sprint 17-om) ────────────────────────────────────
-function KlasserView(props: { subject: SubjectFile }) {
-  const { subject } = props;
-  const dayName = ['', 'mån', 'tis', 'ons', 'tor', 'fre'];
-  return (
-    <main className="main">
-      <h2>Klasshantering</h2>
-      <p className="sub">Lektionspass per klass (läses från subject.json — redigeras i datakällan)</p>
-      <table className="tbl">
-        <thead><tr><th>Klass</th><th>Läsår</th><th>Socrative-rum</th><th>Lektionspass</th></tr></thead>
-        <tbody>
-          {subject.meta.klasser.map((c) => (
-            <tr key={c.id}>
-              <td><b>{c.namn}</b></td><td>{c.läsår}</td><td>{c.socrative}</td>
-              <td>{(subject.schema[c.id] ?? []).map((p) => `${dayName[p.day]} ${p.start}–${p.end}`).join(' · ')}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </main>
-  );
+  </>);
 }
 
 // ── Bibliotek: datakällor + wizard (sprint 20/22/24-om) ───────
