@@ -38,14 +38,27 @@ export interface KalenderProps {
   subject: SubjectFile;
   placedByClass: Record<string, Placed[]>;
   onChanged: () => void;
+  /** FR-CAL-009: öppna lektionskortet i planeringen. */
+  onOpenLesson: (kapitel: number, globalIdx: number) => void;
 }
 
-export default function Kalender({ subject, placedByClass, onChanged }: KalenderProps) {
+/** FR-CAL-005: händelsetypernas färger — paritet med prototypens CAL_COLORS. */
+const TYPE_COLORS: Record<string, string> = {
+  regular: '#3b82f6', test: '#eab308', repetition: '#a855f7', review: '#a855f7',
+  ovaformagor: '#f97316', exam: '#dc2626',
+};
+const TYPE_LABELS: Array<[string, string]> = [
+  ['regular', 'Lektion'], ['test', 'Diagnos'], ['repetition', 'Repetition'],
+  ['ovaformagor', 'Öva förmågor'], ['exam', 'PROV'],
+];
+
+export default function Kalender({ subject, placedByClass, onChanged, onOpenLesson }: KalenderProps) {
   const [mode, setMode] = useState<CalMode>('vecka');
   const [classId, setClassId] = useState(Object.keys(placedByClass)[0] ?? '8B');
   const [anchor, setAnchor] = useState(() => new Date());
   const [weekends, setWeekends] = useState(false);
-  const [moveModal, setMoveModal] = useState<{ globalIdx: number; date: string; start: string; end: string } | null>(null);
+  const [moveModal, setMoveModal] = useState<{ globalIdx: number; date: string; start: string; end: string; reason: string } | null>(null);
+  const [editModal, setEditModal] = useState<{ p: Placed; reason: string } | null>(null); // FR-CAL-011/012/015
 
   const placed = placedByClass[classId] ?? [];
   const byDate = useMemo(() => {
@@ -75,16 +88,20 @@ export default function Kalender({ subject, placedByClass, onChanged }: Kalender
     const d = new Date(dateIso + 'T00:00:00Z');
     const weekday = d.getUTCDay() === 0 ? 7 : d.getUTCDay();
     const pass = (subject.schema[classId] ?? []).find((p) => p.day === weekday);
-    setMoveModal({ globalIdx: gi, date: dateIso, start: pass?.start ?? '08:00', end: pass?.end ?? '09:00' });
+    setMoveModal({ globalIdx: gi, date: dateIso, start: pass?.start ?? '08:00', end: pass?.end ?? '09:00', reason: '' });
   };
 
   const chip = (p: Placed, withTime = true) => (
     <div key={p.globalIdx} draggable className={`cal-chip ${p.override ? 'ov' : ''}`}
       style={{ borderLeft: `4px solid ${KAP_COLORS[p.kapitel] ?? '#888'}` }}
-      title={`Kap ${p.kapitel} · ${p.lesson.avsnitt}${p.override ? ` (${p.override.type}: ${p.override.reason})` : ''}`}
+      title={`Kap ${p.kapitel} · ${p.lesson.avsnitt}${p.override ? ` (${p.override.type}: ${p.override.reason})` : ''} — klicka för att öppna`}
+      onClick={() => onOpenLesson(p.kapitel, p.globalIdx)}
       onDragStart={(e) => e.dataTransfer.setData('text/plain', String(p.globalIdx))}>
+      <span className="tdot" style={{ background: TYPE_COLORS[p.lesson.type] ?? '#3b82f6' }} />
       {withTime && <small>{p.slot!.start}</small>} {p.kapitel}.{p.lesson.id} {p.lesson.avsnitt.replace(/^\d+\.\d+\s*/, '').slice(0, 20)}
       {p.override?.type === 'moved' && ' 📍'}
+      <button className="chip-x" title="Ändra lektion (ställ in / flytta / återställ)"
+        onClick={(e) => { e.stopPropagation(); setEditModal({ p, reason: p.override?.reason ?? '' }); }}>×</button>
     </div>
   );
 
@@ -123,10 +140,14 @@ export default function Kalender({ subject, placedByClass, onChanged }: Kalender
                   return (
                     <div key={p.globalIdx} draggable className="cal-block"
                       style={{ top, height: h, background: KAP_COLORS[p.kapitel] ?? '#555' }}
-                      title={`${p.lesson.avsnitt} · ${p.slot!.start}–${p.slot!.end}`}
+                      title={`${p.lesson.avsnitt} · ${p.slot!.start}–${p.slot!.end} — klicka för att öppna`}
+                      onClick={() => onOpenLesson(p.kapitel, p.globalIdx)}
                       onDragStart={(e) => e.dataTransfer.setData('text/plain', String(p.globalIdx))}>
+                      <span className="tdot" style={{ background: TYPE_COLORS[p.lesson.type] ?? '#3b82f6' }} />
                       <b>{p.kapitel}.{p.lesson.id}</b> {p.lesson.avsnitt.replace(/^\d+\.\d+\s*/, '')}
                       <small>{p.slot!.start}–{p.slot!.end}{p.override?.type === 'moved' ? ' 📍' : ''}</small>
+                      <button className="chip-x" title="Ändra lektion"
+                        onClick={(e) => { e.stopPropagation(); setEditModal({ p, reason: p.override?.reason ?? '' }); }}>×</button>
                     </div>
                   );
                 })}
@@ -199,8 +220,8 @@ export default function Kalender({ subject, placedByClass, onChanged }: Kalender
             <div key={iso(ms)} className="cal-mini"
               onClick={() => { setAnchor(new Date(ms.getUTCFullYear(), ms.getUTCMonth(), 1)); setMode('månad'); }}>
               <h4>{ms.toLocaleDateString('sv-SE', { month: 'long', year: 'numeric' })}</h4>
-              <div className="cal-minigrid">
-                {cells.map((d) => {
+              <div className="cal-minigrid" style={{ gridTemplateColumns: `repeat(${weekends ? 7 : 5}, 1fr)` }}>
+                {cells.filter((d) => weekends || ((d.getUTCDay() + 6) % 7) < 5).map((d) => {
                   const di = iso(d);
                   const n = (byDate.get(di) ?? []).length;
                   const lov = !!breakLabelFor(di, subject);
@@ -252,9 +273,10 @@ export default function Kalender({ subject, placedByClass, onChanged }: Kalender
 
   const confirmMove = (shift: boolean) => {
     if (!moveModal) return;
+    const reason = moveModal.reason.trim() || 'Flyttad via kalendern';
     const ov: LessonOverride = shift
-      ? { type: 'shifted', reason: 'Flyttad via kalendern' }
-      : { type: 'moved', reason: 'Flyttad via kalendern', targetDate: moveModal.date, targetStart: moveModal.start, targetEnd: moveModal.end };
+      ? { type: 'shifted', reason }
+      : { type: 'moved', reason, targetDate: moveModal.date, targetStart: moveModal.start, targetEnd: moveModal.end };
     setCalOverride(classId, moveModal.globalIdx, ov);
     setMoveModal(null); onChanged();
   };
@@ -283,6 +305,16 @@ export default function Kalender({ subject, placedByClass, onChanged }: Kalender
         </div>
       </div>
 
+      <div className="cal-legend">{/* FR-CAL-005 */}
+        {TYPE_LABELS.map(([t, label]) => (
+          <span key={t}><i className="tdot" style={{ background: TYPE_COLORS[t] }} />{label}</span>
+        ))}
+        <span className="sep" />
+        {Object.keys(subject.kapitelMeta).map(Number).sort((a, b) => a - b).map((k) => (
+          <span key={k}><i className="kdot" style={{ background: KAP_COLORS[k] ?? '#555' }} />Kap {k}</span>
+        ))}
+      </div>
+
       {mode === 'vecka' && week()}
       {mode === 'månad' && month()}
       {mode === 'termin' && term()}
@@ -294,11 +326,48 @@ export default function Kalender({ subject, placedByClass, onChanged }: Kalender
         <div className="overlay" role="dialog">
           <div className="modal">
             <h3>Flytta lektion till {moveModal.date}?</h3>
-            <p>Tid: {moveModal.start}–{moveModal.end}</p>
+            <div className="pair">{/* FR-CAL-013: redigerbar tid */}
+              <label>Start <input type="time" value={moveModal.start}
+                onChange={(e) => setMoveModal({ ...moveModal, start: e.target.value })} /></label>
+              <label>Slut <input type="time" value={moveModal.end}
+                onChange={(e) => setMoveModal({ ...moveModal, end: e.target.value })} /></label>
+            </div>
+            <label>Anledning (valfritt)</label>{/* FR-CAL-014 */}
+            <input placeholder="t.ex. Studiedag, NP, friluftsdag…" value={moveModal.reason}
+              onChange={(e) => setMoveModal({ ...moveModal, reason: e.target.value })} />
             <div className="modal-actions" style={{ flexWrap: 'wrap' }}>
               <button className="btn" onClick={() => confirmMove(false)}>📍 Fäst på detta datum</button>
               <button className="btn sec" onClick={() => confirmMove(true)}>⏭ Skjut till nästa ordinarie pass</button>
               <button className="btn sec" onClick={() => setMoveModal(null)}>Avbryt</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {editModal && (
+        <div className="overlay" role="dialog" onClick={() => setEditModal(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Ändra lektion {editModal.p.kapitel}.{editModal.p.lesson.id} — {editModal.p.lesson.avsnitt}</h3>
+            <p className="muted">Klass {classId} · {editModal.p.slot ? `${editModal.p.slot.date} ${editModal.p.slot.start}` : 'inställd'}
+              {editModal.p.override && <> · nuvarande: {editModal.p.override.type} ({editModal.p.override.reason})</>}</p>
+            <label>Anledning (valfritt)</label>{/* FR-CAL-014 */}
+            <input placeholder="t.ex. Studiedag, NP, friluftsdag…" value={editModal.reason}
+              onChange={(e) => setEditModal({ ...editModal, reason: e.target.value })} />
+            <div className="modal-actions" style={{ flexWrap: 'wrap' }}>
+              {editModal.p.override && ( /* FR-CAL-015 */
+                <button className="btn" onClick={() => {
+                  setCalOverride(classId, editModal.p.globalIdx, null);
+                  setEditModal(null); onChanged();
+                }}>↩ Återställ till ordinarie</button>
+              )}
+              <button className="btn" onClick={() => { /* FR-CAL-012 */
+                setCalOverride(classId, editModal.p.globalIdx, { type: 'shifted', reason: editModal.reason.trim() || 'Flyttad till nästa tillfälle' });
+                setEditModal(null); onChanged();
+              }}>⏭ Flytta till nästa tillfälle (allt förskjuts)</button>
+              <button className="btn warn" onClick={() => { /* FR-CAL-011 */
+                setCalOverride(classId, editModal.p.globalIdx, { type: 'cancelled', reason: editModal.reason.trim() || 'Utgår' });
+                setEditModal(null); onChanged();
+              }}>⛔ Ta bort lektion (efterföljande fyller sloten)</button>
+              <button className="btn sec" onClick={() => setEditModal(null)}>Avbryt</button>
             </div>
           </div>
         </div>

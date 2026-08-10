@@ -61,6 +61,13 @@ export default function App() {
     return out;
   }, [lib, sequence, tick]);
   const goTo = (kap: number, section: InnerTab) => { setKapitel(kap); setInner(section); setTab('planering'); }; // FR-GEN-005
+  const [focus, setFocus] = useState<{ idx: number; token: number } | null>(null); // FR-CAL-009
+  const openLesson = (kap: number, globalIdx: number) => {
+    let before = 0;
+    for (const k of chapters) { if (k === kap) break; before += composeChapter(k, lib.lessons[k] ?? []).length; }
+    setKapitel(kap); setInner('lektionsplan'); setTab('planering');
+    setFocus({ idx: globalIdx - before, token: Date.now() });
+  };
   const placed = placedByClass[classId] ?? [];
   const slotFor = (kap: number, idx: number): ScheduledSlot | null => {
     let before = 0;
@@ -109,11 +116,11 @@ export default function App() {
           </nav>
           <PlaneringView lib={lib} kapitel={kapitel} lessons={lessons} slotFor={slotFor}
             globalIdxFor={globalIdxFor} placed={placed} classId={classId} onChange={refresh}
-            inner={inner} setInner={setInner} />
+            inner={inner} setInner={setInner} focus={focus} />
         </div>
       )}
 
-      {tab === 'kalender' && <Kalender subject={lib.subject} placedByClass={placedByClass} onChanged={refresh} />}
+      {tab === 'kalender' && <Kalender subject={lib.subject} placedByClass={placedByClass} onChanged={refresh} onOpenLesson={openLesson} />}
       {tab === 'klasser' && <KlasserView subject={lib.subject} />}
       {tab === 'bibliotek' && <BibliotekView lib={lib} onLoaded={(l) => { setLib(l); refresh(); }} />}
       {tab === 'superteach' && stOn && (
@@ -142,8 +149,9 @@ function PlaneringView(props: {
   placed: PlacedLesson<LessonRecord>[]; onChange: () => void;
   inner: import('../views/Arsoversikt.js').InnerTab;
   setInner: (t: import('../views/Arsoversikt.js').InnerTab) => void;
+  focus: { idx: number; token: number } | null;
 }) {
-  const { lib, kapitel, lessons, slotFor, globalIdxFor, placed, classId, onChange, inner, setInner } = props;
+  const { lib, kapitel, lessons, slotFor, globalIdxFor, placed, classId, onChange, inner, setInner, focus } = props;
   const meta = lib.subject.kapitelMeta[String(kapitel)];
   const accent = KAP_COLORS[kapitel] ?? '#555'; // FR-GEN-003
   const [adding, setAdding] = useState(false);
@@ -154,6 +162,12 @@ function PlaneringView(props: {
     setSel(n);
     document.getElementById(`lesson-card-${kapitel}-${n}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
+  useEffect(() => { // FR-CAL-009: fokusera lektion vald i kalendern
+    if (focus === null) return;
+    const t = setTimeout(() => gotoLesson(focus.idx), 60);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus?.token, kapitel]);
   useEffect(() => { // FR-GEN-007: piltangenter, ej när formulärfält är i fokus
     const onKey = (e: KeyboardEvent) => {
       if (inner !== 'lektionsplan') return;
@@ -389,6 +403,7 @@ function LessonCard(props: {
         <button className="icon-btn" title={override ? 'Återställ' : 'Ställ in / flytta'} onClick={() => setCancelDlg(true)}>{override ? '↩' : '⛔'}</button>
         <button className="icon-btn" title="Ta bort lektion" onClick={() => { removeLesson(kapitel, lesson.id); onChange(); }}>🗑</button>
       </div>
+      {override && <p className="ov-reason">📝 {override.reason}</p>}
       {timeline && (
         <div className="bam" aria-label="BAM-tidslinje">
           {timeline.map((seg) => (
