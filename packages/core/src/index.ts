@@ -40,3 +40,4 @@ export * from './records/schedule.js';
 export * from './adapters/subject-loader.js';
 export * from './logic/bam-default.js';
 export * from './records/schedule-overrides.js';
+export * from './logic/arsoversikt.js';

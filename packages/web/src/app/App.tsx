@@ -1,9 +1,11 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   computeTimes, defaultBamTimeline, diffMinutes, generateSlots, placeLessons,
+  weeksLabel, KAP_COLORS,
   type LessonRecord, type PlacedLesson, type ScheduledSlot, type SubjectFile,
 } from '@planner/core';
 import Kalender from '../views/Kalender.js';
+import Arsoversikt, { type InnerTab } from '../views/Arsoversikt.js';
 import {
   addCustomLesson, composeChapter, demoLibrary, effectiveField, exportBackup, getSettings,
   importBackup, loadFromGithub, nextCustomId, removeLesson, restoreAllRemoved, saveSettings,
@@ -16,15 +18,16 @@ import './styles.css';
 const SuperTeachPanel = lazy(() => import('../features/superteach/SuperTeachPanel.js'));
 const FLAG = 'classroom-planner.superteach.enabled';
 
-type Tab = 'planering' | 'kalender' | 'klasser' | 'bibliotek' | 'superteach' | 'installningar';
+type Tab = 'arsoversikt' | 'planering' | 'kalender' | 'klasser' | 'bibliotek' | 'superteach' | 'installningar';
 const TABS: Array<[Tab, string]> = [
-  ['planering', 'Planering'], ['kalender', 'Kalender'], ['klasser', 'Klasser'],
-  ['bibliotek', 'Bibliotek'], ['superteach', 'SuperTeach'], ['installningar', 'Inställningar'],
+  ['arsoversikt', 'Årsöversikt'], ['planering', 'Planering'], ['kalender', 'Kalender'],
+  ['klasser', 'Klasser'], ['bibliotek', 'Bibliotek'], ['superteach', 'SuperTeach'], ['installningar', 'Inställningar'],
 ];
 
 export default function App() {
   const [lib, setLib] = useState<LoadedLibrary>(demoLibrary);
-  const [tab, setTab] = useState<Tab>('planering');
+  const [tab, setTab] = useState<Tab>('arsoversikt');
+  const [inner, setInner] = useState<InnerTab>('lektionsplan');
   const [classId, setClassId] = useState('8B');
   const [kapitel, setKapitel] = useState(1);
   const [tick, bump] = useState(0);
@@ -48,6 +51,16 @@ export default function App() {
     }
     return out;
   }, [lib, sequence, tick]);
+  // FR-YR-005/007: baslinje = samma sekvens utan kalenderöverstyrningar
+  const baselineByClass = useMemo(() => {
+    const out: Record<string, PlacedLesson<LessonRecord>[]> = {};
+    for (const c of lib.subject.meta.klasser.filter((x) => !x.arkiverad)) {
+      const slots = generateSlots(lib.subject, c.id, sequence.length + 20);
+      out[c.id] = placeLessons(sequence, slots);
+    }
+    return out;
+  }, [lib, sequence, tick]);
+  const goTo = (kap: number, section: InnerTab) => { setKapitel(kap); setInner(section); setTab('planering'); }; // FR-GEN-005
   const placed = placedByClass[classId] ?? [];
   const slotFor = (kap: number, idx: number): ScheduledSlot | null => {
     let before = 0;
@@ -68,9 +81,16 @@ export default function App() {
           <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>{label}</button>
         ))}
         <span className="spacer" />
+        <span className="stat"><b>{sequence.length}</b><small>LEKTIONER</small></span>
+        <span className="stat"><b>{weeksLabel(sequence.length, (lib.subject.schema[classId] ?? []).length)}</b><small>VECKOR</small></span>
+        <span className="stat"><b>{chapters.length}</b><small>KAPITEL</small></span>
         <span className="badge">{lib.subject.meta.lärobok.split(',')[0]}</span>
         <span className={`src ${lib.source}`}>{lib.source === 'github' ? '● GitHub' : '○ Demo'}</span>
       </header>
+
+      {tab === 'arsoversikt' && (
+        <Arsoversikt lib={lib} placedByClass={placedByClass} baselineByClass={baselineByClass} onGoTo={goTo} />
+      )}
 
       {tab === 'planering' && (
         <div className="wrap">
@@ -88,7 +108,8 @@ export default function App() {
             ))}
           </nav>
           <PlaneringView lib={lib} kapitel={kapitel} lessons={lessons} slotFor={slotFor}
-            globalIdxFor={globalIdxFor} placed={placed} classId={classId} onChange={refresh} />
+            globalIdxFor={globalIdxFor} placed={placed} classId={classId} onChange={refresh}
+            inner={inner} setInner={setInner} />
         </div>
       )}
 
@@ -109,15 +130,41 @@ export default function App() {
 }
 
 // ── Planering: lektionskort, inline edit, BAM, add/remove ─────
+const INNER_TABS: Array<[import('../views/Arsoversikt.js').InnerTab, string]> = [
+  ['lektionsplan', '📋 Lektionsplan'], ['oversikt', '🗓 Översikt'], ['uppgifter', '✏️ Uppgifter'],
+  ['begrepp', '💡 Begrepp'], ['filmer', '🎬 Filmer'], ['magma', '🧮 Magma'], ['klasser', '🏫 Klasser'],
+];
+
 function PlaneringView(props: {
   lib: LoadedLibrary; kapitel: number; lessons: LessonRecord[]; classId: string;
   slotFor: (kap: number, idx: number) => ScheduledSlot | null;
   globalIdxFor: (kap: number, idx: number) => number;
   placed: PlacedLesson<LessonRecord>[]; onChange: () => void;
+  inner: import('../views/Arsoversikt.js').InnerTab;
+  setInner: (t: import('../views/Arsoversikt.js').InnerTab) => void;
 }) {
-  const { lib, kapitel, lessons, slotFor, globalIdxFor, placed, classId, onChange } = props;
+  const { lib, kapitel, lessons, slotFor, globalIdxFor, placed, classId, onChange, inner, setInner } = props;
   const meta = lib.subject.kapitelMeta[String(kapitel)];
+  const accent = KAP_COLORS[kapitel] ?? '#555'; // FR-GEN-003
   const [adding, setAdding] = useState(false);
+  const [sel, setSel] = useState(0); // FR-GEN-007: vald lektion
+  const clampSel = Math.min(sel, Math.max(0, lessons.length - 1));
+  const gotoLesson = (i: number) => {
+    const n = Math.max(0, Math.min(lessons.length - 1, i));
+    setSel(n);
+    document.getElementById(`lesson-card-${kapitel}-${n}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+  useEffect(() => { // FR-GEN-007: piltangenter, ej när formulärfält är i fokus
+    const onKey = (e: KeyboardEvent) => {
+      if (inner !== 'lektionsplan') return;
+      const t = e.target as HTMLElement | null;
+      if (t && ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return;
+      if (e.key === 'ArrowRight') { e.preventDefault(); gotoLesson(clampSel + 1); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); gotoLesson(clampSel - 1); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   const exportWord = async (scope: 'kapitel' | 'vecka') => {
     const rows = lessons.map((l, i) => ({ lesson: l, slot: slotFor(kapitel, i) }));
@@ -132,28 +179,172 @@ function PlaneringView(props: {
 
   return (
     <main className="main">
-      <div className="head-row">
+      <div className="head-row kap-head" style={{ borderLeft: `6px solid ${accent}` }}>
         <div>
-          <h2>Kapitel {kapitel} — {meta.name}</h2>
+          <h2 style={{ color: accent }}>Kapitel {kapitel} — {meta.name}</h2>
           <p className="sub">{lessons.length} lektioner · {meta.term} · prov: {meta.prov} · klass {classId}</p>
         </div>
-        <div>
+        <div className="no-print">
           <button className="btn sec" onClick={() => { undo() && onChange(); }}>↶ Ångra</button>{' '}
+          <button className="btn sec" onClick={() => window.print()}>🖨 Skriv ut</button>{' '}
           <button className="btn sec" onClick={() => void exportWord('vecka')}>📄 Vecka → Word</button>{' '}
           <button className="btn sec" onClick={() => void exportWord('kapitel')}>📄 Kapitel → Word</button>{' '}
           <button className="btn" onClick={() => setAdding(true)}>+ Lägg till lektion</button>
         </div>
       </div>
 
-      {lessons.map((l, i) => (
-        <LessonCard key={`${l.id}-${i}`} kapitel={kapitel} lesson={l} slot={slotFor(kapitel, i)}
-          globalIdx={globalIdxFor(kapitel, i)} classId={classId}
-          override={placed[globalIdxFor(kapitel, i)]?.override}
-          flip={lib.flip[kapitel]?.[l.id]} onChange={onChange} />
-      ))}
+      <div className="inner-tabs no-print">{/* FR-GEN-004 */}
+        {INNER_TABS.map(([t, label]) => (
+          <button key={t} className={`itab ${inner === t ? 'active' : ''}`}
+            style={inner === t ? { borderBottomColor: accent, color: accent } : undefined}
+            onClick={() => setInner(t)}>{label}</button>
+        ))}
+      </div>
+
+      {inner === 'lektionsplan' && (<>
+        <div className="lesson-nav no-print">{/* FR-GEN-007 */}
+          <label>Välj lektion:</label>
+          <select value={clampSel} onChange={(e) => gotoLesson(Number(e.target.value))}>
+            {lessons.map((l, i) => <option key={`${l.id}-${i}`} value={i}>Lektion {i + 1} — {l.avsnitt}</option>)}
+          </select>
+          <button className="btn sec" onClick={() => gotoLesson(clampSel - 1)} aria-label="Föregående lektion">◀</button>
+          <button className="btn sec" onClick={() => gotoLesson(clampSel + 1)} aria-label="Nästa lektion">▶</button>
+          <span className="badge" style={{ background: accent }}>Lektion {clampSel + 1} / {lessons.length}</span>
+        </div>
+        {lessons.map((l, i) => (
+          <div key={`${l.id}-${i}`} id={`lesson-card-${kapitel}-${i}`}
+            className={i === clampSel ? 'sel-lesson' : undefined} onClick={() => setSel(i)}>
+            <LessonCard kapitel={kapitel} lesson={l} slot={slotFor(kapitel, i)}
+              globalIdx={globalIdxFor(kapitel, i)} classId={classId}
+              override={placed[globalIdxFor(kapitel, i)]?.override}
+              flip={lib.flip[kapitel]?.[l.id]} onChange={onChange} />
+          </div>
+        ))}
+      </>)}
+
+      {inner === 'oversikt' && <OversiktTab kapitel={kapitel} lessons={lessons} slotFor={slotFor} />}
+      {inner === 'uppgifter' && <UppgifterTab kapitel={kapitel} lessons={lessons} />}
+      {inner === 'begrepp' && <BegreppTab lib={lib} kapitel={kapitel} />}
+      {inner === 'filmer' && <LinkTab lib={lib} kapitel={kapitel} lessons={lessons} typ="film" tom="Inga filmer i kapitlet ännu — lägg till via + länk på lektionskortet." />}
+      {inner === 'magma' && <LinkTab lib={lib} kapitel={kapitel} lessons={lessons} typ="magma" tom="Inga Magma-aktiviteter ännu — lägg till via + länk på lektionskortet." />}
+      {inner === 'klasser' && <KlasserTab lib={lib} kapitel={kapitel} placed={placed} />}
 
       {adding && <AddLessonDialog kapitel={kapitel} lessons={lessons} onClose={() => { setAdding(false); onChange(); }} />}
     </main>
+  );
+}
+
+// ── Inre kapitelflikar (FR-GEN-004) ───────────────────────────
+function OversiktTab(props: { kapitel: number; lessons: LessonRecord[]; slotFor: (k: number, i: number) => ScheduledSlot | null }) {
+  const { kapitel, lessons, slotFor } = props;
+  return (
+    <table className="tbl">
+      <thead><tr><th>#</th><th>Datum</th><th>Avsnitt</th><th>Typ</th><th>Del</th><th>Exit ticket</th></tr></thead>
+      <tbody>
+        {lessons.map((l, i) => {
+          const s = slotFor(kapitel, i);
+          return (
+            <tr key={`${l.id}-${i}`}>
+              <td>{i + 1}</td>
+              <td>{s ? `v.${s.week} · ${s.date} ${s.start}` : '—'}</td>
+              <td>{effectiveField(kapitel, l, 'avsnitt')}</td>
+              <td>{l.type}</td><td>{l.del || '—'}</td><td>{l.exit}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+function UppgifterTab(props: { kapitel: number; lessons: LessonRecord[] }) {
+  const { kapitel, lessons } = props;
+  return (<>
+    <p className="note">Grön = introduktion · Blå = E-nivå · Röd = C/A-nivå. Del 1: Grön/Blå (minimum grönt). Del 2: Blå/Röd (minimum blått). Grönt + blått lämnas in som foto i Google Classroom.</p>
+    <table className="tbl">
+      <thead><tr><th>Avsnitt</th><th>Del</th><th>Grön</th><th>Blå</th><th>Röd</th><th>Teori</th></tr></thead>
+      <tbody>
+        {lessons.filter((l) => l.type === 'regular').map((l, i) => (
+          <tr key={`${l.id}-${i}`}>
+            <td>{effectiveField(kapitel, l, 'avsnitt')}</td><td>{l.del || '—'}</td>
+            <td className="rg grön">{effectiveField(kapitel, l, 'grön')}</td>
+            <td className="rg blå">{effectiveField(kapitel, l, 'blå')}</td>
+            <td className="rg röd">{effectiveField(kapitel, l, 'röd')}</td>
+            <td>{l.sidor_teori}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </>);
+}
+
+function BegreppTab(props: { lib: LoadedLibrary; kapitel: number }) {
+  const { lib, kapitel } = props;
+  const entries = Object.entries(lib.begrepp.perDelkapitel)
+    .filter(([k]) => k.split('.')[0] === String(kapitel))
+    .sort(([a], [b]) => a.localeCompare(b, 'sv', { numeric: true }));
+  if (entries.length === 0) return <p className="muted">Inga begrepp registrerade för kapitlet.</p>;
+  return (<>
+    {entries.map(([delkap, list]) => (
+      <div key={delkap} className="card">
+        <div className="title">{delkap}</div>
+        <div className="reslist">
+          {list.map((b) => (
+            <span key={b} className="chip" title={lib.begrepp.definitioner[b] ?? 'Definition saknas'}>{b}</span>
+          ))}
+        </div>
+      </div>
+    ))}
+  </>);
+}
+
+function LinkTab(props: { lib: LoadedLibrary; kapitel: number; lessons: LessonRecord[]; typ: 'film' | 'magma'; tom: string }) {
+  const { lib, kapitel, lessons, typ, tom } = props;
+  const rows = lessons.flatMap((l) => {
+    const flip = lib.flip[kapitel]?.[l.id];
+    const fromFlip = typ === 'film'
+      ? (flip?.blocks ?? []).flatMap((b) => (b.typ === 'film' ? [{ titel: b.ref.titel, url: b.ref.url }] : []))
+      : [];
+    const fromLinks = getLinks(kapitel, l.id).filter((x) => x.typ === typ);
+    return [...fromFlip, ...fromLinks].map((x) => ({ lesson: l, ...x }));
+  });
+  if (rows.length === 0) return <p className="muted">{tom}</p>;
+  return (
+    <table className="tbl">
+      <thead><tr><th>Lektion</th><th>{typ === 'film' ? 'Film' : 'Magma-aktivitet'}</th></tr></thead>
+      <tbody>
+        {rows.map((r, i) => (
+          <tr key={i}><td>{r.lesson.avsnitt}</td>
+            <td><a href={r.url} target="_blank" rel="noreferrer">{typ === 'film' ? '🎬' : '🧮'} {r.titel || r.url}</a></td></tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function KlasserTab(props: { lib: LoadedLibrary; kapitel: number; placed: PlacedLesson<LessonRecord>[] }) {
+  const { lib, kapitel } = props;
+  const dayName = ['', 'mån', 'tis', 'ons', 'tor', 'fre'];
+  return (
+    <table className="tbl">
+      <thead><tr><th>Klass</th><th>Socrative</th><th>Lektionspass</th><th>Kapitlets period</th></tr></thead>
+      <tbody>
+        {lib.subject.meta.klasser.filter((c) => !c.arkiverad).map((c) => {
+          const seq = Object.keys(lib.subject.kapitelMeta).map(Number).sort((a, b) => a - b)
+            .flatMap((k) => composeChapter(k, lib.lessons[k] ?? []).map((lesson) => ({ kapitel: k, lesson })));
+          const slots = generateSlots(lib.subject, c.id, seq.length + 20);
+          const mine = placeLessons(seq, slots, getCalOverrides(c.id)).filter((p) => p.kapitel === kapitel && p.slot);
+          const first = mine[0]?.slot, last = mine[mine.length - 1]?.slot;
+          return (
+            <tr key={c.id}>
+              <td><b>{c.namn}</b></td><td>{c.socrative}</td>
+              <td>{(lib.subject.schema[c.id] ?? []).map((p) => `${dayName[p.day]} ${p.start}–${p.end}`).join(' · ')}</td>
+              <td>{first && last ? `v.${first.week} (${first.date}) – v.${last.week} (${last.date})` : '—'}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
   );
 }
 

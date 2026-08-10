@@ -4,12 +4,12 @@
  */
 import {
   loadSubjectLibrary,
-  githubReader,
   type FieldOverride,
   type FlipDoc,
   type LessonRecord,
   type SubjectFile,
 } from '@planner/core';
+import { githubReader } from './githubReader.js';
 import { DEMO_BEGREPP, DEMO_FLIP, DEMO_LESSONS, DEMO_SUBJECT } from '../data/demo.js';
 
 const K = {
