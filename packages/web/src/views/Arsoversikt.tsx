@@ -11,7 +11,7 @@ import {
   type KeyDate, type KeyDateChange, type LessonRecord, type PlacedLesson, type SubjectFile,
 } from '@planner/core';
 import type { LoadedLibrary } from '../state/store.js';
-import { getLinks } from '../state/store.js';
+import { countMagmaForKap, getLinks } from '../state/store.js';
 
 type Placed = PlacedLesson<LessonRecord>;
 export type InnerTab = 'lektionsplan' | 'oversikt' | 'uppgifter' | 'begrepp' | 'filmer' | 'magma' | 'klasser';
@@ -59,11 +59,8 @@ export default function Arsoversikt({ lib, placedByClass, baselineByClass, onGoT
     }
     return n;
   };
-  const countMagma = (kap: number): number => {
-    let n = 0;
-    for (const l of lib.lessons[kap] ?? []) n += getLinks(kap, l.id).filter((x) => x.typ === 'magma').length;
-    return n;
-  };
+  const countMagma = (kap: number): number =>
+    countMagmaForKap(kap, (lib.lessons[kap] ?? []).map((l) => l.id));
 
   const keyRow = (k: KeyDate) => {
     const ch = changeByIdx.get(k.globalIdx);

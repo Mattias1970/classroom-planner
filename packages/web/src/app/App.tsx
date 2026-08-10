@@ -1,7 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
-  applySchemaEdits, computeTimes, defaultBamTimeline, diffMinutes, distinctEditedFields,
-  generateSlots, placeLessons, summarizeEdits, weeksLabel, KAP_COLORS,
+  applySchemaEdits, buildBegreppTabell, computeTimes, defaultBamTimeline, diffMinutes,
+  distinctEditedFields, generateSlots, normalizeUrl, placeLessons, summarizeEdits,
+  weeksLabel, KAP_COLORS,
   type LessonRecord, type PlacedLesson, type ScheduledSlot, type SubjectFile,
 } from '@planner/core';
 import { SchedulePanel, TimeBand } from '../views/SchemaOchTidsband.js';
@@ -12,7 +13,10 @@ import {
   getOverrides, getSchemaEdits, getSettings, importBackup, isEdited, loadFromGithub,
   nextCustomId, removeLesson, restoreAllRemoved, saveSettings,
   setField, undo, type InsertMode, type LoadedLibrary,
-  addLink, getCalOverrides, getLinks, removeLink, setCalOverride, type LessonLink,
+  addLink, getCalOverrides, getLinks, removeLink, setCalOverride, shiftAllCalOverrides,
+  clearMagma, countMagmaForKap, getMagma, setMagma,
+  getPrio, setPrio, PRIO_ALL,
+  type LessonLink, type ToolTyp,
 } from '../state/store.js';
 import { Docx } from './wordExport.js';
 import './styles.css';
@@ -298,35 +302,51 @@ function PlaneringView(props: {
         </div>
       </>)}
 
-      {inner === 'oversikt' && <OversiktTab kapitel={kapitel} lessons={lessons} slotFor={slotFor} />}
+      {inner === 'oversikt' && <OversiktTab kapitel={kapitel} lessons={lessons} slotFor={slotFor}
+        onOpenRow={(i) => { setInner('lektionsplan'); setTimeout(() => gotoLesson(i), 60); }} />}
       {inner === 'uppgifter' && <UppgifterTab kapitel={kapitel} lessons={lessons} />}
-      {inner === 'begrepp' && <BegreppTab lib={lib} kapitel={kapitel} />}
-      {inner === 'filmer' && <LinkTab lib={lib} kapitel={kapitel} lessons={lessons} typ="film" tom="Inga filmer i kapitlet ännu — lägg till via + länk på lektionskortet." />}
-      {inner === 'magma' && <LinkTab lib={lib} kapitel={kapitel} lessons={lessons} typ="magma" tom="Inga Magma-aktiviteter ännu — lägg till via + länk på lektionskortet." />}
+      {inner === 'begrepp' && <BegreppTab lib={lib} kapitel={kapitel} lessons={lessons} />}
+      {inner === 'filmer' && <FilmerTab lib={lib} kapitel={kapitel} lessons={lessons} onChange={onChange}
+        onOpenRow={(i) => { setInner('lektionsplan'); setTimeout(() => gotoLesson(i), 60); }} />}
+      {inner === 'magma' && <MagmaTab kapitel={kapitel} lessons={lessons} onChange={onChange}
+        onOpenRow={(i) => { setInner('lektionsplan'); setTimeout(() => gotoLesson(i), 60); }} />}
       {inner === 'klasser' && <KlasserTab lib={lib} kapitel={kapitel} placed={placed} />}
 
-      {adding && <AddLessonDialog kapitel={kapitel} lessons={lessons} onClose={() => { setAdding(false); onChange(); }} />}
+      {adding && <AddLessonDialog kapitel={kapitel} lessons={lessons}
+        insertGlobalIdx={globalIdxFor(kapitel, lessons.length - 1)}
+        onClose={() => { setAdding(false); onChange(); }} />}
       {addAfter !== null && <AddLessonDialog kapitel={kapitel} lessons={lessons} initialAfterId={addAfter}
+        insertGlobalIdx={globalIdxFor(kapitel, lessons.findIndex((l) => l.id === addAfter))}
         onClose={() => { setAddAfter(null); onChange(); }} />}
     </main>
   );
 }
 
 // ── Inre kapitelflikar (FR-GEN-004) ───────────────────────────
-function OversiktTab(props: { kapitel: number; lessons: LessonRecord[]; slotFor: (k: number, i: number) => ScheduledSlot | null }) {
-  const { kapitel, lessons, slotFor } = props;
+function OversiktTab(props: {
+  kapitel: number; lessons: LessonRecord[];
+  slotFor: (k: number, i: number) => ScheduledSlot | null;
+  onOpenRow: (idx: number) => void;
+}) {
+  const { kapitel, lessons, slotFor, onOpenRow } = props;
   return (
-    <table className="tbl">
-      <thead><tr><th>#</th><th>Datum</th><th>Avsnitt</th><th>Typ</th><th>Del</th><th>Exit ticket</th></tr></thead>
+    <table className="tbl clickable">
+      <thead><tr><th>Lek.</th><th>Vecka</th><th>Datum</th><th>Tid</th><th>Avsnitt</th><th>Typ</th>
+        <th>🟢 Grön</th><th>🔵 Blå</th><th>🔴 Röd</th></tr></thead>
       <tbody>
         {lessons.map((l, i) => {
-          const s = slotFor(kapitel, i);
+          const sl = slotFor(kapitel, i);
           return (
-            <tr key={`${l.id}-${i}`}>
+            <tr key={`${l.id}-${i}`} onClick={() => onOpenRow(i)} title="Öppna i lektionsplanen">
               <td>{i + 1}</td>
-              <td>{s ? `v.${s.week} · ${s.date} ${s.start}` : '—'}</td>
+              <td>{sl ? `v.${sl.week}` : '—'}</td>
+              <td>{sl?.date ?? '—'}</td>
+              <td>{sl ? `${sl.start}–${sl.end}` : '—'}</td>
               <td>{effectiveField(kapitel, l, 'avsnitt')}</td>
-              <td>{l.type}</td><td>{l.del || '—'}</td><td>{l.exit}</td>
+              <td><span className={`typebadge t-${l.type}`}>{l.type === 'regular' ? 'LEKTION' : l.type === 'test' ? 'DIAGNOS' : l.type === 'exam' ? 'PROV' : l.type === 'ovaformagor' ? 'ÖVA FÖRMÅGOR' : 'REPETITION'}</span></td>
+              <td className="rg grön">{effectiveField(kapitel, l, 'grön')}</td>
+              <td className="rg blå">{effectiveField(kapitel, l, 'blå')}</td>
+              <td className="rg röd">{effectiveField(kapitel, l, 'röd')}</td>
             </tr>
           );
         })}
@@ -337,67 +357,160 @@ function OversiktTab(props: { kapitel: number; lessons: LessonRecord[]; slotFor:
 
 function UppgifterTab(props: { kapitel: number; lessons: LessonRecord[] }) {
   const { kapitel, lessons } = props;
+  const har = (v: string) => !!v && v !== '—';
   return (<>
-    <p className="note">Grön = introduktion · Blå = E-nivå · Röd = C/A-nivå. Del 1: Grön/Blå (minimum grönt). Del 2: Blå/Röd (minimum blått). Grönt + blått lämnas in som foto i Google Classroom.</p>
-    <table className="tbl">
-      <thead><tr><th>Avsnitt</th><th>Del</th><th>Grön</th><th>Blå</th><th>Röd</th><th>Teori</th></tr></thead>
-      <tbody>
-        {lessons.filter((l) => l.type === 'regular').map((l, i) => (
-          <tr key={`${l.id}-${i}`}>
-            <td>{effectiveField(kapitel, l, 'avsnitt')}</td><td>{l.del || '—'}</td>
-            <td className="rg grön">{effectiveField(kapitel, l, 'grön')}</td>
-            <td className="rg blå">{effectiveField(kapitel, l, 'blå')}</td>
-            <td className="rg röd">{effectiveField(kapitel, l, 'röd')}</td>
-            <td>{l.sidor_teori}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="card">{/* FR-UPP-002 + FR-EXT-002 */}
+      <div className="title">📌 Inlämning</div>
+      <ul className="rules-ul">
+        <li>Foto på beräkningar laddas upp i <b>Google Classroom</b></li>
+        <li><span className="rg grön">Grön</span> + <span className="rg blå">Blå</span> är <b>obligatoriska</b></li>
+        <li><span className="rg röd">Röd</span> — görs och lämnas in om lektionstid finns, annars frivillig fördjupning</li>
+      </ul>
+    </div>
+    {lessons.map((l, i) => {
+      if (l.type !== 'regular' && l.type !== 'repetition') return null;
+      const g = effectiveField(kapitel, l, 'grön'), b = effectiveField(kapitel, l, 'blå'), r = effectiveField(kapitel, l, 'röd');
+      if (!har(g) && !har(b) && !har(r)) return null;
+      return (
+        <div key={`${l.id}-${i}`} className="upp-card">
+          <div className="upp-head">
+            <b>Lektion {i + 1} — {effectiveField(kapitel, l, 'avsnitt')}</b>
+            {l.del === 1 && <span className="pill min">Lek 1: min. Grön</span>}
+            {l.del === 2 && <span className="pill min">Lek 2: min. Blå</span>}
+            {har(l.sidor_teori) && <span className="muted">📖 {l.sidor_teori}</span>}
+          </div>
+          <div className="upp-levels">
+            {har(g) && <div className="upp-lv grön"><h6>🟢 GRÖN – INTRODUKTION</h6><p>Uppg. {g}</p><span className="pill min">Obligatorisk</span></div>}
+            {har(b) && <div className="upp-lv blå"><h6>🔵 BLÅ – E-NIVÅ</h6><p>Uppg. {b}</p><span className="pill min">Obligatorisk</span></div>}
+            {har(r) && <div className="upp-lv röd"><h6>🔴 RÖD – C/A-NIVÅ</h6><p>Uppg. {r}</p><span className="pill">Frivillig / vid lektionstid</span></div>}
+          </div>
+        </div>
+      );
+    })}
   </>);
 }
 
-function BegreppTab(props: { lib: LoadedLibrary; kapitel: number }) {
-  const { lib, kapitel } = props;
-  const entries = Object.entries(lib.begrepp.perDelkapitel)
-    .filter(([k]) => k.split('.')[0] === String(kapitel))
-    .sort(([a], [b]) => a.localeCompare(b, 'sv', { numeric: true }));
-  if (entries.length === 0) return <p className="muted">Inga begrepp registrerade för kapitlet.</p>;
+function BegreppTab(props: { lib: LoadedLibrary; kapitel: number; lessons: LessonRecord[] }) {
+  const { lib, kapitel, lessons } = props;
+  const rows = buildBegreppTabell(lessons, lib.begrepp.definitioner);
+  const chips = [...new Map(rows.map((r) => [r.begrepp.toLowerCase(), r])).values()];
+  if (rows.length === 0) return <p className="muted">Inga begrepp registrerade för kapitlet.</p>;
   return (<>
-    {entries.map(([delkap, list]) => (
-      <div key={delkap} className="card">
-        <div className="title">{delkap}</div>
-        <div className="reslist">
-          {list.map((b) => (
-            <span key={b} className="chip" title={lib.begrepp.definitioner[b] ?? 'Definition saknas'}>{b}</span>
-          ))}
+    <table className="tbl">{/* FR-BEG-001 */}
+      <thead><tr><th>Lektion</th><th>Begrepp</th><th>Avsnitt</th><th>Förklaring</th></tr></thead>
+      <tbody>
+        {rows.map((r, i) => (
+          <tr key={i}><td>{r.lektionNr}</td><td><b>{r.begrepp}</b></td><td>{r.avsnitt}</td>
+            <td><Forklaring text={r.forklaring} /></td></tr>
+        ))}
+      </tbody>
+    </table>
+    <h3 className="yr-h">Alla begrepp i kapitlet</h3>{/* FR-BEG-003 */}
+    <div className="reslist">
+      {chips.map((r) => <span key={r.begrepp} className="chip" title={r.forklaring}>{r.begrepp}</span>)}
+    </div>
+  </>);
+}
+
+function Forklaring({ text }: { text: string }) { /* FR-BEG-002 */
+  const [open, setOpen] = useState(false);
+  const LIMIT = 90;
+  if (text.length <= LIMIT || open) return <>{text}</>;
+  return <>{text.slice(0, LIMIT)}… <button className="icon-btn addres" onClick={() => setOpen(true)}>Visa mer</button></>;
+}
+
+function FilmerTab(props: {
+  lib: LoadedLibrary; kapitel: number; lessons: LessonRecord[];
+  onChange: () => void; onOpenRow: (idx: number) => void;
+}) {
+  const { lib, kapitel, lessons, onChange, onOpenRow } = props;
+  const [form, setForm] = useState<{ id: number; titel: string; url: string } | null>(null);
+  const filmsFor = (l: LessonRecord) => {
+    const flip = lib.flip[kapitel]?.[l.id];
+    const fromFlip = (flip?.blocks ?? []).flatMap((b) => (b.typ === 'film' ? [{ titel: b.ref.titel, url: b.ref.url, fixed: true }] : []));
+    const own = getLinks(kapitel, l.id).map((x, i) => ({ ...x, i })).filter((x) => x.typ === 'film')
+      .map((x) => ({ titel: x.titel, url: x.url, fixed: false, idx: x.i }));
+    return [...fromFlip, ...own] as Array<{ titel: string; url: string; fixed: boolean; idx?: number }>;
+  };
+  const total = lessons.reduce((n, l) => n + filmsFor(l).length, 0);
+  return (<>
+    <div className="card">
+      <div className="title">🎬 Filmlänkar per lektion</div>
+      <p className="note">Alla filmlänkar (t.ex. Binogi) som lagts till på enskilda lektioner samlas här. Lägg till eller ta bort en länk direkt — det uppdaterar automatiskt motsvarande lektionskort.</p>
+    </div>
+    <p className="muted">{total} filmer totalt i kapitlet</p>
+    {lessons.map((l, i) => (
+      <div key={`${l.id}-${i}`} className="upp-card">
+        <div className="upp-head">
+          <b>🎬 Lektion {i + 1} — {effectiveField(kapitel, l, 'avsnitt')}</b>
+          <button className="btn sec" onClick={() => onOpenRow(i)}>Öppna lektion →</button>{/* FR-FILM-004 */}
         </div>
+        {filmsFor(l).map((f, j) => (
+          <div key={j} className="film-row">
+            <a href={normalizeUrl(f.url)} target="_blank" rel="noopener noreferrer">▶ {f.titel || f.url}</a>
+            {!f.fixed && f.idx !== undefined && (
+              <button className="icon-btn" title="Ta bort" onClick={() => { removeLink(kapitel, l.id, f.idx!); onChange(); }}>×</button>
+            )}{/* FR-FILM-003 */}
+          </div>
+        ))}
+        {form?.id === l.id ? (
+          <div className="resform">{/* FR-FILM-002 */}
+            <input placeholder="Titel (valfri)" value={form.titel} onChange={(e) => setForm({ ...form, titel: e.target.value })} />
+            <input placeholder="https://youtube.com/…" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
+            <button className="btn" disabled={form.url.trim() === ''}
+              onClick={() => { addLink(kapitel, l.id, { typ: 'film', platform: 'Annat', titel: form.titel, url: form.url }); setForm(null); onChange(); }}>+ Lägg till film</button>
+            <button className="btn sec" onClick={() => setForm(null)}>Avbryt</button>
+          </div>
+        ) : (
+          <button className="icon-btn addres" onClick={() => setForm({ id: l.id, titel: '', url: '' })}>+ Lägg till film</button>
+        )}
       </div>
     ))}
   </>);
 }
 
-function LinkTab(props: { lib: LoadedLibrary; kapitel: number; lessons: LessonRecord[]; typ: 'film' | 'magma'; tom: string }) {
-  const { lib, kapitel, lessons, typ, tom } = props;
-  const rows = lessons.flatMap((l) => {
-    const flip = lib.flip[kapitel]?.[l.id];
-    const fromFlip = typ === 'film'
-      ? (flip?.blocks ?? []).flatMap((b) => (b.typ === 'film' ? [{ titel: b.ref.titel, url: b.ref.url }] : []))
-      : [];
-    const fromLinks = getLinks(kapitel, l.id).filter((x) => x.typ === typ);
-    return [...fromFlip, ...fromLinks].map((x) => ({ lesson: l, ...x }));
-  });
-  if (rows.length === 0) return <p className="muted">{tom}</p>;
-  return (
-    <table className="tbl">
-      <thead><tr><th>Lektion</th><th>{typ === 'film' ? 'Film' : 'Magma-aktivitet'}</th></tr></thead>
-      <tbody>
-        {rows.map((r, i) => (
-          <tr key={i}><td>{r.lesson.avsnitt}</td>
-            <td><a href={r.url} target="_blank" rel="noreferrer">{typ === 'film' ? '🎬' : '🧮'} {r.titel || r.url}</a></td></tr>
-        ))}
-      </tbody>
-    </table>
-  );
+function MagmaTab(props: {
+  kapitel: number; lessons: LessonRecord[];
+  onChange: () => void; onOpenRow: (idx: number) => void;
+}) {
+  const { kapitel, lessons, onChange, onOpenRow } = props;
+  const [form, setForm] = useState<{ id: number; label: string; url: string } | null>(null);
+  const withAct = lessons.filter((l) => getMagma(kapitel, l.id)).length;
+  return (<>
+    <div className="card">
+      <div className="title">🧮 Magma-aktiviteter per lektion</div>
+      <p className="note">Magma är en app med övningsuppgifter och test som du väljer åt eleverna. Länkarna som lagts till på enskilda lektioner samlas här. Lägg till eller ta bort en länk direkt — det uppdaterar automatiskt motsvarande lektionskort.</p>
+    </div>
+    <p className="muted">{withAct} av {lessons.length} lektioner har en Magma-aktivitet</p>
+    {lessons.map((l, i) => {
+      const act = getMagma(kapitel, l.id); /* FR-MAG-001: en aktivitet per lektion */
+      return (
+        <div key={`${l.id}-${i}`} className="upp-card magma">
+          <div className="upp-head">
+            <b>🧮 Lektion {i + 1} — {effectiveField(kapitel, l, 'avsnitt')}</b>
+            <button className="btn sec" onClick={() => onOpenRow(i)}>Öppna lektion →</button>{/* FR-MAG-004 */}
+          </div>
+          {form?.id === l.id ? (
+            <div className="resform">{/* FR-MAG-002 */}
+              <input placeholder="Etikett" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} />
+              <input placeholder="https://magma.se/…" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
+              <button className="btn" disabled={form.url.trim() === ''}
+                onClick={() => { setMagma(kapitel, l.id, { label: form.label, url: form.url }); setForm(null); onChange(); }}>Spara</button>
+              <button className="btn sec" onClick={() => setForm(null)}>Avbryt</button>
+            </div>
+          ) : act ? (
+            <div className="film-row">
+              <a href={normalizeUrl(act.url)} target="_blank" rel="noopener noreferrer">🔥 {act.label || act.url}</a>
+              <button className="btn sec" onClick={() => setForm({ id: l.id, label: act.label, url: act.url })}>✏️ Ändra</button>
+              <button className="icon-btn" title="Ta bort" onClick={() => { clearMagma(kapitel, l.id); onChange(); }}>×</button>{/* FR-MAG-003 */}
+            </div>
+          ) : (
+            <span className="muted">Ingen Magma-länk tillagd. <button className="icon-btn addres" onClick={() => setForm({ id: l.id, label: '', url: '' })}>+ Lägg till Magma-länk</button></span>
+          )}
+        </div>
+      );
+    })}
+  </>);
 }
 
 function KlasserTab(props: { lib: LoadedLibrary; kapitel: number; placed: PlacedLesson<LessonRecord>[] }) {
@@ -606,90 +719,204 @@ function LessonCard(props: {
 function ResourceRow(props: { kapitel: number; lesson: LessonRecord; links: LessonLink[]; flipCount: number; onChange: () => void }) {
   const { kapitel, lesson, links, flipCount, onChange } = props;
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState<LessonLink>({ typ: 'film', titel: '', url: '' });
-  const ICON: Record<LessonLink['typ'], string> = { film: '🎬', magma: '🧮', quiz: '❓', verktyg: '🔧', aktivitet: '🤝', ovrigt: '📎' };
-  const CATS: Array<[LessonLink['typ'], string]> = [
-    ['film', 'Filmer (Binogi m.m.)'], ['magma', 'Magma'], ['quiz', 'Quiz/Socrative'],
-    ['verktyg', 'Verktyg'], ['aktivitet', 'Aktiviteter (EPA m.m.)'], ['ovrigt', 'Övrigt'],
+  const [form, setForm] = useState<LessonLink>({ typ: 'film', platform: 'Binogi', titel: '', url: '' });
+  const ICON: Record<ToolTyp, string> = { laxforhor: '📱', exit: '🎫', ovning: '✏️', film: '🎬', prov: '📝', flippat: '🏠' };
+  const CATS: Array<[ToolTyp, string, string]> = [ /* FR-TOOL-001: specens sex typer */
+    ['laxforhor', 'Läxförhör', 'Quiz som körs i början av lektionen (tidigare exit tickets + begrepp)'],
+    ['exit', 'Exit ticket', 'Kort test i slutet: ca 5 frågor på lektionens koncept + nya begrepp'],
+    ['ovning', 'Övningar', 'Extra övningar och interaktiva uppgifter'],
+    ['film', 'Filmer', 'Genomgångsfilmer och stödmaterial'],
+    ['prov', 'Prov', 'Prov och större bedömningar'],
+    ['flippat', 'Flippat underlag', 'Text, video och quiz som skickas till elever inför lektionen'],
   ];
   return (
     <div className="resources">
       <label>Pedagogiska verktyg</label>
-      <div className="toolgroups">{/* FR-CARD-012: sex kategorier, alltid synliga */}
-        {CATS.map(([typ, label]) => (
+      <div className="toolgroups">{/* FR-TOOL-001: sex grupper, alltid synliga */}
+        {CATS.map(([typ, label, desc]) => (
           <div key={typ} className="toolgroup">
-            <h6>{ICON[typ]} {label}</h6>
+            <div className="toolgroup-head">
+              <h6>{ICON[typ]} {label}</h6>
+              <button className="icon-btn addres" onClick={() => { setForm({ typ, platform: PLATFORMS[typ][0], titel: '', url: '' }); setAdding(true); }}>+ Lägg till</button>
+            </div>
+            <p className="tool-desc">{desc}</p>
             <div className="reslist">
-              {links.filter((l) => l.typ === typ).length === 0 && <span className="muted">—</span>}
               {links.map((l, i) => l.typ === typ && (
                 <span key={`${l.url}-${i}`} className={`reslink ${l.typ}`}>
-                  <a href={l.url} target="_blank" rel="noreferrer">{l.titel || l.typ}</a>
+                  {l.platform && <em className="plat">{l.platform.toUpperCase()}</em>}
+                  {l.url
+                    ? <a href={normalizeUrl(l.url)} target="_blank" rel="noopener noreferrer">{l.titel || l.url}</a>
+                    : <span>{l.titel}</span>}{/* FR-TOOL-004/005 */}
                   {i >= flipCount && (
                     <button className="icon-btn" title="Ta bort" onClick={() => { removeLink(kapitel, lesson.id, i - flipCount); onChange(); }}>×</button>
                   )}
                 </span>
               ))}
-              <button className="icon-btn addres" onClick={() => { setForm({ typ, titel: '', url: '' }); setAdding(true); }}>+</button>
             </div>
           </div>
         ))}
       </div>
+      <MagmaRow kapitel={kapitel} lesson={lesson} onChange={onChange} />
+      <PrioBlock kapitel={kapitel} lesson={lesson} onChange={onChange} />
       {adding && (
-        <div className="resform">
-          <select value={form.typ} onChange={(e) => setForm({ ...form, typ: e.target.value as LessonLink['typ'] })}>
-            <option value="film">Film</option><option value="magma">Magma</option>
-            <option value="quiz">Quiz</option><option value="verktyg">Verktyg</option>
-            <option value="aktivitet">Aktivitet</option><option value="ovrigt">Övrigt</option>
-          </select>
-          <input placeholder="Titel" value={form.titel} onChange={(e) => setForm({ ...form, titel: e.target.value })} />
-          <input placeholder="https://…" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
-          <button className="btn" disabled={!form.url.startsWith('http')}
-            onClick={() => { addLink(kapitel, lesson.id, form); setForm({ typ: form.typ, titel: '', url: '' }); setAdding(false); onChange(); }}>Spara</button>
+        <div className="overlay" role="dialog" onClick={() => setAdding(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Lägg till: {ICON[form.typ]} {CATS.find(([t]) => t === form.typ)?.[1]}</h3>
+            <label>Plattform</label>{/* FR-TOOL-002 */}
+            <select value={form.platform} onChange={(e) => setForm({ ...form, platform: e.target.value })}>
+              {PLATFORMS[form.typ].map((pf) => <option key={pf} value={pf}>{pf}</option>)}
+            </select>
+            <label>Titel / beskrivning</label>
+            <input placeholder="t.ex. Quiz 1.1a eller Negativa tal — genomgång" value={form.titel}
+              onChange={(e) => setForm({ ...form, titel: e.target.value })} />
+            <label>Länk (valfri)</label>
+            <input placeholder="https://…" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
+            <div className="modal-actions">
+              <button className="btn sec" onClick={() => setAdding(false)}>Avbryt</button>
+              <button className="btn" disabled={form.titel.trim() === '' && form.url.trim() === ''}
+                onClick={() => { addLink(kapitel, lesson.id, form); setAdding(false); onChange(); }}>Lägg till</button>{/* FR-TOOL-003 */}
+            </div>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function AddLessonDialog(props: { kapitel: number; lessons: LessonRecord[]; onClose: () => void; initialAfterId?: number }) {
-  const { kapitel, lessons, onClose, initialAfterId } = props;
-  const [titel, setTitel] = useState('Extra: repetition');
-  const [mode, setMode] = useState<InsertMode>('skjut-fram');
-  const [afterId, setAfterId] = useState<number | null>(initialAfterId ?? lessons[lessons.length - 1]?.id ?? null);
-  const save = () => {
-    addCustomLesson({
-      kapitel, afterId: mode === 'sist' ? null : afterId, mode,
-      lesson: {
-        id: nextCustomId(lessons), type: 'repetition', avsnitt: titel, del: 0,
-        grön: '—', blå: '—', röd: '—', sidor_teori: '—', begrepp: '—', soc_start: '—', exit: '—',
-        genomgang: '', bam_gora: '', bam_lara: '', bam_ex: '', ex: '', laxa: '—',
-      },
-    });
-    onClose();
+const PLATFORMS: Record<ToolTyp, string[]> = { /* FR-TOOL-002 */
+  laxforhor: ['Socrative', 'Google Forms', 'Kunskapsmatrisen', 'Annat'],
+  exit: ['Socrative', 'Google Forms', 'Annat'],
+  ovning: ['Magma', 'Kunskapsmatrisen', 'NOMP', 'Annat'],
+  film: ['Binogi', 'YouTube', 'Egen inspelning', 'Annat'],
+  prov: ['Kunskapsmatrisen', 'Papper', 'Annat'],
+  flippat: ['Google Classroom', 'YouTube', 'Socrative', 'Annat'],
+};
+
+// ── Magma: en aktivitet per lektion (FR-MAG-002/003/005) ─────
+function MagmaRow(props: { kapitel: number; lesson: LessonRecord; onChange: () => void }) {
+  const { kapitel, lesson, onChange } = props;
+  const act = getMagma(kapitel, lesson.id);
+  const [editing, setEditing] = useState(false);
+  const [label, setLabel] = useState(act?.label ?? '');
+  const [url, setUrl] = useState(act?.url ?? '');
+  return (
+    <div className="magma-row">
+      <label>🧮 Magma</label>
+      {!editing && (act
+        ? <span className="reslink ovning"><em className="plat">MAGMA</em>
+            <a href={normalizeUrl(act.url)} target="_blank" rel="noopener noreferrer">{act.label || act.url}</a>
+            <button className="icon-btn" title="Ändra" onClick={() => { setLabel(act.label); setUrl(act.url); setEditing(true); }}>✏️</button>
+            <button className="icon-btn" title="Ta bort" onClick={() => { clearMagma(kapitel, lesson.id); onChange(); }}>×</button>
+          </span>
+        : <span className="muted">Ingen Magma-länk tillagd. <button className="icon-btn addres" onClick={() => setEditing(true)}>+ Lägg till Magma-länk</button></span>)}
+      {editing && (
+        <span className="resform">
+          <input placeholder="Etikett, t.ex. Negativa tal — övning" value={label} onChange={(e) => setLabel(e.target.value)} />
+          <input placeholder="https://magma.se/…" value={url} onChange={(e) => setUrl(e.target.value)} />
+          <button className="btn" disabled={url.trim() === ''} onClick={() => { setMagma(kapitel, lesson.id, { label, url }); setEditing(false); onChange(); }}>Spara</button>
+          <button className="btn sec" onClick={() => setEditing(false)}>Avbryt</button>
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ── Prio Övningsrum (FR-PRIO-001…003) ────────────────────────
+function PrioBlock(props: { kapitel: number; lesson: LessonRecord; onChange: () => void }) {
+  const { kapitel, lesson, onChange } = props;
+  const state = getPrio(kapitel, lesson.id);
+  const toggle = (room: string) => {
+    const cur = state[room] ?? { active: false, desc: '' };
+    setPrio(kapitel, lesson.id, { ...state, [room]: { ...cur, active: !cur.active } });
+    onChange();
+  };
+  const setDesc = (room: string, desc: string) => {
+    const cur = state[room] ?? { active: true, desc: '' };
+    setPrio(kapitel, lesson.id, { ...state, [room]: { ...cur, desc } });
+    onChange();
   };
   return (
-    <div className="overlay" role="dialog" aria-label="Lägg till lektion">
-      <div className="modal">
-        <h3>Lägg till lektion i kapitel {kapitel}</h3>
-        <label>Titel</label>
-        <input value={titel} onChange={(e) => setTitel(e.target.value)} />
-        <label>Infogningsläge</label>
-        {(['skjut-fram', 'ersätt', 'sist'] as InsertMode[]).map((m) => (
-          <label key={m} className="radio">
-            <input type="radio" checked={mode === m} onChange={() => setMode(m)} />
-            {m === 'skjut-fram' ? 'Skjut fram efterföljande lektioner' : m === 'ersätt' ? 'Ersätt en befintlig lektion' : 'Lägg sist i kapitlet'}
-          </label>
-        ))}
-        {mode !== 'sist' && (
-          <>
-            <label>{mode === 'ersätt' ? 'Ersätter' : 'Efter'} lektion</label>
-            <select value={afterId ?? ''} onChange={(e) => setAfterId(Number(e.target.value))}>
-              {lessons.map((l) => <option key={l.id} value={l.id}>{l.id} · {l.avsnitt}</option>)}
-            </select>
-          </>
-        )}
+    <div className="prio-block">
+      <label>🚪 Prio Övningsrum</label>
+      <div className="prio-rooms">
+        {PRIO_ALL.map((room) => {
+          const r = state[room];
+          return (
+            <span key={room} className="prio-room">
+              <button className={`prio-pill ${r?.active ? 'on' : ''}`} onClick={() => toggle(room)}>{room}</button>
+              {r?.active && (
+                <input className="prio-desc" placeholder="Vad innehåller rummet? (t.ex. Uppgifter 1.1–1.3 repetition)"
+                  defaultValue={r.desc} onBlur={(e) => setDesc(room, e.target.value)} />
+              )}
+            </span>
+          );
+        })}
+      </div>
+      <p className="note">Klicka ett rum för att aktivera det och lägg till beskrivning.</p>
+    </div>
+  );
+}
+
+function AddLessonDialog(props: {
+  kapitel: number; lessons: LessonRecord[]; onClose: () => void; initialAfterId?: number;
+  insertGlobalIdx?: number;
+}) {
+  const { kapitel, lessons, onClose, initialAfterId, insertGlobalIdx } = props;
+  const afterId = initialAfterId ?? lessons[lessons.length - 1]?.id ?? null;
+  const source = lessons.find((l) => l.id === afterId) ?? null;
+  const srcIdx = source ? lessons.findIndex((l) => l.id === source.id) : -1;
+  const next = srcIdx >= 0 ? lessons[srcIdx + 1] ?? null : null;
+
+  const blank = (id: number): LessonRecord => ({
+    id, type: source?.type ?? 'regular', avsnitt: 'Ny lektion', del: 0,
+    grön: '—', blå: '—', röd: '—', sidor_teori: '—', begrepp: '—', soc_start: '—', exit: '—',
+    genomgang: '', bam_gora: '', bam_lara: '', bam_ex: '', ex: '', laxa: '—',
+  });
+
+  const finish = () => { /* FR-STR-005: håll kalenderöverstyrningar i synk */
+    if (insertGlobalIdx !== undefined) shiftAllCalOverrides(insertGlobalIdx + 1, 1);
+    onClose();
+  };
+
+  const addBlank = () => { /* FR-STR-002 */
+    addCustomLesson({ kapitel, afterId, mode: 'skjut-fram', lesson: blank(nextCustomId(lessons)) });
+    finish();
+  };
+  const addCopy = () => { /* FR-STR-003: djupkopiera föregående */
+    if (!source) return;
+    addCustomLesson({ kapitel, afterId, mode: 'skjut-fram', lesson: { ...source, id: nextCustomId(lessons) } });
+    finish();
+  };
+  const pullNext = () => { /* FR-STR-004: nästa lektions innehåll hit; donatorn blir tomt skal */
+    if (!source || !next) return;
+    const id1 = nextCustomId(lessons);
+    addCustomLesson({ kapitel, afterId, mode: 'skjut-fram', lesson: { ...next, id: id1 } });
+    addCustomLesson({ kapitel, afterId: next.id, mode: 'ersätt', lesson: { ...blank(id1 + 1), avsnitt: 'Tomt skal (flyttad)' } });
+    finish();
+  };
+
+  return (
+    <div className="overlay" role="dialog" aria-label="Lägg till lektion" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h3>Lägg till lektion efter "Lektion {srcIdx + 1} — {source?.avsnitt ?? '—'}"</h3>
+        {next && <p className="muted">Nästa lektion är just nu "Lektion {srcIdx + 2} — {next.avsnitt}".</p>}
+        <div className="ins-modes">{/* FR-STR-001 */}
+          <button className="ins-mode" onClick={addBlank}>
+            <b>📄 Tomt innehåll</b>
+            <span>Skapa en ny, tom lektion som du fyller i själv.</span>
+          </button>
+          <button className="ins-mode" onClick={addCopy} disabled={!source}>
+            <b>📋 Samma som föregående</b>
+            <span>Kopiera hela innehållet från lektionen du utgick ifrån, redigera sedan det som skiljer.</span>
+          </button>
+          {next && (
+            <button className="ins-mode warn" onClick={pullNext}>
+              <b>⏩ Flytta in nästa lektion hit</b>
+              <span>Innehållet i lektionen som annars hade legat direkt efter flyttas in i den nya platsen. Den lektionen blir då ett tomt skal.</span>
+            </button>
+          )}
+        </div>
         <div className="modal-actions">
-          <button className="btn" onClick={save}>Lägg till</button>
           <button className="btn sec" onClick={onClose}>Avbryt</button>
         </div>
       </div>

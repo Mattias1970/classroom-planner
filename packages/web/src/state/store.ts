@@ -118,6 +118,8 @@ export function exportBackup(): string {
     calOverrides: localStorage.getItem('classroom-planner.cal-overrides.v1') ?? null,
     lessonLinks: localStorage.getItem('classroom-planner.lesson-links.v1') ?? null,
     schemaEdits: localStorage.getItem(SCHEMA_KEY) ?? null,
+    magma: localStorage.getItem('classroom-planner.magma.v1') ?? null,
+    prio: localStorage.getItem('classroom-planner.prio.v1') ?? null,
   }, null, 2);
 }
 export function importBackup(json: string): void {
@@ -130,6 +132,51 @@ export function importBackup(json: string): void {
   if (typeof b.calOverrides === 'string') localStorage.setItem('classroom-planner.cal-overrides.v1', b.calOverrides);
   if (typeof b.lessonLinks === 'string') localStorage.setItem('classroom-planner.lesson-links.v1', b.lessonLinks);
   if (typeof b.schemaEdits === 'string') localStorage.setItem(SCHEMA_KEY, b.schemaEdits);
+  if (typeof b.magma === 'string') localStorage.setItem('classroom-planner.magma.v1', b.magma);
+  if (typeof b.prio === 'string') localStorage.setItem('classroom-planner.prio.v1', b.prio);
+}
+
+// ── Magma: en aktivitet per lektion (FR-MAG-001…006) ─────────
+export interface MagmaActivity { label: string; url: string; }
+const MAGMA_KEY = 'classroom-planner.magma.v1';
+export function getMagma(kapitel: number, lektionId: number): MagmaActivity | null {
+  return read<Record<string, MagmaActivity>>(MAGMA_KEY, {})[linkKey(kapitel, lektionId)] ?? null;
+}
+export function setMagma(kapitel: number, lektionId: number, a: MagmaActivity): void {
+  const all = read<Record<string, MagmaActivity>>(MAGMA_KEY, {});
+  all[linkKey(kapitel, lektionId)] = a;
+  write(MAGMA_KEY, all);
+}
+export function clearMagma(kapitel: number, lektionId: number): void {
+  const all = read<Record<string, MagmaActivity>>(MAGMA_KEY, {});
+  delete all[linkKey(kapitel, lektionId)];
+  write(MAGMA_KEY, all);
+}
+export function countMagmaForKap(kapitel: number, lessonIds: number[]): number {
+  const all = read<Record<string, MagmaActivity>>(MAGMA_KEY, {});
+  return lessonIds.filter((id) => all[linkKey(kapitel, id)]).length;
+}
+
+// ── Prio Övningsrum (FR-PRIO-001…003) ────────────────────────
+export interface PrioRoom { active: boolean; desc: string; }
+export type PrioState = Record<string, PrioRoom>; // 'Prio1'…'Prio5'
+const PRIO_KEY = 'classroom-planner.prio.v1';
+export const PRIO_ALL = ['Prio1', 'Prio2', 'Prio3', 'Prio4', 'Prio5'] as const;
+export function getPrio(kapitel: number, lektionId: number): PrioState {
+  return read<Record<string, PrioState>>(PRIO_KEY, {})[linkKey(kapitel, lektionId)] ?? {};
+}
+export function setPrio(kapitel: number, lektionId: number, state: PrioState): void {
+  const all = read<Record<string, PrioState>>(PRIO_KEY, {});
+  all[linkKey(kapitel, lektionId)] = state;
+  write(PRIO_KEY, all);
+}
+
+// ── FR-STR-005: skifta kalenderöverstyrningar vid strukturell insättning ──
+import { shiftOverrideMap } from '@planner/core';
+export function shiftAllCalOverrides(insertedAt: number, delta: number): void {
+  const all = read<Record<string, OverrideMap>>(OV_KEY, {});
+  for (const cls of Object.keys(all)) all[cls] = shiftOverrideMap(all[cls], insertedAt, delta);
+  write(OV_KEY, all);
 }
 
 // ── Bibliotek: demo eller GitHub ──────────────────────────────
@@ -178,12 +225,26 @@ export function setCalOverride(classId: string, globalIdx: number, ov: LessonOve
   write(OV_KEY, all);
 }
 
-// ── Resurslänkar per lektion: filmer, magma, verktyg ─────────
-export interface LessonLink { typ: 'film' | 'magma' | 'quiz' | 'verktyg' | 'aktivitet' | 'ovrigt'; titel: string; url: string; }
+// ── Pedagogiska verktyg per lektion (FR-TOOL-001…007) ─────────
+/** Specens sex verktygstyper. */
+export type ToolTyp = 'laxforhor' | 'exit' | 'ovning' | 'film' | 'prov' | 'flippat';
+export interface LessonLink { typ: ToolTyp; platform?: string; titel: string; url: string; }
 const LINKS_KEY = 'classroom-planner.lesson-links.v1';
 function linkKey(kapitel: number, lektionId: number): string { return `${kapitel}:${lektionId}`; }
+/** Migrerar äldre kategorier (del 3) till specens sex typer. */
+const LEGACY_TYP: Record<string, { typ: ToolTyp; platform?: string }> = {
+  quiz: { typ: 'laxforhor', platform: 'Socrative' },
+  magma: { typ: 'ovning', platform: 'Magma' },
+  verktyg: { typ: 'ovning' },
+  aktivitet: { typ: 'ovning' },
+  ovrigt: { typ: 'ovning' },
+};
 export function getLinks(kapitel: number, lektionId: number): LessonLink[] {
-  return read<Record<string, LessonLink[]>>(LINKS_KEY, {})[linkKey(kapitel, lektionId)] ?? [];
+  const raw = read<Record<string, Array<LessonLink & { typ: string }>>>(LINKS_KEY, {})[linkKey(kapitel, lektionId)] ?? [];
+  return raw.map((l) => {
+    const legacy = LEGACY_TYP[l.typ];
+    return legacy ? { ...l, typ: legacy.typ, platform: l.platform ?? legacy.platform } : (l as LessonLink);
+  });
 }
 export function addLink(kapitel: number, lektionId: number, link: LessonLink): void {
   const all = read<Record<string, LessonLink[]>>(LINKS_KEY, {});

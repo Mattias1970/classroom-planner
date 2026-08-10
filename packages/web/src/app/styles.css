@@ -305,3 +305,45 @@ h2 { margin: 0 0 2px; font-size: 19px; }
 .toolgroups { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
 .toolgroup { background: #f8fafc; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
 .toolgroup h6 { margin: 0 0 4px; font-size: 11px; color: var(--muted); }
+
+/* ── Del 4: verktygsgrupper, insättningslägen, uppgiftskort, filmer/magma, prio ── */
+.toolgroup-head { display: flex; justify-content: space-between; align-items: center; }
+.tool-desc { margin: 1px 0 5px; font-size: 10.5px; color: var(--muted); font-style: italic; }
+.reslink .plat { background: #ede9fe; color: #6d28d9; font-style: normal; font-size: 9px;
+  letter-spacing: .06em; border-radius: 4px; padding: 1px 5px; }
+.magma-row, .prio-block { display: grid; grid-template-columns: 90px 1fr; gap: 6px 10px; margin-top: 8px; align-items: start; }
+.magma-row > label, .prio-block > label { font-size: 12px; color: var(--muted); font-weight: 600; padding-top: 4px; }
+.prio-block .note { grid-column: 2; margin: 0; }
+.prio-rooms { display: flex; flex-direction: column; gap: 4px; }
+.prio-room { display: flex; gap: 8px; align-items: center; }
+.prio-pill { background: #e0f2fe; color: #075985; border: none; border-radius: 999px;
+  padding: 3px 12px; font-family: monospace; font-weight: 700; cursor: pointer; }
+.prio-pill.on { background: #1565C0; color: #fff; }
+.prio-desc { flex: 1; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 8px; font-size: 12.5px; }
+.ins-modes { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.ins-mode { text-align: left; background: #f8fafc; border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 14px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+.ins-mode:hover { border-color: var(--navy-2); }
+.ins-mode.warn { background: #fff7ed; border-color: #fdba74; }
+.ins-mode span { font-size: 12.5px; color: var(--muted); }
+.tbl.clickable tbody tr { cursor: pointer; }
+.tbl.clickable tbody tr:hover { background: #eff6ff; }
+.typebadge { font-size: 10px; letter-spacing: .05em; border-radius: 4px; padding: 2px 6px; background: #dbeafe; color: #1d4ed8; }
+.typebadge.t-test { background: #fef9c3; color: #854d0e; }
+.typebadge.t-repetition, .typebadge.t-review { background: #f3e8ff; color: #7e22ce; }
+.typebadge.t-ovaformagor { background: #ffedd5; color: #c2410c; }
+.typebadge.t-exam { background: #fee2e2; color: #b91c1c; }
+.rules-ul { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
+.rules-ul li { margin: 3px 0; }
+.upp-card { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 14px; margin-bottom: 10px; }
+.upp-card.magma { border-left: 4px solid #f97316; }
+.upp-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+.upp-head b { margin-right: auto; }
+.upp-levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.upp-lv { border-radius: 8px; padding: 8px 10px; border: 1px solid var(--line); }
+.upp-lv h6 { margin: 0 0 3px; font-size: 10.5px; letter-spacing: .05em; }
+.upp-lv p { margin: 0 0 5px; font-weight: 600; }
+.upp-lv.grön { background: #f0fdf4; } .upp-lv.blå { background: #eff6ff; } .upp-lv.röd { background: #fef2f2; }
+.film-row { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
+.film-row a { color: var(--navy); }
