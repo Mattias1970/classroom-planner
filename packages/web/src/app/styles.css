@@ -237,7 +237,7 @@ h2 { margin: 0 0 2px; font-size: 19px; }
 
 .plan-flex { display: flex; gap: 12px; align-items: flex-start; }
 .plan-cards { flex: 1; min-width: 0; }
-.tb { width: 74px; flex: none; position: sticky; top: 10px; display: flex; flex-direction: column;
+.tb { width: 74px; flex: none; position: sticky; display: flex; flex-direction: column;
   gap: 4px; align-items: stretch; }
 .tb-btn { background: #f1f5f9; border: 1px solid var(--line); border-radius: 8px; padding: 3px 0;
   cursor: pointer; font-size: 11.5px; }
@@ -311,7 +311,8 @@ h2 { margin: 0 0 2px; font-size: 19px; }
 .tool-desc { margin: 1px 0 5px; font-size: 10.5px; color: var(--muted); font-style: italic; }
 .reslink .plat { background: #ede9fe; color: #6d28d9; font-style: normal; font-size: 9px;
   letter-spacing: .06em; border-radius: 4px; padding: 1px 5px; }
-.magma-row, .prio-block { display: grid; grid-template-columns: 90px 1fr; gap: 6px 10px; margin-top: 8px; align-items: start; }
+.magma-row, .prio-block { display: grid; grid-template-columns: 90px 1fr; gap: 6px 10px; margin-top: 8px; align-items: start;
+  grid-column: 1 / -1; /* spänn över hela .resources-gridden — annars kläms de in i etikettkolumnen */ }
 .magma-row > label, .prio-block > label { font-size: 12px; color: var(--muted); font-weight: 600; padding-top: 4px; }
 .prio-block .note { grid-column: 2; margin: 0; }
 .prio-rooms { display: flex; flex-direction: column; gap: 4px; }
@@ -347,3 +348,19 @@ h2 { margin: 0 0 2px; font-size: 19px; }
 .upp-lv.grön { background: #f0fdf4; } .upp-lv.blå { background: #eff6ff; } .upp-lv.röd { background: #fef2f2; }
 .film-row { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
 .film-row a { color: var(--navy); }
+
+/* ── Bugfixar: autoväxande text, sticky planeringstopp, WYSIWYG-utskrift ── */
+.inline-edit.grow { overflow-y: hidden; resize: none; }
+
+.plan-sticky { position: sticky; top: 0; z-index: 30; background: var(--bg);
+  padding-top: 6px; margin-top: -6px; box-shadow: 0 6px 8px -8px rgba(0,0,0,.25); }
+.tb { top: 210px; } /* tidsbandet fäster under den stickade toppen */
+
+@media print {
+  /* Utskriften ska se ut som på skärmen: behåll färger/bakgrunder, lös upp sticky */
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  .plan-sticky { position: static; box-shadow: none; }
+  .tb { display: none; }
+  .sel-lesson > .card { outline: none; }
+  .inline-edit { border-color: transparent; }
+}

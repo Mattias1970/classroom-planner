@@ -233,6 +233,7 @@ function PlaneringView(props: {
 
   return (
     <main className="main">
+      <div className="plan-sticky">
       <div className="head-row kap-head" style={{ borderLeft: `6px solid ${accent}` }}>
         <div>
           <h2 style={{ color: accent }}>Kapitel {kapitel} — {meta.name}</h2>
@@ -264,7 +265,6 @@ function PlaneringView(props: {
       </div>
 
       {inner === 'lektionsplan' && (<>
-        <SchedulePanel subject={lib.subject} onChange={onChange} />{/* FR-SCH-001…006 */}
         <div className="lesson-nav no-print">{/* FR-GEN-007 */}
           <label>Välj lektion:</label>
           <select value={clampSel} onChange={(e) => gotoLesson(Number(e.target.value))}>
@@ -281,6 +281,11 @@ function PlaneringView(props: {
           const d = new Date(s0.date + 'T00:00:00Z');
           return <p className="sub les-info no-print">{DL[d.getUTCDay()]} v.{s0.week} · {d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'long', year: 'numeric' })} · {s0.start}–{s0.end} · klass {classId}</p>;
         })()}
+      </>)}
+      </div>{/* /plan-sticky */}
+
+      {inner === 'lektionsplan' && (<>
+        <SchedulePanel subject={lib.subject} onChange={onChange} />{/* FR-SCH-001…006 */}
         <div className="plan-flex">
           <TimeBand subject={lib.subject} classId={classId} placed={placed}
             selectedSlotDate={slotFor(kapitel, clampSel)?.date ?? null}
@@ -539,6 +544,13 @@ function KlasserTab(props: { lib: LoadedLibrary; kapitel: number; placed: Placed
   );
 }
 
+/** Höjden följer innehållet så att all text alltid syns (även vid utskrift). */
+function autoGrow(el: HTMLTextAreaElement | null): void {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight + 2}px`;
+}
+
 function Editable(props: { kapitel: number; lesson: LessonRecord; field: keyof LessonRecord; multiline?: boolean; rows?: number; onChange: () => void }) {
   const { kapitel, lesson, field, multiline, rows, onChange } = props;
   const value = effectiveField(kapitel, lesson, field);
@@ -556,7 +568,8 @@ function Editable(props: { kapitel: number; lesson: LessonRecord; field: keyof L
   return (
     <span className={`edit-wrap ${edited ? 'has-edit' : ''}`}>
       {multiline
-        ? <textarea key={value} className="inline-edit" defaultValue={value} rows={rows ?? 2} onBlur={(e) => commit(e.target)} />
+        ? <textarea key={value} className="inline-edit grow" defaultValue={value} rows={rows ?? 2}
+            ref={autoGrow} onInput={(e) => autoGrow(e.currentTarget)} onBlur={(e) => commit(e.target)} />
         : <input key={value} className="inline-edit" defaultValue={value} onBlur={(e) => commit(e.target)} />}
       {flash && <span className="saved-flash">✓ Sparat</span>}
       {edited && !flash && (
