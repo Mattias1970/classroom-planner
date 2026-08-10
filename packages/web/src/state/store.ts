@@ -57,6 +57,19 @@ export function undo(): boolean {
   return true;
 }
 
+/** FR-EDIT-005: tar bort alla lokala redigeringar för ett fält (med ångra-steg). */
+export function clearField(kapitel: number, lektionId: number, field: keyof LessonRecord): void {
+  const all = getOverrides();
+  const undoStack = read<FieldOverride[][]>(K.undo, []);
+  write(K.undo, [...undoStack.slice(-19), all]);
+  write(K.overrides, all.filter((o) => !(o.kapitel === kapitel && o.lektionId === lektionId && o.field === field)));
+}
+
+/** Har fältet en lokal redigering? (FR-EDIT-004) */
+export function isEdited(kapitel: number, lektionId: number, field: keyof LessonRecord): boolean {
+  return getOverrides().some((o) => o.kapitel === kapitel && o.lektionId === lektionId && o.field === field);
+}
+
 export function effectiveField(kapitel: number, lesson: LessonRecord, field: keyof LessonRecord): string {
   const mine = getOverrides()
     .filter((o) => o.kapitel === kapitel && o.lektionId === lesson.id && o.field === field)
@@ -104,6 +117,7 @@ export function exportBackup(): string {
     superteach: localStorage.getItem('classroom-planner.superteach.evidence.v1') ?? null,
     calOverrides: localStorage.getItem('classroom-planner.cal-overrides.v1') ?? null,
     lessonLinks: localStorage.getItem('classroom-planner.lesson-links.v1') ?? null,
+    schemaEdits: localStorage.getItem(SCHEMA_KEY) ?? null,
   }, null, 2);
 }
 export function importBackup(json: string): void {
@@ -115,6 +129,7 @@ export function importBackup(json: string): void {
   if (typeof b.superteach === 'string') localStorage.setItem('classroom-planner.superteach.evidence.v1', b.superteach);
   if (typeof b.calOverrides === 'string') localStorage.setItem('classroom-planner.cal-overrides.v1', b.calOverrides);
   if (typeof b.lessonLinks === 'string') localStorage.setItem('classroom-planner.lesson-links.v1', b.lessonLinks);
+  if (typeof b.schemaEdits === 'string') localStorage.setItem(SCHEMA_KEY, b.schemaEdits);
 }
 
 // ── Bibliotek: demo eller GitHub ──────────────────────────────
@@ -143,6 +158,12 @@ export async function loadFromGithub(): Promise<LoadedLibrary> {
   return { source: 'github', subject: lib.subject, lessons, flip, begrepp: lib.begrepp };
 }
 
+// ── Schemaändringar: startdatum + pass per klass (FR-SCH-002…005) ──
+import type { SchemaEdits } from '@planner/core';
+const SCHEMA_KEY = 'classroom-planner.schema-edits.v1';
+export function getSchemaEdits(): SchemaEdits { return read<SchemaEdits>(SCHEMA_KEY, {}); }
+export function saveSchemaEdits(e: SchemaEdits): void { write(SCHEMA_KEY, e); }
+
 // ── Kalenderöverstyrningar per klass (sprint kalender-komplett) ──
 import type { OverrideMap, LessonOverride } from '@planner/core';
 const OV_KEY = 'classroom-planner.cal-overrides.v1';
@@ -158,7 +179,7 @@ export function setCalOverride(classId: string, globalIdx: number, ov: LessonOve
 }
 
 // ── Resurslänkar per lektion: filmer, magma, verktyg ─────────
-export interface LessonLink { typ: 'film' | 'magma' | 'quiz' | 'verktyg'; titel: string; url: string; }
+export interface LessonLink { typ: 'film' | 'magma' | 'quiz' | 'verktyg' | 'aktivitet' | 'ovrigt'; titel: string; url: string; }
 const LINKS_KEY = 'classroom-planner.lesson-links.v1';
 function linkKey(kapitel: number, lektionId: number): string { return `${kapitel}:${lektionId}`; }
 export function getLinks(kapitel: number, lektionId: number): LessonLink[] {

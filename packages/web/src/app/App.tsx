@@ -1,14 +1,16 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
-  computeTimes, defaultBamTimeline, diffMinutes, generateSlots, placeLessons,
-  weeksLabel, KAP_COLORS,
+  applySchemaEdits, computeTimes, defaultBamTimeline, diffMinutes, distinctEditedFields,
+  generateSlots, placeLessons, summarizeEdits, weeksLabel, KAP_COLORS,
   type LessonRecord, type PlacedLesson, type ScheduledSlot, type SubjectFile,
 } from '@planner/core';
+import { SchedulePanel, TimeBand } from '../views/SchemaOchTidsband.js';
 import Kalender from '../views/Kalender.js';
 import Arsoversikt, { type InnerTab } from '../views/Arsoversikt.js';
 import {
-  addCustomLesson, composeChapter, demoLibrary, effectiveField, exportBackup, getSettings,
-  importBackup, loadFromGithub, nextCustomId, removeLesson, restoreAllRemoved, saveSettings,
+  addCustomLesson, clearField, composeChapter, demoLibrary, effectiveField, exportBackup,
+  getOverrides, getSchemaEdits, getSettings, importBackup, isEdited, loadFromGithub,
+  nextCustomId, removeLesson, restoreAllRemoved, saveSettings,
   setField, undo, type InsertMode, type LoadedLibrary,
   addLink, getCalOverrides, getLinks, removeLink, setCalOverride, type LessonLink,
 } from '../state/store.js';
@@ -33,50 +35,58 @@ export default function App() {
   const [tick, bump] = useState(0);
   const refresh = () => bump((t) => t + 1);
   const stOn = localStorage.getItem(FLAG) === 'true';
+  const [showEdits, setShowEdits] = useState(false); // FR-EDIT-008
 
-  const chapters = Object.keys(lib.subject.kapitelMeta).map(Number).sort((a, b) => a - b);
+  // FR-SCH-002…005: lokala schemaändringar appliceras ovanpå datakällan
+  const libEff = useMemo<LoadedLibrary>(
+    () => ({ ...lib, subject: applySchemaEdits(lib.subject, getSchemaEdits()) }),
+    [lib, tick],
+  );
+  const editCount = useMemo(() => distinctEditedFields(getOverrides()), [tick]); // FR-EDIT-007
+
+  const chapters = Object.keys(libEff.subject.kapitelMeta).map(Number).sort((a, b) => a - b);
   const lessons = useMemo(
-    () => composeChapter(kapitel, lib.lessons[kapitel] ?? []),
-    [lib, kapitel, tick],
+    () => composeChapter(kapitel, libEff.lessons[kapitel] ?? []),
+    [libEff, kapitel, tick],
   );
   const sequence = useMemo(
-    () => chapters.flatMap((k) => composeChapter(k, lib.lessons[k] ?? []).map((lesson) => ({ kapitel: k, lesson }))),
-    [lib, tick],
+    () => chapters.flatMap((k) => composeChapter(k, libEff.lessons[k] ?? []).map((lesson) => ({ kapitel: k, lesson }))),
+    [libEff, tick],
   );
   const placedByClass = useMemo(() => {
     const out: Record<string, PlacedLesson<LessonRecord>[]> = {};
-    for (const c of lib.subject.meta.klasser.filter((x) => !x.arkiverad)) {
-      const slots = generateSlots(lib.subject, c.id, sequence.length + 20);
+    for (const c of libEff.subject.meta.klasser.filter((x) => !x.arkiverad)) {
+      const slots = generateSlots(libEff.subject, c.id, sequence.length + 20);
       out[c.id] = placeLessons(sequence, slots, getCalOverrides(c.id));
     }
     return out;
-  }, [lib, sequence, tick]);
+  }, [libEff, sequence, tick]);
   // FR-YR-005/007: baslinje = samma sekvens utan kalenderöverstyrningar
   const baselineByClass = useMemo(() => {
     const out: Record<string, PlacedLesson<LessonRecord>[]> = {};
-    for (const c of lib.subject.meta.klasser.filter((x) => !x.arkiverad)) {
-      const slots = generateSlots(lib.subject, c.id, sequence.length + 20);
+    for (const c of libEff.subject.meta.klasser.filter((x) => !x.arkiverad)) {
+      const slots = generateSlots(libEff.subject, c.id, sequence.length + 20);
       out[c.id] = placeLessons(sequence, slots);
     }
     return out;
-  }, [lib, sequence, tick]);
+  }, [libEff, sequence, tick]);
   const goTo = (kap: number, section: InnerTab) => { setKapitel(kap); setInner(section); setTab('planering'); }; // FR-GEN-005
   const [focus, setFocus] = useState<{ idx: number; token: number } | null>(null); // FR-CAL-009
   const openLesson = (kap: number, globalIdx: number) => {
     let before = 0;
-    for (const k of chapters) { if (k === kap) break; before += composeChapter(k, lib.lessons[k] ?? []).length; }
+    for (const k of chapters) { if (k === kap) break; before += composeChapter(k, libEff.lessons[k] ?? []).length; }
     setKapitel(kap); setInner('lektionsplan'); setTab('planering');
     setFocus({ idx: globalIdx - before, token: Date.now() });
   };
   const placed = placedByClass[classId] ?? [];
   const slotFor = (kap: number, idx: number): ScheduledSlot | null => {
     let before = 0;
-    for (const k of chapters) { if (k === kap) break; before += composeChapter(k, lib.lessons[k] ?? []).length; }
+    for (const k of chapters) { if (k === kap) break; before += composeChapter(k, libEff.lessons[k] ?? []).length; }
     return placed[before + idx]?.slot ?? null;
   };
   const globalIdxFor = (kap: number, idx: number): number => {
     let before = 0;
-    for (const k of chapters) { if (k === kap) break; before += composeChapter(k, lib.lessons[k] ?? []).length; }
+    for (const k of chapters) { if (k === kap) break; before += composeChapter(k, libEff.lessons[k] ?? []).length; }
     return before + idx;
   };
 
@@ -89,14 +99,19 @@ export default function App() {
         ))}
         <span className="spacer" />
         <span className="stat"><b>{sequence.length}</b><small>LEKTIONER</small></span>
-        <span className="stat"><b>{weeksLabel(sequence.length, (lib.subject.schema[classId] ?? []).length)}</b><small>VECKOR</small></span>
+        <span className="stat"><b>{weeksLabel(sequence.length, (libEff.subject.schema[classId] ?? []).length)}</b><small>VECKOR</small></span>
         <span className="stat"><b>{chapters.length}</b><small>KAPITEL</small></span>
-        <span className="badge">{lib.subject.meta.lärobok.split(',')[0]}</span>
+        {editCount > 0 && (
+          <button className="stat edit-stat" title="Visa redigerade fält" onClick={() => setShowEdits(true)}>
+            <b>{editCount}</b><small>REDIGERAT</small>
+          </button>
+        )}
+        <span className="badge">{libEff.subject.meta.lärobok.split(',')[0]}</span>
         <span className={`src ${lib.source}`}>{lib.source === 'github' ? '● GitHub' : '○ Demo'}</span>
       </header>
 
       {tab === 'arsoversikt' && (
-        <Arsoversikt lib={lib} placedByClass={placedByClass} baselineByClass={baselineByClass} onGoTo={goTo} />
+        <Arsoversikt lib={libEff} placedByClass={placedByClass} baselineByClass={baselineByClass} onGoTo={goTo} />
       )}
 
       {tab === 'planering' && (
@@ -105,33 +120,52 @@ export default function App() {
             <h4>Kapitel</h4>
             {chapters.map((k) => (
               <button key={k} className={`chap ${k === kapitel ? 'active' : ''}`} onClick={() => setKapitel(k)}>
-                {k}. {lib.subject.kapitelMeta[String(k)].name}
-                <small>{composeChapter(k, lib.lessons[k] ?? []).length}</small>
+                {k}. {libEff.subject.kapitelMeta[String(k)].name}
+                <small>{composeChapter(k, libEff.lessons[k] ?? []).length}</small>
               </button>
             ))}
             <h4>Klass</h4>
-            {lib.subject.meta.klasser.filter((c) => !c.arkiverad).map((c) => (
+            {libEff.subject.meta.klasser.filter((c) => !c.arkiverad).map((c) => (
               <button key={c.id} className={`chap ${c.id === classId ? 'active' : ''}`} onClick={() => setClassId(c.id)}>{c.namn}</button>
             ))}
           </nav>
-          <PlaneringView lib={lib} kapitel={kapitel} lessons={lessons} slotFor={slotFor}
+          <PlaneringView lib={libEff} kapitel={kapitel} lessons={lessons} slotFor={slotFor}
             globalIdxFor={globalIdxFor} placed={placed} classId={classId} onChange={refresh}
-            inner={inner} setInner={setInner} focus={focus} />
+            inner={inner} setInner={setInner} focus={focus} onOpenLesson={openLesson} />
         </div>
       )}
 
-      {tab === 'kalender' && <Kalender subject={lib.subject} placedByClass={placedByClass} onChanged={refresh} onOpenLesson={openLesson} />}
-      {tab === 'klasser' && <KlasserView subject={lib.subject} />}
+      {tab === 'kalender' && <Kalender subject={libEff.subject} placedByClass={placedByClass} onChanged={refresh} onOpenLesson={openLesson} />}
+      {tab === 'klasser' && <KlasserView subject={libEff.subject} />}
       {tab === 'bibliotek' && <BibliotekView lib={lib} onLoaded={(l) => { setLib(l); refresh(); }} />}
       {tab === 'superteach' && stOn && (
         <Suspense fallback={<main className="main"><p>Laddar SuperTeach…</p></main>}>
           <SuperTeachPanel
             students={['elev-8B-01', 'elev-8B-02', 'elev-8B-03', 'elev-8B-04']}
-            subject={lib.subject.meta.ämne.toLowerCase()}
+            subject={libEff.subject.meta.ämne.toLowerCase()}
           />
         </Suspense>
       )}
       {tab === 'installningar' && <InstallningarView onChange={refresh} />}
+
+      {showEdits && ( /* FR-EDIT-008 */
+        <div className="overlay" role="dialog" onClick={() => setShowEdits(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="head-row"><h3>Lokalt redigerade fält</h3>
+              <button className="icon-btn" onClick={() => setShowEdits(false)}>✕</button></div>
+            <table className="tbl">
+              <thead><tr><th>Kapitel</th><th>Lektion</th><th>Fält</th><th>Värde</th></tr></thead>
+              <tbody>
+                {summarizeEdits(getOverrides()).map((r, i) => (
+                  <tr key={i}><td>{r.kapitel}</td><td>{r.lektionId}</td><td>{r.field}</td>
+                    <td>{r.value.slice(0, 60)}{r.value.length > 60 ? '…' : ''}</td></tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="note">Återställ ett enskilt fält med ↩ vid fältet, eller stegvis via ↶ Ångra i planeringen.</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -150,11 +184,13 @@ function PlaneringView(props: {
   inner: import('../views/Arsoversikt.js').InnerTab;
   setInner: (t: import('../views/Arsoversikt.js').InnerTab) => void;
   focus: { idx: number; token: number } | null;
+  onOpenLesson: (kapitel: number, globalIdx: number) => void;
 }) {
-  const { lib, kapitel, lessons, slotFor, globalIdxFor, placed, classId, onChange, inner, setInner, focus } = props;
+  const { lib, kapitel, lessons, slotFor, globalIdxFor, placed, classId, onChange, inner, setInner, focus, onOpenLesson } = props;
   const meta = lib.subject.kapitelMeta[String(kapitel)];
   const accent = KAP_COLORS[kapitel] ?? '#555'; // FR-GEN-003
   const [adding, setAdding] = useState(false);
+  const [addAfter, setAddAfter] = useState<number | null>(null); // FR-CARD-016
   const [sel, setSel] = useState(0); // FR-GEN-007: vald lektion
   const clampSel = Math.min(sel, Math.max(0, lessons.length - 1));
   const gotoLesson = (i: number) => {
@@ -196,7 +232,15 @@ function PlaneringView(props: {
       <div className="head-row kap-head" style={{ borderLeft: `6px solid ${accent}` }}>
         <div>
           <h2 style={{ color: accent }}>Kapitel {kapitel} — {meta.name}</h2>
-          <p className="sub">{lessons.length} lektioner · {meta.term} · prov: {meta.prov} · klass {classId}</p>
+          <p className="sub">
+            {lessons.length} lektioner · {weeksLabel(lessons.length, (lib.subject.schema[classId] ?? []).length)} veckor · {meta.term}
+          </p>
+          <p className="sub kap-pills">
+            <span className="kpill">📖 Sammanfattning: {meta.sidor_samm}</span>
+            <span className="kpill">🏆 {meta.prov}</span>
+            <span className="kpill">📱 Socrative: {lib.subject.meta.klasser.filter((c) => !c.arkiverad).map((c) => c.socrative).join(' / ')}</span>
+            <span className="kpill">🏫 Klasser: {lib.subject.meta.klasser.filter((c) => !c.arkiverad).map((c) => c.namn).join(' & ')}</span>
+          </p>
         </div>
         <div className="no-print">
           <button className="btn sec" onClick={() => { undo() && onChange(); }}>↶ Ångra</button>{' '}
@@ -216,6 +260,7 @@ function PlaneringView(props: {
       </div>
 
       {inner === 'lektionsplan' && (<>
+        <SchedulePanel subject={lib.subject} onChange={onChange} />{/* FR-SCH-001…006 */}
         <div className="lesson-nav no-print">{/* FR-GEN-007 */}
           <label>Välj lektion:</label>
           <select value={clampSel} onChange={(e) => gotoLesson(Number(e.target.value))}>
@@ -225,15 +270,32 @@ function PlaneringView(props: {
           <button className="btn sec" onClick={() => gotoLesson(clampSel + 1)} aria-label="Nästa lektion">▶</button>
           <span className="badge" style={{ background: accent }}>Lektion {clampSel + 1} / {lessons.length}</span>
         </div>
-        {lessons.map((l, i) => (
-          <div key={`${l.id}-${i}`} id={`lesson-card-${kapitel}-${i}`}
-            className={i === clampSel ? 'sel-lesson' : undefined} onClick={() => setSel(i)}>
-            <LessonCard kapitel={kapitel} lesson={l} slot={slotFor(kapitel, i)}
-              globalIdx={globalIdxFor(kapitel, i)} classId={classId}
-              override={placed[globalIdxFor(kapitel, i)]?.override}
-              flip={lib.flip[kapitel]?.[l.id]} onChange={onChange} />
+        {(() => { /* FR-LES-002: dag, vecka, månad, år + tider för vald lektion/klass */
+          const s0 = slotFor(kapitel, clampSel);
+          if (!s0) return null;
+          const DL = ['Sön', 'Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör'];
+          const d = new Date(s0.date + 'T00:00:00Z');
+          return <p className="sub les-info no-print">{DL[d.getUTCDay()]} v.{s0.week} · {d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'long', year: 'numeric' })} · {s0.start}–{s0.end} · klass {classId}</p>;
+        })()}
+        <div className="plan-flex">
+          <TimeBand subject={lib.subject} classId={classId} placed={placed}
+            selectedSlotDate={slotFor(kapitel, clampSel)?.date ?? null}
+            onOpenLesson={onOpenLesson} />{/* FR-TB-001…006 */}
+          <div className="plan-cards">
+            {lessons.map((l, i) => (
+              <div key={`${l.id}-${i}`} id={`lesson-card-${kapitel}-${i}`}
+                className={i === clampSel ? 'sel-lesson' : undefined} onClick={() => setSel(i)}>
+                <LessonCard kapitel={kapitel} lesson={l} slot={slotFor(kapitel, i)}
+                  globalIdx={globalIdxFor(kapitel, i)} classId={classId}
+                  socRoom={lib.subject.meta.klasser.find((c) => c.id === classId)?.socrative ?? 'Matte8B'}
+                  defs={lib.begrepp.definitioner}
+                  override={placed[globalIdxFor(kapitel, i)]?.override}
+                  flip={lib.flip[kapitel]?.[l.id]} onChange={onChange}
+                  onAddAfter={() => setAddAfter(l.id)} />
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
       </>)}
 
       {inner === 'oversikt' && <OversiktTab kapitel={kapitel} lessons={lessons} slotFor={slotFor} />}
@@ -244,6 +306,8 @@ function PlaneringView(props: {
       {inner === 'klasser' && <KlasserTab lib={lib} kapitel={kapitel} placed={placed} />}
 
       {adding && <AddLessonDialog kapitel={kapitel} lessons={lessons} onClose={() => { setAdding(false); onChange(); }} />}
+      {addAfter !== null && <AddLessonDialog kapitel={kapitel} lessons={lessons} initialAfterId={addAfter}
+        onClose={() => { setAddAfter(null); onChange(); }} />}
     </main>
   );
 }
@@ -362,27 +426,50 @@ function KlasserTab(props: { lib: LoadedLibrary; kapitel: number; placed: Placed
   );
 }
 
-function Editable(props: { kapitel: number; lesson: LessonRecord; field: keyof LessonRecord; multiline?: boolean; onChange: () => void }) {
-  const { kapitel, lesson, field, multiline, onChange } = props;
+function Editable(props: { kapitel: number; lesson: LessonRecord; field: keyof LessonRecord; multiline?: boolean; rows?: number; onChange: () => void }) {
+  const { kapitel, lesson, field, multiline, rows, onChange } = props;
   const value = effectiveField(kapitel, lesson, field);
-  const commit = (v: string) => { if (v !== value) { setField(kapitel, lesson.id, field, v); onChange(); } };
-  return multiline
-    ? <textarea className="inline-edit" defaultValue={value} rows={2} onBlur={(e) => commit(e.target.value)} />
-    : <input className="inline-edit" defaultValue={value} onBlur={(e) => commit(e.target.value)} />;
+  const edited = isEdited(kapitel, lesson.id, field); // FR-EDIT-004
+  const [flash, setFlash] = useState(false); // FR-EDIT-006
+  const commit = (el: HTMLInputElement | HTMLTextAreaElement) => {
+    const v = el.value;
+    if (v.trim() === '') { el.value = value; return; } // FR-EDIT-003: tomt sparas inte
+    if (v !== value) {
+      setField(kapitel, lesson.id, field, v);
+      setFlash(true); setTimeout(() => setFlash(false), 1500);
+      onChange();
+    }
+  };
+  return (
+    <span className={`edit-wrap ${edited ? 'has-edit' : ''}`}>
+      {multiline
+        ? <textarea key={value} className="inline-edit" defaultValue={value} rows={rows ?? 2} onBlur={(e) => commit(e.target)} />
+        : <input key={value} className="inline-edit" defaultValue={value} onBlur={(e) => commit(e.target)} />}
+      {flash && <span className="saved-flash">✓ Sparat</span>}
+      {edited && !flash && (
+        <button className="restore-btn" title="Återställ original"
+          onClick={() => { clearField(kapitel, lesson.id, field); onChange(); }}>↩ Återställ original</button>
+      )}{/* FR-EDIT-005 */}
+    </span>
+  );
 }
 
 function LessonCard(props: {
   kapitel: number; lesson: LessonRecord; slot: ScheduledSlot | null;
-  globalIdx: number; classId: string;
+  globalIdx: number; classId: string; socRoom: string; defs: Record<string, string>;
   override?: import('@planner/core').LessonOverride;
-  flip?: import('@planner/core').FlipDoc; onChange: () => void;
+  flip?: import('@planner/core').FlipDoc; onChange: () => void; onAddAfter: () => void;
 }) {
-  const { kapitel, lesson, slot, globalIdx, classId, override, flip, onChange } = props;
+  const { kapitel, lesson, slot, globalIdx, classId, socRoom, defs, override, flip, onChange, onAddAfter } = props;
+  const har = (v: string) => !!v && v !== '—';
+  const begreppList = har(effectiveField(kapitel, lesson, 'begrepp'))
+    ? effectiveField(kapitel, lesson, 'begrepp').split(',').map((b) => b.trim()).filter(Boolean) : [];
   const [cancelDlg, setCancelDlg] = useState(false);
   const rows = flip?.bamTimeline?.length
     ? flip.bamTimeline
     : slot ? defaultBamTimeline(lesson, diffMinutes(slot.start, slot.end)) : null;
   const timeline = rows && slot ? computeTimes(rows, slot.start) : null;
+  const segFor = (kind: string) => timeline?.find((t) => t.kind === kind);
   const links: LessonLink[] = [
     ...(flip?.blocks ?? []).flatMap((b) => b.typ === 'film' || b.typ === 'quiz'
       ? [{ typ: b.typ, titel: b.ref.titel, url: b.ref.url } as LessonLink] : []),
@@ -395,6 +482,8 @@ function LessonCard(props: {
         <span className="title">
           Lektion {lesson.id} · {effectiveField(kapitel, lesson, 'avsnitt')}
           {flip && <span className="pill flip">Flippat</span>}
+          {har(lesson.sidor_teori) && <span className="pill teori">📖 Teorisidor: {lesson.sidor_teori}</span>}
+          {begreppList.length > 0 && <span className="pill beg">💡 {begreppList.length} begrepp introduceras</span>}
           {lesson.exit !== '—' && <span className="pill quiz">Exit</span>}
           {lesson.type !== 'regular' && <span className="pill">{lesson.type}</span>}
           {override && <span className="pill ov">{override.type === 'cancelled' ? '⛔ Inställd' : override.type === 'shifted' ? '⏭ Framflyttad' : '📍 Flyttad'}</span>}
@@ -404,28 +493,95 @@ function LessonCard(props: {
         <button className="icon-btn" title="Ta bort lektion" onClick={() => { removeLesson(kapitel, lesson.id); onChange(); }}>🗑</button>
       </div>
       {override && <p className="ov-reason">📝 {override.reason}</p>}
-      {timeline && (
-        <div className="bam" aria-label="BAM-tidslinje">
-          {timeline.map((seg) => (
-            <div key={seg.label} className={`seg ${seg.kind}`} style={{ flexGrow: seg.minutes }}>
-              <b>{seg.label}</b><span>{seg.from}–{seg.to}</span>
+
+      {slot && ( /* FR-CARD-003: Tavlan */
+        <div className="tavlan">
+          <div className="tavlan-top">🗓 TAVLAN</div>
+          <div className="tavlan-bar">
+            <b>Ma</b>
+            <span className="t">{slot.start} – {slot.end}</span>
+            <small>{['Sön', 'Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör'][new Date(slot.date + 'T00:00:00Z').getUTCDay()]} · v.{slot.week}</small>
+          </div>
+          {timeline && (
+            <div className="bam" aria-label="BAM-tidslinje">{/* FR-CARD-004 */}
+              {timeline.map((seg) => (
+                <div key={seg.label} className={`seg ${seg.kind}`} style={{ flexGrow: seg.minutes }}>
+                  <b>{seg.label}</b><span>{seg.from}–{seg.to}</span>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+          {har(lesson.soc_start) && segFor('quiz') && ( /* FR-CARD-005 */
+            <div className="soc-block start">
+              <span className="soc-time">⏱ {segFor('quiz')!.from}–{segFor('quiz')!.to} · LÄXFÖRHÖR</span>
+              <span className="soc-room">Socrative.com · Roomname: <b>{socRoom}</b></span>
+              <Editable kapitel={kapitel} lesson={lesson} field="soc_start" onChange={onChange} />
+            </div>
+          )}
+          <div className="bam-cols">{/* göra / lära / exempel — redigerbara (FR-EDIT-001) */}
+            <div className="bam-col gora"><h5>VAD SKA VI GÖRA</h5>
+              <Editable kapitel={kapitel} lesson={lesson} field="bam_gora" multiline rows={3} onChange={onChange} /></div>
+            <div className="bam-col lara"><h5>VAD SKA VI LÄRA OSS</h5>
+              <Editable kapitel={kapitel} lesson={lesson} field="bam_lara" multiline rows={3} onChange={onChange} /></div>
+            <div className="bam-col ex"><h5>EXEMPEL VI RÄKNAR</h5>
+              <Editable kapitel={kapitel} lesson={lesson} field="bam_ex" multiline rows={3} onChange={onChange} /></div>
+          </div>
         </div>
       )}
+
       <div className="rows">
-        <label>Genomgång</label><Editable kapitel={kapitel} lesson={lesson} field="genomgang" multiline onChange={onChange} />
-        <label>Begrepp</label><Editable kapitel={kapitel} lesson={lesson} field="begrepp" onChange={onChange} />
-        <label>Uppgifter</label>
-        <div className="ranges">
-          <span className="rg grön">Grön {effectiveField(kapitel, lesson, 'grön')}</span>
-          <span className="rg blå">Blå {effectiveField(kapitel, lesson, 'blå')}</span>
-          <span className="rg röd">Röd {effectiveField(kapitel, lesson, 'röd')}</span>
-          <span className="rg teori">Teori {lesson.sidor_teori}</span>
+        <label>Genomgång{segFor('lecture') && <small className="tspan"> {segFor('lecture')!.from}–{segFor('lecture')!.to}</small>}</label>
+        <Editable kapitel={kapitel} lesson={lesson} field="genomgang" multiline onChange={onChange} />{/* FR-CARD-006 */}
+
+        {har(lesson.ex) && (<> {/* FR-CARD-007 */}
+          <label>Bokens exempel</label>
+          <div className="ex-box"><Editable kapitel={kapitel} lesson={lesson} field="ex" multiline onChange={onChange} /></div>
+        </>)}
+
+        {begreppList.length > 0 && (<> {/* FR-CARD-008 */}
+          <label>Begrepp</label>
+          <div className="reslist">
+            {begreppList.map((b) => (
+              <span key={b} className="chip" title={defs[b.toLowerCase()] ?? defs[b] ?? 'Definition saknas'}>{b}</span>
+            ))}
+          </div>
+        </>)}
+
+        {(har(effectiveField(kapitel, lesson, 'grön')) || har(effectiveField(kapitel, lesson, 'blå')) || har(effectiveField(kapitel, lesson, 'röd'))) && (<>
+          <label>Arbete{segFor('work') && <small className="tspan"> {segFor('work')!.from}–{segFor('work')!.to}</small>}</label>
+          <div>{/* FR-CARD-009/010/011 */}
+            {lesson.del === 1 && <span className="pill min">Minimum lektion 1: Grönt klart</span>}
+            {lesson.del === 2 && <span className="pill min">Minimum lektion 2: Blått klart</span>}
+            <div className="ranges">
+              {har(effectiveField(kapitel, lesson, 'grön')) && <span className="rg grön">Grön {effectiveField(kapitel, lesson, 'grön')} · Introduktion · obligatorisk</span>}
+              {har(effectiveField(kapitel, lesson, 'blå')) && <span className="rg blå">Blå {effectiveField(kapitel, lesson, 'blå')} · E-nivå · obligatorisk</span>}
+              {har(effectiveField(kapitel, lesson, 'röd')) && <span className="rg röd">Röd {effectiveField(kapitel, lesson, 'röd')} · C/A-nivå · frivillig</span>}
+            </div>
+            <p className="note">📷 Fotografera dina beräkningar och ladda upp i Google Classroom. Grön + blå är obligatoriska att lämna in; det som inte hinns med görs klart hemma eller på stödtid.</p>
+          </div>
+        </>)}
+
+        <label>Läxa</label>{/* FR-CARD-013 */}
+        <div>
+          {begreppList.length > 0 && <p className="note">💡 Nya begrepp att kunna: {begreppList.join(', ')}</p>}
+          <Editable kapitel={kapitel} lesson={lesson} field="laxa" onChange={onChange} />
+          <p className="note">Kom ihåg: gröna och blå uppgifter ska vara inlämnade i Classroom.</p>
         </div>
-        <label>Läxa</label><Editable kapitel={kapitel} lesson={lesson} field="laxa" onChange={onChange} />
       </div>
+
+      {har(lesson.exit) && segFor('exit') && ( /* FR-CARD-014 */
+        <div className="soc-block exit">
+          <span className="soc-time">⏱ {segFor('exit')!.from}–{segFor('exit')!.to} · EXIT TICKET</span>
+          <span className="soc-room">Socrative.com · Roomname: <b>{socRoom}</b></span>
+          <Editable kapitel={kapitel} lesson={lesson} field="exit" onChange={onChange} />
+          <p className="note">5 minuter. Visa att du förstår lektionens grundläggande uppgifter. Exit ticket från denna lektion används som läxförhör nästa lektion.</p>
+        </div>
+      )}
+
       <ResourceRow kapitel={kapitel} lesson={lesson} links={links} flipCount={flipCount} onChange={onChange} />
+      <div className="card-foot no-print">{/* FR-CARD-016 */}
+        <button className="btn sec" onClick={onAddAfter}>+ Lägg till lektion efter denna</button>
+      </div>
       {cancelDlg && (
         <div className="overlay" role="dialog">
           <div className="modal">
@@ -451,27 +607,39 @@ function ResourceRow(props: { kapitel: number; lesson: LessonRecord; links: Less
   const { kapitel, lesson, links, flipCount, onChange } = props;
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState<LessonLink>({ typ: 'film', titel: '', url: '' });
-  const ICON: Record<LessonLink['typ'], string> = { film: '🎬', magma: '🧮', quiz: '❓', verktyg: '🔧' };
+  const ICON: Record<LessonLink['typ'], string> = { film: '🎬', magma: '🧮', quiz: '❓', verktyg: '🔧', aktivitet: '🤝', ovrigt: '📎' };
+  const CATS: Array<[LessonLink['typ'], string]> = [
+    ['film', 'Filmer (Binogi m.m.)'], ['magma', 'Magma'], ['quiz', 'Quiz/Socrative'],
+    ['verktyg', 'Verktyg'], ['aktivitet', 'Aktiviteter (EPA m.m.)'], ['ovrigt', 'Övrigt'],
+  ];
   return (
     <div className="resources">
-      <label>Resurser</label>
-      <div className="reslist">
-        {links.length === 0 && <span className="muted">Inga länkar ännu.</span>}
-        {links.map((l, i) => (
-          <span key={`${l.url}-${i}`} className={`reslink ${l.typ}`}>
-            <a href={l.url} target="_blank" rel="noreferrer">{ICON[l.typ]} {l.titel || l.typ}</a>
-            {i >= flipCount && (
-              <button className="icon-btn" title="Ta bort" onClick={() => { removeLink(kapitel, lesson.id, i - flipCount); onChange(); }}>×</button>
-            )}
-          </span>
+      <label>Pedagogiska verktyg</label>
+      <div className="toolgroups">{/* FR-CARD-012: sex kategorier, alltid synliga */}
+        {CATS.map(([typ, label]) => (
+          <div key={typ} className="toolgroup">
+            <h6>{ICON[typ]} {label}</h6>
+            <div className="reslist">
+              {links.filter((l) => l.typ === typ).length === 0 && <span className="muted">—</span>}
+              {links.map((l, i) => l.typ === typ && (
+                <span key={`${l.url}-${i}`} className={`reslink ${l.typ}`}>
+                  <a href={l.url} target="_blank" rel="noreferrer">{l.titel || l.typ}</a>
+                  {i >= flipCount && (
+                    <button className="icon-btn" title="Ta bort" onClick={() => { removeLink(kapitel, lesson.id, i - flipCount); onChange(); }}>×</button>
+                  )}
+                </span>
+              ))}
+              <button className="icon-btn addres" onClick={() => { setForm({ typ, titel: '', url: '' }); setAdding(true); }}>+</button>
+            </div>
+          </div>
         ))}
-        <button className="icon-btn addres" onClick={() => setAdding(!adding)}>+ länk</button>
       </div>
       {adding && (
         <div className="resform">
           <select value={form.typ} onChange={(e) => setForm({ ...form, typ: e.target.value as LessonLink['typ'] })}>
             <option value="film">Film</option><option value="magma">Magma</option>
             <option value="quiz">Quiz</option><option value="verktyg">Verktyg</option>
+            <option value="aktivitet">Aktivitet</option><option value="ovrigt">Övrigt</option>
           </select>
           <input placeholder="Titel" value={form.titel} onChange={(e) => setForm({ ...form, titel: e.target.value })} />
           <input placeholder="https://…" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
@@ -483,11 +651,11 @@ function ResourceRow(props: { kapitel: number; lesson: LessonRecord; links: Less
   );
 }
 
-function AddLessonDialog(props: { kapitel: number; lessons: LessonRecord[]; onClose: () => void }) {
-  const { kapitel, lessons, onClose } = props;
+function AddLessonDialog(props: { kapitel: number; lessons: LessonRecord[]; onClose: () => void; initialAfterId?: number }) {
+  const { kapitel, lessons, onClose, initialAfterId } = props;
   const [titel, setTitel] = useState('Extra: repetition');
   const [mode, setMode] = useState<InsertMode>('skjut-fram');
-  const [afterId, setAfterId] = useState<number | null>(lessons[lessons.length - 1]?.id ?? null);
+  const [afterId, setAfterId] = useState<number | null>(initialAfterId ?? lessons[lessons.length - 1]?.id ?? null);
   const save = () => {
     addCustomLesson({
       kapitel, afterId: mode === 'sist' ? null : afterId, mode,
