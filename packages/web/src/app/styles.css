@@ -450,3 +450,6 @@ html.is-mobile.phone-large { font-size: 17px; }
 
 /* Fix: arbets- och läxblocken är barn i .rows-gridden — spänn hela bredden */
 .rows .work-block, .rows .laxa-block { grid-column: 1 / -1; }
+
+/* Prototypimport */
+.proto-preview { background: #f8fafc; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-top: 8px; }

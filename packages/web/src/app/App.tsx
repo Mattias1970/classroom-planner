@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   applyClassEdits, applySchemaEdits, buildBegreppTabell, computeTimes, defaultBamTimeline, diffMinutes,
+  parsePrototypeLinks, summarizePrototypeLinks, type PrototypeLink,
   distinctEditedFields, generateSlots, normalizeUrl, placeLessons, summarizeEdits,
   weeksLabel, KAP_COLORS,
   type LessonRecord, type PlacedLesson, type ScheduledSlot, type SubjectFile,
@@ -153,7 +154,7 @@ export default function App() {
 
       {tab === 'kalender' && <Kalender subject={libEff.subject} placedByClass={placedByClass} onChanged={refresh} onOpenLesson={openLesson} />}
       {tab === 'klasser' && <KlasserView subject={libEff.subject} />}
-      {tab === 'bibliotek' && <BibliotekView lib={lib} onLoaded={(l) => { setLib(l); refresh(); }} />}
+      {tab === 'bibliotek' && <BibliotekView lib={libEff} onLoaded={(l) => { setLib(l); refresh(); }} onChange={refresh} />}
       {tab === 'superteach' && stOn && (
         <Suspense fallback={<main className="main"><p>Laddar SuperTeach…</p></main>}>
           <SuperTeachPanel
@@ -1037,7 +1038,72 @@ const PLATFORMS: Record<ToolTyp, string[]> = { /* FR-TOOL-002 */
 };
 
 // ── Bibliotek: datakällor + wizard (sprint 20/22/24-om) ───────
-function BibliotekView(props: { lib: LoadedLibrary; onLoaded: (l: LoadedLibrary) => void }) {
+// ── Import av film-/quizlänkar ur HTML-prototypen ─────────────
+function PrototypImportCard(props: { lib: LoadedLibrary; onChange: () => void }) {
+  const { lib, onChange } = props;
+  const [parsed, setParsed] = useState<PrototypeLink[] | null>(null);
+  const [msg, setMsg] = useState('');
+
+  const lessonFor = (delkapitel: string): { kapitel: number; id: number } | null => {
+    const kap = Number(delkapitel.split('.')[0]);
+    const lesson = (lib.lessons[kap] ?? []).find((l) => l.avsnitt.startsWith(delkapitel));
+    return lesson ? { kapitel: kap, id: lesson.id } : null;
+  };
+
+  const doImport = () => {
+    if (!parsed) return;
+    let added = 0, skipped = 0, unmatched = 0;
+    for (const l of parsed) {
+      const target = lessonFor(l.delkapitel);
+      if (!target) { unmatched++; continue; }
+      const existing = getLinks(target.kapitel, target.id);
+      const dup = existing.some((x) => (l.url && x.url === l.url) || (!l.url && x.titel === l.titel));
+      if (dup) { skipped++; continue; }
+      const platform = l.typ === 'film'
+        ? (l.url.includes('binogi') ? 'Binogi' : l.url.includes('youtu') ? 'YouTube' : 'Annat')
+        : 'Socrative';
+      addLink(target.kapitel, target.id, {
+        typ: l.typ === 'film' ? 'film' : 'laxforhor',
+        platform, titel: l.titel, url: l.url,
+      });
+      added++;
+    }
+    setMsg(`✓ ${added} länkar importerade${skipped ? `, ${skipped} fanns redan` : ''}${unmatched ? `, ${unmatched} kunde inte matchas mot en lektion` : ''}. De syns nu på lektionskorten samt i Filmer-fliken och årsöversiktens räknare.`);
+    setParsed(null);
+    onChange();
+  };
+
+  return (
+    <div className="card">
+      <div className="title">🎬 Importera länkar från HTML-prototypen</div>
+      <p className="note">Ladda upp <code>planering_matematik8_alla_kapitel.html</code> så hämtas alla film- och Socrative-länkar och kopplas till rätt lektion via delkapitelrubrikerna. Ingenting skrivs förrän du bekräftar.</p>
+      <label className="btn sec file-btn">⬆ Välj HTML-fil
+        <input type="file" accept=".html,.htm,text/html" hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void f.text().then((t) => { setParsed(parsePrototypeLinks(t)); setMsg(''); });
+            e.target.value = '';
+          }} />
+      </label>
+      {parsed && (() => {
+        const sum = summarizePrototypeLinks(parsed);
+        return (
+          <div className="proto-preview">
+            <p><b>Hittade:</b> {sum.totalFilmer} filmer · {sum.totalQuiz} quizreferenser</p>
+            <p className="muted">{Object.entries(sum.perKapitel).map(([k, v]) => `Kap ${k}: ${v.filmer} filmer, ${v.quiz} quiz`).join(' · ')}</p>
+            <div className="modal-actions">
+              <button className="btn sec" onClick={() => setParsed(null)}>Avbryt</button>
+              <button className="btn" disabled={parsed.length === 0} onClick={doImport}>Importera {parsed.length} länkar</button>
+            </div>
+          </div>
+        );
+      })()}
+      {msg && <p className="status">{msg}</p>}
+    </div>
+  );
+}
+
+function BibliotekView(props: { lib: LoadedLibrary; onLoaded: (l: LoadedLibrary) => void; onChange: () => void }) {
   const [s, setS] = useState(getSettings());
   const [status, setStatus] = useState('');
   const connect = async () => {
@@ -1052,6 +1118,7 @@ function BibliotekView(props: { lib: LoadedLibrary; onLoaded: (l: LoadedLibrary)
   };
   return (
     <main className="main">
+      <PrototypImportCard lib={props.lib} onChange={props.onChange} />
       <h2>Bibliotek — datakällor</h2>
       <div className="card">
         <div className="card-head"><span className="title">GitHub: {s.githubRepo}</span>
