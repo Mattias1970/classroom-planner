@@ -447,3 +447,6 @@ html.is-mobile.phone-large { font-size: 17px; }
 .laxa-head { font-size: 11px; letter-spacing: .06em; color: #0f766e; font-weight: 700; margin-bottom: 6px; }
 .laxa-block .reslist { margin-bottom: 8px; }
 .pull-pill { background: #b08968; color: #fff; border-radius: 999px; padding: 8px 18px; font-size: 13.5px; }
+
+/* Fix: arbets- och läxblocken är barn i .rows-gridden — spänn hela bredden */
+.rows .work-block, .rows .laxa-block { grid-column: 1 / -1; }

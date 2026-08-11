@@ -723,7 +723,7 @@ function LessonCard(props: {
           </div>
         )}
 
-        <label>Läxa</label>{/* Fig 14 · FR-CARD-013 */}
+        {/* Fig 14 · FR-CARD-013 */}
         <div className="laxa-block">
           <div className="laxa-head">📚 LÄXA</div>
           {begreppList.length > 0 && (<>
