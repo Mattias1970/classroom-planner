@@ -333,9 +333,9 @@ function PlaneringView(props: {
             ))}
           </div>
         </div>
-        {pullHint !== null && ( /* FR-MOB-008 */
+        {pullHint !== null && ( /* Fig 36 · FR-MOB-008 */
           <div className="pull-hint" style={{ opacity: pullHint / 140 }}>
-            ⬇ Fortsätt dra för Kapitel {allChapters[allChapters.indexOf(kapitel) + 1]} …
+            <span className="pull-pill">⬇ Fortsätt för Kapitel {allChapters[allChapters.indexOf(kapitel) + 1]}: {lib.subject.kapitelMeta[String(allChapters[allChapters.indexOf(kapitel) + 1])]?.name ?? ''}</span>
           </div>
         )}
       </>)}
@@ -639,6 +639,13 @@ function LessonCard(props: {
               {timeline.map((seg) => (
                 <div key={seg.label} className={`seg ${seg.kind}`} style={{ flexGrow: seg.minutes }}>
                   <b>{seg.label}</b><span>{seg.from}–{seg.to}</span>
+                  {seg.kind === 'work' && ( /* fig 11: nivåintervall i segmentet */
+                    <i className="seg-levels">{[
+                      har(effectiveField(kapitel, lesson, 'grön')) && `Grön ${effectiveField(kapitel, lesson, 'grön')}`,
+                      har(effectiveField(kapitel, lesson, 'blå')) && `Blå ${effectiveField(kapitel, lesson, 'blå')}`,
+                      har(effectiveField(kapitel, lesson, 'röd')) && `Röd ${effectiveField(kapitel, lesson, 'röd')}`,
+                    ].filter(Boolean).join(' · ')}</i>
+                  )}
                 </div>
               ))}
             </div>
@@ -679,25 +686,54 @@ function LessonCard(props: {
           </div>
         </>)}
 
-        {(har(effectiveField(kapitel, lesson, 'grön')) || har(effectiveField(kapitel, lesson, 'blå')) || har(effectiveField(kapitel, lesson, 'röd'))) && (<>
-          <label>Arbete{segFor('work') && <small className="tspan"> {segFor('work')!.from}–{segFor('work')!.to}</small>}</label>
-          <div>{/* FR-CARD-009/010/011 */}
-            {lesson.del === 1 && <span className="pill min">Minimum lektion 1: Grönt klart</span>}
-            {lesson.del === 2 && <span className="pill min">Minimum lektion 2: Blått klart</span>}
-            <div className="ranges">
-              {har(effectiveField(kapitel, lesson, 'grön')) && <span className="rg grön">Grön {effectiveField(kapitel, lesson, 'grön')} · Introduktion · obligatorisk</span>}
-              {har(effectiveField(kapitel, lesson, 'blå')) && <span className="rg blå">Blå {effectiveField(kapitel, lesson, 'blå')} · E-nivå · obligatorisk</span>}
-              {har(effectiveField(kapitel, lesson, 'röd')) && <span className="rg röd">Röd {effectiveField(kapitel, lesson, 'röd')} · C/A-nivå · frivillig</span>}
+        {(har(effectiveField(kapitel, lesson, 'grön')) || har(effectiveField(kapitel, lesson, 'blå')) || har(effectiveField(kapitel, lesson, 'röd'))) && (
+          <div className="work-block">{/* Fig 12 · FR-CARD-009/010/011 */}
+            <div className="work-head">
+              ✏️ {segFor('work') && <b>{segFor('work')!.from}–{segFor('work')!.to}</b>} · ARBETE
+              {har(lesson.sidor_teori) && <> · 📖 SID {lesson.sidor_teori}</>}
             </div>
-            <p className="note">📷 Fotografera dina beräkningar och ladda upp i Google Classroom. Grön + blå är obligatoriska att lämna in; det som inte hinns med görs klart hemma eller på stödtid.</p>
+            {lesson.del > 0 && (
+              <p className="work-intro">
+                <b>Lektion {lesson.del} av 2 — {effectiveField(kapitel, lesson, 'avsnitt')}</b><br />
+                {lesson.del === 1
+                  ? <>Alla börjar med <span className="rg grön">Gröna</span> uppgifter (introduktion, obligatorisk). Fortsätt med <span className="rg blå">Blå</span> om du är klar med gröna.</>
+                  : <>Minimum: gör klart <span className="rg blå">Blå</span> (E-nivå). Fortsätt med <span className="rg röd">Röda</span> för fördjupning mot C/A-nivå.</>}
+              </p>
+            )}
+            <div className="upp-levels">
+              {har(effectiveField(kapitel, lesson, 'grön')) && (
+                <div className="upp-lv grön"><h6>🟢 GRÖN – INTRODUKTION</h6>
+                  <p>Uppg. {effectiveField(kapitel, lesson, 'grön')}</p>
+                  <small>Alla elever · Obligatorisk</small>
+                  {lesson.del === 1 && <span className="pill min">Minimum lektion 1</span>}</div>
+              )}
+              {har(effectiveField(kapitel, lesson, 'blå')) && (
+                <div className="upp-lv blå"><h6>🔵 BLÅ – E-NIVÅ</h6>
+                  <p>Uppg. {effectiveField(kapitel, lesson, 'blå')}</p>
+                  <small>{lesson.del === 1 ? 'När grön är klar · Obligatorisk' : 'Alla elever · Obligatorisk'}</small>
+                  {lesson.del === 2 && <span className="pill min">Minimum lektion 2</span>}</div>
+              )}
+              {har(effectiveField(kapitel, lesson, 'röd')) && (
+                <div className="upp-lv röd"><h6>🔴 RÖD – C/A-NIVÅ</h6>
+                  <p>Uppg. {effectiveField(kapitel, lesson, 'röd')}</p>
+                  <small>Frivillig · görs om lektionstid finns</small></div>
+              )}
+            </div>
+            <p className="note">📷 <b>Inlämning via Google Classroom.</b> Fotografera beräkningarna och ladda upp i Classroom. <b>Minst gröna och blå uppgifter</b> ska laddas upp — det är obligatoriskt. Röda uppgifter är frivilliga. Det som inte hinns med görs klart hemma eller på stödtid och lämnas sedan in.</p>
           </div>
-        </>)}
+        )}
 
-        <label>Läxa</label>{/* FR-CARD-013 */}
-        <div>
-          {begreppList.length > 0 && <p className="note">💡 Nya begrepp att kunna: {begreppList.join(', ')}</p>}
+        <label>Läxa</label>{/* Fig 14 · FR-CARD-013 */}
+        <div className="laxa-block">
+          <div className="laxa-head">📚 LÄXA</div>
+          {begreppList.length > 0 && (<>
+            <p><b>Begrepp att kunna inför nästa lektions läxförhör:</b></p>
+            <div className="reslist">
+              {begreppList.map((b) => <span key={b} className="chip" title={defs[b.toLowerCase()] ?? defs[b] ?? 'Definition saknas'}>{b}</span>)}
+            </div>
+          </>)}
           <Editable kapitel={kapitel} lesson={lesson} field="laxa" onChange={onChange} />
-          <p className="note">Kom ihåg: gröna och blå uppgifter ska vara inlämnade i Classroom.</p>
+          <p className="note">Gröna och blå uppgifter ska vara klara och inlämnade via Google Classroom innan nästa lektion om de ej gjorts på lektionstid.</p>
         </div>
       </div>
 

@@ -58,7 +58,7 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
   const [anchor, setAnchor] = useState(() => new Date());
   const [weekends, setWeekends] = useState(false);
   const [moveModal, setMoveModal] = useState<{ globalIdx: number; date: string; start: string; end: string; reason: string } | null>(null);
-  const [editModal, setEditModal] = useState<{ p: Placed; reason: string } | null>(null); // FR-CAL-011/012/015
+  const [editModal, setEditModal] = useState<{ p: Placed; reason: string; choice: 'remove' | 'shift' | 'restore' | null } | null>(null); // FR-CAL-011/012/015 (fig 5)
 
   const placed = placedByClass[classId] ?? [];
   const byDate = useMemo(() => {
@@ -101,7 +101,7 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
       {withTime && <small>{p.slot!.start}</small>} {p.kapitel}.{p.lesson.id} {p.lesson.avsnitt.replace(/^\d+\.\d+\s*/, '').slice(0, 20)}
       {p.override?.type === 'moved' && ' 📍'}
       <button className="chip-x" title="Ändra lektion (ställ in / flytta / återställ)"
-        onClick={(e) => { e.stopPropagation(); setEditModal({ p, reason: p.override?.reason ?? '' }); }}>×</button>
+        onClick={(e) => { e.stopPropagation(); setEditModal({ p, reason: p.override?.reason ?? '', choice: null }); }}>×</button>
     </div>
   );
 
@@ -147,7 +147,7 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
                       <b>{p.kapitel}.{p.lesson.id}</b> {p.lesson.avsnitt.replace(/^\d+\.\d+\s*/, '')}
                       <small>{p.slot!.start}–{p.slot!.end}{p.override?.type === 'moved' ? ' 📍' : ''}</small>
                       <button className="chip-x" title="Ändra lektion"
-                        onClick={(e) => { e.stopPropagation(); setEditModal({ p, reason: p.override?.reason ?? '' }); }}>×</button>
+                        onClick={(e) => { e.stopPropagation(); setEditModal({ p, reason: p.override?.reason ?? '', choice: null }); }}>×</button>
                     </div>
                   );
                 })}
@@ -343,31 +343,43 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
           </div>
         </div>
       )}
-      {editModal && (
+      {editModal && ( /* Fig 5: välj åtgärd + anledning + Bekräfta */
         <div className="overlay" role="dialog" onClick={() => setEditModal(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Ändra lektion {editModal.p.kapitel}.{editModal.p.lesson.id} — {editModal.p.lesson.avsnitt}</h3>
-            <p className="muted">Klass {classId} · {editModal.p.slot ? `${editModal.p.slot.date} ${editModal.p.slot.start}` : 'inställd'}
-              {editModal.p.override && <> · nuvarande: {editModal.p.override.type} ({editModal.p.override.reason})</>}</p>
-            <label>Anledning (valfritt)</label>{/* FR-CAL-014 */}
-            <input placeholder="t.ex. Studiedag, NP, friluftsdag…" value={editModal.reason}
-              onChange={(e) => setEditModal({ ...editModal, reason: e.target.value })} />
-            <div className="modal-actions" style={{ flexWrap: 'wrap' }}>
-              {editModal.p.override && ( /* FR-CAL-015 */
-                <button className="btn" onClick={() => {
-                  setCalOverride(classId, editModal.p.globalIdx, null);
-                  setEditModal(null); onChanged();
-                }}>↩ Återställ till ordinarie</button>
-              )}
-              <button className="btn" onClick={() => { /* FR-CAL-012 */
-                setCalOverride(classId, editModal.p.globalIdx, { type: 'shifted', reason: editModal.reason.trim() || 'Flyttad till nästa tillfälle' });
-                setEditModal(null); onChanged();
-              }}>⏭ Flytta till nästa tillfälle (allt förskjuts)</button>
-              <button className="btn warn" onClick={() => { /* FR-CAL-011 */
-                setCalOverride(classId, editModal.p.globalIdx, { type: 'cancelled', reason: editModal.reason.trim() || 'Utgår' });
-                setEditModal(null); onChanged();
-              }}>⛔ Ta bort lektion (efterföljande fyller sloten)</button>
+            <h3>⛔ Ändra lektion</h3>
+            <p className="muted">Välj vad du vill göra med "Kap {editModal.p.kapitel} L{editModal.p.globalIdx + 1}: {editModal.p.lesson.avsnitt}"
+              {editModal.p.override && <> · nuvarande: {editModal.p.override.type} ({editModal.p.override.reason})</>}:</p>
+            <div className="ins-modes edit-choices">
+              <button className={`ins-mode ${editModal.choice === 'remove' ? 'sel' : ''}`}
+                onClick={() => setEditModal({ ...editModal, choice: 'remove' })}>
+                <b>🗑 Ta bort lektion</b>
+                <span>Lektionen tas bort. Alla efterföljande lektioner kliver ett steg framåt.</span>
+              </button>
+              <button className={`ins-mode ${editModal.choice === 'shift' ? 'sel' : ''}`}
+                onClick={() => setEditModal({ ...editModal, choice: 'shift' })}>
+                <b>⏭ Flytta till nästa tillfälle</b>
+                <span>Lektionen hoppas över nu och läggs på nästa ordinarie lektionstillfälle. Alla efterföljande följer med.</span>
+              </button>
+              {editModal.p.override && (
+                <button className={`ins-mode ${editModal.choice === 'restore' ? 'sel' : ''}`}
+                  onClick={() => setEditModal({ ...editModal, choice: 'restore' })}>
+                  <b>↩ Återställ till ordinarie</b>
+                  <span>Tar bort ändringen och lägger tillbaka lektionen på sin ordinarie plats.</span>
+                </button>
+              )}{/* FR-CAL-015 */}
+            </div>
+            <label>Anteckning / anledning:</label>{/* FR-CAL-014 */}
+            <textarea rows={3} placeholder="T.ex. Studiedag, sjukdom, schemabrytning, friluftsliv…"
+              value={editModal.reason} onChange={(e) => setEditModal({ ...editModal, reason: e.target.value })} />
+            <div className="modal-actions">
               <button className="btn sec" onClick={() => setEditModal(null)}>Avbryt</button>
+              <button className="btn" disabled={editModal.choice === null} onClick={() => {
+                const reason = editModal.reason.trim();
+                if (editModal.choice === 'restore') setCalOverride(classId, editModal.p.globalIdx, null);
+                else if (editModal.choice === 'shift') setCalOverride(classId, editModal.p.globalIdx, { type: 'shifted', reason: reason || 'Flyttad till nästa tillfälle' });
+                else setCalOverride(classId, editModal.p.globalIdx, { type: 'cancelled', reason: reason || 'Utgår' });
+                setEditModal(null); onChanged();
+              }}>Bekräfta</button>
             </div>
           </div>
         </div>
