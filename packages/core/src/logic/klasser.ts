@@ -5,13 +5,13 @@
  * FR-MOB-001/006/009/010: mobilidentifiering, skärmstorleksgissning,
  * nästa-kapitel-logik.
  */
-import type { KlassInfo, SchedulePass, SubjectFile } from '../records/lesson-record.js';
+import type { ClassMeta, SchedulePass, SubjectFile } from '../records/lesson-record.js';
 
-export interface AddedClass { klass: KlassInfo; schema: SchedulePass[]; }
+export interface AddedClass { klass: ClassMeta; schema: SchedulePass[]; }
 export interface ClassEdits {
   added?: AddedClass[];
   /** Patchar per klass-id (FR-CM-003). */
-  renamed?: Record<string, Partial<Pick<KlassInfo, 'namn' | 'läsår' | 'socrative'>>>;
+  renamed?: Record<string, Partial<Pick<ClassMeta, 'namn' | 'läsår' | 'socrative'>>>;
   /** true = arkiverad, false = återaktiverad (FR-CM-005/006). */
   archived?: Record<string, boolean>;
   /** Permanent borttagna klass-id:n (FR-CM-007). */
@@ -28,7 +28,7 @@ export function applyClassEdits(subject: SubjectFile, edits: ClassEdits): Subjec
     && Object.keys(archived).length === 0 && deleted.length === 0) return subject;
 
   const del = new Set(deleted);
-  let klasser: KlassInfo[] = [
+  let klasser: ClassMeta[] = [
     ...subject.meta.klasser,
     ...added.map((a) => a.klass),
   ]
@@ -57,14 +57,14 @@ export function uniqueClassId(wanted: string, existingIds: string[]): string {
 }
 
 /** Validerar en klassbackup-JSON (FR-CM-010). Kastar Error med svensk text vid fel. */
-export function validateClassBackup(raw: unknown): { klasser: KlassInfo[]; schema: Record<string, SchedulePass[]> } {
+export function validateClassBackup(raw: unknown): { klasser: ClassMeta[]; schema: Record<string, SchedulePass[]> } {
   const b = raw as { klasser?: unknown; schema?: unknown };
   if (!Array.isArray(b.klasser) || b.klasser.length === 0) throw new Error('Filen saknar klasser.');
-  for (const k of b.klasser as Array<Partial<KlassInfo>>) {
+  for (const k of b.klasser as Array<Partial<ClassMeta>>) {
     if (!k.id || !k.namn) throw new Error('Ogiltig klass i filen: id och namn krävs.');
   }
   if (typeof b.schema !== 'object' || b.schema === null) throw new Error('Filen saknar schema.');
-  return { klasser: b.klasser as KlassInfo[], schema: b.schema as Record<string, SchedulePass[]> };
+  return { klasser: b.klasser as ClassMeta[], schema: b.schema as Record<string, SchedulePass[]> };
 }
 
 // ── Mobil (FR-MOB-001/006/009/010) ────────────────────────────
