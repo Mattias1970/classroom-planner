@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parsePrototypeLinks, summarizePrototypeLinks } from '../src/index.js';
+import { parseFilmState, parsePrototypeLinks, summarizePrototypeLinks } from '../src/index.js';
 
 const HTML = `
 <h3>Lektion 1 – 1.1 Negativa tal</h3>
@@ -57,5 +57,32 @@ describe('summarizePrototypeLinks', () => {
     expect(s.perKapitel[2].filmer).toBe(1);
     expect(s.totalFilmer).toBe(5);
     expect(s.totalQuiz).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('parseFilmState (verklig prototypstruktur)', () => {
+  const REAL = `
+// ── DYNAMIC CONTENT STATE (film & magma, keyed by "kap-id") ──
+const filmState = {
+  // 1.1 Negativa tal (lek 1)
+  '1-1': [
+    {title:'Introduktion till negativa tal – Binogi', url:'https://app.binogi.se/l/introduktion-till-negativa-tal'},
+    {title:'Rationella tal – Binogi', url:'https://app.binogi.se/l/rationella-tal'}
+  ],
+  '2-59': [
+    {title:'Uttryck med variabler – Binogi', url:'https://app.binogi.se/l/uttryck'}
+  ]
+};
+const magmaState = {};`;
+  it('läser kap-id-nycklade filmlistor med exakta lektionsadresser', () => {
+    const f = parseFilmState(REAL);
+    expect(f).toHaveLength(3);
+    expect(f[0]).toEqual({ kapitel: 1, lektionId: 1, titel: 'Introduktion till negativa tal – Binogi', url: 'https://app.binogi.se/l/introduktion-till-negativa-tal' });
+    expect(f[2].kapitel).toBe(2);
+    expect(f[2].lektionId).toBe(59);
+  });
+  it('hanterar escapade citattecken och saknad filmState', () => {
+    expect(parseFilmState("const filmState = { '1-2': [{title:'Bråk \\'special\\'', url:'https://x.se'}] };")[0].titel).toBe("Bråk 'special'");
+    expect(parseFilmState('<html>ingen state</html>')).toEqual([]);
   });
 });

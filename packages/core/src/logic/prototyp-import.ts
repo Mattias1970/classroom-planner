@@ -65,6 +65,43 @@ export function parsePrototypeLinks(html: string): PrototypeLink[] {
   return out;
 }
 
+/** En film ur prototypens filmState — exakt lektionsadress. */
+export interface FilmStateLink { kapitel: number; lektionId: number; titel: string; url: string; }
+
+/**
+ * Prototypens verkliga struktur: filmState = { 'kap-id': [{title, url}, …] }.
+ * Ger exakta lektionsadresser (bättre än delkapitelheuristiken ovan).
+ */
+export function parseFilmState(html: string): FilmStateLink[] {
+  const start = html.indexOf('const filmState = {');
+  if (start === -1) return [];
+  let depth = 0, end = start;
+  for (let i = html.indexOf('{', start); i < html.length; i++) {
+    if (html[i] === '{') depth++;
+    else if (html[i] === '}') { depth--; if (depth === 0) { end = i + 1; break; } }
+  }
+  const block = html.slice(start, end);
+  const out: FilmStateLink[] = [];
+  const keyRe = /'(\d+)-(\d+)'\s*:\s*\[/g;
+  let m: RegExpExecArray | null;
+  while ((m = keyRe.exec(block)) !== null) {
+    const kapitel = Number(m[1]), lektionId = Number(m[2]);
+    let d = 1, p = m.index + m[0].length;
+    while (d > 0 && p < block.length) {
+      if (block[p] === '[') d++;
+      else if (block[p] === ']') d--;
+      p++;
+    }
+    const arr = block.slice(m.index + m[0].length, p - 1);
+    const itemRe = /\{title:\s*'((?:[^'\\]|\\.)*)'\s*,\s*url:\s*'([^']*)'\s*\}/g;
+    let it: RegExpExecArray | null;
+    while ((it = itemRe.exec(arr)) !== null) {
+      out.push({ kapitel, lektionId, titel: it[1].replace(/\\'/g, "'").replace(/\\\\/g, '\\'), url: it[2] });
+    }
+  }
+  return out;
+}
+
 export interface PrototypeImportSummary {
   perKapitel: Record<number, { filmer: number; quiz: number }>;
   totalFilmer: number;
