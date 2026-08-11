@@ -54,6 +54,7 @@ export default function Arsoversikt({ lib, placedByClass, baselineByClass, onGoT
   const countFilms = (kap: number): number => {
     let n = 0;
     for (const l of lib.lessons[kap] ?? []) {
+      n += (lib.lankar[`${kap}-${l.id}`] ?? []).filter((b) => b.typ === 'film').length;
       n += (lib.flip[kap]?.[l.id]?.blocks ?? []).filter((b) => b.typ === 'film').length;
       n += getLinks(kap, l.id).filter((x) => x.typ === 'film').length;
     }

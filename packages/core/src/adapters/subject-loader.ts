@@ -11,6 +11,7 @@ import {
   type FieldOverride,
   type FlipDoc,
   type LessonRecord,
+  type BookLink,
   type SubjectFile,
   type SubjectLibrary,
 } from '../records/lesson-record.js';
@@ -59,6 +60,12 @@ export async function loadSubjectLibrary(reader: DataFileReader, slug: string): 
     definitioner: definitionerText ? parseJson<Record<string, string>>(definitionerText, 'definitioner.json') : {},
   };
 
+  // Bokens resurslänkar (t.ex. Binogi-filmer), valfri fil bredvid book.json.
+  const lankarText = await reader.readText(`${contentBase}/lankar.json`);
+  const lankar = lankarText
+    ? parseJson<Record<string, BookLink[]>>(lankarText, `${contentBase}/lankar.json`)
+    : {};
+
   const kapitel = new Map<number, { lektioner: LessonRecord[]; flip: Map<number, FlipDoc> }>();
   for (const kapNr of Object.keys(kapitelMeta).map(Number).sort((a, b) => a - b)) {
     const dir = `${contentBase}/kapitel/${kapNr}/lektioner`;
@@ -78,7 +85,7 @@ export async function loadSubjectLibrary(reader: DataFileReader, slug: string): 
     kapitel.set(kapNr, { lektioner, flip });
   }
 
-  return { slug, subject, book, kapitel, begrepp, overrides };
+  return { slug, subject, book, kapitel, begrepp, lankar, overrides };
 }
 
 /** Test-/demo-läsare över ett vanligt objekt { path: innehåll }. */

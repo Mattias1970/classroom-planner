@@ -75,12 +75,22 @@ export interface FieldOverride {
   kapitel: number; lektionId: number; field: keyof LessonRecord; value: string; updatedAt: string;
 }
 
+/** Bokbunden resurslänk (books/<bookId>/lankar.json), nycklad 'kap-lektionsId'. */
+export interface BookLink {
+  typ: 'laxforhor' | 'exit' | 'ovning' | 'film' | 'prov' | 'flippat';
+  platform?: string;
+  titel: string;
+  url: string;
+}
+
 export interface SubjectLibrary {
   slug: string;
   book?: BookFile;
   subject: SubjectFile;
   kapitel: Map<number, { lektioner: LessonRecord[]; flip: Map<number, FlipDoc> }>;
   begrepp: { perDelkapitel: Record<string, string[]>; definitioner: Record<string, string> };
+  /** Bokens resurslänkar per lektion ('kap-lektionsId'), t.ex. Binogi-filmer. */
+  lankar: Record<string, BookLink[]>;
   overrides: FieldOverride[];
 }
 

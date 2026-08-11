@@ -225,10 +225,12 @@ export interface LoadedLibrary {
   lessons: Record<number, LessonRecord[]>;
   flip: Record<number, Record<number, FlipDoc>>;
   begrepp: { perDelkapitel: Record<string, string[]>; definitioner: Record<string, string> };
+  /** Bokens resurslänkar per lektion ('kap-lektionsId') ur books/<bookId>/lankar.json. */
+  lankar: Record<string, import('@planner/core').BookLink[]>;
 }
 
 export function demoLibrary(): LoadedLibrary {
-  return { source: 'demo', subject: DEMO_SUBJECT, lessons: DEMO_LESSONS, flip: DEMO_FLIP, begrepp: DEMO_BEGREPP };
+  return { source: 'demo', subject: DEMO_SUBJECT, lessons: DEMO_LESSONS, flip: DEMO_FLIP, begrepp: DEMO_BEGREPP, lankar: {} };
 }
 
 export async function loadFromGithub(): Promise<LoadedLibrary> {
@@ -241,7 +243,7 @@ export async function loadFromGithub(): Promise<LoadedLibrary> {
     lessons[nr] = kap.lektioner;
     flip[nr] = Object.fromEntries(kap.flip);
   }
-  return { source: 'github', subject: lib.subject, lessons, flip, begrepp: lib.begrepp };
+  return { source: 'github', subject: lib.subject, lessons, flip, begrepp: lib.begrepp, lankar: lib.lankar };
 }
 
 // ── Schemaändringar: startdatum + pass per klass (FR-SCH-002…005) ──

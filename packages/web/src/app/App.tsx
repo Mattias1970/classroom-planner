@@ -329,6 +329,7 @@ function PlaneringView(props: {
                   globalIdx={globalIdxFor(kapitel, i)} classId={classId}
                   socRoom={lib.subject.meta.klasser.find((c) => c.id === classId)?.socrative ?? 'Matte8B'}
                   defs={lib.begrepp.definitioner}
+                  bookLinks={lib.lankar[`${kapitel}-${l.id}`] ?? []}
                   override={placed[globalIdxFor(kapitel, i)]?.override}
                   flip={lib.flip[kapitel]?.[l.id]} onChange={onChange}
                   onAddAfter={() => setAddAfter(l.id)} />
@@ -468,7 +469,10 @@ function FilmerTab(props: {
   const [form, setForm] = useState<{ id: number; titel: string; url: string } | null>(null);
   const filmsFor = (l: LessonRecord) => {
     const flip = lib.flip[kapitel]?.[l.id];
-    const fromFlip = (flip?.blocks ?? []).flatMap((b) => (b.typ === 'film' ? [{ titel: b.ref.titel, url: b.ref.url, fixed: true }] : []));
+    const fromBook = (lib.lankar[`${kapitel}-${l.id}`] ?? [])
+      .filter((b) => b.typ === 'film')
+      .map((b) => ({ titel: b.titel, url: b.url, fixed: true }));
+    const fromFlip = [...fromBook, ...(flip?.blocks ?? []).flatMap((b) => (b.typ === 'film' ? [{ titel: b.ref.titel, url: b.ref.url, fixed: true }] : []))];
     const own = getLinks(kapitel, l.id).map((x, i) => ({ ...x, i })).filter((x) => x.typ === 'film')
       .map((x) => ({ titel: x.titel, url: x.url, fixed: false, idx: x.i }));
     return [...fromFlip, ...own] as Array<{ titel: string; url: string; fixed: boolean; idx?: number }>;
@@ -592,10 +596,11 @@ function KlasserTab(props: { lib: LoadedLibrary; kapitel: number; placed: Placed
 function LessonCard(props: {
   kapitel: number; lesson: LessonRecord; slot: ScheduledSlot | null;
   globalIdx: number; classId: string; socRoom: string; defs: Record<string, string>;
+  bookLinks: import('@planner/core').BookLink[];
   override?: import('@planner/core').LessonOverride;
   flip?: import('@planner/core').FlipDoc; onChange: () => void; onAddAfter: () => void;
 }) {
-  const { kapitel, lesson, slot, globalIdx, classId, socRoom, defs, override, flip, onChange, onAddAfter } = props;
+  const { kapitel, lesson, slot, globalIdx, classId, socRoom, defs, bookLinks, override, flip, onChange, onAddAfter } = props;
   const har = (v: string) => !!v && v !== '—';
   const begreppList = har(effectiveField(kapitel, lesson, 'begrepp'))
     ? effectiveField(kapitel, lesson, 'begrepp').split(',').map((b) => b.trim()).filter(Boolean) : [];
@@ -749,7 +754,8 @@ function LessonCard(props: {
         </div>
       )}
 
-      <ResourceRow kapitel={kapitel} lesson={lesson} links={links} flipCount={flipCount} onChange={onChange} />
+      <ResourceRow kapitel={kapitel} lesson={lesson} links={links} flipCount={flipCount}
+        bookLinks={bookLinks} onChange={onChange} />
       <div className="card-foot no-print">{/* FR-CARD-016 */}
         <button className="btn sec" onClick={onAddAfter}>+ Lägg till lektion efter denna</button>
       </div>
@@ -900,8 +906,11 @@ function Editable(props: { kapitel: number; lesson: LessonRecord; field: keyof L
   );
 }
 
-function ResourceRow(props: { kapitel: number; lesson: LessonRecord; links: LessonLink[]; flipCount: number; onChange: () => void }) {
-  const { kapitel, lesson, links, flipCount, onChange } = props;
+function ResourceRow(props: {
+  kapitel: number; lesson: LessonRecord; links: LessonLink[]; flipCount: number;
+  bookLinks: import('@planner/core').BookLink[]; onChange: () => void;
+}) {
+  const { kapitel, lesson, links, flipCount, bookLinks, onChange } = props;
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState<LessonLink>({ typ: 'film', platform: 'Binogi', titel: '', url: '' });
   const ICON: Record<ToolTyp, string> = { laxforhor: '📱', exit: '🎫', ovning: '✏️', film: '🎬', prov: '📝', flippat: '🏠' };
@@ -925,6 +934,12 @@ function ResourceRow(props: { kapitel: number; lesson: LessonRecord; links: Less
             </div>
             <p className="tool-desc">{desc}</p>
             <div className="reslist">
+              {bookLinks.map((b, i) => b.typ === typ && (
+                <span key={`bok-${i}`} className={`reslink ${b.typ}`} title="Ur bokens datakälla">
+                  <em className="plat">{(b.platform ?? 'BOK').toUpperCase()}</em>
+                  <a href={normalizeUrl(b.url)} target="_blank" rel="noopener noreferrer">{b.titel || b.url}</a>
+                </span>
+              ))}
               {links.map((l, i) => l.typ === typ && (
                 <span key={`${l.url}-${i}`} className={`reslink ${l.typ}`}>
                   {l.platform && <em className="plat">{l.platform.toUpperCase()}</em>}
@@ -1054,7 +1069,8 @@ function PrototypImportCard(props: { lib: LoadedLibrary; onChange: () => void })
       const dup = getLinks(f.kapitel, f.lektionId).some((x) => x.url === f.url);
       const dupFlip = (lib.flip[f.kapitel]?.[f.lektionId]?.blocks ?? [])
         .some((b) => b.typ === 'film' && b.ref.url === f.url);
-      if (dup || dupFlip) { skipped++; continue; }
+      const dupBook = (lib.lankar[`${f.kapitel}-${f.lektionId}`] ?? []).some((b) => b.url === f.url);
+      if (dup || dupFlip || dupBook) { skipped++; continue; }
       addLink(f.kapitel, f.lektionId, {
         typ: 'film',
         platform: f.url.includes('binogi') ? 'Binogi' : f.url.includes('youtu') ? 'YouTube' : 'Annat',

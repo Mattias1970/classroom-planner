@@ -125,3 +125,35 @@ describe('bokindelning (books/<bookId>/)', () => {
     expect(lib.kapitel.get(1)?.lektioner).toHaveLength(1);
   });
 });
+
+describe('lankar.json — bokens resurslänkar', async () => {
+  const { loadSubjectLibrary, memoryReader } = await import('../../src/index.js');
+  const BASE: Record<string, string> = {
+    'subjects/matte8/subject.json': JSON.stringify({
+      meta: { ämne: 'Ma', årskurs: 8, lärobok: 'Prio', klasser: [] },
+      schema: {}, läsår: { startdatum: [2026, 7, 17], lov: [] },
+      kapitelMeta: { '1': { name: 'Tal', col: 'c1', lektioner: 1, veckor: '1', term: 'HT', sidor_samm: '—', prov: 'Prov' } },
+    }),
+    'subjects/matte8/kapitel/1/lektioner/1.json': JSON.stringify({
+      id: 1, type: 'regular', avsnitt: '1.1 Negativa tal', del: 1,
+      grön: '1–13', blå: '14–21', röd: '—', sidor_teori: 's 8–13', begrepp: '—',
+      soc_start: '—', exit: '—', genomgang: '', bam_gora: '', bam_lara: '', bam_ex: '', ex: '', laxa: '—',
+    }),
+  };
+
+  it('läser lankar.json när filen finns', async () => {
+    const lib = await loadSubjectLibrary(memoryReader({
+      ...BASE,
+      'subjects/matte8/lankar.json': JSON.stringify({
+        '1-1': [{ typ: 'film', platform: 'Binogi', titel: 'Negativa tal', url: 'https://app.binogi.se/l/x' }],
+      }),
+    }), 'matte8');
+    expect(lib.lankar['1-1']).toHaveLength(1);
+    expect(lib.lankar['1-1'][0].platform).toBe('Binogi');
+  });
+
+  it('ger tomt objekt när filen saknas — bakåtkompatibelt', async () => {
+    const lib = await loadSubjectLibrary(memoryReader(BASE), 'matte8');
+    expect(lib.lankar).toEqual({});
+  });
+});
