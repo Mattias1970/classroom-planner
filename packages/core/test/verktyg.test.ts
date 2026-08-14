@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildBegreppTabell, normalizeUrl, shiftOverrideMap,
+  buildBegreppTabell, normalizeUrl, resolveBegrepp, shiftOverrideMap,
   type LessonRecord, type OverrideMap,
 } from '../src/index.js';
 
@@ -66,5 +66,21 @@ describe('buildBegreppTabell (FR-BEG-001)', () => {
       lesson(2, 'b', 'potens'),
     ], {});
     expect(rows).toHaveLength(1);
+  });
+});
+
+describe('resolveBegrepp — härledning per lektion', () => {
+  const per = { '1.4': ['potens', 'bas', 'exponent'], '1.5': ['tiopotens'] };
+  it('lektionens eget fält vinner när det är ifyllt', () => {
+    expect(resolveBegrepp('kvadratrot, Potens, potens', '1.4 Potenser', 1, per))
+      .toEqual(['kvadratrot', 'Potens']);
+  });
+  it('del 1 utan eget fält hämtar delkapitlets begrepp via avsnittet', () => {
+    expect(resolveBegrepp('—', '1.4 Potenser', 1, per)).toEqual(['potens', 'bas', 'exponent']);
+    expect(resolveBegrepp('', '1.5 Räkna med potenser', 0, per)).toEqual(['tiopotens']);
+  });
+  it('del 2 introducerar inget; rubrik utan delkapitel ger tomt', () => {
+    expect(resolveBegrepp('—', '1.4 Potenser', 2, per)).toEqual([]);
+    expect(resolveBegrepp('—', 'Repetition 1 (Blandade uppgifter)', 1, per)).toEqual([]);
   });
 });

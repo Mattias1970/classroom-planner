@@ -6,12 +6,14 @@
  */
 import { useMemo, useState } from 'react';
 import {
-  countBegreppForKap, diffKeyDates, examWarnings, extractKeyDates, svDateLabel,
+  diffKeyDates, examWarnings, extractKeyDates, svDateLabel,
   weeksLabel, KAP_COLORS,
   type KeyDate, type KeyDateChange, type LessonRecord, type PlacedLesson, type SubjectFile,
 } from '@planner/core';
 import type { LoadedLibrary } from '../state/store.js';
-import { countMagmaForKap, getLinks } from '../state/store.js';
+import { countMagmaForKap, effectiveField, getLinks } from '../state/store.js';
+import { resolveBegrepp } from '@planner/core';
+import PROTO_FILMER from '../data/prototyp-filmer.json';
 
 type Placed = PlacedLesson<LessonRecord>;
 export type InnerTab = 'lektionsplan' | 'oversikt' | 'uppgifter' | 'begrepp' | 'filmer' | 'magma' | 'klasser';
@@ -51,10 +53,22 @@ export default function Arsoversikt({ lib, placedByClass, baselineByClass, onGoT
   const chapters = Object.keys(lib.subject.kapitelMeta).map(Number).sort((a, b) => a - b);
   const passes = (lib.subject.schema[classId] ?? []).length;
 
+  const countBegrepp = (kap: number): number => { // effektiva värden: redigeringar slår igenom
+    const seen = new Set<string>();
+    for (const l of lib.lessons[kap] ?? []) {
+      for (const b of resolveBegrepp(
+        effectiveField(kap, l, 'begrepp'), effectiveField(kap, l, 'avsnitt'), l.del, lib.begrepp.perDelkapitel,
+      )) seen.add(b.toLowerCase());
+    }
+    return seen.size;
+  };
+  const seedFilms = PROTO_FILMER as Record<string, Array<{ url: string }>>;
   const countFilms = (kap: number): number => {
     let n = 0;
     for (const l of lib.lessons[kap] ?? []) {
-      n += (lib.lankar[`${kap}-${l.id}`] ?? []).filter((b) => b.typ === 'film').length;
+      const data = (lib.lankar[`${kap}-${l.id}`] ?? []).filter((b) => b.typ === 'film');
+      const dataUrls = new Set(data.map((b) => b.url));
+      n += data.length + (seedFilms[`${kap}-${l.id}`] ?? []).filter((f) => !dataUrls.has(f.url)).length;
       n += (lib.flip[kap]?.[l.id]?.blocks ?? []).filter((b) => b.typ === 'film').length;
       n += getLinks(kap, l.id).filter((x) => x.typ === 'film').length;
     }
@@ -118,7 +132,7 @@ export default function Arsoversikt({ lib, placedByClass, baselineByClass, onGoT
               <h3>{meta.name}</h3>
               <p>{nLek} lek · {weeksLabel(nLek, passes)} v</p>
               <div className="yr-pills">{/* FR-YR-003 + FR-GEN-005 */}
-                <button onClick={() => onGoTo(kap, 'begrepp')}>💡 {countBegreppForKap(lib.begrepp.perDelkapitel, kap)} begrepp</button>
+                <button onClick={() => onGoTo(kap, 'begrepp')}>💡 {countBegrepp(kap)} begrepp</button>
                 <button onClick={() => onGoTo(kap, 'filmer')}>🎬 {countFilms(kap)} filmer</button>
                 <button onClick={() => onGoTo(kap, 'magma')}>🧮 {countMagma(kap)} Magma</button>
               </div>

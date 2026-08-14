@@ -59,3 +59,34 @@ export function buildBegreppTabell(
   });
   return rows;
 }
+
+/**
+ * Begrepp för en lektion: lektionens eget fält om ifyllt; annars, för den
+ * introducerande lektionen (del 1 eller odelad ordinarie lektion), hämtas
+ * delkapitlets begrepp ur per-delkapitel-strukturen via avsnittsrubriken
+ * ("1.4 Potenser" → nyckel "1.4"). Dedupe skiftlägesokänsligt, ordning bevaras.
+ */
+export function resolveBegrepp(
+  rawBegrepp: string,
+  avsnitt: string,
+  del: number,
+  perDelkapitel: Record<string, string[]>,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (b: string) => {
+    const t = b.trim();
+    if (t === '' || t === '—' || seen.has(t.toLowerCase())) return;
+    seen.add(t.toLowerCase());
+    out.push(t);
+  };
+  if (rawBegrepp && rawBegrepp !== '—') {
+    for (const b of rawBegrepp.split(',')) push(b);
+    return out;
+  }
+  if (del === 2) return out; // introduceras lektion 1 — repeteras via läxan
+  const m = avsnitt.match(/^([1-9])\.(\d{1,2})\b/);
+  if (!m) return out;
+  for (const b of perDelkapitel[`${m[1]}.${m[2]}`] ?? []) push(b);
+  return out;
+}

@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   applyClassEdits, applySchemaEdits, buildBegreppTabell, computeTimes, defaultBamTimeline, diffMinutes,
   mergePromptSources, parseFilmState, parsePrototypeLinks, parseTokenExpiry, promptIdFromName,
+  resolveBegrepp,
   summarizePrototypeLinks,
   type FilmStateLink, type PromptTemplate, type PrototypeLink,
   distinctEditedFields, generateSlots, normalizeUrl, placeLessons, summarizeEdits,
@@ -217,6 +218,26 @@ export default function App() {
 }
 
 // ── Planering: lektionskort, inline edit, BAM, add/remove ─────
+/** Begrepp för lektionen: redigerat fält → eget fält → delkapitlets lista. */
+function effBegrepp(kapitel: number, lesson: LessonRecord, perDelkapitel: Record<string, string[]>): string[] {
+  return resolveBegrepp(
+    effectiveField(kapitel, lesson, 'begrepp'),
+    effectiveField(kapitel, lesson, 'avsnitt'),
+    lesson.del, perDelkapitel,
+  );
+}
+
+/** Bokens länkar med inbyggd filmfallback (prototypens 55) — dedupe på url. */
+const SEED_LINKS: Record<string, Array<{ titel: string; url: string }>> = PROTO_FILMER as never;
+function bookLinksFor(lib: LoadedLibrary, kapitel: number, lektionId: number): import('@planner/core').BookLink[] {
+  const fromData = lib.lankar[`${kapitel}-${lektionId}`] ?? [];
+  const urls = new Set(fromData.map((l) => l.url));
+  const fromSeed = (SEED_LINKS[`${kapitel}-${lektionId}`] ?? [])
+    .filter((f) => !urls.has(f.url))
+    .map((f) => ({ typ: 'film' as const, platform: 'Binogi', titel: f.titel, url: f.url }));
+  return [...fromData, ...fromSeed];
+}
+
 const INNER_TABS: Array<[import('../views/Arsoversikt.js').InnerTab, string]> = [
   ['lektionsplan', '📋 Lektionsplan'], ['oversikt', '🗓 Översikt'], ['uppgifter', '✏️ Uppgifter'],
   ['begrepp', '💡 Begrepp'], ['filmer', '🎬 Filmer'], ['magma', '🧮 Magma'], ['klasser', '🏫 Klasser'],
@@ -344,7 +365,8 @@ function PlaneringView(props: {
                   globalIdx={globalIdxFor(kapitel, i)} classId={classId}
                   socRoom={lib.subject.meta.klasser.find((c) => c.id === classId)?.socrative ?? 'Matte8B'}
                   defs={lib.begrepp.definitioner}
-                  bookLinks={lib.lankar[`${kapitel}-${l.id}`] ?? []}
+                  perDelkapitel={lib.begrepp.perDelkapitel}
+                  bookLinks={bookLinksFor(lib, kapitel, l.id)}
                   override={placed[globalIdxFor(kapitel, i)]?.override}
                   flip={lib.flip[kapitel]?.[l.id]} onChange={onChange}
                   onAddAfter={() => setAddAfter(l.id)} />
@@ -449,7 +471,10 @@ function UppgifterTab(props: { kapitel: number; lessons: LessonRecord[] }) {
 
 function BegreppTab(props: { lib: LoadedLibrary; kapitel: number; lessons: LessonRecord[] }) {
   const { lib, kapitel, lessons } = props;
-  const rows = buildBegreppTabell(lessons, lib.begrepp.definitioner);
+  const rows = buildBegreppTabell(
+    lessons.map((l) => ({ ...l, begrepp: effBegrepp(kapitel, l, lib.begrepp.perDelkapitel).join(', ') || '—' })),
+    lib.begrepp.definitioner,
+  );
   const chips = [...new Map(rows.map((r) => [r.begrepp.toLowerCase(), r])).values()];
   if (rows.length === 0) return <p className="muted">Inga begrepp registrerade för kapitlet.</p>;
   return (<>
@@ -484,7 +509,7 @@ function FilmerTab(props: {
   const [form, setForm] = useState<{ id: number; titel: string; url: string } | null>(null);
   const filmsFor = (l: LessonRecord) => {
     const flip = lib.flip[kapitel]?.[l.id];
-    const fromBook = (lib.lankar[`${kapitel}-${l.id}`] ?? [])
+    const fromBook = bookLinksFor(lib, kapitel, l.id)
       .filter((b) => b.typ === 'film')
       .map((b) => ({ titel: b.titel, url: b.url, fixed: true }));
     const fromFlip = [...fromBook, ...(flip?.blocks ?? []).flatMap((b) => (b.typ === 'film' ? [{ titel: b.ref.titel, url: b.ref.url, fixed: true }] : []))];
@@ -611,14 +636,14 @@ function KlasserTab(props: { lib: LoadedLibrary; kapitel: number; placed: Placed
 function LessonCard(props: {
   kapitel: number; lesson: LessonRecord; slot: ScheduledSlot | null;
   globalIdx: number; classId: string; socRoom: string; defs: Record<string, string>;
+  perDelkapitel: Record<string, string[]>;
   bookLinks: import('@planner/core').BookLink[];
   override?: import('@planner/core').LessonOverride;
   flip?: import('@planner/core').FlipDoc; onChange: () => void; onAddAfter: () => void;
 }) {
-  const { kapitel, lesson, slot, globalIdx, classId, socRoom, defs, bookLinks, override, flip, onChange, onAddAfter } = props;
+  const { kapitel, lesson, slot, globalIdx, classId, socRoom, defs, perDelkapitel, bookLinks, override, flip, onChange, onAddAfter } = props;
   const har = (v: string) => !!v && v !== '—';
-  const begreppList = har(effectiveField(kapitel, lesson, 'begrepp'))
-    ? effectiveField(kapitel, lesson, 'begrepp').split(',').map((b) => b.trim()).filter(Boolean) : [];
+  const begreppList = effBegrepp(kapitel, lesson, perDelkapitel);
   const [cancelDlg, setCancelDlg] = useState(false);
   const rows = flip?.bamTimeline?.length
     ? flip.bamTimeline
@@ -635,9 +660,11 @@ function LessonCard(props: {
     <article className={`card type-${lesson.type} ${override ? 'ov-' + override.type : ''}`}>
       <div className="card-head">
         <span className="title">
-          Lektion {lesson.id} · {effectiveField(kapitel, lesson, 'avsnitt')}
+          Lektion {lesson.id} ·{' '}
+          <span className="inline-wrap"><Editable kapitel={kapitel} lesson={lesson} field="avsnitt" onChange={onChange} /></span>
           {flip && <span className="pill flip">Flippat</span>}
-          {har(lesson.sidor_teori) && <span className="pill teori">📖 Teorisidor: {lesson.sidor_teori}</span>}
+          <span className="pill teori">📖 Teorisidor:{' '}
+            <span className="inline-wrap sm"><Editable kapitel={kapitel} lesson={lesson} field="sidor_teori" onChange={onChange} /></span></span>
           {begreppList.length > 0 && <span className="pill beg">💡 {begreppList.length} begrepp introduceras</span>}
           {lesson.exit !== '—' && <span className="pill quiz">Exit</span>}
           {lesson.type !== 'regular' && <span className="pill">{lesson.type}</span>}
@@ -725,14 +752,18 @@ function LessonCard(props: {
           <div className="ex-box"><Editable kapitel={kapitel} lesson={lesson} field="ex" multiline onChange={onChange} /></div>
         </>)}
 
-        {begreppList.length > 0 && (<> {/* FR-CARD-008 */}
-          <label>Begrepp</label>
-          <div className="reslist">
-            {begreppList.map((b) => (
-              <span key={b} className="chip" title={defs[b.toLowerCase()] ?? defs[b] ?? 'Definition saknas'}>{b}</span>
-            ))}
-          </div>
-        </>)}
+        <label>Begrepp</label>{/* FR-CARD-008 — härledda + redigerbara */}
+        <div>
+          {begreppList.length > 0 && (
+            <div className="reslist">
+              {begreppList.map((b) => (
+                <span key={b} className="chip" title={defs[b.toLowerCase()] ?? defs[b] ?? 'Definition saknas'}>{b}</span>
+              ))}
+            </div>
+          )}
+          <Editable kapitel={kapitel} lesson={lesson} field="begrepp" onChange={onChange} />
+          <p className="note">Kommaseparerat. Tomt eller "—" hämtar delkapitlets begreppslista automatiskt; egna ändringar slår igenom i begreppsfliken, läxan och årsöversiktens räknare.</p>
+        </div>
 
         {(har(effectiveField(kapitel, lesson, 'grön')) || har(effectiveField(kapitel, lesson, 'blå')) || har(effectiveField(kapitel, lesson, 'röd'))) && (
           <div className="work-block">{/* Fig 12 · FR-CARD-009/010/011 */}
@@ -751,19 +782,19 @@ function LessonCard(props: {
             <div className="upp-levels">
               {har(effectiveField(kapitel, lesson, 'grön')) && (
                 <div className="upp-lv grön"><h6>🟢 GRÖN – INTRODUKTION</h6>
-                  <p>Uppg. {effectiveField(kapitel, lesson, 'grön')}</p>
+                  <p>Uppg. <span className="inline-wrap sm"><Editable kapitel={kapitel} lesson={lesson} field="grön" onChange={onChange} /></span></p>
                   <small>Alla elever · Obligatorisk</small>
                   {lesson.del === 1 && <span className="pill min">Minimum lektion 1</span>}</div>
               )}
               {har(effectiveField(kapitel, lesson, 'blå')) && (
                 <div className="upp-lv blå"><h6>🔵 BLÅ – E-NIVÅ</h6>
-                  <p>Uppg. {effectiveField(kapitel, lesson, 'blå')}</p>
+                  <p>Uppg. <span className="inline-wrap sm"><Editable kapitel={kapitel} lesson={lesson} field="blå" onChange={onChange} /></span></p>
                   <small>{lesson.del === 1 ? 'När grön är klar · Obligatorisk' : 'Alla elever · Obligatorisk'}</small>
                   {lesson.del === 2 && <span className="pill min">Minimum lektion 2</span>}</div>
               )}
               {har(effectiveField(kapitel, lesson, 'röd')) && (
                 <div className="upp-lv röd"><h6>🔴 RÖD – C/A-NIVÅ</h6>
-                  <p>Uppg. {effectiveField(kapitel, lesson, 'röd')}</p>
+                  <p>Uppg. <span className="inline-wrap sm"><Editable kapitel={kapitel} lesson={lesson} field="röd" onChange={onChange} /></span></p>
                   <small>Frivillig · görs om lektionstid finns</small></div>
               )}
             </div>
@@ -1196,7 +1227,7 @@ function PrototypImportCard(props: { lib: LoadedLibrary; onChange: () => void })
       const dup = getLinks(f.kapitel, f.lektionId).some((x) => x.url === f.url);
       const dupFlip = (lib.flip[f.kapitel]?.[f.lektionId]?.blocks ?? [])
         .some((b) => b.typ === 'film' && b.ref.url === f.url);
-      const dupBook = (lib.lankar[`${f.kapitel}-${f.lektionId}`] ?? []).some((b) => b.url === f.url);
+      const dupBook = bookLinksFor(lib, f.kapitel, f.lektionId).some((b) => b.url === f.url);
       if (dup || dupFlip || dupBook) { skipped++; continue; }
       addLink(f.kapitel, f.lektionId, {
         typ: 'film',

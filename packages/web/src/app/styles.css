@@ -476,3 +476,10 @@ html.is-mobile.phone-large { font-size: 17px; }
 .src-status code { background: #f1f5f9; border-radius: 4px; padding: 1px 5px; }
 .status.warn { color: #b45309; }
 .status.err { color: #b91c1c; font-weight: 700; }
+
+/* Inline-redigerbara rubriker/piller */
+.inline-wrap { display: inline-block; min-width: 180px; vertical-align: middle; }
+.inline-wrap.sm { min-width: 70px; }
+.inline-wrap .inline-edit { font: inherit; padding: 1px 6px; }
+.pill.teori .inline-edit { background: transparent; border-color: transparent; width: 90px; }
+.pill.teori .edit-wrap.has-edit .inline-edit { background: #fef9c3; }
