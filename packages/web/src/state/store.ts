@@ -85,10 +85,10 @@ export function isEdited(kapitel: number, lektionId: number, field: keyof Lesson
 }
 
 export function effectiveField(kapitel: number, lesson: LessonRecord, field: keyof LessonRecord): string {
-  const mine = getOverrides()
-    .filter((o) => o.kapitel === kapitel && o.lektionId === lesson.id && o.field === field)
-    .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
-  return mine.length ? mine[mine.length - 1].value : String(lesson[field]);
+  const source = String(lesson[field] ?? '');
+  const base = getOverrides().filter((o) => o.kapitel === kapitel && o.lektionId === lesson.id && o.field === field)
+    .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt)).pop()?.value;
+  return resolveField(source, base, getVariants(kapitel, lesson.id), field);
 }
 
 // ── Egna/borttagna lektioner (sprint 18-om) ───────────────────
@@ -137,6 +137,7 @@ export function exportBackup(): string {
     classEdits: lsGet(CLASSES_KEY) ?? null,
     classNotes: lsGet(NOTES_KEY) ?? null,
     prompts: lsGet(PROMPTS_KEY),
+    lessonVariants: lsGet(VARIANTS_KEY),
   }, null, 2);
 }
 export function importBackup(json: string): void {
@@ -154,6 +155,7 @@ export function importBackup(json: string): void {
   if (typeof b.classEdits === 'string') lsSet(CLASSES_KEY, b.classEdits);
   if (typeof b.classNotes === 'string') lsSet(NOTES_KEY, b.classNotes);
   if (typeof b.prompts === 'string') lsSet(PROMPTS_KEY, b.prompts);
+  if (typeof b.lessonVariants === 'string') lsSet(VARIANTS_KEY, b.lessonVariants);
 }
 
 // ── Klassregister-overlay (FR-CM-002…008) ─────────────────────
@@ -175,6 +177,48 @@ export function setClassNote(classId: string, kapitel: number, lektionId: number
   const k = noteKey(classId, kapitel, lektionId);
   if (text.trim() === '') delete all[k]; else all[k] = text;
   write(NOTES_KEY, all);
+}
+
+// ── Lektionsvarianter (krav 2): original eller namngiven variant ──
+import { resolveField, uniqueVariantName, EMPTY_VARIANTS, type LessonVariants, type VariantFields } from '@planner/core';
+const VARIANTS_KEY = 'classroom-planner.lesson-variants.v1';
+function variantKey(kapitel: number, lektionId: number): string { return `${kapitel}:${lektionId}`; }
+export function getVariants(kapitel: number, lektionId: number): LessonVariants {
+  return read<Record<string, LessonVariants>>(VARIANTS_KEY, {})[variantKey(kapitel, lektionId)] ?? EMPTY_VARIANTS;
+}
+function writeVariants(kapitel: number, lektionId: number, v: LessonVariants): void {
+  const all = read<Record<string, LessonVariants>>(VARIANTS_KEY, {});
+  all[variantKey(kapitel, lektionId)] = v;
+  write(VARIANTS_KEY, all);
+}
+export function setActiveVariant(kapitel: number, lektionId: number, name: string | null): void {
+  writeVariants(kapitel, lektionId, { ...getVariants(kapitel, lektionId), active: name });
+}
+/** Skapar variant ur aktuellt effektivt läge (basöverstyrningar + ev. aktiv variant) och aktiverar den. */
+export function saveAsVariant(kapitel: number, lektionId: number, wantedName: string): string {
+  const cur = getVariants(kapitel, lektionId);
+  const name = uniqueVariantName(wantedName, Object.keys(cur.varianter));
+  const fields: VariantFields = {};
+  for (const o of getOverrides()) {
+    if (o.kapitel === kapitel && o.lektionId === lektionId) fields[o.field] = o.value;
+  }
+  if (cur.active !== null) Object.assign(fields, cur.varianter[cur.active] ?? {});
+  writeVariants(kapitel, lektionId, { active: name, varianter: { ...cur.varianter, [name]: fields } });
+  return name;
+}
+export function setVariantField(kapitel: number, lektionId: number, field: keyof LessonRecord, value: string): void {
+  const cur = getVariants(kapitel, lektionId);
+  if (cur.active === null) return;
+  writeVariants(kapitel, lektionId, {
+    ...cur,
+    varianter: { ...cur.varianter, [cur.active]: { ...(cur.varianter[cur.active] ?? {}), [field]: value } },
+  });
+}
+export function deleteVariant(kapitel: number, lektionId: number, name: string): void {
+  const cur = getVariants(kapitel, lektionId);
+  const varianter = { ...cur.varianter };
+  delete varianter[name];
+  writeVariants(kapitel, lektionId, { active: cur.active === name ? null : cur.active, varianter });
 }
 
 // ── Promptbibliotek: egna varianter (persistent, i backup) ───
@@ -251,9 +295,50 @@ export function demoLibrary(): LoadedLibrary {
   return { source: 'demo', subject: DEMO_SUBJECT, lessons: DEMO_LESSONS, flip: DEMO_FLIP, begrepp: DEMO_BEGREPP, lankar: {}, prompter: [] };
 }
 
-export async function loadFromGithub(): Promise<LoadedLibrary> {
+const CACHE_KEY = 'classroom-planner.data-cache.v1';
+const TOKEN_EXP_KEY = 'classroom-planner.token-expiry.v1';
+export interface DataCacheInfo { sha: string; sparad: string; }
+export function getCacheInfo(): DataCacheInfo | null {
+  const raw = lsGet(CACHE_KEY);
+  if (!raw) return null;
+  try { const c = JSON.parse(raw) as { sha: string; sparad: string }; return { sha: c.sha, sparad: c.sparad }; }
+  catch { return null; }
+}
+export function getTokenExpiryHeader(): string | null { return lsGet(TOKEN_EXP_KEY); }
+
+/** Hämtar default-branchens senaste commit-sha (2 små anrop) — nyckeln till cachen. */
+async function fetchHeadSha(owner: string, repo: string, token: string): Promise<string> {
+  const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' };
+  const repoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers });
+  if (!repoRes.ok) throw new Error(`GitHub ${repoRes.status} — kontrollera token och repo.`);
+  // Krav 4: fine-grained-tokens exponerar sin utgång i denna header.
+  const exp = repoRes.headers.get('github-authentication-token-expiration');
+  if (exp) lsSet(TOKEN_EXP_KEY, exp);
+  const branch = ((await repoRes.json()) as { default_branch: string }).default_branch;
+  const brRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/branches/${branch}`, { headers });
+  if (!brRes.ok) throw new Error(`GitHub ${brRes.status} vid branch-läsning.`);
+  return ((await brRes.json()) as { commit: { sha: string } }).commit.sha;
+}
+
+/**
+ * Krav 3: cache nycklad på repots commit-sha. Oförändrat repo ⇒ 2 snabba
+ * anrop och sedan cache — inga fil-hämtningar. forceRefresh hoppar cachen.
+ */
+export async function loadFromGithub(forceRefresh = false): Promise<LoadedLibrary & { cachedSha?: string }> {
   const s = getSettings();
   if (!s.githubToken) throw new Error('Ingen token angiven — se Bibliotek → Datakällor.');
+  const sha = await fetchHeadSha(s.githubOwner, s.githubRepo, s.githubToken);
+  if (!forceRefresh) {
+    const raw = lsGet(CACHE_KEY);
+    if (raw) {
+      try {
+        const c = JSON.parse(raw) as { sha: string; key: string; lib: LoadedLibrary };
+        if (c.sha === sha && c.key === `${s.githubOwner}/${s.githubRepo}/${s.slug}`) {
+          return { ...c.lib, source: 'github', cachedSha: sha };
+        }
+      } catch { /* trasig cache → full laddning */ }
+    }
+  }
   const reader = githubReader(s.githubOwner, s.githubRepo, s.githubToken);
   const lib = await loadSubjectLibrary(reader, s.slug);
   const lessons: Record<number, LessonRecord[]> = {};
@@ -275,7 +360,12 @@ export async function loadFromGithub(): Promise<LoadedLibrary> {
     }
   } catch { /* trasig promptkatalog ska inte stoppa dataladdningen */ }
 
-  return { source: 'github', subject: lib.subject, lessons, flip, begrepp: lib.begrepp, lankar: lib.lankar, prompter };
+  const loaded: LoadedLibrary = { source: 'github', subject: lib.subject, lessons, flip, begrepp: lib.begrepp, lankar: lib.lankar, prompter };
+  lsSet(CACHE_KEY, JSON.stringify({
+    sha, key: `${s.githubOwner}/${s.githubRepo}/${s.slug}`,
+    sparad: new Date().toISOString(), lib: loaded,
+  }));
+  return { ...loaded, cachedSha: undefined };
 }
 
 // ── Schemaändringar: startdatum + pass per klass (FR-SCH-002…005) ──

@@ -81,6 +81,15 @@ export async function loadSubjectLibrary(reader: DataFileReader, slug: string): 
       lektioner.push(applyOverrides(kapNr, record, overrides));
       const flipText = await reader.readText(`${dir}/${record.id}.flip.json`);
       if (flipText) flip.set(record.id, validateFlipDoc(parseJson(flipText, `${record.id}.flip.json`), `${record.id}.flip.json`));
+      // Krav: länkar som lektionsfil — sidecar <id>.lankar.json vinner över
+      // aggregatet lankar.json; dedupe på url.
+      const lankarSidecar = await reader.readText(`${dir}/${record.id}.lankar.json`);
+      if (lankarSidecar) {
+        const egna = parseJson<BookLink[]>(lankarSidecar, `${record.id}.lankar.json`);
+        const key = `${kapNr}-${record.id}`;
+        const urls = new Set(egna.map((l) => l.url));
+        lankar[key] = [...egna, ...(lankar[key] ?? []).filter((l) => !urls.has(l.url))];
+      }
     }
     kapitel.set(kapNr, { lektioner, flip });
   }

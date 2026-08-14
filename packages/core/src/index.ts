@@ -47,3 +47,4 @@ export * from './logic/klasser.js';
 export * from './logic/ical.js';
 export * from './logic/prototyp-import.js';
 export * from './logic/prompter.js';
+export * from './logic/varianter.js';

@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   applyClassEdits, applySchemaEdits, buildBegreppTabell, computeTimes, defaultBamTimeline, diffMinutes,
-  mergePromptSources, parseFilmState, parsePrototypeLinks, promptIdFromName,
+  mergePromptSources, parseFilmState, parsePrototypeLinks, parseTokenExpiry, promptIdFromName,
   summarizePrototypeLinks,
   type FilmStateLink, type PromptTemplate, type PrototypeLink,
   distinctEditedFields, generateSlots, normalizeUrl, placeLessons, summarizeEdits,
@@ -25,6 +25,8 @@ import {
   getPrio, setPrio, PRIO_ALL,
   getClassEdits, getClassNote, setClassNote, lsGet, lsSet,
   deleteCustomPrompt, getCustomPrompts, saveCustomPrompt,
+  deleteVariant, getCacheInfo, getTokenExpiryHeader, getVariants,
+  saveAsVariant, setActiveVariant, setVariantField,
   type LessonLink, type ToolTyp,
 } from '../state/store.js';
 import { Docx } from './wordExport.js';
@@ -55,6 +57,16 @@ export default function App() {
     () => ({ ...lib, subject: applyClassEdits(applySchemaEdits(lib.subject, getSchemaEdits()), getClassEdits()) }),
     [lib, tick],
   );
+  useEffect(() => { // Krav 4: token används automatiskt vid start; krav 3 gör starten snabb
+    if (getSettings().githubToken === '') return;
+    let cancelled = false;
+    void loadFromGithub().then(
+      (l) => { if (!cancelled) setLib(l); },
+      () => { /* behåll demo; Bibliotek visar fel/tokenstatus */ },
+    );
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const mobile = useMobile(); // FR-MOB-001/010
   const [screenSize, setScreenSize] = useScreenSize(); // FR-MOB-005…007
   const [sizeModal, setSizeModal] = useState(false);
@@ -637,6 +649,31 @@ function LessonCard(props: {
       </div>
       {override && <p className="ov-reason">📝 {override.reason}</p>}
 
+      {(() => { /* Krav 2: original eller namngiven variant av samma lektionsnummer */
+        const v = getVariants(kapitel, lesson.id);
+        const names = Object.keys(v.varianter);
+        const baseEdited = isEdited(kapitel, lesson.id, 'genomgang') || getOverrides().some((o) => o.kapitel === kapitel && o.lektionId === lesson.id);
+        return (
+          <div className="variant-row no-print">
+            <label>Version:</label>
+            <select value={v.active ?? ''} onChange={(e) => { setActiveVariant(kapitel, lesson.id, e.target.value || null); onChange(); }}>
+              <option value="">Original{baseEdited ? ' (redigerad)' : ''}</option>
+              {names.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+            <button className="icon-btn addres" title="Spara aktuellt läge som ny variant"
+              onClick={() => {
+                const namn = window.prompt('Namn på varianten (t.ex. Stödgrupp, Snabbare tempo):', 'Variant');
+                if (namn) { saveAsVariant(kapitel, lesson.id, namn.trim()); onChange(); }
+              }}>💾 Spara som variant…</button>
+            {v.active !== null && (
+              <button className="icon-btn" title="Ta bort varianten"
+                onClick={() => { if (window.confirm(`Ta bort varianten "${v.active}"?`)) { deleteVariant(kapitel, lesson.id, v.active!); onChange(); } }}>🗑</button>
+            )}
+            {v.active !== null && <span className="pill src-egen">Redigeringar sparas i varianten</span>}
+          </div>
+        );
+      })()}
+
       {slot && ( /* FR-CARD-003: Tavlan */
         <div className="tavlan">
           <div className="tavlan-top">🗓 TAVLAN</div>
@@ -889,7 +926,8 @@ function Editable(props: { kapitel: number; lesson: LessonRecord; field: keyof L
     const v = el.value;
     if (v.trim() === '') { el.value = value; return; } // FR-EDIT-003: tomt sparas inte
     if (v !== value) {
-      setField(kapitel, lesson.id, field, v);
+      if (getVariants(kapitel, lesson.id).active !== null) setVariantField(kapitel, lesson.id, field, v); // krav 2
+      else setField(kapitel, lesson.id, field, v);
       setFlash(true); setTimeout(() => setFlash(false), 1500);
       onChange();
     }
@@ -1228,11 +1266,11 @@ function PrototypImportCard(props: { lib: LoadedLibrary; onChange: () => void })
 function BibliotekView(props: { lib: LoadedLibrary; onLoaded: (l: LoadedLibrary) => void; onChange: () => void }) {
   const [s, setS] = useState(getSettings());
   const [status, setStatus] = useState('');
-  const connect = async () => {
+  const connect = async (forceRefresh = false) => {
     saveSettings(s);
     setStatus('Hämtar…');
     try {
-      const lib = await loadFromGithub();
+      const lib = await loadFromGithub(forceRefresh);
       const n = Object.values(lib.lessons).reduce((a, b) => a + b.length, 0);
       setStatus(`✓ ${n} lektioner lästa från ${s.githubOwner}/${s.githubRepo} (${s.slug})`);
       props.onLoaded(lib);
@@ -1257,9 +1295,29 @@ function BibliotekView(props: { lib: LoadedLibrary; onLoaded: (l: LoadedLibrary)
         <input type="password" value={s.githubToken} onChange={(e) => setS({ ...s, githubToken: e.target.value })} placeholder="github_pat_…" />
         <div className="modal-actions">
           <button className="btn" onClick={() => void connect()}>Anslut och hämta</button>
+          <button className="btn sec" title="Ignorera cachen och hämta allt på nytt"
+            onClick={() => void connect(true)}>⟳ Uppdatera från GitHub</button>
         </div>
         {status && <p className="status">{status}</p>}
-        <p className="note">Tokenen sparas endast i din webbläsare och skickas bara till GitHubs API.</p>
+        {(() => { /* Krav 3+4: cache- och tokenstatus */
+          const cache = getCacheInfo();
+          const exp = parseTokenExpiry(getTokenExpiryHeader());
+          return (
+            <div className="src-status">
+              {cache && <p className="muted">🗃 Cache: commit <code>{cache.sha.slice(0, 7)}</code> · sparad {cache.sparad.slice(0, 16).replace('T', ' ')}. Oförändrat repo laddas härifrån (2 snabba anrop i stället för alla filer).</p>}
+              {exp ? (
+                <p className={exp.daysLeft < 0 ? 'status err' : exp.daysLeft <= 14 ? 'status warn' : 'muted'}>
+                  🔑 Nyckeln {exp.daysLeft < 0
+                    ? <>har <b>gått ut</b> ({exp.iso}) — skapa en ny fine-grained PAT och klistra in ovan.</>
+                    : <>är giltig till <b>{exp.iso}</b> ({exp.daysLeft} dagar kvar{exp.daysLeft <= 14 ? ' — dags att förnya snart' : ''}).</>}
+                </p>
+              ) : (
+                <p className="muted">🔑 Nyckelns giltighetstid visas här efter första anslutningen.</p>
+              )}
+            </div>
+          );
+        })()}
+        <p className="note">Tokenen sparas endast i din webbläsare, används automatiskt vid appstart och skickas bara till GitHubs API.</p>
       </div>
     </main>
   );
