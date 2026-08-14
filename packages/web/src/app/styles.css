@@ -453,3 +453,16 @@ html.is-mobile.phone-large { font-size: 17px; }
 
 /* Prototypimport */
 .proto-preview { background: #f8fafc; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-top: 8px; }
+
+/* ── Promptbibliotek ── */
+.prompt-row { border: 1px solid var(--line); border-radius: 10px; margin: 8px 0; overflow: hidden; }
+.prompt-head { display: flex; gap: 10px; align-items: baseline; padding: 10px 14px; cursor: pointer; flex-wrap: wrap; }
+.prompt-head:hover { background: #f8fafc; }
+.prompt-head .muted { flex-basis: 100%; font-size: 12.5px; }
+.pill.src-inbyggd { background: #e0f2fe; color: #075985; }
+.pill.src-datakalla { background: #dcfce7; color: #166534; }
+.pill.src-egen { background: #fef9c3; color: #713f12; }
+.prompt-body { border-top: 1px solid var(--line); padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
+.prompt-body textarea { width: 100%; font-family: ui-monospace, monospace; font-size: 12px;
+  border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; }
+.prompt-body input { border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 10px; }

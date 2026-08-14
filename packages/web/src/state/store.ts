@@ -136,6 +136,7 @@ export function exportBackup(): string {
     prio: lsGet('classroom-planner.prio.v1') ?? null,
     classEdits: lsGet(CLASSES_KEY) ?? null,
     classNotes: lsGet(NOTES_KEY) ?? null,
+    prompts: lsGet(PROMPTS_KEY),
   }, null, 2);
 }
 export function importBackup(json: string): void {
@@ -152,6 +153,7 @@ export function importBackup(json: string): void {
   if (typeof b.prio === 'string') lsSet('classroom-planner.prio.v1', b.prio);
   if (typeof b.classEdits === 'string') lsSet(CLASSES_KEY, b.classEdits);
   if (typeof b.classNotes === 'string') lsSet(NOTES_KEY, b.classNotes);
+  if (typeof b.prompts === 'string') lsSet(PROMPTS_KEY, b.prompts);
 }
 
 // ── Klassregister-overlay (FR-CM-002…008) ─────────────────────
@@ -173,6 +175,20 @@ export function setClassNote(classId: string, kapitel: number, lektionId: number
   const k = noteKey(classId, kapitel, lektionId);
   if (text.trim() === '') delete all[k]; else all[k] = text;
   write(NOTES_KEY, all);
+}
+
+// ── Promptbibliotek: egna varianter (persistent, i backup) ───
+import type { PromptTemplate } from '@planner/core';
+const PROMPTS_KEY = 'classroom-planner.prompts.v1';
+export function getCustomPrompts(): PromptTemplate[] {
+  return read<PromptTemplate[]>(PROMPTS_KEY, []).map((p) => ({ ...p, kalla: 'egen' as const }));
+}
+export function saveCustomPrompt(prompt: PromptTemplate): void {
+  const all = getCustomPrompts().filter((p) => p.id !== prompt.id);
+  write(PROMPTS_KEY, [...all, { ...prompt, kalla: 'egen', uppdaterad: new Date().toISOString() }]);
+}
+export function deleteCustomPrompt(id: string): void {
+  write(PROMPTS_KEY, getCustomPrompts().filter((p) => p.id !== id));
 }
 
 // ── Magma: en aktivitet per lektion (FR-MAG-001…006) ─────────
@@ -227,23 +243,39 @@ export interface LoadedLibrary {
   begrepp: { perDelkapitel: Record<string, string[]>; definitioner: Record<string, string> };
   /** Bokens resurslänkar per lektion ('kap-lektionsId') ur books/<bookId>/lankar.json. */
   lankar: Record<string, import('@planner/core').BookLink[]>;
+  /** Promptmallar ur datakällans prompter/-katalog. */
+  prompter: PromptTemplate[];
 }
 
 export function demoLibrary(): LoadedLibrary {
-  return { source: 'demo', subject: DEMO_SUBJECT, lessons: DEMO_LESSONS, flip: DEMO_FLIP, begrepp: DEMO_BEGREPP, lankar: {} };
+  return { source: 'demo', subject: DEMO_SUBJECT, lessons: DEMO_LESSONS, flip: DEMO_FLIP, begrepp: DEMO_BEGREPP, lankar: {}, prompter: [] };
 }
 
 export async function loadFromGithub(): Promise<LoadedLibrary> {
   const s = getSettings();
   if (!s.githubToken) throw new Error('Ingen token angiven — se Bibliotek → Datakällor.');
-  const lib = await loadSubjectLibrary(githubReader(s.githubOwner, s.githubRepo, s.githubToken), s.slug);
+  const reader = githubReader(s.githubOwner, s.githubRepo, s.githubToken);
+  const lib = await loadSubjectLibrary(reader, s.slug);
   const lessons: Record<number, LessonRecord[]> = {};
   const flip: Record<number, Record<number, FlipDoc>> = {};
   for (const [nr, kap] of lib.kapitel) {
     lessons[nr] = kap.lektioner;
     flip[nr] = Object.fromEntries(kap.flip);
   }
-  return { source: 'github', subject: lib.subject, lessons, flip, begrepp: lib.begrepp, lankar: lib.lankar };
+  // Promptmallar (valfritt): prompter/index.json = [{id, namn, beskrivning, fil}]
+  const prompter: PromptTemplate[] = [];
+  try {
+    const idxText = await reader.readText('prompter/index.json');
+    if (idxText) {
+      const idx = JSON.parse(idxText) as Array<{ id: string; namn: string; beskrivning: string; fil: string }>;
+      for (const e of idx) {
+        const body = await reader.readText(`prompter/${e.fil}`);
+        if (body) prompter.push({ id: e.id, namn: e.namn, beskrivning: e.beskrivning, innehall: body, kalla: 'datakalla' });
+      }
+    }
+  } catch { /* trasig promptkatalog ska inte stoppa dataladdningen */ }
+
+  return { source: 'github', subject: lib.subject, lessons, flip, begrepp: lib.begrepp, lankar: lib.lankar, prompter };
 }
 
 // ── Schemaändringar: startdatum + pass per klass (FR-SCH-002…005) ──

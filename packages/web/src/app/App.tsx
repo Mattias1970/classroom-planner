@@ -1,8 +1,9 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   applyClassEdits, applySchemaEdits, buildBegreppTabell, computeTimes, defaultBamTimeline, diffMinutes,
-  parseFilmState, parsePrototypeLinks, summarizePrototypeLinks,
-  type FilmStateLink, type PrototypeLink,
+  mergePromptSources, parseFilmState, parsePrototypeLinks, promptIdFromName,
+  summarizePrototypeLinks,
+  type FilmStateLink, type PromptTemplate, type PrototypeLink,
   distinctEditedFields, generateSlots, normalizeUrl, placeLessons, summarizeEdits,
   weeksLabel, KAP_COLORS,
   type LessonRecord, type PlacedLesson, type ScheduledSlot, type SubjectFile,
@@ -10,6 +11,7 @@ import {
 import { SchedulePanel, TimeBand } from '../views/SchemaOchTidsband.js';
 import { KlassHanterare } from '../views/KlassHanterare.js';
 import PROTO_FILMER from '../data/prototyp-filmer.json';
+import PROMPT_LEKTIONSGEN from '../data/prompter/lektionsgenerator.md?raw';
 import { BottomNav, ScreenSizeModal, useMobile, useScreenSize, useScrollToNextChapter } from '../views/Mobil.js';
 import Kalender from '../views/Kalender.js';
 import Arsoversikt, { type InnerTab } from '../views/Arsoversikt.js';
@@ -22,6 +24,7 @@ import {
   clearMagma, countMagmaForKap, getMagma, setMagma,
   getPrio, setPrio, PRIO_ALL,
   getClassEdits, getClassNote, setClassNote, lsGet, lsSet,
+  deleteCustomPrompt, getCustomPrompts, saveCustomPrompt,
   type LessonLink, type ToolTyp,
 } from '../state/store.js';
 import { Docx } from './wordExport.js';
@@ -1055,6 +1058,92 @@ const PLATFORMS: Record<ToolTyp, string[]> = { /* FR-TOOL-002 */
 };
 
 // ── Bibliotek: datakällor + wizard (sprint 20/22/24-om) ───────
+// ── Promptbibliotek (inbyggda + datakällans + egna varianter) ─
+const INBYGGDA_PROMPTER: PromptTemplate[] = [{
+  id: 'lektionsgenerator',
+  namn: 'Lektionsgenerator (agentteam)',
+  beskrivning: 'Skapar komplett lektionsplanering ur 10 boksidor åt gången: Binogi-filmer, genomgångsexempel, flippat underlag, Socrative-quiz (Excel) och NotebookLM-filmprompt. Utdata i appens fältformat.',
+  innehall: PROMPT_LEKTIONSGEN,
+  kalla: 'inbyggd',
+}];
+
+function PromptBibliotek(props: { lib: LoadedLibrary; onChange: () => void }) {
+  const { lib, onChange } = props;
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [edit, setEdit] = useState<PromptTemplate | null>(null);
+  const [msg, setMsg] = useState('');
+  const all = mergePromptSources(INBYGGDA_PROMPTER, lib.prompter, getCustomPrompts());
+  const KALLA_LABEL = { inbyggd: 'Inbyggd', datakalla: 'Datakälla', egen: 'Egen' } as const;
+
+  const copyText = (t: string) => {
+    void navigator.clipboard?.writeText(t).then(
+      () => setMsg('✓ Prompten kopierad — klistra in i en ny chatt tillsammans med boksidorna.'),
+      () => setMsg('✗ Kunde inte kopiera — markera texten och kopiera manuellt.'),
+    );
+  };
+  const download = (p: PromptTemplate) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([p.innehall], { type: 'text/markdown' }));
+    a.download = `${p.id}.md`;
+    a.click(); URL.revokeObjectURL(a.href);
+  };
+  const saveAsNew = (source: PromptTemplate) => {
+    const namn = window.prompt('Namn på den nya prompten:', `${source.namn} (variant)`);
+    if (!namn) return;
+    const beskrivning = window.prompt('Beskrivning (vad ska den göra?):', source.beskrivning) ?? '';
+    const id = promptIdFromName(namn, all.map((x) => x.id));
+    saveCustomPrompt({ id, namn, beskrivning, innehall: source.innehall, kalla: 'egen' });
+    setMsg(`✓ "${namn}" sparad som egen prompt.`); setOpenId(id); onChange();
+  };
+
+  return (
+    <div className="card">
+      <div className="title">📜 Promptbibliotek</div>
+      <p className="note">Promptmallar för AI-genererat lektionsinnehåll. Inbyggda följer appen och kan inte försvinna; lägg en prompter/-katalog i datakällan för att uppdatera utan appsläpp; egna varianter sparas i webbläsaren och ingår i backupen.</p>
+      {all.map((p) => (
+        <div key={`${p.kalla}-${p.id}`} className="prompt-row">
+          <div className="prompt-head" onClick={() => setOpenId(openId === p.id ? null : p.id)}>
+            <b>{p.namn}</b>
+            <span className={`pill src-${p.kalla}`}>{KALLA_LABEL[p.kalla]}</span>
+            <span className="muted">{p.beskrivning}</span>
+          </div>
+          {openId === p.id && (
+            <div className="prompt-body">
+              {edit?.id === p.id ? (<>
+                <input value={edit.namn} onChange={(e) => setEdit({ ...edit, namn: e.target.value })} />
+                <input placeholder="Beskrivning" value={edit.beskrivning}
+                  onChange={(e) => setEdit({ ...edit, beskrivning: e.target.value })} />
+                <textarea rows={16} value={edit.innehall}
+                  onChange={(e) => setEdit({ ...edit, innehall: e.target.value })} />
+                <div className="modal-actions">
+                  <button className="btn sec" onClick={() => setEdit(null)}>Avbryt</button>
+                  <button className="btn" disabled={edit.namn.trim() === '' || edit.innehall.trim() === ''}
+                    onClick={() => { saveCustomPrompt(edit); setEdit(null); setMsg('✓ Uppdaterad.'); onChange(); }}>Spara</button>
+                </div>
+              </>) : (<>
+                <textarea rows={12} readOnly value={p.innehall} />
+                <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
+                  <button className="btn" onClick={() => copyText(p.innehall)}>⧉ Kopiera</button>
+                  <button className="btn sec" onClick={() => download(p)}>⬇ Ladda ner .md</button>
+                  <button className="btn sec" onClick={() => saveAsNew(p)}>💾 Spara som ny…</button>
+                  {p.kalla === 'egen' && (<>
+                    <button className="btn sec" onClick={() => setEdit(p)}>✎ Redigera</button>
+                    <button className="btn warn" onClick={() => {
+                      if (window.confirm(`Ta bort "${p.namn}"?`)) { deleteCustomPrompt(p.id); setMsg('✓ Borttagen.'); onChange(); }
+                    }}>🗑 Ta bort</button>
+                  </>)}
+                </div>
+                {p.uppdaterad && <p className="muted">Uppdaterad {p.uppdaterad.slice(0, 16).replace('T', ' ')}</p>}
+              </>)}
+            </div>
+          )}
+        </div>
+      ))}
+      {msg && <p className="status">{msg}</p>}
+    </div>
+  );
+}
+
 // ── Import av filmlänkar ur HTML-prototypen ──────────────────
 function PrototypImportCard(props: { lib: LoadedLibrary; onChange: () => void }) {
   const { lib, onChange } = props;
@@ -1152,6 +1241,7 @@ function BibliotekView(props: { lib: LoadedLibrary; onLoaded: (l: LoadedLibrary)
   return (
     <main className="main">
       <PrototypImportCard lib={props.lib} onChange={props.onChange} />
+      <PromptBibliotek lib={props.lib} onChange={props.onChange} />
       <h2>Bibliotek — datakällor</h2>
       <div className="card">
         <div className="card-head"><span className="title">GitHub: {s.githubRepo}</span>
