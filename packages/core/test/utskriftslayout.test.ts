@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  BLAD, LAYOUT_FALT, LJUSA_FARGER, rektanglarKorsar, bandHojd, defaultUtskriftslayout, fyllSidled, layoutFaltVarde,
+  BLAD, LAYOUT_FALT, LINJE_FARGER, LJUSA_FARGER, arLinje, rektanglarKorsar, bandHojd, defaultUtskriftslayout, fyllSidled, layoutFaltVarde,
   normaliseraRuta, nyBoxId, snapBox,
 } from '../src/domain/utskriftslayout.js';
 import type { LessonRecord } from '../src/records/lesson-record.js';
@@ -101,5 +101,18 @@ describe('Arbete-fältet + färgplattor + markeringskorsning (del 21)', () => {
     expect(rektanglarKorsar(a, { xMm: 25, yMm: 15, wMm: 20, hMm: 10 })).toBe(true);
     expect(rektanglarKorsar(a, { xMm: 30, yMm: 10, wMm: 5, hMm: 5 })).toBe(false); // kant-i-kant räknas inte
     expect(rektanglarKorsar(a, { xMm: 0, yMm: 40, wMm: 5, hMm: 5 })).toBe(false);
+  });
+});
+
+describe('Fristående linjer (del 22)', () => {
+  it('linje finns i katalogen, saknar innehåll och känns igen', () => {
+    expect(LAYOUT_FALT.some((f) => f.id === 'linje' && f.etikett === 'Linje')).toBe(true);
+    expect(layoutFaltVarde('linje', lektion)).toBe('');
+    expect(arLinje({ falt: 'linje' })).toBe(true);
+    expect(arLinje({ falt: 'laxa' })).toBe(false);
+  });
+  it('LINJE_FARGER har svart först och giltiga hexfärger', () => {
+    expect(LINJE_FARGER[0]?.namn).toBe('Svart');
+    for (const f of LINJE_FARGER) expect(f.hex).toMatch(/^#[0-9a-f]{6}$/);
   });
 });

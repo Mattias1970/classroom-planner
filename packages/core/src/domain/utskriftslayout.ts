@@ -24,7 +24,23 @@ export interface LayoutBox {
   ram?: boolean;
   /** Ljus bakgrundsplatta, hexfärg ur LJUSA_FARGER (del 21). Tom/undefined = ingen. */
   bakgrund?: string;
+  /** Linjetjocklek i mm — endast för fältet 'linje' (del 22). */
+  linjeMm?: number;
+  /** Linjefärg (hex) — endast för fältet 'linje' (del 22). */
+  linjeFarg?: string;
 }
+
+/** Linjefärger (del 22). */
+export const LINJE_FARGER: ReadonlyArray<{ namn: string; hex: string }> = [
+  { namn: 'Svart', hex: '#111111' },
+  { namn: 'Mörkgrå', hex: '#334155' },
+  { namn: 'Blå', hex: '#175cd3' },
+  { namn: 'Grön', hex: '#15803d' },
+  { namn: 'Röd', hex: '#b91c1c' },
+] as const;
+
+/** Är ytan en fristående linje (utan innehåll)? Vågrät om bredare än hög. */
+export function arLinje(b: { falt: string }): boolean { return b.falt === 'linje'; }
 
 /** Ljusa färgplattor för ytor (del 21). */
 export const LJUSA_FARGER: ReadonlyArray<{ namn: string; hex: string }> = [
@@ -60,6 +76,7 @@ export const LAYOUT_FALT: ReadonlyArray<{ id: string; etikett: string }> = [
   { id: 'bam_ex', etikett: 'BAM — exempel' },
   { id: 'ex', etikett: 'Exempel' },
   { id: 'laxa', etikett: 'Läxa' },
+  { id: 'linje', etikett: 'Linje' },
 ] as const;
 
 export function faltEtikett(faltId: string): string {
@@ -76,6 +93,7 @@ export interface LayoutExtra { datum?: string; tid?: string; lektionsNr?: number
 /** Värdet för ett layoutfält, för en given lektion. */
 export function layoutFaltVarde(faltId: string, lesson: LessonRecord, extra: LayoutExtra = {}): string {
   switch (faltId) {
+    case 'linje': return ''; // fristående linje — inget innehåll (del 22)
     case 'lektionsnr': return extra.lektionsNr !== undefined ? `L${extra.lektionsNr}` : '';
     case 'datum': return extra.datum ?? '';
     case 'tid': return extra.tid ?? '';

@@ -9,10 +9,10 @@
 import { useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  AlignmentType, Document, HeadingLevel, Packer, Paragraph, TextRun,
+  AlignmentType, BorderStyle, Document, HeadingLevel, Packer, Paragraph, TextRun,
 } from 'docx';
 import {
-  BLAD, LAYOUT_FALT, LJUSA_FARGER, bandHojd, defaultUtskriftslayout, faltEtikett, fyllSidled,
+  BLAD, LAYOUT_FALT, LINJE_FARGER, LJUSA_FARGER, arLinje, bandHojd, defaultUtskriftslayout, faltEtikett, fyllSidled,
   rektanglarKorsar,
   layoutFaltVarde, normaliseraRuta, nyBoxId, snapBox, svDateLabel,
   type LayoutBox, type ScheduledSlot, type LessonRecord, type SnapGuide, type UtskriftsLayout,
@@ -121,9 +121,9 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
       const r = normaliseraRuta(drag.x1, drag.y1, drag.x2, drag.y2);
       const id = nyBoxId(layout.boxar.map((b) => b.id));
       spara({
-        boxar: [...layout.boxar, {
-          id, falt: drag.falt, ...r, fontPt: 10, align: 'left', visaEtikett: true,
-        }],
+        boxar: [...layout.boxar, drag.falt === 'linje'
+          ? { id, falt: 'linje', ...r, fontPt: 10, align: 'left' as const, visaEtikett: false, linjeMm: 0.6, linjeFarg: '#334155' }
+          : { id, falt: drag.falt, ...r, fontPt: 10, align: 'left' as const, visaEtikett: true }],
       });
       setValda([id]); setValtFalt(null);
     }
@@ -162,6 +162,14 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
     const boxHtml = (b: LayoutBox, lesson: LessonRecord, idx: number) => {
       const varde = layoutFaltVarde(b.falt, lesson, extraFor(idx));
       const text = b.visaEtikett && varde !== '' ? `<b>${faltEtikett(b.falt)}:</b> ${varde}` : varde;
+      if (arLinje(b)) {
+        const t = b.linjeMm ?? 0.6, f = b.linjeFarg ?? '#334155';
+        const streck = b.wMm >= b.hMm
+          ? `left:0;right:0;top:50%;transform:translateY(-50%);height:${t}mm`
+          : `top:0;bottom:0;left:50%;transform:translateX(-50%);width:${t}mm`;
+        return `<div style="position:absolute;left:${b.xMm}mm;top:${b.yMm}mm;width:${b.wMm}mm;height:${b.hMm}mm">` +
+          `<div style="position:absolute;${streck};background:${f}"></div></div>`;
+      }
       const ram = b.ram === true ? 'border:0.35mm solid #333;' : '';
       const platta = b.bakgrund !== undefined && b.bakgrund !== '' ? `background:${b.bakgrund};` : '';
       return `<div style="position:absolute;left:${b.xMm}mm;top:${b.yMm}mm;width:${b.wMm}mm;height:${b.hMm}mm;` +
@@ -172,7 +180,7 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
       `<div style="position:relative;height:${band}mm;page-break-inside:avoid;border-bottom:1mm solid #334155">` +
       layout.boxar.map((b) => boxHtml(b, l, i)).join('') + `</div>`).join('');
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Planering kap ${kapitel}</title>
-      <style>@page{size:A4;margin:0}body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#111}
+      <style>@page{size:A4;margin:0}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#111}
       .rubrik{padding:${BLAD.marginalMm}mm ${BLAD.marginalMm}mm 4mm}</style></head><body>
       <div class="rubrik"><h1 style="margin:0 0 2mm;font-size:16pt">Kapitel ${kapitel} — ${kapMeta?.name ?? ''} · ${classId}</h1>
       <div style="font-size:9pt">${lib.subject.meta.lärobok} · Innehåll: ${delkapitel.join(' · ')}</div></div>
@@ -192,12 +200,25 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
     lessons.forEach((l, i) => {
       barn.push(new Paragraph({ children: [] }));
       for (const b of ordnade) {
+        if (arLinje(b)) { // vågrät linje → styckekant med vald tjocklek/färg (lodräta kan inte flöda i Word)
+          if (b.wMm >= b.hMm) barn.push(new Paragraph({
+            border: { bottom: { style: BorderStyle.SINGLE, size: Math.round((b.linjeMm ?? 0.6) * 2.835 * 8), color: (b.linjeFarg ?? '#334155').replace('#', '') } },
+            children: [],
+          }));
+          continue;
+        }
         const varde = layoutFaltVarde(b.falt, l, extraFor(i));
         if (varde === '') continue;
         barn.push(new Paragraph({
           alignment: alignOf(b.align),
           ...(b.bakgrund !== undefined && b.bakgrund !== ''
             ? { shading: { type: 'clear' as const, fill: b.bakgrund.replace('#', '') } } : {}),
+          ...(b.ram === true ? { border: {
+            top: { style: BorderStyle.SINGLE, size: 8, color: '333333' },
+            bottom: { style: BorderStyle.SINGLE, size: 8, color: '333333' },
+            left: { style: BorderStyle.SINGLE, size: 8, color: '333333' },
+            right: { style: BorderStyle.SINGLE, size: 8, color: '333333' },
+          } } : {}),
           children: [
             ...(b.visaEtikett ? [new TextRun({ text: `${faltEtikett(b.falt)}: `, bold: true, size: b.fontPt * 2 })] : []),
             new TextRun({ text: varde, size: b.fontPt * 2 }),
@@ -238,7 +259,25 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
               ))}
             </div>
 
-            {vald && (<>
+            {vald && arLinje(vald) && (<>
+              <h4 className="cm-h">{valda.length > 1 ? `${valda.length} YTOR VALDA` : 'VALD LINJE'}</h4>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <label>Tjocklek <input type="number" min={0.2} max={3} step={0.1} style={{ width: 60 }}
+                  value={vald.linjeMm ?? 0.6}
+                  onChange={(e) => uppdateraValda({ linjeMm: Number(e.target.value) })} /> mm</label>
+                <span className="muted">Färg:</span>
+                {LINJE_FARGER.map((f) => (
+                  <button key={f.namn} title={f.namn}
+                    onClick={() => uppdateraValda({ linjeFarg: f.hex })}
+                    style={{ width: 22, height: 22, borderRadius: 4, cursor: 'pointer', background: f.hex,
+                      border: (vald.linjeFarg ?? '#334155') === f.hex ? '2px solid #175cd3' : '1px solid #d0d5dd' }} />
+                ))}
+                <button className="btn sec" title="Fyll bladet i sidled"
+                  onClick={() => spara({ boxar: layout.boxar.map((b) => (valda.includes(b.id) ? fyllSidled(b) : b)) })}>⇔ Fyll sidled</button>
+                <button className="btn warn" onClick={taBortValda}>🗑 Ta bort</button>
+              </div>
+            </>)}
+            {vald && !arLinje(vald) && (<>
               <h4 className="cm-h">{valda.length > 1 ? `${valda.length} YTOR VALDA` : `VALD YTA — ${faltEtikett(vald.falt)}`}</h4>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                 <label>Font <input type="number" min={6} max={36} style={{ width: 54 }} value={vald.fontPt}
@@ -327,7 +366,13 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
                       fontSize: b.fontPt * PX * 0.353, textAlign: b.align, lineHeight: 1.25, padding: 1,
                     }}
                     title={faltEtikett(b.falt)}>
-                    {b.visaEtikett ? <b>{faltEtikett(b.falt)}: </b> : null}{varde || <i style={{ color: '#98a2b3' }}>{faltEtikett(b.falt)}</i>}
+                    {arLinje(b) ? (
+                      b.wMm >= b.hMm
+                        ? <div style={{ position: 'absolute', left: 0, right: 0, top: '50%', transform: 'translateY(-50%)', height: Math.max(1, mm(b.linjeMm ?? 0.6)), background: b.linjeFarg ?? '#334155' }} />
+                        : <div style={{ position: 'absolute', top: 0, bottom: 0, left: '50%', transform: 'translateX(-50%)', width: Math.max(1, mm(b.linjeMm ?? 0.6)), background: b.linjeFarg ?? '#334155' }} />
+                    ) : (<>
+                      {b.visaEtikett ? <b>{faltEtikett(b.falt)}: </b> : null}{varde || <i style={{ color: '#98a2b3' }}>{faltEtikett(b.falt)}</i>}
+                    </>)}
                     {valda.length === 1 && valda[0] === b.id && (
                       <div onPointerDown={(e) => {
                         e.stopPropagation();
