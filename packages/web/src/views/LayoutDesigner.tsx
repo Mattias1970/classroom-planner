@@ -186,7 +186,7 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
 
   return createPortal(
     <div className="overlay" role="dialog" aria-label="Layout för utskrift" onClick={onClose}
-      style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '16px 0' }}>
+      style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '16px 0', zIndex: 1000 }}>
       {/* del 20b: portal till body + toppförankrad — öppnas alltid högst upp */}
       <div className="modal" style={{ width: 'min(980px, 96vw)', margin: 0 }}
         onClick={(e) => e.stopPropagation()}>

@@ -55,7 +55,7 @@ h2 { margin: 0 0 2px; font-size: 19px; }
 .seg.quiz { background: var(--b-quiz); } .seg.lecture { background: var(--b-lecture); }
 .seg.work { background: var(--b-work); } .seg.exit { background: var(--b-exit); }
 .seg.custom { background: var(--muted); }
-.overlay { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: grid; place-items: center; }
+.overlay { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: grid; place-items: center; z-index: 100; } /* del 20c: alltid ovanpå sticky-lager (plan-sticky z-30, bottom-nav z-60) */
 .modal { background: var(--card); border-radius: 12px; padding: 20px 24px; width: min(480px, 92vw); box-shadow: 0 8px 30px rgba(0,0,0,.2); }
 .modal h3 { margin: 0 0 10px; }
 .modal label, .card label { display: block; font-size: 12.5px; color: var(--ink); font-weight: 600; margin: 10px 0 3px; }
