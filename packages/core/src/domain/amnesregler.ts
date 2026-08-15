@@ -85,3 +85,27 @@ export function normaliseraRegler(regler: Lektionsregel[]): Lektionsregel[] | nu
     .filter((r) => r.rubrik !== '' || r.text !== '');
   return rensade.length > 0 ? rensade : null;
 }
+
+/** Ett kapitels datumspann (första–sista placerade pass). */
+export interface KapitelSpann { kapitel: number; forsta: string; sista: string; }
+
+/**
+ * Placerar betygsdatum i kapitelkolumnerna under Viktiga datum (del 15):
+ * ett datum hör till det sista kapitlet som hunnit börja (forsta <= datum);
+ * datum före allt hamnar i första kapitlet. Ingen egen yta — raderna
+ * integreras i respektive kapitelkolumn.
+ */
+export function placeraBetygsdatum(
+  lista: Betygsdatum[], spann: KapitelSpann[],
+): Record<number, Betygsdatum[]> {
+  const ut: Record<number, Betygsdatum[]> = {};
+  const sorterade = [...spann].sort((a, b) => a.forsta.localeCompare(b.forsta));
+  if (sorterade.length === 0) return ut;
+  for (const b of sorteraBetygsdatum(lista)) {
+    let vald = sorterade[0];
+    for (const sp of sorterade) if (sp.forsta <= b.datum) vald = sp;
+    if (vald === undefined) continue;
+    ut[vald.kapitel] = [...(ut[vald.kapitel] ?? []), b];
+  }
+  return ut;
+}

@@ -5,11 +5,11 @@
  */
 import { useMemo, useState, type DragEvent } from 'react';
 import {
-  KAP_COLORS, byggExternaPoster, isoWeek, unikaAmnen,
+  KAP_COLORS, byggExternaPoster, fargForKlass, isoWeek, unikaAmnen,
   type ExternPost, type LessonOverride, type LessonRecord,
   type LokalPlanering, type PlacedLesson, type SubjectFile,
 } from '@planner/core';
-import { setCalOverride } from '../state/store.js';
+import { getBetygsdatum, setCalOverride } from '../state/store.js';
 
 const DAY_START = 7, DAY_END = 17;
 const DAY_NAMES = ['Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön'];
@@ -102,6 +102,15 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
     return [...ids].sort((a, b) => a.localeCompare(b, 'sv'));
   }, [placedByClass, planeringar]);
   const amnesVal = unikaAmnen([subject.meta.ämne, ...planeringar.map((pl) => pl.amne)]);
+  // Del 15: betygssättningsdatum syns i kalendern oavsett klass- och ämnesfilter
+  const betygsByDate = useMemo(() => {
+    const m = new Map<string, { id: string; label: string }[]>();
+    for (const b of getBetygsdatum()) {
+      const arr = m.get(b.datum) ?? [];
+      arr.push({ id: b.id, label: b.label }); m.set(b.datum, arr);
+    }
+    return m;
+  }, []);
 
   const startYear = subject.läsår.startdatum[0];
   const nav = (dir: -1 | 1) => {
@@ -132,7 +141,7 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
       onClick={() => onOpenLesson(p.kapitel, p.globalIdx)}
       onDragStart={(e) => e.dataTransfer.setData('text/plain', String(p.globalIdx))}>
       <span className="tdot" style={{ background: TYPE_COLORS[p.lesson.type] ?? '#3b82f6' }} />
-      {classId === ALLA && <b>{p.cid}</b>} {withTime && <small>{p.slot!.start}</small>} {p.kapitel}.{p.lesson.id} {p.lesson.avsnitt.replace(/^\d+\.\d+\s*/, '').slice(0, 20)}
+      {classId === ALLA && <b style={{ color: fargForKlass(p.cid) }}>{p.cid}</b>} {withTime && <small>{p.slot!.start}</small>} {p.kapitel}.{p.lesson.id} {p.lesson.avsnitt.replace(/^\d+\.\d+\s*/, '').slice(0, 20)}
       {p.override?.type === 'moved' && ' 📍'}
       {enKlass && <button className="chip-x" title="Ändra lektion (ställ in / flytta / återställ)"
         onClick={(e) => { e.stopPropagation(); setEditModal({ p, reason: p.override?.reason ?? '', choice: null }); }}>×</button>}
@@ -186,13 +195,19 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
                       onClick={() => onOpenLesson(p.kapitel, p.globalIdx)}
                       onDragStart={(e) => e.dataTransfer.setData('text/plain', String(p.globalIdx))}>
                       <span className="tdot" style={{ background: TYPE_COLORS[p.lesson.type] ?? '#3b82f6' }} />
-                      <b>{classId === ALLA ? `${p.cid} · ` : ''}{p.kapitel}.{p.lesson.id}</b> {p.lesson.avsnitt.replace(/^\d+\.\d+\s*/, '')}
+                      <b>{classId === ALLA && <span style={{ color: fargForKlass(p.cid), filter: 'brightness(1.8)' }}>{p.cid} · </span>}{p.kapitel}.{p.lesson.id}</b> {p.lesson.avsnitt.replace(/^\d+\.\d+\s*/, '')}
                       <small>{p.slot!.start}–{p.slot!.end}{p.override?.type === 'moved' ? ' 📍' : ''}</small>
                       {enKlass && <button className="chip-x" title="Ändra lektion"
                         onClick={(e) => { e.stopPropagation(); setEditModal({ p, reason: p.override?.reason ?? '', choice: null }); }}>×</button>}
                     </div>
                   );
                 })}
+                {(betygsByDate.get(di) ?? []).map((b) => (
+                  <div key={b.id} className="cal-block" style={{ top: 0, height: 20, background: '#7f1d1d', zIndex: 2 }}
+                    title={`${b.label} · ${di}`}>
+                    <b>🎓 {b.label}</b>
+                  </div>
+                ))}
                 {(externByDate.get(di) ?? []).map((post) => {
                   const top = ((toMin(post.start) - DAY_START * 60) / 60) * H;
                   const h = Math.max(22, ((toMin(post.end) - toMin(post.start)) / 60) * H);
@@ -245,6 +260,11 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
                     onDragOver={(e) => e.preventDefault()} onDrop={(e) => onDropDay(e, di)}>
                     <span className="d">{d.getUTCDate()}</span>
                     {lov && <span className="lovlabel">{lov.split(' ')[0]}</span>}
+                    {(betygsByDate.get(di) ?? []).map((b) => (
+                      <div key={b.id} className="cal-chip" style={{ borderLeft: '4px solid #7f1d1d' }} title={b.label}>
+                        <span className="tdot" style={{ background: '#7f1d1d' }} />🎓 {b.label}
+                      </div>
+                    ))}
                     {(byDate.get(di) ?? []).map((p) => chip(p))}
                     {(externByDate.get(di) ?? []).map((post) => externChip(post))}
                   </div>
@@ -280,12 +300,13 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
                   const di = iso(d);
                   const egna = byDate.get(di) ?? [];
                   const externa = externByDate.get(di) ?? [];
-                  const n = egna.length + externa.length;
+                  const betyg = betygsByDate.get(di) ?? [];
+                  const n = egna.length + externa.length + betyg.length;
                   const lov = !!breakLabelFor(di, subject);
                   return (
                     <span key={di}
                       className={`mini-d ${d.getUTCMonth() !== ms.getUTCMonth() ? 'dim' : ''} ${lov ? 'lov' : ''} ${n ? 'has' : ''}`}
-                      style={n ? { background: egna[0] ? KAP_COLORS[egna[0].kapitel] : externa[0]?.farg } : undefined}>
+                      style={n ? { background: betyg.length > 0 ? '#7f1d1d' : egna[0] ? KAP_COLORS[egna[0].kapitel] : externa[0]?.farg } : undefined}>
                       {d.getUTCDate()}
                     </span>
                   );
@@ -349,7 +370,8 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
           <span className="sep" />
           <button className={`btn sec ${classId === ALLA ? 'active' : ''}`} onClick={() => setClassId(ALLA)}>Alla klasser</button>
           {klassVal.map((c) => (
-            <button key={c} className={`btn sec ${classId === c ? 'active' : ''}`} onClick={() => setClassId(c)}>{c}</button>
+            <button key={c} className={`btn sec ${classId === c ? 'active' : ''}`}
+              style={{ color: fargForKlass(c), fontWeight: 600 }} onClick={() => setClassId(c)}>{c}</button>
           ))}
           <span className="sep" />
           {amnesVal.length > 1 && (<>
@@ -373,7 +395,9 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
       {(planeringar.length > 0 || classId === ALLA) && (
         <div className="cal-legend">{/* Del 13: planeringar i kalendern */}
           <span className="muted">Planeringar:</span>
-          <span className="leg"><span className="tdot" style={{ background: '#3b82f6' }} /> {subject.meta.ämne} · {Object.keys(placedByClass).join(' & ')} (datakälla)</span>
+          <span className="leg"><span className="tdot" style={{ background: '#3b82f6' }} /> {subject.meta.ämne} · {Object.keys(placedByClass).map((c, i) => (
+            <b key={c} style={{ color: fargForKlass(c) }}>{i > 0 ? ' & ' : ''}{c}</b>
+          ))} (datakälla)</span>
           {planeringar.map((pl) => (
             <span key={pl.id} className="leg">
               <span className="tdot" style={{ background: pl.farg }} /> {pl.amne} · {pl.klassNamn} ({pl.bokTitel})

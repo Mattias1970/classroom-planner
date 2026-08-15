@@ -31,17 +31,36 @@ function props() {
 beforeEach(() => { localStorage.clear(); });
 
 describe('Årsöversikt del 14 (render smoke)', () => {
-  it('Viktiga datum har alltid rubriken Betygssättning, med hänvisning när datum saknas', () => {
+  it('utan betygsdatum: hänvisning till inställningarna, ingen egen betygsyta', () => {
     const host = render(<Arsoversikt {...props()} />);
-    expect(host.textContent).toContain('Betygssättning');
     expect(host.textContent).toContain('kugghjulet → Viktiga datum');
+    expect([...host.querySelectorAll('h4')].some((h) => h.textContent?.includes('Betygssättning'))).toBe(false);
   });
 
-  it('inlagda betygsdatum visas med vecka och svenskt datum', () => {
+  it('betygsdatum integreras som 🎓-rad i kapitelkolumnerna (del 15), ingen egen kolumn', () => {
     setBetygsdatum([{ id: 'bd-1', label: 'Betygssättning HT', datum: '2026-12-11' }]);
     const host = render(<Arsoversikt {...props()} />);
-    expect(host.textContent).toContain('Betygssättning HT');
+    expect(host.textContent).toContain('🎓 Betygssättning HT');
     expect(host.textContent).toMatch(/v\.50/);
+    // Ingen egen kolumnrubrik för betygssättning — raden bor i en kapitelkolumn
+    expect([...host.querySelectorAll('h4')].some((h) => h.textContent?.includes('Betygssättning'))).toBe(false);
+  });
+
+  it('Alla ämnen-knappen visar datakällans översikt och planeringssammanfattningar samtidigt', () => {
+    setBetygsdatum([{ id: 'bd-1', label: 'Betygssättning HT', datum: '2026-12-11' }]);
+    saveLokalPlanering({
+      id: 'kemi-8f', klassNamn: '8F', amne: 'Kemi', bokTitel: 'Spektrum Kemi',
+      farg: '#b45309', schema: [{ veckodag: 2, start: '10:00', slut: '11:00' }],
+    });
+    const host = render(<Arsoversikt {...props()} />);
+    const allaBtn = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Alla ämnen');
+    expect(allaBtn).toBeDefined();
+    act(() => { allaBtn?.click(); });
+    expect(host.textContent).toContain('alla ämnen');
+    expect(host.textContent).toContain('Spektrum Kemi');           // planeringens sammanfattning
+    expect(host.textContent).toContain('Viktiga datum — repetition'); // datakällans sektion kvar
+    expect(host.textContent).toContain('Lektionsregler — Kemi');   // regler per ämne staplade
+    expect(host.textContent).toContain('Lektionsregler — Matematik');
   });
 
   it('ämnesflikar visas när planeringar finns; ämnesvyn visar planeringens sammanfattning', () => {

@@ -96,6 +96,18 @@ export function byggExternaPoster(p: LokalPlanering, lasar: SubjectFile['läsår
   }));
 }
 
+/**
+ * Klassfärger (del 15): varje klass får en egen, stabil textfärg så att
+ * klasser kan särskiljas när de visas tillsammans i kalender och översikt.
+ */
+const KLASS_PALETT = ['#1d4ed8', '#b91c1c', '#15803d', '#7c3aed', '#b45309', '#0e7490', '#9d174d', '#4d7c0f'];
+
+export function fargForKlass(klassNamn: string): string {
+  let hash = 0;
+  for (const ch of klassNamn) hash = (hash * 33 + ch.charCodeAt(0)) % 9973;
+  return KLASS_PALETT[hash % KLASS_PALETT.length] ?? '#1d4ed8';
+}
+
 /** Unika ämnen för filterchips: standardordning först, övriga alfabetiskt. */
 export function unikaAmnen(amnen: string[]): string[] {
   const set = new Set(amnen.filter((a) => a.trim() !== ''));

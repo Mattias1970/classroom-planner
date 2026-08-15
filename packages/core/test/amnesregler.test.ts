@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   DEFAULT_LEKTIONSREGLER, normaliseraRegler, nyttBetygsdatumId, reglerForAmne,
   sorteraBetygsdatum, validateBetygsdatum,
+  placeraBetygsdatum,
 } from '../src/domain/amnesregler.js';
+import { fargForKlass } from '../src/domain/lokal-planering.js';
 
 describe('validateBetygsdatum', () => {
   it('kräver rubrik och giltigt ISO-datum', () => {
@@ -45,5 +47,40 @@ describe('normaliseraRegler', () => {
       { rubrik: '', text: '   ' },
     ])).toEqual([{ rubrik: 'Säkerhet', text: 'Skyddsglasögon.' }]);
     expect(normaliseraRegler([{ rubrik: ' ', text: '' }])).toBeNull();
+  });
+});
+
+describe('placeraBetygsdatum — integreras i kapitelkolumnerna (del 15)', () => {
+  const spann = [
+    { kapitel: 1, forsta: '2026-08-20', sista: '2026-10-02' },
+    { kapitel: 2, forsta: '2026-10-05', sista: '2026-11-20' },
+    { kapitel: 3, forsta: '2026-11-23', sista: '2027-02-05' },
+  ];
+  it('datum hamnar i det kapitel som pågår/senast börjat', () => {
+    const ut = placeraBetygsdatum([
+      { id: 'bd-1', label: 'HT', datum: '2026-12-11' },
+      { id: 'bd-2', label: 'Mitt i kap 2', datum: '2026-11-01' },
+    ], spann);
+    expect(ut[3]?.[0]?.label).toBe('HT');
+    expect(ut[2]?.[0]?.label).toBe('Mitt i kap 2');
+  });
+  it('datum före läsåret hamnar i första kapitlet; datum efter allt i sista', () => {
+    const ut = placeraBetygsdatum([
+      { id: 'bd-1', label: 'Tidigt', datum: '2026-06-01' },
+      { id: 'bd-2', label: 'VT', datum: '2027-06-04' },
+    ], spann);
+    expect(ut[1]?.[0]?.label).toBe('Tidigt');
+    expect(ut[3]?.[0]?.label).toBe('VT');
+  });
+  it('tomt spann ger tomt resultat', () => {
+    expect(placeraBetygsdatum([{ id: 'bd-1', label: 'X', datum: '2026-12-11' }], [])).toEqual({});
+  });
+});
+
+describe('fargForKlass', () => {
+  it('stabil och giltig hexfärg; olika klasser får normalt olika färg', () => {
+    expect(fargForKlass('8B')).toBe(fargForKlass('8B'));
+    expect(fargForKlass('8B')).toMatch(/^#[0-9a-f]{6}$/);
+    expect(fargForKlass('8B')).not.toBe(fargForKlass('8F'));
   });
 });
