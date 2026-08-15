@@ -12,7 +12,7 @@ import {
   type LokalBok,
   type LokalPlanering,
   sorteraBetygsdatum,
-  type AmnesreglerMap, type Betygsdatum, type Lektionsregel,
+  type AmnesreglerMap, type Betygsdatum, type Lektionsregel, type UtskriftsLayout,
 } from '@planner/core';
 import { githubReader } from './githubReader.js';
 import { DEMO_BEGREPP, DEMO_FLIP, DEMO_LESSONS, DEMO_SUBJECT } from '../data/demo.js';
@@ -143,6 +143,14 @@ const BETYGSDATUM_KEY = 'classroom-planner.betygsdatum.v1';
 export function getBetygsdatum(): Betygsdatum[] { return sorteraBetygsdatum(read<Betygsdatum[]>(BETYGSDATUM_KEY, [])); }
 export function setBetygsdatum(lista: Betygsdatum[]): void { write(BETYGSDATUM_KEY, sorteraBetygsdatum(lista)); }
 
+const LAYOUT_KEY = 'classroom-planner.utskriftslayout.v1';
+export function getUtskriftslayout(): UtskriftsLayout | null {
+  const raw = lsGet(LAYOUT_KEY);
+  if (raw === null) return null;
+  try { return JSON.parse(raw) as UtskriftsLayout; } catch { return null; }
+}
+export function setUtskriftslayout(l: UtskriftsLayout): void { lsSet(LAYOUT_KEY, JSON.stringify(l)); }
+
 const AMNESREGLER_KEY = 'classroom-planner.amnesregler.v1';
 export function getAmnesregler(): AmnesreglerMap { return read<AmnesreglerMap>(AMNESREGLER_KEY, {}); }
 export function setAmnesregler(amne: string, regler: Lektionsregel[] | null): void {
@@ -192,6 +200,7 @@ export function exportBackup(): string {
     planeringar: lsGet(PLANERINGAR_KEY),
     betygsdatum: lsGet(BETYGSDATUM_KEY),
     amnesregler: lsGet(AMNESREGLER_KEY),
+    utskriftslayout: lsGet(LAYOUT_KEY),
   }, null, 2);
 }
 export function importBackup(json: string): void {
@@ -215,6 +224,7 @@ export function importBackup(json: string): void {
   if (typeof b.planeringar === 'string') lsSet(PLANERINGAR_KEY, b.planeringar);
   if (typeof b.betygsdatum === 'string') lsSet(BETYGSDATUM_KEY, b.betygsdatum);
   if (typeof b.amnesregler === 'string') lsSet(AMNESREGLER_KEY, b.amnesregler);
+  if (typeof b.utskriftslayout === 'string') lsSet(LAYOUT_KEY, b.utskriftslayout);
 }
 
 // ── Klassregister-overlay (FR-CM-002…008) ─────────────────────

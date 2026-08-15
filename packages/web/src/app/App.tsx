@@ -22,6 +22,7 @@ import PROTO_FILMER from '../data/prototyp-filmer.json';
 import PROMPT_LEKTIONSGEN from '../data/prompter/lektionsgenerator.md?raw';
 import PROMPT_BOKIMPORT from '../data/prompter/bokimport.md?raw';
 import { BokBibliotek } from '../views/BokBibliotek.js';
+import { LayoutDesigner } from '../views/LayoutDesigner.js';
 import { BottomNav, ScreenSizeModal, useMobile, useScreenSize, useScrollToNextChapter } from '../views/Mobil.js';
 import Kalender from '../views/Kalender.js';
 import Arsoversikt, { type InnerTab } from '../views/Arsoversikt.js';
@@ -353,6 +354,7 @@ function PlaneringView(props: {
   const meta = lib.subject.kapitelMeta[String(kapitel)];
   const accent = KAP_COLORS[kapitel] ?? '#555'; // FR-GEN-003
   const [adding, setAdding] = useState(false);
+  const [layoutOpen, setLayoutOpen] = useState(false); // del 20
   const [addAfter, setAddAfter] = useState<number | null>(null); // FR-CARD-016
   const [sel, setSel] = useState(0); // FR-GEN-007: vald lektion
   const clampSel = Math.min(sel, Math.max(0, lessons.length - 1));
@@ -440,6 +442,7 @@ function PlaneringView(props: {
           <button className="btn sec" onClick={() => gotoLesson(clampSel + 1)} aria-label="Nästa lektion">▶</button>
           <span className="badge" style={{ background: accent }}>Lektion {clampSel + 1} / {lessons.length}</span>
           <button className="btn sec" onClick={onOpenClassMgr}>⚙ Klasser</button>{/* FR-CM-001 */}
+          <button className="btn sec" onClick={() => setLayoutOpen(true)}>🖨 Layout…</button>{/* del 20 */}
         </div>
         {(() => { /* FR-LES-002: dag, vecka, månad, år + tider för vald lektion/klass */
           const s0 = slotFor(kapitel, clampSel);
@@ -491,6 +494,8 @@ function PlaneringView(props: {
         onOpenRow={(i) => { setInner('lektionsplan'); setTimeout(() => gotoLesson(i), 60); }} />}
       {inner === 'klasser' && <KlasserTab lib={lib} kapitel={kapitel} placed={placed} />}
 
+      {layoutOpen && <LayoutDesigner lib={lib} kapitel={kapitel} lessons={lessons}
+        slotFor={slotFor} classId={classId} onClose={() => setLayoutOpen(false)} />}{/* del 20 */}
       {adding && <AddLessonDialog kapitel={kapitel} lessons={lessons}
         insertGlobalIdx={globalIdxFor(kapitel, lessons.length - 1)}
         onClose={() => { setAdding(false); onChange(); }} />}
@@ -1084,6 +1089,7 @@ function ResourceRow(props: {
 }) {
   const { kapitel, lesson, links, flipCount, bookLinks, onChange } = props;
   const [adding, setAdding] = useState(false);
+  const [layoutOpen, setLayoutOpen] = useState(false); // del 20
   const [form, setForm] = useState<LessonLink>({ typ: 'film', platform: 'Binogi', titel: '', url: '' });
   const ICON: Record<ToolTyp, string> = { laxforhor: '📱', exit: '🎫', ovning: '✏️', film: '🎬', prov: '📝', flippat: '🏠' };
   const CATS: Array<[ToolTyp, string, string]> = [ /* FR-TOOL-001: specens sex typer */
