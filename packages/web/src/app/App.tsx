@@ -216,14 +216,14 @@ export default function App() {
             globalIdxFor={globalIdxFor} placed={placed} classId={classId} onChange={refresh}
             inner={inner} setInner={setInner} focus={focus} onOpenLesson={openLesson}
             mobile={mobile} onNextChapter={(k) => { setKapitel(k); }} allChapters={chapters}
-            onOpenClassMgr={() => setClassMgr(true)} />
+ />
         </div>
       )}
 
       {tab === 'kalender' && <Kalender subject={libEff.subject} placedByClass={placedByClass} onChanged={refresh} onOpenLesson={openLesson}
         planeringar={getLokalaPlaneringar()} onTaBortPlanering={(id) => { deleteLokalPlanering(id); refresh(); }} />}
       </SetupGate>
-      {tab === 'klasser' && <KlasserView subject={libEff.subject} />}
+      {tab === 'klasser' && <KlasserView subject={libEff.subject} onOpenClassMgr={() => setClassMgr(true)} />}
       {tab === 'bibliotek' && <BibliotekView lib={libEff} onLoaded={(l) => { setLib(l); refresh(); }} onChange={refresh} />}
       {tab === 'superteach' && stOn && (
         <Suspense fallback={<main className="main"><p>Laddar SuperTeach…</p></main>}>
@@ -347,9 +347,9 @@ function PlaneringView(props: {
   focus: { idx: number; token: number } | null;
   onOpenLesson: (kapitel: number, globalIdx: number) => void;
   mobile: boolean; allChapters: number[]; onNextChapter: (k: number) => void;
-  onOpenClassMgr: () => void;
+
 }) {
-  const { lib, kapitel, lessons, slotFor, globalIdxFor, placed, classId, onChange, inner, setInner, focus, onOpenLesson, mobile, allChapters, onNextChapter, onOpenClassMgr } = props;
+  const { lib, kapitel, lessons, slotFor, globalIdxFor, placed, classId, onChange, inner, setInner, focus, onOpenLesson, mobile, allChapters, onNextChapter } = props;
   const pullHint = useScrollToNextChapter(mobile && inner === 'lektionsplan', allChapters, kapitel, onNextChapter); // FR-MOB-008/009
   const meta = lib.subject.kapitelMeta[String(kapitel)];
   const accent = KAP_COLORS[kapitel] ?? '#555'; // FR-GEN-003
@@ -418,6 +418,7 @@ function PlaneringView(props: {
         <div className="no-print">
           <button className="btn sec" onClick={() => { undo() && onChange(); }}>↶ Ångra</button>{' '}
           <button className="btn sec" onClick={() => window.print()}>🖨 Skriv ut</button>{' '}
+          <button className="btn sec" onClick={() => setLayoutOpen(true)}>🖨 Layout…</button>{' '}{/* del 24: hos utskriftsraden */}
           <button className="btn sec" onClick={() => void exportWord('vecka')}>📄 Vecka → Word</button>{' '}
           <button className="btn sec" onClick={() => void exportWord('kapitel')}>📄 Kapitel → Word</button>{' '}
           <button className="btn" onClick={() => setAdding(true)}>+ Lägg till lektion</button>
@@ -441,8 +442,7 @@ function PlaneringView(props: {
           <button className="btn sec" onClick={() => gotoLesson(clampSel - 1)} aria-label="Föregående lektion">◀</button>
           <button className="btn sec" onClick={() => gotoLesson(clampSel + 1)} aria-label="Nästa lektion">▶</button>
           <span className="badge" style={{ background: accent }}>Lektion {clampSel + 1} / {lessons.length}</span>
-          <button className="btn sec" onClick={onOpenClassMgr}>⚙ Klasser</button>{/* FR-CM-001 */}
-          <button className="btn sec" onClick={() => setLayoutOpen(true)}>🖨 Layout…</button>{/* del 20 */}
+
         </div>
         {(() => { /* FR-LES-002: dag, vecka, månad, år + tider för vald lektion/klass */
           const s0 = slotFor(kapitel, clampSel);
@@ -1023,13 +1023,17 @@ function AddLessonDialog(props: {
   );
 }
 
-function KlasserView(props: { subject: SubjectFile }) {
-  const { subject } = props;
+function KlasserView(props: { subject: SubjectFile; onOpenClassMgr: () => void }) {
+  const { subject, onOpenClassMgr } = props;
   const dayName = ['', 'mån', 'tis', 'ons', 'tor', 'fre'];
   return (
     <main className="main">
-      <h2>Klasshantering</h2>
-      <p className="sub">Lektionspass per klass (läses från subject.json — redigeras i datakällan)</p>
+      <div className="head-row">
+        <h2>Klasshantering</h2>
+        <button className="btn" onClick={onOpenClassMgr}>⚙ Hantera klasser & elever</button>{/* del 24: hit från planeringen */}
+      </div>
+      <p className="sub">Lektionspass per klass (läses från subject.json — redigeras i datakällan).
+        Klasser (lägg till/arkivera) och elevregister med Excel-import hanteras via knappen ovan.</p>
       <table className="tbl">
         <thead><tr><th>Klass</th><th>Läsår</th><th>Socrative-rum</th><th>Lektionspass</th></tr></thead>
         <tbody>
