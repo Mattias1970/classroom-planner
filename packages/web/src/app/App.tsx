@@ -7,10 +7,15 @@ import {
   type FilmStateLink, type PromptTemplate, type PrototypeLink,
   distinctEditedFields, generateSlots, normalizeUrl, placeLessons, summarizeEdits,
   weeksLabel, KAP_COLORS,
+  deriveSetup, type SchemaPass,
   type LessonRecord, type PlacedLesson, type ScheduledSlot, type SubjectFile,
 } from '@planner/core';
 import { SchedulePanel, TimeBand } from '../views/SchemaOchTidsband.js';
 import { KlassHanterare } from '../views/KlassHanterare.js';
+import { SettingsButton } from '../components/SettingsButton.js';
+import { SettingsPanel } from '../components/SettingsPanel.js';
+import { SetupGate } from '../components/SetupGate.js';
+import { useSetup } from '../state/useSetup.js';
 import PROTO_FILMER from '../data/prototyp-filmer.json';
 import PROMPT_LEKTIONSGEN from '../data/prompter/lektionsgenerator.md?raw';
 import { BottomNav, ScreenSizeModal, useMobile, useScreenSize, useScrollToNextChapter } from '../views/Mobil.js';
@@ -36,10 +41,10 @@ import './styles.css';
 const SuperTeachPanel = lazy(() => import('../features/superteach/SuperTeachPanel.js'));
 const FLAG = 'classroom-planner.superteach.enabled';
 
-type Tab = 'arsoversikt' | 'planering' | 'kalender' | 'klasser' | 'bibliotek' | 'superteach' | 'installningar';
+type Tab = 'arsoversikt' | 'planering' | 'kalender' | 'klasser' | 'bibliotek' | 'superteach';
 const TABS: Array<[Tab, string]> = [
   ['arsoversikt', 'Årsöversikt'], ['planering', 'Planering'], ['kalender', 'Kalender'],
-  ['klasser', 'Klasser'], ['bibliotek', 'Bibliotek'], ['superteach', 'SuperTeach'], ['installningar', 'Inställningar'],
+  ['klasser', 'Klasser'], ['bibliotek', 'Bibliotek'], ['superteach', 'SuperTeach'],
 ];
 
 export default function App() {
@@ -72,6 +77,9 @@ export default function App() {
   const [screenSize, setScreenSize] = useScreenSize(); // FR-MOB-005…007
   const [sizeModal, setSizeModal] = useState(false);
   const [classMgr, setClassMgr] = useState(false); // FR-CM-001
+  const [settingsOpen, setSettingsOpen] = useState(false); // Del 9: kugghjulspanel
+  // Del 9: initieringstillstånd per planering (slug), spärr via canCreateOverview
+  const { setup, validation, uppdatera } = useSetup(`cp.setup.v1.${getSettings().slug}`);
   const editCount = useMemo(() => distinctEditedFields(getOverrides()), [tick]); // FR-EDIT-007
 
   const chapters = Object.keys(libEff.subject.kapitelMeta).map(Number).sort((a, b) => a - b);
@@ -112,6 +120,23 @@ export default function App() {
   const safeClassId = activeIds.includes(classId) ? classId : (activeIds[0] ?? classId);
   if (safeClassId !== classId) setTimeout(() => setClassId(safeClassId), 0);
   const placed = placedByClass[safeClassId] ?? [];
+  // Del 9: befintlig komplett data (t.ex. Prio 8) häver spärren automatiskt.
+  // deriveSetup returnerar null vid ofullständigt underlag → wizarden gäller.
+  useEffect(() => {
+    if (validation.complete) return;
+    const klassNamn = libEff.subject.meta.klasser.find((c) => c.id === safeClassId)?.namn ?? safeClassId;
+    const derived = deriveSetup({
+      lasarStart: libEff.subject.läsår.startdatum[0],
+      klass: klassNamn,
+      amne: libEff.subject.meta.ämne,
+      amnesschema: (libEff.subject.schema[safeClassId] ?? []).map((p) => ({
+        veckodag: p.day as SchemaPass['veckodag'], start: p.start, slut: p.end,
+      })),
+      bokTitel: libEff.subject.meta.lärobok,
+    });
+    if (derived) uppdatera(derived);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [libEff, safeClassId, validation.complete]);
   const slotFor = (kap: number, idx: number): ScheduledSlot | null => {
     let before = 0;
     for (const k of chapters) { if (k === kap) break; before += composeChapter(k, libEff.lessons[k] ?? []).length; }
@@ -141,8 +166,10 @@ export default function App() {
         )}
         <span className="badge">{libEff.subject.meta.lärobok.split(',')[0]}</span>
         <span className={`src ${lib.source}`}>{lib.source === 'github' ? '● GitHub' : '○ Demo'}</span>
+        <SettingsButton isOpen={settingsOpen} onClick={() => setSettingsOpen(true)} />{/* Del 9 */}
       </header>
 
+      <SetupGate setup={setup} onOppnaInitiering={() => setSettingsOpen(true)}>{/* Del 9: spärren */}
       {tab === 'arsoversikt' && (
         <Arsoversikt lib={libEff} placedByClass={placedByClass} baselineByClass={baselineByClass} onGoTo={goTo} />
       )}
@@ -171,6 +198,7 @@ export default function App() {
       )}
 
       {tab === 'kalender' && <Kalender subject={libEff.subject} placedByClass={placedByClass} onChanged={refresh} onOpenLesson={openLesson} />}
+      </SetupGate>
       {tab === 'klasser' && <KlasserView subject={libEff.subject} />}
       {tab === 'bibliotek' && <BibliotekView lib={libEff} onLoaded={(l) => { setLib(l); refresh(); }} onChange={refresh} />}
       {tab === 'superteach' && stOn && (
@@ -181,13 +209,37 @@ export default function App() {
           />
         </Suspense>
       )}
-      {tab === 'installningar' && <InstallningarView onChange={refresh} />}
+      {settingsOpen && (/* Del 9: samlad inställningspanel från kugghjulet */
+        <SettingsPanel
+          onClose={() => setSettingsOpen(false)}
+          setup={setup}
+          validation={validation}
+          uppdateraSetup={uppdatera}
+          version="utveckling · del 9"
+          renderDatakalla={() => <DatakallaSektion onOppnaBibliotek={() => { setTab('bibliotek'); setSettingsOpen(false); }} />}
+          renderKlasser={() => (
+            <div className="modal-actions">
+              <button className="btn" onClick={() => { setClassMgr(true); setSettingsOpen(false); }}>⚙ Hantera klasser</button>
+              <button className="btn sec" onClick={() => { setTab('klasser'); setSettingsOpen(false); }}>Öppna klassvyn</button>
+            </div>
+          )}
+          renderUtseende={() => (
+            <div>
+              <div className="modal-actions">
+                <button className="btn" onClick={() => { setSizeModal(true); setSettingsOpen(false); }}>📱 Skärmstorlek</button>
+              </div>
+              <p className="note">Teman kommer i en senare del.</p>
+            </div>
+          )}
+          renderBackup={() => <InstallningarInnehall onChange={refresh} />}
+        />
+      )}
 
       {mobile && (
         <BottomNav tab={tab} kapitel={kapitel} chapters={chapters}
           onTab={(t) => setTab(t)} onKapitel={(k) => { setKapitel(k); setInner('lektionsplan'); setTab('planering'); }}
           extra={[['planering', '📋 Planering'], ['klasser', '🏫 Klasser'], ['bibliotek', '📚 Bibliotek'], ['installningar', '⚙ Inställningar']]}
-          onExtra={(t) => setTab(t as Tab)} />
+          onExtra={(t) => { if (t === 'installningar') { setSettingsOpen(true); } else { setTab(t as Tab); } }} />
       )}{/* FR-MOB-003/004 */}
       {mobile && (
         <button className="fab-size" title="Skärmstorlek" onClick={() => setSizeModal(true)}>📱</button>
@@ -1354,8 +1406,8 @@ function BibliotekView(props: { lib: LoadedLibrary; onLoaded: (l: LoadedLibrary)
   );
 }
 
-// ── Inställningar: backup (sprint 19-om) ──────────────────────
-function InstallningarView(props: { onChange: () => void }) {
+// ── Inställningar: backup m.m. — nu innehåll i kugghjulspanelen (del 9) ──
+function InstallningarInnehall(props: { onChange: () => void }) {
   const [msg, setMsg] = useState('');
   const doExport = () => {
     const blob = new Blob([exportBackup()], { type: 'application/json' });
@@ -1371,8 +1423,7 @@ function InstallningarView(props: { onChange: () => void }) {
   };
   const stOn = lsGet(FLAG) === 'true';
   return (
-    <main className="main">
-      <h2>Inställningar</h2>
+    <div>
       <div className="card">
         <div className="title">Säkerhetskopiering</div>
         <p className="note">Fältändringar, egna lektioner, borttagningar och SuperTeach-evidens.</p>
@@ -1411,6 +1462,26 @@ function InstallningarView(props: { onChange: () => void }) {
           Aktivera SuperTeach-fliken (kunskapsöversikt per elev)
         </label>
       </div>
-    </main>
+    </div>
+  );
+}
+
+// ── Datakälla-sektionen i kugghjulspanelen (del 9) ─────────────
+function DatakallaSektion(props: { onOppnaBibliotek: () => void }) {
+  const s = getSettings();
+  return (
+    <div>
+      <table className="tbl">
+        <tbody>
+          <tr><td>Repo</td><td>{s.githubOwner}/{s.githubRepo}</td></tr>
+          <tr><td>Planering (slug)</td><td>{s.slug}</td></tr>
+          <tr><td>Token</td><td>{s.githubToken === '' ? '○ Ingen token sparad' : '● Sparad i denna webbläsare'}</td></tr>
+        </tbody>
+      </table>
+      <p className="note">Datakällan är skrivskyddad från appen — alla ändringar lagras lokalt som overlays.</p>
+      <div className="modal-actions">
+        <button className="btn" onClick={props.onOppnaBibliotek}>Ändra i Bibliotek → Datakällor</button>
+      </div>
+    </div>
   );
 }
