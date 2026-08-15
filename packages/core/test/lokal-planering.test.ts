@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  byggExternaPoster, fargForAmne, planeringFromSetup, planeringsId, unikaAmnen,
+  amnesSummering, byggExternaPoster, fargForAmne, planeringFromSetup, planeringsId, unikaAmnen,
 } from '../src/domain/lokal-planering.js';
 import type { SetupState } from '../src/domain/setup.js';
 import type { SubjectFile } from '../src/records/lesson-record.js';
@@ -81,5 +81,34 @@ describe('unikaAmnen', () => {
     expect(unikaAmnen(['Kemi', 'Spanska', 'Matematik', 'Kemi', 'Bild'])).toEqual([
       'Matematik', 'Kemi', 'Bild', 'Spanska',
     ]);
+  });
+});
+
+describe('amnesSummering — ämnesstyrd topbar (del 16)', () => {
+  const pl = planeringFromSetup(setup); // Kemi 8F, 2 pass/vecka
+  const bok = {
+    bok: { id: 'kemi', titel: 'Spektrum Kemi', förlag: 'Liber', ämne: 'Kemi', årskurs: 8,
+      kapitelMeta: { '1': { name: 'Atomer', col: '#111', lektioner: 2, veckor: '', term: '', sidor_samm: '', prov: '' },
+                     '2': { name: 'Reaktioner', col: '#222', lektioner: 1, veckor: '', term: '', sidor_samm: '', prov: '' } } },
+    lektioner: { 1: [
+      { id: 1, type: 'regular' as const, avsnitt: '1.1', del: 1, grön: '—', blå: '—', röd: '—', sidor_teori: '—', begrepp: '—', soc_start: '—', exit: '—', genomgang: '—', bam_gora: '—', bam_lara: '—', bam_ex: '—', ex: '—', laxa: '—' },
+      { id: 2, type: 'regular' as const, avsnitt: '1.1', del: 2, grön: '—', blå: '—', röd: '—', sidor_teori: '—', begrepp: '—', soc_start: '—', exit: '—', genomgang: '—', bam_gora: '—', bam_lara: '—', bam_ex: '—', ex: '—', laxa: '—' },
+    ] },
+  };
+
+  it('med bok i biblioteket: lektioner och kapitel ur boken, unika per titel', () => {
+    const st = amnesSummering([pl, { ...pl, id: 'kemi-8b', klassNamn: '8B' }], [bok], lasar);
+    expect(st.lektioner).toBe(2);   // samma bok räknas en gång
+    expect(st.kapitel).toBe(2);
+    expect(st.harBok).toBe(true);
+    expect(st.passPerVecka).toBe(2);
+    expect(st.bokTitlar).toEqual(['Spektrum Kemi']);
+  });
+
+  it('utan bok: lektioner = schemalagda pass under läsåret', () => {
+    const st = amnesSummering([pl], [], lasar);
+    expect(st.harBok).toBe(false);
+    expect(st.lektioner).toBeGreaterThan(50);
+    expect(st.kapitel).toBe(0);
   });
 });

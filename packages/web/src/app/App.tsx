@@ -8,7 +8,7 @@ import {
   type FilmStateLink, type PromptTemplate, type PrototypeLink,
   distinctEditedFields, generateSlots, normalizeUrl, placeLessons, summarizeEdits,
   weeksLabel, KAP_COLORS,
-  deriveSetup, isSetupComplete, planeringFromSetup, type SchemaPass,
+  ALLA_AMNEN, amnesSummering, deriveSetup, isSetupComplete, planeringFromSetup, type SchemaPass,
   type LessonRecord, type PlacedLesson, type ScheduledSlot, type SubjectFile,
 } from '@planner/core';
 import { SchedulePanel, TimeBand } from '../views/SchemaOchTidsband.js';
@@ -34,7 +34,7 @@ import {
   clearMagma, countMagmaForKap, getMagma, setMagma,
   getPrio, setPrio, PRIO_ALL,
   getClassEdits, getClassNote, setClassNote, lsGet, lsSet,
-  deleteLokalPlanering, getLokalaPlaneringar, saveLokalPlanering,
+  deleteLokalPlanering, getLokalaBocker, getLokalaPlaneringar, saveLokalPlanering,
   deleteCustomPrompt, getCustomPrompts, saveCustomPrompt,
   deleteVariant, getCacheInfo, getTokenExpiryHeader, getVariants,
   saveAsVariant, setActiveVariant, setVariantField,
@@ -86,6 +86,16 @@ export default function App() {
   // Del 9: initieringstillstånd per planering (slug), spärr via canCreateOverview
   const { setup, validation, uppdatera } = useSetup(`cp.setup.v1.${getSettings().slug}`);
   const editCount = useMemo(() => distinctEditedFields(getOverrides()), [tick]); // FR-EDIT-007
+  // Del 16: ämnesval i årsöversikten styr topbarens summering (null = datakällans ämne)
+  const [oversiktAmne, setOversiktAmne] = useState<string | null>(null);
+  const topbar = useMemo(() => {
+    const a = oversiktAmne;
+    if (a === null || a === ALLA_AMNEN || a === libEff.subject.meta.ämne) return null; // datakällans siffror
+    const pls = getLokalaPlaneringar().filter((p) => p.amne === a);
+    if (pls.length === 0) return null;
+    return { amne: a, ...amnesSummering(pls, getLokalaBocker(), libEff.subject.läsår) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oversiktAmne, libEff, tick]);
 
   const chapters = Object.keys(libEff.subject.kapitelMeta).map(Number).sort((a, b) => a - b);
   const lessons = useMemo(
@@ -165,22 +175,25 @@ export default function App() {
           <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>{label}</button>
         ))}
         <span className="spacer" />
-        <span className="stat"><b>{sequence.length}</b><small>LEKTIONER</small></span>
-        <span className="stat"><b>{weeksLabel(sequence.length, (libEff.subject.schema[classId] ?? []).length)}</b><small>VECKOR</small></span>
-        <span className="stat"><b>{chapters.length}</b><small>KAPITEL</small></span>
+        <span className="stat"><b>{topbar ? topbar.lektioner : sequence.length}</b><small>LEKTIONER</small></span>
+        <span className="stat"><b>{topbar
+          ? (topbar.harBok && topbar.passPerVecka > 0 ? weeksLabel(topbar.lektioner, topbar.passPerVecka) : '—')
+          : weeksLabel(sequence.length, (libEff.subject.schema[classId] ?? []).length)}</b><small>VECKOR</small></span>
+        <span className="stat"><b>{topbar ? (topbar.kapitel > 0 ? topbar.kapitel : '—') : chapters.length}</b><small>KAPITEL</small></span>
         {editCount > 0 && (
           <button className="stat edit-stat" title="Visa redigerade fält" onClick={() => setShowEdits(true)}>
             <b>{editCount}</b><small>REDIGERAT</small>
           </button>
         )}
-        <span className="badge">{libEff.subject.meta.lärobok.split(',')[0]}</span>
+        <span className="badge">{topbar ? (topbar.bokTitlar[0] ?? topbar.amne) : libEff.subject.meta.lärobok.split(',')[0]}</span>
         <span className={`src ${lib.source}`}>{lib.source === 'github' ? '● GitHub' : '○ Demo'}</span>
         <SettingsButton isOpen={settingsOpen} onClick={() => setSettingsOpen(true)} />{/* Del 9 */}
       </header>
 
       <SetupGate setup={setup} onOppnaInitiering={() => setSettingsOpen(true)}>{/* Del 9: spärren */}
       {tab === 'arsoversikt' && (
-        <Arsoversikt lib={libEff} placedByClass={placedByClass} baselineByClass={baselineByClass} onGoTo={goTo} />
+        <Arsoversikt lib={libEff} placedByClass={placedByClass} baselineByClass={baselineByClass} onGoTo={goTo}
+          amne={oversiktAmne ?? libEff.subject.meta.ämne} onAmne={setOversiktAmne} />
       )}
 
       {tab === 'planering' && (
@@ -237,6 +250,12 @@ export default function App() {
             return `✓ ${pl.amne} · ${pl.klassNamn} visas nu i kalendern.`;
           }}
           version="utveckling · del 13"
+          tillgangligaBocker={[
+            { titel: libEff.subject.meta.lärobok.split(',')[0] ?? libEff.subject.meta.lärobok,
+              forlag: libEff.subject.meta.lärobok.split(',').slice(1).join(',').trim(),
+              amne: libEff.subject.meta.ämne, arskurs: libEff.subject.meta.årskurs },
+            ...getLokalaBocker().map((b) => ({ titel: b.bok.titel, forlag: b.bok.förlag, amne: b.bok.ämne, arskurs: b.bok.årskurs })),
+          ]}
           renderDatum={() => <BetygsdatumEditor onChange={refresh} />}
           renderDatakalla={() => <DatakallaSektion onOppnaBibliotek={() => { setTab('bibliotek'); setSettingsOpen(false); }} />}
           renderKlasser={() => (

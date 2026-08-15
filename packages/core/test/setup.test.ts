@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   amnesbytePatch,
+  bokvalPatch,
   validateSetup,
   isSetupComplete,
   canCreateOverview,
@@ -226,5 +227,24 @@ describe('amnesbytePatch — ämnesbyte rensar schema och bok', () => {
   it('byte från tomt ämne rensar (harmlöst) och sätter det nya', () => {
     const patch = amnesbytePatch({}, 'Biologi');
     expect(patch.amne).toBe('Biologi');
+  });
+});
+
+describe('bokvalPatch — bokval styr hela menyn (del 16)', () => {
+  it('bok med annat ämne byter ämne och rensar schemat, men sätter boken', () => {
+    const patch = bokvalPatch(
+      { amne: 'Matematik', amnesschema: giltigtSchema, bok: { titel: 'Prio 8' } },
+      { titel: 'Spektrum Biologi', forlag: 'Liber', amne: 'Biologi' },
+    );
+    expect(patch).toEqual({
+      amne: 'Biologi',
+      bok: { titel: 'Spektrum Biologi', forlag: 'Liber' },
+      amnesschema: null,
+    });
+  });
+
+  it('bok med samma ämne byter bara boken', () => {
+    const patch = bokvalPatch({ amne: 'Kemi' }, { titel: 'Kemiboken 2', amne: 'Kemi' });
+    expect(patch).toEqual({ bok: { titel: 'Kemiboken 2' } });
   });
 });

@@ -225,6 +225,23 @@ export function amnesbytePatch(setup: PartialSetup, nyttAmne: string | null): Pa
 }
 
 /**
+ * Bokval (del 16): väljer man en bok ur biblioteket följer hela menyn med —
+ * ämnet sätts från boken, och byter ämnet därmed rensas schemat (regeln
+ * från amnesbytePatch), medan boken sätts till den valda.
+ */
+export function bokvalPatch(
+  setup: PartialSetup,
+  val: { titel: string; forlag?: string; amne?: string },
+): PartialSetup {
+  const bok: BokRef = { titel: val.titel, ...(val.forlag !== undefined && val.forlag !== '' ? { forlag: val.forlag } : {}) };
+  const nyttAmne = val.amne?.trim() ?? '';
+  if (nyttAmne !== '' && nyttAmne !== (setup.amne ?? '').trim()) {
+    return { amne: nyttAmne, bok, amnesschema: null };
+  }
+  return { bok };
+}
+
+/**
  * SPÄRREN: ingen översikt (eller annan planeringsvy) får skapas
  * förrän initieringen är komplett. All vy-gating går genom denna funktion.
  */

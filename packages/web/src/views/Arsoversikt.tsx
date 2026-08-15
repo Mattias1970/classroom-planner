@@ -29,6 +29,9 @@ export interface ArsoversiktProps {
   placedByClass: Record<string, Placed[]>;
   baselineByClass: Record<string, Placed[]>;
   onGoTo: (kapitel: number, inner: InnerTab) => void; // FR-GEN-005
+  /** Del 16: kontrollerat ämnesval — styr även topbarens summering. */
+  amne?: string;
+  onAmne?: (amne: string) => void;
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -43,7 +46,7 @@ function isKapiteltest(k: { type: string; avsnitt: string }): boolean {
   return k.type === 'test' && !/diagnos/i.test(k.avsnitt);
 }
 
-export default function Arsoversikt({ lib, placedByClass, baselineByClass, onGoTo }: ArsoversiktProps) {
+export default function Arsoversikt({ lib, placedByClass, baselineByClass, onGoTo, amne: amneProp, onAmne }: ArsoversiktProps) {
   const classes = lib.subject.meta.klasser.filter((c) => !c.arkiverad);
   const [classId, setClassId] = useState(classes[0]?.id ?? '8B'); // FR-YR-002
   const [popup, setPopup] = useState<KeyDateChange | null>(null);  // FR-YR-006
@@ -53,8 +56,10 @@ export default function Arsoversikt({ lib, placedByClass, baselineByClass, onGoT
   const planeringar = getLokalaPlaneringar();
   const bocker = getLokalaBocker();
   const amnen = unikaAmnen([lib.subject.meta.ämne, ...planeringar.map((p) => p.amne)]);
-  const ALLA = '__alla__';
-  const [amne, setAmne] = useState<string>(lib.subject.meta.ämne);
+  const ALLA = '__alla__'; // = ALLA_AMNEN i kärnan
+  const [amneLocal, setAmneLocal] = useState<string>(lib.subject.meta.ämne);
+  const amne = amneProp ?? amneLocal;
+  const setAmne = (a: string) => { setAmneLocal(a); onAmne?.(a); };
   const aktivtAmne = amne === ALLA || amnen.includes(amne) ? amne : lib.subject.meta.ämne;
   const visaAlla = aktivtAmne === ALLA;
   const arDatakalla = visaAlla || aktivtAmne === lib.subject.meta.ämne;
@@ -95,6 +100,12 @@ export default function Arsoversikt({ lib, placedByClass, baselineByClass, onGoT
   const countMagma = (kap: number): number =>
     countMagmaForKap(kap, (lib.lessons[kap] ?? []).map((l) => l.id));
 
+  const betygsRow = (b: { id: string; label: string; datum: string }) => (
+    <div key={`bd-${b.id}`} className="yr-key exam">{/* del 16: samma radstil som övriga */}
+      <span>🎓 {b.label}</span>
+      <b>v.{isoWeek(new Date(b.datum + 'T00:00:00Z'))} · {svDateLabel(b.datum)}</b>
+    </div>
+  );
   const keyRow = (k: KeyDate) => {
     const ch = changeByIdx.get(k.globalIdx);
     return (
@@ -157,12 +168,7 @@ export default function Arsoversikt({ lib, placedByClass, baselineByClass, onGoT
                   <div className="yr-keyrow"><span>Kapitel i boken</span><b>{Object.keys(bok.bok.kapitelMeta).length}</b></div>
                   <div className="yr-keyrow"><span>Lektioner i boken</span><b>{raknaLektioner(bok.lektioner)}</b></div>
                 </>)}
-                {betygsdatum.map((b) => (
-                  <div key={b.id} className="yr-keyrow exam">
-                    <span>🎓 {b.label}</span>
-                    <b>v.{isoWeek(new Date(b.datum + 'T00:00:00Z'))} · {svDateLabel(b.datum)}</b>
-                  </div>
-                ))}
+                {betygsdatum.map((b) => betygsRow(b))}
                 {!bok && <p className="muted">Ingen matchande bok i biblioteket — importera boken för kapitel och lektioner.</p>}
               </div>
             );
@@ -222,19 +228,19 @@ export default function Arsoversikt({ lib, placedByClass, baselineByClass, onGoT
             return dagar.length > 0 ? [{ kapitel: kap, forsta: dagar[0], sista: dagar[dagar.length - 1] }] : [];
           });
           const perKap = placeraBetygsdatum(betygsdatum, spann);
-          return chapters.map((kap) => (
-            <div key={kap} className="yr-datecol">
-              <h4 style={{ background: KAP_COLORS[kap] ?? '#555' }}>Kap {kap} – {lib.subject.kapitelMeta[String(kap)].name}</h4>
-              {keys.filter((k) => k.kapitel === kap).map(keyRow)}
-              {(perKap[kap] ?? []).map((b) => (
-                <div key={b.id} className="yr-keyrow exam">
-                  <span>🎓 {b.label}</span>
-                  <b>v.{isoWeek(new Date(b.datum + 'T00:00:00Z'))} · {svDateLabel(b.datum)}</b>
-                </div>
-              ))}
-              {keys.filter((k) => k.kapitel === kap).length === 0 && (perKap[kap] ?? []).length === 0 && <p className="muted">Inga nyckeldatum.</p>}
-            </div>
-          ));
+          return chapters.map((kap) => {
+            const rader = [
+              ...keys.filter((k) => k.kapitel === kap).map((k) => ({ datum: k.date ?? '9999-12-31', el: keyRow(k) })),
+              ...(perKap[kap] ?? []).map((b) => ({ datum: b.datum, el: betygsRow(b) })),
+            ].sort((a, b) => a.datum.localeCompare(b.datum)); // del 16: rätt plats utifrån datum
+            return (
+              <div key={kap} className="yr-datecol">
+                <h4 style={{ background: KAP_COLORS[kap] ?? '#555' }}>Kap {kap} – {lib.subject.kapitelMeta[String(kap)].name}</h4>
+                {rader.map((r) => r.el)}
+                {rader.length === 0 && <p className="muted">Inga nyckeldatum.</p>}
+              </div>
+            );
+          });
         })()}
       </div>
 

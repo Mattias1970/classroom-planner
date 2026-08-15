@@ -4,6 +4,7 @@ import {
   SETUP_FIELD_LABELS,
   STANDARD_AMNEN,
   amnesbytePatch,
+  bokvalPatch,
   describeMissing,
   veckodagsnamn,
   type PartialSetup,
@@ -23,6 +24,8 @@ export interface SetupWizardProps {
   onHamtaFranDatakallan?: () => void;
   /** Frivillig: visa komplett initiering som planering i kalendern; returnerar statusrad. */
   onVisaIKalendern?: () => string;
+  /** Bibliotekets böcker för bokväljaren; bokval styr ämne (och rensar schema vid ämnesbyte). */
+  tillgangligaBocker?: Array<{ titel: string; forlag?: string; amne: string; arskurs?: number }>;
 }
 
 const rad: React.CSSProperties = {
@@ -68,7 +71,7 @@ function faltOk(field: SetupField, v: SetupValidation): boolean {
  * skapas förrän samtliga är gröna — spärren ligger i @planner/core
  * (canCreateOverview), den här komponenten visar bara tillståndet.
  */
-export function SetupWizard({ setup, validation, uppdatera, onHamtaFranDatakallan, onVisaIKalendern }: SetupWizardProps): React.JSX.Element {
+export function SetupWizard({ setup, validation, uppdatera, onHamtaFranDatakallan, onVisaIKalendern, tillgangligaBocker = [] }: SetupWizardProps): React.JSX.Element {
   const [kalenderMsg, setKalenderMsg] = React.useState('');
   const schema = setup.amnesschema ?? [];
 
@@ -226,6 +229,24 @@ export function SetupWizard({ setup, validation, uppdatera, onHamtaFranDatakalla
         <StatusPrick ok={faltOk('bok', validation)} />
         <span style={etikett}>{SETUP_FIELD_LABELS.bok}</span>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {tillgangligaBocker.length > 0 && (
+            <select
+              aria-label="Välj bok ur biblioteket"
+              style={falt}
+              value={tillgangligaBocker.some((b) => b.titel === setup.bok?.titel) ? setup.bok?.titel ?? '' : ''}
+              onChange={(e) => {
+                const bok = tillgangligaBocker.find((b) => b.titel === e.target.value);
+                if (bok) uppdatera(bokvalPatch(setup, bok)); // hela menyn följer bokvalet
+              }}
+            >
+              <option value="" disabled>Välj bok ur biblioteket …</option>
+              {tillgangligaBocker.map((b) => (
+                <option key={b.titel} value={b.titel}>
+                  {b.titel} ({b.amne}{b.arskurs !== undefined ? `, åk ${b.arskurs}` : ''})
+                </option>
+              ))}
+            </select>
+          )}
           <input
             aria-label="Bokens titel"
             style={falt}

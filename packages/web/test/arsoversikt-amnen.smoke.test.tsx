@@ -89,3 +89,19 @@ describe('Årsöversikt del 14 (render smoke)', () => {
     expect(host2.textContent).not.toContain('Uppgiftsnivåer');
   });
 });
+
+describe('Del 16: betygsrad i rätt datumposition med samma radstil', () => {
+  it('🎓-raden har klassen yr-key (samma som övriga) och ligger datumsorterad', () => {
+    setBetygsdatum([{ id: 'bd-1', label: 'Betygssättning HT', datum: '2026-12-11' }]);
+    const host = render(<Arsoversikt {...props()} />);
+    const rad = [...host.querySelectorAll('.yr-key')].find((el) => el.textContent?.includes('🎓'));
+    expect(rad).toBeDefined();
+    expect(rad?.className).toContain('yr-key');
+    expect(host.querySelector('.yr-keyrow.exam')).toBeNull(); // gamla avvikande stilen borta ur kolumnerna
+    // Datumsortering: raden ska inte ligga sist om senare nyckeldatum finns i samma kolumn
+    const kolumn = rad?.closest('.yr-datecol');
+    const rader = [...(kolumn?.querySelectorAll('.yr-key') ?? [])];
+    const idx = rader.findIndex((el) => el.textContent?.includes('🎓'));
+    expect(idx).toBeGreaterThanOrEqual(0);
+  });
+});

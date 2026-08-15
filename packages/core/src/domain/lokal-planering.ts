@@ -9,6 +9,7 @@
 import { generateSlots, type ScheduledSlot } from '../records/schedule.js';
 import type { SubjectFile } from '../records/lesson-record.js';
 import { STANDARD_AMNEN, type SchemaPass, type SetupState } from './setup.js';
+import { raknaLektioner, type LokalBok } from './bocker.js';
 
 export interface LokalPlanering {
   id: string;
@@ -115,4 +116,38 @@ export function unikaAmnen(amnen: string[]): string[] {
     ...STANDARD_AMNEN.filter((a) => set.has(a)),
     ...[...set].filter((a) => !STANDARD_AMNEN.includes(a)).sort((a, b) => a.localeCompare(b, 'sv')),
   ];
+}
+
+/** Delat värde för "alla ämnen" i ämnesval. */
+export const ALLA_AMNEN = '__alla__';
+
+export interface AmnesSummering {
+  lektioner: number;
+  kapitel: number;
+  passPerVecka: number;
+  bokTitlar: string[];
+  /** true om minst en av planeringarnas böcker finns i biblioteket. */
+  harBok: boolean;
+}
+
+/**
+ * Topbarens summering för ett ämne (del 16): lektioner/kapitel räknas ur
+ * bibliotekets böcker (unika per titel); saknas boken används antalet
+ * schemalagda pass under läsåret som lektionstal.
+ */
+export function amnesSummering(
+  planeringar: LokalPlanering[],
+  bocker: LokalBok[],
+  lasar: SubjectFile['läsår'],
+): AmnesSummering {
+  const titlar = [...new Set(planeringar.map((p) => p.bokTitel))];
+  let lektioner = 0, kapitel = 0, harBok = false;
+  for (const titel of titlar) {
+    const bok = bocker.find((b) => b.bok.titel === titel);
+    if (bok) { harBok = true; lektioner += raknaLektioner(bok.lektioner); kapitel += Object.keys(bok.bok.kapitelMeta).length; }
+  }
+  if (!harBok) {
+    for (const p of planeringar) lektioner += byggExternaPoster(p, lasar).length;
+  }
+  return { lektioner, kapitel, passPerVecka: planeringar[0]?.schema.length ?? 0, bokTitlar: titlar, harBok };
 }

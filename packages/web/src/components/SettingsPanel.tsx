@@ -42,6 +42,7 @@ export interface SettingsPanelProps {
   onHamtaFranDatakallan?: () => void;
   /** Frivillig: spara komplett initiering som planering i kalendern; returnerar statusrad. */
   onVisaIKalendern?: () => string;
+  tillgangligaBocker?: Array<{ titel: string; forlag?: string; amne: string; arskurs?: number }>;
   /** Version/testläge som visas under Om. */
   version?: string;
   testlage?: boolean;
@@ -102,6 +103,7 @@ export function SettingsPanel({
   renderBackup,
   onHamtaFranDatakallan,
   onVisaIKalendern,
+  tillgangligaBocker,
   version = 'utveckling',
   testlage = false,
 }: SettingsPanelProps): React.JSX.Element {
@@ -157,7 +159,8 @@ export function SettingsPanel({
 
           {aktiv === 'initiering' && (
             <SetupWizard setup={setup} validation={validation} uppdatera={uppdateraSetup}
-              onHamtaFranDatakallan={onHamtaFranDatakallan} onVisaIKalendern={onVisaIKalendern} />
+              onHamtaFranDatakallan={onHamtaFranDatakallan} onVisaIKalendern={onVisaIKalendern}
+              tillgangligaBocker={tillgangligaBocker} />
           )}
 
           {aktiv === 'datum' &&
