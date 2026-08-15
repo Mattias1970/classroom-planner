@@ -15,6 +15,7 @@ import { SchedulePanel, TimeBand } from '../views/SchemaOchTidsband.js';
 import { KlassHanterare } from '../views/KlassHanterare.js';
 import { SettingsButton } from '../components/SettingsButton.js';
 import { SettingsPanel } from '../components/SettingsPanel.js';
+import { BetygsdatumEditor } from '../components/BetygsdatumEditor.js';
 import { SetupGate } from '../components/SetupGate.js';
 import { useSetup } from '../state/useSetup.js';
 import PROTO_FILMER from '../data/prototyp-filmer.json';
@@ -236,6 +237,7 @@ export default function App() {
             return `✓ ${pl.amne} · ${pl.klassNamn} visas nu i kalendern.`;
           }}
           version="utveckling · del 13"
+          renderDatum={() => <BetygsdatumEditor onChange={refresh} />}
           renderDatakalla={() => <DatakallaSektion onOppnaBibliotek={() => { setTab('bibliotek'); setSettingsOpen(false); }} />}
           renderKlasser={() => (
             <div className="modal-actions">

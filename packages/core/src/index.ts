@@ -52,3 +52,4 @@ export * from './domain/setup.js';
 export * from './domain/elever.js';
 export * from './domain/bocker.js';
 export * from './domain/lokal-planering.js';
+export * from './domain/amnesregler.js';

@@ -4,6 +4,7 @@ import type { PartialSetup, SetupValidation } from '@planner/core';
 
 export type SettingsSectionId =
   | 'initiering'
+  | 'datum'
   | 'datakalla'
   | 'klasser'
   | 'utseende'
@@ -12,6 +13,7 @@ export type SettingsSectionId =
 
 const SEKTIONER: { id: SettingsSectionId; label: string }[] = [
   { id: 'initiering', label: 'Initiering' },
+  { id: 'datum', label: 'Viktiga datum' },
   { id: 'datakalla', label: 'Datakälla' },
   { id: 'klasser', label: 'Klasser' },
   { id: 'utseende', label: 'Utseende' },
@@ -31,6 +33,7 @@ export interface SettingsPanelProps {
    * backup-export/import, repo/token-formuläret) utan att den här
    * komponenten behöver känna till dem.
    */
+  renderDatum?: () => React.ReactNode;
   renderDatakalla?: () => React.ReactNode;
   renderKlasser?: () => React.ReactNode;
   renderUtseende?: () => React.ReactNode;
@@ -92,6 +95,7 @@ export function SettingsPanel({
   setup,
   validation,
   uppdateraSetup,
+  renderDatum,
   renderDatakalla,
   renderKlasser,
   renderUtseende,
@@ -155,6 +159,11 @@ export function SettingsPanel({
             <SetupWizard setup={setup} validation={validation} uppdatera={uppdateraSetup}
               onHamtaFranDatakallan={onHamtaFranDatakallan} onVisaIKalendern={onVisaIKalendern} />
           )}
+
+          {aktiv === 'datum' &&
+            (renderDatum?.() ?? (
+              <Platshallare text="Betygssättningsdatum m.m. kopplas in här (renderDatum)." />
+            ))}
 
           {aktiv === 'datakalla' &&
             (renderDatakalla?.() ?? (

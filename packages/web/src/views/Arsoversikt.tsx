@@ -6,12 +6,17 @@
  */
 import { useMemo, useState } from 'react';
 import {
-  diffKeyDates, examWarnings, extractKeyDates, svDateLabel,
+  byggExternaPoster, diffKeyDates, examWarnings, extractKeyDates, isoWeek, normaliseraRegler,
+  raknaLektioner, reglerForAmne, svDateLabel, unikaAmnen,
   weeksLabel, KAP_COLORS,
-  type KeyDate, type KeyDateChange, type LessonRecord, type PlacedLesson, type SubjectFile,
+  type KeyDate, type KeyDateChange, type Lektionsregel, type LessonRecord, type LokalBok,
+  type LokalPlanering, type PlacedLesson, type SubjectFile,
 } from '@planner/core';
 import type { LoadedLibrary } from '../state/store.js';
-import { countMagmaForKap, effectiveField, getLinks } from '../state/store.js';
+import {
+  countMagmaForKap, effectiveField, getAmnesregler, getBetygsdatum, getLinks,
+  getLokalaBocker, getLokalaPlaneringar, setAmnesregler,
+} from '../state/store.js';
 import { resolveBegrepp } from '@planner/core';
 import PROTO_FILMER from '../data/prototyp-filmer.json';
 
@@ -41,6 +46,16 @@ export default function Arsoversikt({ lib, placedByClass, baselineByClass, onGoT
   const classes = lib.subject.meta.klasser.filter((c) => !c.arkiverad);
   const [classId, setClassId] = useState(classes[0]?.id ?? '8B'); // FR-YR-002
   const [popup, setPopup] = useState<KeyDateChange | null>(null);  // FR-YR-006
+  // Del 14: en översikt per ämne — datakällans + lokala planeringars
+  const [tick, bump] = useState(0);
+  void tick;
+  const planeringar = getLokalaPlaneringar();
+  const bocker = getLokalaBocker();
+  const amnen = unikaAmnen([lib.subject.meta.ämne, ...planeringar.map((p) => p.amne)]);
+  const [amne, setAmne] = useState(lib.subject.meta.ämne);
+  const aktivtAmne = amnen.includes(amne) ? amne : lib.subject.meta.ämne;
+  const arDatakalla = aktivtAmne === lib.subject.meta.ämne;
+  const betygsdatum = getBetygsdatum();
 
   const placed = placedByClass[classId] ?? [];
   const baseline = baselineByClass[classId] ?? [];
@@ -93,20 +108,59 @@ export default function Arsoversikt({ lib, placedByClass, baselineByClass, onGoT
     );
   };
 
+  const amnesPlaneringar = planeringar.filter((p) => p.amne === aktivtAmne);
+
   return (
     <main className="main wide">
       <div className="head-row">
-        <h2>Årsöversikt — {lib.subject.meta.lärobok.split(',')[0]}</h2>
+        <h2>Årsöversikt — {arDatakalla ? lib.subject.meta.lärobok.split(',')[0] : aktivtAmne}</h2>
         <div className="cal-controls">
-          <span className="muted">Visa datum för:</span>
-          {classes.map((c) => (
-            <button key={c.id} className={`btn sec ${classId === c.id ? 'active' : ''}`}
-              onClick={() => setClassId(c.id)}>{c.namn}</button>
-          ))}
+          {amnen.length > 1 && (<>
+            <span className="muted">Ämne:</span>
+            {amnen.map((a) => (
+              <button key={a} className={`btn sec ${aktivtAmne === a ? 'active' : ''}`}
+                onClick={() => setAmne(a)}>{a}</button>
+            ))}
+            <span className="sep" />
+          </>)}
+          {arDatakalla && (<>
+            <span className="muted">Visa datum för:</span>
+            {classes.map((c) => (
+              <button key={c.id} className={`btn sec ${classId === c.id ? 'active' : ''}`}
+                onClick={() => setClassId(c.id)}>{c.namn}</button>
+            ))}
+          </>)}
         </div>
       </div>
 
-      {warnings.length > 0 && ( /* FR-YR-007 */
+      {!arDatakalla && ( /* Del 14: ämnesöversikt för lokala planeringar */
+        <div className="yr-dates">
+          {amnesPlaneringar.map((p) => {
+            const poster = byggExternaPoster(p, lib.subject.läsår);
+            const bok = bocker.find((b: LokalBok) => b.bok.titel === p.bokTitel);
+            const forsta = poster[0];
+            const sista = poster[poster.length - 1];
+            return (
+              <div key={p.id} className="yr-datecol">
+                <h4 style={{ background: p.farg }}>{p.amne} · {p.klassNamn}</h4>
+                <div className="yr-keyrow"><span>Bok</span><b>{p.bokTitel}</b></div>
+                <div className="yr-keyrow"><span>Pass/vecka</span><b>{p.schema.length}</b></div>
+                <div className="yr-keyrow"><span>Pass under läsåret</span><b>{poster.length}</b></div>
+                {forsta && <div className="yr-keyrow"><span>Första pass</span><b>v.{forsta.week} · {svDateLabel(forsta.date)}</b></div>}
+                {sista && <div className="yr-keyrow"><span>Sista pass</span><b>v.{sista.week} · {svDateLabel(sista.date)}</b></div>}
+                {bok && (<>
+                  <div className="yr-keyrow"><span>Kapitel i boken</span><b>{Object.keys(bok.bok.kapitelMeta).length}</b></div>
+                  <div className="yr-keyrow"><span>Lektioner i boken</span><b>{raknaLektioner(bok.lektioner)}</b></div>
+                </>)}
+                {!bok && <p className="muted">Ingen matchande bok i biblioteket — importera boken för kapitel och lektioner.</p>}
+              </div>
+            );
+          })}
+          {amnesPlaneringar.length === 0 && <p className="muted">Inga planeringar för ämnet ännu.</p>}
+        </div>
+      )}
+
+      {arDatakalla && warnings.length > 0 && ( /* FR-YR-007 */
         <div className="yr-warn" role="alert">
           <b>⚠ Provdatum har förändrats</b>
           {warnings.map((w) => (
@@ -120,7 +174,7 @@ export default function Arsoversikt({ lib, placedByClass, baselineByClass, onGoT
         </div>
       )}
 
-      <div className="yr-grid">{/* FR-YR-001 */}
+      {arDatakalla && <div className="yr-grid">{/* FR-YR-001 */}
         {chapters.map((kap) => {
           const meta = lib.subject.kapitelMeta[String(kap)];
           const items = placed.filter((p) => p.kapitel === kap);
@@ -144,11 +198,23 @@ export default function Arsoversikt({ lib, placedByClass, baselineByClass, onGoT
             </div>
           );
         })}
-      </div>
+      </div>}
 
-      <h3 className="yr-h">Viktiga datum — repetition, diagnoser och prov</h3>{/* FR-YR-008 */}
+      <h3 className="yr-h">Viktiga datum{arDatakalla ? ' — repetition, diagnoser och prov' : ''}</h3>{/* FR-YR-008 + del 14 */}
       <div className="yr-dates">
-        {chapters.map((kap) => (
+        <div className="yr-datecol">{/* Del 14: betygssättning som egen rubrik, alla ämnen */}
+          <h4 style={{ background: '#7f1d1d' }}>🎓 Betygssättning</h4>
+          {betygsdatum.map((b) => (
+            <div key={b.id} className="yr-keyrow exam">
+              <span>{b.label}</span>
+              <b>v.{isoWeek(new Date(b.datum + 'T00:00:00Z'))} · {svDateLabel(b.datum)}</b>
+            </div>
+          ))}
+          {betygsdatum.length === 0 && (
+            <p className="muted">Inga betygssättningsdatum ännu — lägg till under kugghjulet → Viktiga datum.</p>
+          )}
+        </div>
+        {arDatakalla && chapters.map((kap) => (
           <div key={kap} className="yr-datecol">
             <h4 style={{ background: KAP_COLORS[kap] ?? '#555' }}>Kap {kap} – {lib.subject.kapitelMeta[String(kap)].name}</h4>
             {keys.filter((k) => k.kapitel === kap).map(keyRow)}
@@ -157,32 +223,7 @@ export default function Arsoversikt({ lib, placedByClass, baselineByClass, onGoT
         ))}
       </div>
 
-      <h3 className="yr-h">Gemensamma lektionsregler</h3>{/* FR-YR-010 */}
-      <div className="yr-rules">
-        <div className="card">
-          <div className="title">Lektionsstruktur (BAM)</div>
-          <p>Tavlan högst upp: <b>Ma [starttid]–[sluttid]</b>. Läxförhör via Socrative
-            ({classes.map((c) => `${c.namn}: ${c.socrative}`).join(' · ')}) → Genomgång →
-            Arbete → <b>Exit ticket</b> i slutet av lektionen (Socrative, samma rum).</p>
-        </div>
-        <div className="card">
-          <div className="title">Uppgiftsnivåer</div>
-          <p><span className="rg grön">Grön</span> = introduktion · <span className="rg blå">Blå</span> = E-nivå ·
-            <span className="rg röd"> Röd</span> = C/A-nivå. Varje delkapitel har två lektioner:
-            del 1 arbetar <b>Grön/Blå</b> (minimum grönt klart), del 2 arbetar <b>Blå/Röd</b> (minimum blått klart).</p>
-        </div>
-        <div className="card">
-          <div className="title">Inlämning</div>
-          <p>Gröna och blå uppgifter är <b>obligatoriska</b>: fotografera beräkningarna och ladda upp i
-            Google Classroom. Röda uppgifter är frivilliga och görs om lektionstid finns.
-            Det som inte hinns med görs klart hemma eller på stödtid.</p>
-        </div>
-        <div className="card">
-          <div className="title">Läxor</div>
-          <p>Läxa till varje delkapitel: <b>alla begrepp</b> som hör till delkapitlet.
-            Läxförhör sker i början av nästa lektion via Socrative.</p>
-        </div>
-      </div>
+      <AmnesreglerSektion amne={aktivtAmne} onChange={() => bump((t) => t + 1)} />
 
       {popup && ( /* FR-YR-006 */
         <div className="overlay" role="dialog" onClick={() => setPopup(null)}>
@@ -200,5 +241,64 @@ export default function Arsoversikt({ lib, placedByClass, baselineByClass, onGoT
         </div>
       )}
     </main>
+  );
+}
+
+
+// ── Del 14: lektionsregler per ämne (gemensam grund + anpassning) ──
+function AmnesreglerSektion(props: { amne: string; onChange: () => void }) {
+  const { amne, onChange } = props;
+  const [edit, setEdit] = useState<Lektionsregel[] | null>(null);
+  const { regler, anpassade } = reglerForAmne(getAmnesregler(), amne);
+
+  const spara = () => {
+    if (edit === null) return;
+    setAmnesregler(amne, normaliseraRegler(edit));
+    setEdit(null); onChange();
+  };
+  const aterstall = () => {
+    if (!window.confirm(`Återgå till de gemensamma reglerna för ${amne}?`)) return;
+    setAmnesregler(amne, null); setEdit(null); onChange();
+  };
+
+  return (
+    <>
+      <h3 className="yr-h">Lektionsregler — {amne}{anpassade ? ' (anpassade)' : ' (gemensam grund)'}
+        {' '}
+        {edit === null
+          ? <button className="icon-btn" title="Anpassa reglerna för ämnet"
+              onClick={() => setEdit(regler.map((r) => ({ ...r })))}>✎</button>
+          : null}
+      </h3>{/* FR-YR-010 + del 14 */}
+      {edit === null ? (
+        <div className="yr-rules">
+          {regler.map((r, i) => (
+            <div key={i} className="card">
+              <div className="title">{r.rubrik}</div>
+              <p>{r.text}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="yr-rules">
+          {edit.map((r, i) => (
+            <div key={i} className="card">
+              <input value={r.rubrik} placeholder="Rubrik"
+                onChange={(e) => setEdit(edit.map((x, xi) => (xi === i ? { ...x, rubrik: e.target.value } : x)))} />
+              <textarea rows={4} value={r.text} placeholder="Regeltext"
+                onChange={(e) => setEdit(edit.map((x, xi) => (xi === i ? { ...x, text: e.target.value } : x)))} />
+              <button className="icon-btn" title="Ta bort regel"
+                onClick={() => setEdit(edit.filter((_, xi) => xi !== i))}>🗑</button>
+            </div>
+          ))}
+          <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
+            <button className="btn sec" onClick={() => setEdit([...edit, { rubrik: '', text: '' }])}>➕ Lägg till regel</button>
+            <button className="btn sec" onClick={() => setEdit(null)}>Avbryt</button>
+            {anpassade && <button className="btn warn" onClick={aterstall}>↺ Återgå till gemensamma</button>}
+            <button className="btn" onClick={spara}>Spara för {amne}</button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

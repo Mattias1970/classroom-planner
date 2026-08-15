@@ -11,6 +11,8 @@ import {
   type Elev,
   type LokalBok,
   type LokalPlanering,
+  sorteraBetygsdatum,
+  type AmnesreglerMap, type Betygsdatum, type Lektionsregel,
 } from '@planner/core';
 import { githubReader } from './githubReader.js';
 import { DEMO_BEGREPP, DEMO_FLIP, DEMO_LESSONS, DEMO_SUBJECT } from '../data/demo.js';
@@ -136,6 +138,19 @@ export function deleteLokalPlanering(id: string): void {
   write(PLANERINGAR_KEY, getLokalaPlaneringar().filter((x) => x.id !== id));
 }
 
+// ── Betygsdatum + ämnesvisa lektionsregler (del 14) ───────────
+const BETYGSDATUM_KEY = 'classroom-planner.betygsdatum.v1';
+export function getBetygsdatum(): Betygsdatum[] { return sorteraBetygsdatum(read<Betygsdatum[]>(BETYGSDATUM_KEY, [])); }
+export function setBetygsdatum(lista: Betygsdatum[]): void { write(BETYGSDATUM_KEY, sorteraBetygsdatum(lista)); }
+
+const AMNESREGLER_KEY = 'classroom-planner.amnesregler.v1';
+export function getAmnesregler(): AmnesreglerMap { return read<AmnesreglerMap>(AMNESREGLER_KEY, {}); }
+export function setAmnesregler(amne: string, regler: Lektionsregel[] | null): void {
+  const all = getAmnesregler();
+  if (regler === null) { delete all[amne]; } else { all[amne] = regler; }
+  write(AMNESREGLER_KEY, all);
+}
+
 /** Slår ihop bas + egna − borttagna till kapitlets faktiska sekvens. */
 export function composeChapter(kapitel: number, base: LessonRecord[]): LessonRecord[] {
   const removed = new Set(getRemovedIds().filter((r) => r.kapitel === kapitel).map((r) => r.id));
@@ -175,6 +190,8 @@ export function exportBackup(): string {
     elever: lsGet(ELEVER_KEY),
     bocker: lsGet(BOCKER_KEY),
     planeringar: lsGet(PLANERINGAR_KEY),
+    betygsdatum: lsGet(BETYGSDATUM_KEY),
+    amnesregler: lsGet(AMNESREGLER_KEY),
   }, null, 2);
 }
 export function importBackup(json: string): void {
@@ -196,6 +213,8 @@ export function importBackup(json: string): void {
   if (typeof b.elever === 'string') lsSet(ELEVER_KEY, b.elever);
   if (typeof b.bocker === 'string') lsSet(BOCKER_KEY, b.bocker);
   if (typeof b.planeringar === 'string') lsSet(PLANERINGAR_KEY, b.planeringar);
+  if (typeof b.betygsdatum === 'string') lsSet(BETYGSDATUM_KEY, b.betygsdatum);
+  if (typeof b.amnesregler === 'string') lsSet(AMNESREGLER_KEY, b.amnesregler);
 }
 
 // ── Klassregister-overlay (FR-CM-002…008) ─────────────────────
