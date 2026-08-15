@@ -49,3 +49,4 @@ export * from './logic/prototyp-import.js';
 export * from './logic/prompter.js';
 export * from './logic/varianter.js';
 export * from './domain/setup.js';
+export * from './domain/elever.js';

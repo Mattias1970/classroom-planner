@@ -2,6 +2,7 @@ import React from 'react';
 import {
   SETUP_FIELDS,
   SETUP_FIELD_LABELS,
+  STANDARD_AMNEN,
   describeMissing,
   veckodagsnamn,
   type PartialSetup,
@@ -9,6 +10,9 @@ import {
   type SetupValidation,
   type SchemaPass,
 } from '@planner/core';
+
+/** Sentinel för select-alternativet "Eget ämne …". */
+const EGET_AMNE = '__eget__';
 
 export interface SetupWizardProps {
   setup: PartialSetup;
@@ -126,13 +130,42 @@ export function SetupWizard({ setup, validation, uppdatera }: SetupWizardProps):
         <label style={etikett} htmlFor="setup-amne">
           {SETUP_FIELD_LABELS.amne}
         </label>
-        <input
-          id="setup-amne"
-          style={falt}
-          placeholder="Matematik"
-          value={setup.amne ?? ''}
-          onChange={(e) => uppdatera({ amne: e.target.value })}
-        />
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <select
+            id="setup-amne"
+            style={falt}
+            value={
+              setup.amne == null || setup.amne === ''
+                ? ''
+                : STANDARD_AMNEN.includes(setup.amne)
+                  ? setup.amne
+                  : EGET_AMNE
+            }
+            onChange={(e) => {
+              const v = e.target.value;
+              uppdatera({ amne: v === EGET_AMNE ? ' ' : v });
+            }}
+          >
+            <option value="" disabled>
+              Välj ämne …
+            </option>
+            {STANDARD_AMNEN.map((a) => (
+              <option key={a} value={a}>
+                {a}
+              </option>
+            ))}
+            <option value={EGET_AMNE}>Eget ämne …</option>
+          </select>
+          {setup.amne != null && setup.amne !== '' && !STANDARD_AMNEN.includes(setup.amne) && (
+            <input
+              aria-label="Eget ämne"
+              style={falt}
+              placeholder="Skriv ämnets namn"
+              value={setup.amne.trimStart() === '' ? '' : setup.amne}
+              onChange={(e) => uppdatera({ amne: e.target.value === '' ? ' ' : e.target.value })}
+            />
+          )}
+        </div>
       </div>
 
       <div style={rad}>

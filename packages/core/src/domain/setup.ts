@@ -29,6 +29,15 @@ export const SETUP_FIELD_LABELS: Record<SetupField, string> = {
   bok: 'Bok',
 };
 
+/** Standardämnen som erbjuds i initieringen; eget ämne kan alltid anges fritt. */
+export const STANDARD_AMNEN: readonly string[] = [
+  'Matematik',
+  'Biologi',
+  'Fysik',
+  'Kemi',
+  'Teknik',
+] as const;
+
 /** Ett återkommande lektionspass i veckoschemat. Veckodag 1 = måndag … 5 = fredag. */
 export interface SchemaPass {
   veckodag: 1 | 2 | 3 | 4 | 5;

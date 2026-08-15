@@ -9,6 +9,7 @@ import {
   type SubjectFile,
 } from '@planner/core';
 import { getClassEdits, saveClassEdits } from '../state/store.js';
+import { EleverPanel } from './Elever.js';
 
 export function KlassHanterare(props: { subject: SubjectFile; onClose: () => void; onChange: () => void }) {
   const { subject, onClose, onChange } = props;
@@ -18,6 +19,7 @@ export function KlassHanterare(props: { subject: SubjectFile; onClose: () => voi
   const [lasar, setLasar] = useState(active[0]?.läsår ?? '2026/27');
   const [inheritFrom, setInheritFrom] = useState(active[0]?.id ?? '');
   const [msg, setMsg] = useState('');
+  const [eleverFor, setEleverFor] = useState<string | null>(null); // del 10
 
   const edits = getClassEdits();
   const save = (e: typeof edits) => { saveClassEdits(e); onChange(); };
@@ -107,9 +109,16 @@ export function KlassHanterare(props: { subject: SubjectFile; onClose: () => voi
               }}>⧉</button>
               <button className="icon-btn" title="Arkivera" disabled={active.length <= 1}
                 onClick={() => setArchived(c.id, true)}>🗄</button>
+              <button className="icon-btn" title="Elevregister"
+                onClick={() => setEleverFor(eleverFor === c.id ? null : c.id)}>👥</button>
             </div>
           </div>
         ))}
+        {eleverFor !== null && active.some((c) => c.id === eleverFor) && (
+          <EleverPanel classId={eleverFor}
+            klassNamn={active.find((c) => c.id === eleverFor)?.namn ?? eleverFor}
+            onChange={onChange} />
+        )}
 
         <h4 className="cm-h">LÄGG TILL NY KLASS</h4>{/* FR-CM-002 */}
         <div className="cm-add">

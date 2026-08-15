@@ -8,6 +8,7 @@ import {
   type FlipDoc,
   type LessonRecord,
   type SubjectFile,
+  type Elev,
 } from '@planner/core';
 import { githubReader } from './githubReader.js';
 import { DEMO_BEGREPP, DEMO_FLIP, DEMO_LESSONS, DEMO_SUBJECT } from '../data/demo.js';
@@ -102,6 +103,16 @@ export function removeLesson(kapitel: number, id: number): void {
 }
 export function restoreAllRemoved(): void { write(K.removed, []); }
 
+// ── Elevregister per klass (del 10) ───────────────────────────
+const ELEVER_KEY = 'classroom-planner.elever.v1';
+export function getElever(classId: string): Elev[] {
+  return read<Record<string, Elev[]>>(ELEVER_KEY, {})[classId] ?? [];
+}
+export function setElever(classId: string, elever: Elev[]): void {
+  const all = read<Record<string, Elev[]>>(ELEVER_KEY, {});
+  write(ELEVER_KEY, { ...all, [classId]: elever });
+}
+
 /** Slår ihop bas + egna − borttagna till kapitlets faktiska sekvens. */
 export function composeChapter(kapitel: number, base: LessonRecord[]): LessonRecord[] {
   const removed = new Set(getRemovedIds().filter((r) => r.kapitel === kapitel).map((r) => r.id));
@@ -138,6 +149,7 @@ export function exportBackup(): string {
     classNotes: lsGet(NOTES_KEY) ?? null,
     prompts: lsGet(PROMPTS_KEY),
     lessonVariants: lsGet(VARIANTS_KEY),
+    elever: lsGet(ELEVER_KEY),
   }, null, 2);
 }
 export function importBackup(json: string): void {
@@ -156,6 +168,7 @@ export function importBackup(json: string): void {
   if (typeof b.classNotes === 'string') lsSet(NOTES_KEY, b.classNotes);
   if (typeof b.prompts === 'string') lsSet(PROMPTS_KEY, b.prompts);
   if (typeof b.lessonVariants === 'string') lsSet(VARIANTS_KEY, b.lessonVariants);
+  if (typeof b.elever === 'string') lsSet(ELEVER_KEY, b.elever);
 }
 
 // ── Klassregister-overlay (FR-CM-002…008) ─────────────────────
