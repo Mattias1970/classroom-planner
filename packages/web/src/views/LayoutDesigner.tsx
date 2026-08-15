@@ -9,7 +9,7 @@
 import { useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  AlignmentType, BorderStyle, Document, HeadingLevel, Packer, Paragraph, TextRun,
+  AlignmentType, BorderStyle, Document, FrameAnchorType, Packer, Paragraph, TextRun,
 } from 'docx';
 import {
   BLAD, LAYOUT_FALT, LINJE_FARGER, LJUSA_FARGER, arLinje, bandHojd, defaultUtskriftslayout, faltEtikett, fyllSidled,
@@ -190,31 +190,57 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
     setTimeout(() => w.print(), 300);
   };
 
-  const exportWord = async () => { // Word: layoutens ordning/typografi som stycken
-    const ordnade = [...layout.boxar].sort((a, b) => a.yMm - b.yMm || a.xMm - b.xMm);
+  const exportWord = async () => { // del 23: WYSIWYG via Words textramar (framePr) — samma mm som skärm/PDF
+    const TW = 56.6929; // twips per mm
+    const tw = (v: number) => Math.round(v * TW);
+    const band = bandHojd(layout);
+    const TOPP = 10, BOTTEN = 10, HUVUD = 22; // mm
+    const perSida = (forsta: boolean) =>
+      Math.max(1, Math.floor((BLAD.hojdMm - TOPP - BOTTEN - (forsta ? HUVUD : 0)) / band));
     const alignOf = (a: LayoutBox['align']) =>
       a === 'center' ? AlignmentType.CENTER : a === 'right' ? AlignmentType.RIGHT : AlignmentType.LEFT;
-    const barn: Paragraph[] = [
-      new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun(`Kapitel ${kapitel} — ${kapMeta?.name ?? ''} · ${classId}`)] }),
-      new Paragraph({ children: [new TextRun({ text: `${lib.subject.meta.lärobok} · Innehåll: ${delkapitel.join(' · ')}`, size: 18 })] }),
-    ];
+    const ankare = { horizontal: FrameAnchorType.PAGE, vertical: FrameAnchorType.PAGE };
+    const ram = (xMm: number, yMm: number, wMm: number, hMm: number) => ({
+      type: 'absolute' as const, position: { x: tw(xMm), y: tw(yMm) }, width: tw(wMm), height: tw(hMm), anchor: ankare,
+    });
+    const barn: Paragraph[] = [];
+
+    // Sidhuvud (sida 1): kapitelrubrik + innehåll som ramar högst upp
+    barn.push(new Paragraph({
+      frame: ram(BLAD.marginalMm, TOPP, BLAD.breddMm - 2 * BLAD.marginalMm, 10),
+      children: [new TextRun({ text: `Kapitel ${kapitel} — ${kapMeta?.name ?? ''} · ${classId}`, bold: true, size: 32 })],
+    }));
+    barn.push(new Paragraph({
+      frame: ram(BLAD.marginalMm, TOPP + 11, BLAD.breddMm - 2 * BLAD.marginalMm, 9),
+      children: [new TextRun({ text: `${lib.subject.meta.lärobok} · Innehåll: ${delkapitel.join(' · ')}`, size: 16 })],
+    }));
+
+    let sida = 0, radPaSida = 0;
     lessons.forEach((l, i) => {
-      if (i > 0) barn.push(new Paragraph({ // del 22b: tjock linje mellan lektioner även i Word
-        border: { bottom: { style: BorderStyle.SINGLE, size: Math.round(1 * 2.835 * 8), color: '334155' } },
-        children: [],
-      }));
-      barn.push(new Paragraph({ children: [] }));
-      for (const b of ordnade) {
-        if (arLinje(b)) { // vågrät linje → styckekant med vald tjocklek/färg (lodräta kan inte flöda i Word)
-          if (b.wMm >= b.hMm) barn.push(new Paragraph({
-            border: { bottom: { style: BorderStyle.SINGLE, size: Math.round((b.linjeMm ?? 0.6) * 2.835 * 8), color: (b.linjeFarg ?? '#334155').replace('#', '') } },
-            children: [],
+      const kapacitet = perSida(sida === 0);
+      if (radPaSida >= kapacitet) { // ny sida
+        sida += 1; radPaSida = 0;
+        barn.push(new Paragraph({ pageBreakBefore: true, children: [] }));
+      }
+      const bandTopp = TOPP + (sida === 0 ? HUVUD : 0) + radPaSida * band;
+      for (const b of layout.boxar) {
+        if (arLinje(b)) { // linjer: skuggad ram med linjens tjocklek — även lodräta fungerar nu
+          const t = b.linjeMm ?? 0.6, f = (b.linjeFarg ?? '#334155').replace('#', '');
+          const vagrat = b.wMm >= b.hMm;
+          barn.push(new Paragraph({
+            frame: vagrat
+              ? ram(b.xMm, bandTopp + b.yMm + b.hMm / 2 - t / 2, b.wMm, t)
+              : ram(b.xMm + b.wMm / 2 - t / 2, bandTopp + b.yMm, t, b.hMm),
+            shading: { type: 'clear' as const, fill: f },
+            spacing: { before: 0, after: 0, line: Math.max(20, tw(t) * 0.9), lineRule: 'exact' as const },
+            children: [new TextRun({ text: '', size: 2 })],
           }));
           continue;
         }
         const varde = layoutFaltVarde(b.falt, l, extraFor(i));
-        if (varde === '' || varde === '—') continue; // del 22b: skriv inte ut tomma fält
+        if (varde === '' || varde === '—') continue;
         barn.push(new Paragraph({
+          frame: ram(b.xMm, bandTopp + b.yMm, b.wMm, b.hMm),
           alignment: alignOf(b.align),
           ...(b.bakgrund !== undefined && b.bakgrund !== ''
             ? { shading: { type: 'clear' as const, fill: b.bakgrund.replace('#', '') } } : {}),
@@ -230,14 +256,28 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
           ],
         }));
       }
+      // tjock linje mellan lektioner — som ram, samma som PDF
+      if (i < lessons.length - 1 && radPaSida < perSida(sida === 0) - 1) {
+        barn.push(new Paragraph({
+          frame: ram(0, bandTopp + band - 0.5, BLAD.breddMm, 1),
+          shading: { type: 'clear' as const, fill: '334155' },
+          spacing: { before: 0, after: 0, line: 40, lineRule: 'exact' as const },
+          children: [new TextRun({ text: '', size: 2 })],
+        }));
+      }
+      radPaSida += 1;
     });
-    const doc = new Document({ sections: [{ children: barn }] });
+
+    const doc = new Document({ sections: [{
+      properties: { page: { size: { width: tw(BLAD.breddMm), height: tw(BLAD.hojdMm) }, margin: { top: 240, bottom: 240, left: 240, right: 240 } } },
+      children: barn,
+    }] });
     const blob = await Packer.toBlob(doc);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `planering_kap${kapitel}_${classId}.docx`;
     a.click(); URL.revokeObjectURL(a.href);
-    setMsg('✓ Wordfil nedladdad. (Word följer layoutens ordning och typografi; PDF är exakt.)');
+    setMsg('✓ Wordfil nedladdad — samma placering som på skärmen (Words textramar).');
   };
 
   const exempel = lessons[0];
