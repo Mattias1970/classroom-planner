@@ -7,6 +7,7 @@
  * kapitelrubrik. Export: PDF via utskriftsvyn (Spara som PDF) och Word.
  */
 import { useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlignmentType, Document, HeadingLevel, Packer, Paragraph, TextRun,
 } from 'docx';
@@ -183,9 +184,11 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
 
   const exempel = lessons[0];
 
-  return (
-    <div className="overlay" role="dialog" aria-label="Layout för utskrift" onClick={onClose}>
-      <div className="modal" style={{ width: 'min(980px, 96vw)', maxHeight: '94vh', overflow: 'auto' }}
+  return createPortal(
+    <div className="overlay" role="dialog" aria-label="Layout för utskrift" onClick={onClose}
+      style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '16px 0' }}>
+      {/* del 20b: portal till body + toppförankrad — öppnas alltid högst upp */}
+      <div className="modal" style={{ width: 'min(980px, 96vw)', margin: 0 }}
         onClick={(e) => e.stopPropagation()}>
         <div className="head-row"><h3>🖨 Layout för utskrift — kapitel {kapitel}</h3>
           <button className="icon-btn" onClick={onClose}>✕</button></div>
@@ -293,6 +296,7 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

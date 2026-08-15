@@ -11,7 +11,7 @@ function render(el: React.ReactElement): HTMLElement {
   const host = document.createElement('div');
   document.body.appendChild(host);
   act(() => { createRoot(host).render(el); });
-  return host;
+  return document.body; // designern portaleras till body (del 20b)
 }
 
 function props() {
@@ -26,7 +26,7 @@ function props() {
   };
 }
 
-beforeEach(() => { localStorage.clear(); });
+beforeEach(() => { localStorage.clear(); document.body.innerHTML = ''; });
 
 describe('LayoutDesigner (render smoke)', () => {
   it('visar fältpalett med lektionsplaneringens fält samt exportknappar', () => {
