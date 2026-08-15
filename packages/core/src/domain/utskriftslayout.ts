@@ -39,6 +39,25 @@ export const LINJE_FARGER: ReadonlyArray<{ namn: string; hex: string }> = [
   { namn: 'Röd', hex: '#b91c1c' },
 ] as const;
 
+/** Mörka plattor för rubrikytor (del 25) — texten blir automatiskt vit. */
+export const MORKA_FARGER: ReadonlyArray<{ namn: string; hex: string }> = [
+  { namn: 'Marinblå', hex: '#1f3a5f' },
+  { namn: 'Blå', hex: '#2563eb' },
+  { namn: 'Grön', hex: '#15803d' },
+  { namn: 'Orange', hex: '#b45309' },
+  { namn: 'Mörkgrå', hex: '#334155' },
+] as const;
+
+/** Textfärg med kontrast mot plattan: vit på mörk, mörk på ljus/ingen. */
+export function textFargForPlatta(hex: string | undefined): string {
+  if (hex === undefined || hex === '') return '#111111';
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  if (!m) return '#111111';
+  const [r, g, b] = [m[1], m[2], m[3]].map((x) => parseInt(x ?? '0', 16) / 255);
+  const luma = 0.2126 * (r ?? 0) + 0.7152 * (g ?? 0) + 0.0722 * (b ?? 0);
+  return luma < 0.55 ? '#ffffff' : '#111111';
+}
+
 /** Är ytan en fristående linje (utan innehåll)? Vågrät om bredare än hög. */
 export function arLinje(b: { falt: string }): boolean { return b.falt === 'linje'; }
 
@@ -56,6 +75,7 @@ export interface UtskriftsLayout { boxar: LayoutBox[] }
 
 /** Alla fält ur lektionsplaneringen som kan placeras på bladet. */
 export const LAYOUT_FALT: ReadonlyArray<{ id: string; etikett: string }> = [
+  { id: 'tavla', etikett: 'Tavlan' },
   { id: 'lektionsnr', etikett: 'Lektionsnummer' },
   { id: 'datum', etikett: 'Datum' },
   { id: 'tid', etikett: 'Tid' },
@@ -71,9 +91,9 @@ export const LAYOUT_FALT: ReadonlyArray<{ id: string; etikett: string }> = [
   { id: 'genomgang', etikett: 'Genomgång' },
   { id: 'soc_start', etikett: 'Läxförhör (Socrative)' },
   { id: 'exit', etikett: 'Exit ticket' },
-  { id: 'bam_gora', etikett: 'BAM — göra' },
-  { id: 'bam_lara', etikett: 'BAM — lära' },
-  { id: 'bam_ex', etikett: 'BAM — exempel' },
+  { id: 'bam_gora', etikett: 'Vad ska vi göra' },
+  { id: 'bam_lara', etikett: 'Vad ska vi lära oss' },
+  { id: 'bam_ex', etikett: 'Exempel vi räknar' },
   { id: 'ex', etikett: 'Exempel' },
   { id: 'laxa', etikett: 'Läxa' },
   { id: 'linje', etikett: 'Linje' },
@@ -88,12 +108,13 @@ const TYP_ETIKETT: Record<string, string> = {
   review: 'Repetition', ovaformagor: 'Öva förmågor', exam: 'PROV',
 };
 
-export interface LayoutExtra { datum?: string; tid?: string; lektionsNr?: number }
+export interface LayoutExtra { datum?: string; tid?: string; lektionsNr?: number; amne?: string }
 
 /** Värdet för ett layoutfält, för en given lektion. */
 export function layoutFaltVarde(faltId: string, lesson: LessonRecord, extra: LayoutExtra = {}): string {
   switch (faltId) {
     case 'linje': return ''; // fristående linje — inget innehåll (del 22)
+    case 'tavla': return [extra.amne, extra.tid].filter((v) => v !== undefined && v !== '').join('  '); // 'Ma  09:00–10:00'
     case 'lektionsnr': return extra.lektionsNr !== undefined ? `L${extra.lektionsNr}` : '';
     case 'datum': return extra.datum ?? '';
     case 'tid': return extra.tid ?? '';
@@ -210,4 +231,35 @@ export function rektanglarKorsar(
 ): boolean {
   return a.xMm < b.xMm + b.wMm && a.xMm + a.wMm > b.xMm
     && a.yMm < b.yMm + b.hMm && a.yMm + a.hMm > b.yMm;
+}
+
+/**
+ * Layoutmall: Lektionskortet (del 25) — återger HTML-lägets lektionsram:
+ * mörk Tavlan-rad (ämne + tid), rubrikraden, Genomgång, Arbete och
+ * Exit ticket som färgade ytor med ram, därunder "Vad ska vi göra",
+ * "Vad ska vi lära oss" och "Exempel vi räknar", sist Begrepp och Läxa.
+ */
+export function lektionskortLayout(): UtskriftsLayout {
+  const M = BLAD.marginalMm, W = BLAD.breddMm - 2 * M;
+  const box = (
+    id: string, falt: string, xMm: number, yMm: number, wMm: number, hMm: number,
+    fontPt: number, extra: Partial<LayoutBox> = {},
+  ): LayoutBox => ({ id, falt, xMm, yMm, wMm, hMm, fontPt, align: 'left', visaEtikett: true, ...extra });
+  return {
+    boxar: [
+      box('box-1', 'lektionsnr', M, 3, 16, 7, 12, { visaEtikett: false }),
+      box('box-2', 'avsnitt', M + 18, 3, W - 78, 7, 12, { visaEtikett: false }),
+      box('box-3', 'sidor_teori', M + W - 58, 3, 34, 7, 9),
+      box('box-4', 'datum', M + W - 22, 3, 22, 7, 9, { visaEtikett: false, align: 'right' }),
+      box('box-5', 'tavla', M, 12, W, 9, 12, { visaEtikett: false, bakgrund: '#1f3a5f' }),
+      box('box-6', 'genomgang', M, 23, W, 22, 10, { bakgrund: '#e8f0fe', ram: true }),
+      box('box-7', 'arbete', M, 47, W * 0.62, 9, 9, { bakgrund: '#e7f6ec', ram: true }),
+      box('box-8', 'exit', M + W * 0.62 + 2, 47, W * 0.38 - 2, 9, 9, { bakgrund: '#fef7e0', ram: true }),
+      box('box-9', 'bam_gora', M, 58, W / 2 - 2, 16, 9, { ram: true }),
+      box('box-10', 'bam_lara', M + W / 2 + 2, 58, W / 2 - 2, 16, 9, { ram: true }),
+      box('box-11', 'bam_ex', M, 76, W, 16, 9, { bakgrund: '#f2f4f7', ram: true }),
+      box('box-12', 'begrepp', M, 94, W * 0.62, 8, 9),
+      box('box-13', 'laxa', M + W * 0.62 + 2, 94, W * 0.38 - 2, 8, 9, { bakgrund: '#fef7e0' }),
+    ],
+  };
 }

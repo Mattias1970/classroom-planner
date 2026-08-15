@@ -12,8 +12,8 @@ import {
   AlignmentType, BorderStyle, Document, FrameAnchorType, Packer, Paragraph, TextRun,
 } from 'docx';
 import {
-  BLAD, LAYOUT_FALT, LINJE_FARGER, LJUSA_FARGER, arLinje, bandHojd, defaultUtskriftslayout, faltEtikett, fyllSidled,
-  rektanglarKorsar,
+  BLAD, LAYOUT_FALT, LINJE_FARGER, LJUSA_FARGER, MORKA_FARGER, arLinje, bandHojd, defaultUtskriftslayout, faltEtikett, fyllSidled,
+  lektionskortLayout, rektanglarKorsar, textFargForPlatta,
   layoutFaltVarde, normaliseraRuta, nyBoxId, snapBox, svDateLabel,
   type LayoutBox, type ScheduledSlot, type LessonRecord, type SnapGuide, type UtskriftsLayout,
 } from '@planner/core';
@@ -148,6 +148,7 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
       lektionsNr: idx + 1,
       datum: slot ? svDateLabel(slot.date) : '',
       tid: slot ? `${slot.start}–${slot.end}` : '',
+      amne: lib.subject.meta.ämne.slice(0, 2), // 'Ma', 'Bi', 'Ke' … som på tavlan
     };
   };
   const delkapitel = useMemo(
@@ -174,7 +175,7 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
       const ram = b.ram === true ? 'border:0.35mm solid #333;' : '';
       const platta = b.bakgrund !== undefined && b.bakgrund !== '' ? `background:${b.bakgrund};` : '';
       return `<div style="position:absolute;left:${b.xMm}mm;top:${b.yMm}mm;width:${b.wMm}mm;height:${b.hMm}mm;` +
-        `${ram}${platta}box-sizing:border-box;padding:0.6mm;` +
+        `${ram}${platta}box-sizing:border-box;padding:0.6mm;color:${textFargForPlatta(b.bakgrund)};` +
         `font-size:${b.fontPt}pt;text-align:${b.align};overflow:hidden;line-height:1.25">${text}</div>`;
     };
     const bandHtml = lessons.map((l, i) =>
@@ -251,8 +252,8 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
             right: { style: BorderStyle.SINGLE, size: 8, color: '333333' },
           } } : {}),
           children: [
-            ...(b.visaEtikett ? [new TextRun({ text: `${faltEtikett(b.falt)}: `, bold: true, size: b.fontPt * 2 })] : []),
-            new TextRun({ text: varde, size: b.fontPt * 2 }),
+            ...(b.visaEtikett ? [new TextRun({ text: `${faltEtikett(b.falt)}: `, bold: true, size: b.fontPt * 2, color: textFargForPlatta(b.bakgrund).replace('#', '') })] : []),
+            new TextRun({ text: varde, size: b.fontPt * 2, color: textFargForPlatta(b.bakgrund).replace('#', '') }),
           ],
         }));
       }
@@ -346,7 +347,7 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
               </div>
               <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
                 <span className="muted">Platta:</span>
-                {LJUSA_FARGER.map((f) => (
+                {[...LJUSA_FARGER, ...MORKA_FARGER].map((f) => (
                   <button key={f.namn} title={f.namn}
                     onClick={() => uppdateraValda({ bakgrund: f.hex })}
                     style={{
@@ -363,6 +364,7 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
               <button className="btn" onClick={skrivUt}>⬇ PDF (Skriv ut)</button>
               <button className="btn sec" onClick={() => void exportWord()}>⬇ Word (.docx)</button>
               <button className="btn sec" onClick={() => { spara(defaultUtskriftslayout()); setValda([]); }}>↺ Standardlayout</button>
+              <button className="btn sec" onClick={() => { spara(lektionskortLayout()); setValda([]); }}>🃏 Lektionskortet</button>{/* del 25 */}
             </div>
             {msg && <p className="status">{msg}</p>}
           </div>
@@ -408,6 +410,7 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
                       border: valda.includes(b.id) ? '2px solid #175cd3' : b.ram === true ? '1.5px solid #344054' : '1px solid #cbd5e1',
                       background: b.bakgrund !== undefined && b.bakgrund !== '' ? b.bakgrund : 'rgba(23,92,211,0.04)',
                       overflow: 'hidden', cursor: 'move',
+                      color: textFargForPlatta(b.bakgrund),
                       fontSize: b.fontPt * PX * 0.353, textAlign: b.align, lineHeight: 1.25, padding: 1,
                     }}
                     title={faltEtikett(b.falt)}>

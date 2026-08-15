@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  BLAD, LAYOUT_FALT, LINJE_FARGER, LJUSA_FARGER, arLinje, rektanglarKorsar, bandHojd, defaultUtskriftslayout, fyllSidled, layoutFaltVarde,
+  BLAD, LAYOUT_FALT, LINJE_FARGER, LJUSA_FARGER, arLinje, lektionskortLayout, rektanglarKorsar, textFargForPlatta, bandHojd, defaultUtskriftslayout, fyllSidled, layoutFaltVarde,
   normaliseraRuta, nyBoxId, snapBox,
 } from '../src/domain/utskriftslayout.js';
 import type { LessonRecord } from '../src/records/lesson-record.js';
@@ -114,5 +114,33 @@ describe('Fristående linjer (del 22)', () => {
   it('LINJE_FARGER har svart först och giltiga hexfärger', () => {
     expect(LINJE_FARGER[0]?.namn).toBe('Svart');
     for (const f of LINJE_FARGER) expect(f.hex).toMatch(/^#[0-9a-f]{6}$/);
+  });
+});
+
+describe('Lektionskortsmallen och pedagogiska rubriker (del 25)', () => {
+  it('BAM-etiketterna är ersatta i katalogen', () => {
+    const e = (id: string) => LAYOUT_FALT.find((f) => f.id === id)?.etikett;
+    expect(e('bam_gora')).toBe('Vad ska vi göra');
+    expect(e('bam_lara')).toBe('Vad ska vi lära oss');
+    expect(e('bam_ex')).toBe('Exempel vi räknar');
+    expect(LAYOUT_FALT.some((f) => f.etikett.includes('BAM'))).toBe(false);
+  });
+  it('tavla-fältet blir ämne + tid', () => {
+    expect(layoutFaltVarde('tavla', lektion, { amne: 'Ma', tid: '09:00–10:00' })).toBe('Ma  09:00–10:00');
+    expect(layoutFaltVarde('tavla', lektion, {})).toBe('');
+  });
+  it('textFargForPlatta ger vit text på mörka plattor och mörk på ljusa', () => {
+    expect(textFargForPlatta('#1f3a5f')).toBe('#ffffff');
+    expect(textFargForPlatta('#e7f6ec')).toBe('#111111');
+    expect(textFargForPlatta(undefined)).toBe('#111111');
+  });
+  it('lektionskortLayout innehåller kortets delar och ryms på bladet', () => {
+    const l = lektionskortLayout();
+    for (const falt of ['tavla', 'genomgang', 'arbete', 'exit', 'bam_gora', 'bam_lara', 'bam_ex', 'begrepp', 'laxa']) {
+      expect(l.boxar.some((b) => b.falt === falt)).toBe(true);
+    }
+    expect(l.boxar.find((b) => b.falt === 'tavla')?.bakgrund).toBe('#1f3a5f');
+    expect(bandHojd(l)).toBeLessThan(120);
+    for (const b of l.boxar) expect(b.xMm + b.wMm).toBeLessThanOrEqual(BLAD.breddMm);
   });
 });
