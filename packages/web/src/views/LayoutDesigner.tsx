@@ -160,7 +160,8 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
     if (!w) { setMsg('✗ Popup blockerad — tillåt popupfönster för utskrift.'); return; }
     const band = bandHojd(layout);
     const boxHtml = (b: LayoutBox, lesson: LessonRecord, idx: number) => {
-      const varde = layoutFaltVarde(b.falt, lesson, extraFor(idx));
+      const raa = layoutFaltVarde(b.falt, lesson, extraFor(idx));
+      const varde = raa === '—' ? '' : raa; // del 22b: '—' skrivs inte ut
       const text = b.visaEtikett && varde !== '' ? `<b>${faltEtikett(b.falt)}:</b> ${varde}` : varde;
       if (arLinje(b)) {
         const t = b.linjeMm ?? 0.6, f = b.linjeFarg ?? '#334155';
@@ -198,6 +199,10 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
       new Paragraph({ children: [new TextRun({ text: `${lib.subject.meta.lärobok} · Innehåll: ${delkapitel.join(' · ')}`, size: 18 })] }),
     ];
     lessons.forEach((l, i) => {
+      if (i > 0) barn.push(new Paragraph({ // del 22b: tjock linje mellan lektioner även i Word
+        border: { bottom: { style: BorderStyle.SINGLE, size: Math.round(1 * 2.835 * 8), color: '334155' } },
+        children: [],
+      }));
       barn.push(new Paragraph({ children: [] }));
       for (const b of ordnade) {
         if (arLinje(b)) { // vågrät linje → styckekant med vald tjocklek/färg (lodräta kan inte flöda i Word)
@@ -208,7 +213,7 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
           continue;
         }
         const varde = layoutFaltVarde(b.falt, l, extraFor(i));
-        if (varde === '') continue;
+        if (varde === '' || varde === '—') continue; // del 22b: skriv inte ut tomma fält
         barn.push(new Paragraph({
           alignment: alignOf(b.align),
           ...(b.bakgrund !== undefined && b.bakgrund !== ''
