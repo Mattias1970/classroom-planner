@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  amnesbytePatch,
   validateSetup,
   isSetupComplete,
   canCreateOverview,
@@ -189,5 +190,41 @@ describe('describeMissing', () => {
 
   it('bekräftar komplett initiering', () => {
     expect(describeMissing(validateSetup(komplett))).toBe('Initieringen är komplett.');
+  });
+});
+
+describe('amnesbytePatch — ämnesbyte rensar schema och bok', () => {
+  const medAllt: PartialSetup = {
+    lasar: '2026/2027',
+    klass: '8B',
+    amne: 'Matematik',
+    amnesschema: giltigtSchema,
+    bok: { titel: 'Prio Matematik 8' },
+  };
+
+  it('byte till annat ämne nollställer amnesschema och bok', () => {
+    const patch = amnesbytePatch(medAllt, 'Kemi');
+    expect(patch).toEqual({ amne: 'Kemi', amnesschema: null, bok: null });
+    const efter = { ...medAllt, ...patch };
+    const v = validateSetup(efter);
+    expect(v.complete).toBe(false);
+    expect(v.missing).toContain('amnesschema');
+    expect(v.missing).toContain('bok');
+    expect(canCreateOverview(efter)).toBe(false); // spärren stänger igen
+  });
+
+  it('samma ämne (inkl. whitespace-skillnad) rensar ingenting', () => {
+    expect(amnesbytePatch(medAllt, ' Matematik ')).toEqual({ amne: ' Matematik ' });
+  });
+
+  it('läsår och klass överlever ämnesbytet', () => {
+    const efter = { ...medAllt, ...amnesbytePatch(medAllt, 'Teknik') };
+    expect(efter.lasar).toBe('2026/2027');
+    expect(efter.klass).toBe('8B');
+  });
+
+  it('byte från tomt ämne rensar (harmlöst) och sätter det nya', () => {
+    const patch = amnesbytePatch({}, 'Biologi');
+    expect(patch.amne).toBe('Biologi');
   });
 });

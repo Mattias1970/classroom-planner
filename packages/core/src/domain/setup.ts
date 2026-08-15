@@ -209,6 +209,22 @@ export function isSetupComplete(setup: PartialSetup): setup is SetupState {
 }
 
 /**
+ * Ämnesbyte: schema och bok hör till ett ämne. När ämnet byts måste båda
+ * anges på nytt — inget får ligga kvar från ett annat ämne. Returnerar
+ * patchen som ska appliceras på tillståndet.
+ *
+ * Gäller *byte av ämne* (t.ex. via väljaren). Att döpa om samma egna ämne
+ * medan man skriver är inte ett byte — anroparen använder då en vanlig
+ * fältuppdatering i stället.
+ */
+export function amnesbytePatch(setup: PartialSetup, nyttAmne: string | null): PartialSetup {
+  const forra = (setup.amne ?? '').trim();
+  const nytt = (nyttAmne ?? '').trim();
+  if (forra === nytt) return { amne: nyttAmne };
+  return { amne: nyttAmne, amnesschema: null, bok: null };
+}
+
+/**
  * SPÄRREN: ingen översikt (eller annan planeringsvy) får skapas
  * förrän initieringen är komplett. All vy-gating går genom denna funktion.
  */

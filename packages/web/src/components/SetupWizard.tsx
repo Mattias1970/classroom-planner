@@ -3,6 +3,7 @@ import {
   SETUP_FIELDS,
   SETUP_FIELD_LABELS,
   STANDARD_AMNEN,
+  amnesbytePatch,
   describeMissing,
   veckodagsnamn,
   type PartialSetup,
@@ -18,6 +19,8 @@ export interface SetupWizardProps {
   setup: PartialSetup;
   validation: SetupValidation;
   uppdatera: (patch: PartialSetup) => void;
+  /** Frivillig: fyll fälten från datakällans kompletta planering. */
+  onHamtaFranDatakallan?: () => void;
 }
 
 const rad: React.CSSProperties = {
@@ -63,7 +66,7 @@ function faltOk(field: SetupField, v: SetupValidation): boolean {
  * skapas förrän samtliga är gröna — spärren ligger i @planner/core
  * (canCreateOverview), den här komponenten visar bara tillståndet.
  */
-export function SetupWizard({ setup, validation, uppdatera }: SetupWizardProps): React.JSX.Element {
+export function SetupWizard({ setup, validation, uppdatera, onHamtaFranDatakallan }: SetupWizardProps): React.JSX.Element {
   const schema = setup.amnesschema ?? [];
 
   const uppdateraPass = (index: number, patch: Partial<SchemaPass>): void => {
@@ -143,7 +146,8 @@ export function SetupWizard({ setup, validation, uppdatera }: SetupWizardProps):
             }
             onChange={(e) => {
               const v = e.target.value;
-              uppdatera({ amne: v === EGET_AMNE ? ' ' : v });
+              // Ämnesbyte: schema och bok rensas (regeln ligger i kärnan).
+              uppdatera(amnesbytePatch(setup, v === EGET_AMNE ? ' ' : v));
             }}
           >
             <option value="" disabled>
@@ -165,6 +169,9 @@ export function SetupWizard({ setup, validation, uppdatera }: SetupWizardProps):
               onChange={(e) => uppdatera({ amne: e.target.value === '' ? ' ' : e.target.value })}
             />
           )}
+          <p style={{ fontSize: 12, color: '#667085', margin: '4px 0 0', width: '100%' }}>
+            Byter du ämne måste schema och bok anges på nytt — de följer ämnet.
+          </p>
         </div>
       </div>
 
@@ -239,6 +246,11 @@ export function SetupWizard({ setup, validation, uppdatera }: SetupWizardProps):
         {SETUP_FIELDS.length} obligatoriska delar. Planeringsvyerna låses upp först när alla är
         gröna.
       </p>
+      {onHamtaFranDatakallan && (
+        <button type="button" onClick={onHamtaFranDatakallan}>
+          ↺ Hämta från datakällan
+        </button>
+      )}
     </div>
   );
 }

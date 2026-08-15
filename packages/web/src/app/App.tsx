@@ -120,12 +120,12 @@ export default function App() {
   const safeClassId = activeIds.includes(classId) ? classId : (activeIds[0] ?? classId);
   if (safeClassId !== classId) setTimeout(() => setClassId(safeClassId), 0);
   const placed = placedByClass[safeClassId] ?? [];
-  // Del 9: befintlig komplett data (t.ex. Prio 8) häver spärren automatiskt.
-  // deriveSetup returnerar null vid ofullständigt underlag → wizarden gäller.
-  useEffect(() => {
-    if (validation.complete) return;
+  // Del 9/11: befintlig komplett data (t.ex. Prio 8) häver spärren automatiskt —
+  // men bara i ett ORÖRT setup. Så fort användaren själv ändrat något (t.ex.
+  // bytt ämne) skriver härledningen aldrig över; wizarden gäller.
+  const deriveFromSource = useMemo(() => () => {
     const klassNamn = libEff.subject.meta.klasser.find((c) => c.id === safeClassId)?.namn ?? safeClassId;
-    const derived = deriveSetup({
+    return deriveSetup({
       lasarStart: libEff.subject.läsår.startdatum[0],
       klass: klassNamn,
       amne: libEff.subject.meta.ämne,
@@ -134,9 +134,13 @@ export default function App() {
       })),
       bokTitel: libEff.subject.meta.lärobok,
     });
+  }, [libEff, safeClassId]);
+  useEffect(() => {
+    if (Object.keys(setup).length > 0) return; // orört setup krävs — rör aldrig användarens val
+    const derived = deriveFromSource();
     if (derived) uppdatera(derived);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [libEff, safeClassId, validation.complete]);
+  }, [deriveFromSource, setup]);
   const slotFor = (kap: number, idx: number): ScheduledSlot | null => {
     let before = 0;
     for (const k of chapters) { if (k === kap) break; before += composeChapter(k, libEff.lessons[k] ?? []).length; }
@@ -215,7 +219,8 @@ export default function App() {
           setup={setup}
           validation={validation}
           uppdateraSetup={uppdatera}
-          version="utveckling · del 9"
+          onHamtaFranDatakallan={() => { const d = deriveFromSource(); if (d) uppdatera(d); }}
+          version="utveckling · del 11"
           renderDatakalla={() => <DatakallaSektion onOppnaBibliotek={() => { setTab('bibliotek'); setSettingsOpen(false); }} />}
           renderKlasser={() => (
             <div className="modal-actions">
