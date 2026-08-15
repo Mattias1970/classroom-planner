@@ -101,7 +101,8 @@ export default function Arsoversikt({ lib, placedByClass, baselineByClass, onGoT
     countMagmaForKap(kap, (lib.lessons[kap] ?? []).map((l) => l.id));
 
   const betygsRow = (b: { id: string; label: string; datum: string }) => (
-    <div key={`bd-${b.id}`} className="yr-key exam">{/* del 16: samma radstil som övriga */}
+    <div key={`bd-${b.id}`} className="yr-key exam"
+      style={{ border: '2px solid #000', borderRadius: 4 }}>{/* del 16/18: samma radstil + svart ram */}
       <span>🎓 {b.label}</span>
       <b>v.{isoWeek(new Date(b.datum + 'T00:00:00Z'))} · {svDateLabel(b.datum)}</b>
     </div>

@@ -203,7 +203,7 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
                   );
                 })}
                 {(betygsByDate.get(di) ?? []).map((b) => (
-                  <div key={b.id} className="cal-block" style={{ top: 0, height: 20, background: '#7f1d1d', zIndex: 2 }}
+                  <div key={b.id} className="cal-block" style={{ top: 0, height: 20, background: '#7f1d1d', zIndex: 2, border: '2px solid #000' }}
                     title={`${b.label} · ${di}`}>
                     <b>🎓 {b.label}</b>
                   </div>
@@ -261,7 +261,7 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
                     <span className="d">{d.getUTCDate()}</span>
                     {lov && <span className="lovlabel">{lov.split(' ')[0]}</span>}
                     {(betygsByDate.get(di) ?? []).map((b) => (
-                      <div key={b.id} className="cal-chip" style={{ borderLeft: '4px solid #7f1d1d' }} title={b.label}>
+                      <div key={b.id} className="cal-chip" style={{ border: '2px solid #000', borderLeft: '4px solid #7f1d1d', borderRadius: 4 }} title={b.label}>
                         <span className="tdot" style={{ background: '#7f1d1d' }} />🎓 {b.label}
                       </div>
                     ))}
