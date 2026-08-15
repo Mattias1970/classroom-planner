@@ -8,7 +8,7 @@ import {
   type FilmStateLink, type PromptTemplate, type PrototypeLink,
   distinctEditedFields, generateSlots, normalizeUrl, placeLessons, summarizeEdits,
   weeksLabel, KAP_COLORS,
-  deriveSetup, type SchemaPass,
+  deriveSetup, isSetupComplete, planeringFromSetup, type SchemaPass,
   type LessonRecord, type PlacedLesson, type ScheduledSlot, type SubjectFile,
 } from '@planner/core';
 import { SchedulePanel, TimeBand } from '../views/SchemaOchTidsband.js';
@@ -33,6 +33,7 @@ import {
   clearMagma, countMagmaForKap, getMagma, setMagma,
   getPrio, setPrio, PRIO_ALL,
   getClassEdits, getClassNote, setClassNote, lsGet, lsSet,
+  deleteLokalPlanering, getLokalaPlaneringar, saveLokalPlanering,
   deleteCustomPrompt, getCustomPrompts, saveCustomPrompt,
   deleteVariant, getCacheInfo, getTokenExpiryHeader, getVariants,
   saveAsVariant, setActiveVariant, setVariantField,
@@ -204,7 +205,8 @@ export default function App() {
         </div>
       )}
 
-      {tab === 'kalender' && <Kalender subject={libEff.subject} placedByClass={placedByClass} onChanged={refresh} onOpenLesson={openLesson} />}
+      {tab === 'kalender' && <Kalender subject={libEff.subject} placedByClass={placedByClass} onChanged={refresh} onOpenLesson={openLesson}
+        planeringar={getLokalaPlaneringar()} onTaBortPlanering={(id) => { deleteLokalPlanering(id); refresh(); }} />}
       </SetupGate>
       {tab === 'klasser' && <KlasserView subject={libEff.subject} />}
       {tab === 'bibliotek' && <BibliotekView lib={libEff} onLoaded={(l) => { setLib(l); refresh(); }} onChange={refresh} />}
@@ -223,7 +225,17 @@ export default function App() {
           validation={validation}
           uppdateraSetup={uppdatera}
           onHamtaFranDatakallan={() => { const d = deriveFromSource(); if (d) uppdatera(d); }}
-          version="utveckling · del 11"
+          onVisaIKalendern={() => { /* Del 13: komplett initiering → planering i kalendern */
+            if (!isSetupComplete(setup)) return '✗ Initieringen måste vara komplett först.';
+            const pl = planeringFromSetup(setup);
+            if (pl.amne === libEff.subject.meta.ämne
+              && libEff.subject.meta.klasser.some((c) => !c.arkiverad && c.namn === pl.klassNamn)) {
+              return `✗ ${pl.amne} för ${pl.klassNamn} visas redan via datakällan.`;
+            }
+            saveLokalPlanering(pl); refresh();
+            return `✓ ${pl.amne} · ${pl.klassNamn} visas nu i kalendern.`;
+          }}
+          version="utveckling · del 13"
           renderDatakalla={() => <DatakallaSektion onOppnaBibliotek={() => { setTab('bibliotek'); setSettingsOpen(false); }} />}
           renderKlasser={() => (
             <div className="modal-actions">

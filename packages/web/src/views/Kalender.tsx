@@ -5,8 +5,9 @@
  */
 import { useMemo, useState, type DragEvent } from 'react';
 import {
-  KAP_COLORS, isoWeek, type LessonOverride, type LessonRecord,
-  type PlacedLesson, type SubjectFile,
+  KAP_COLORS, byggExternaPoster, isoWeek, unikaAmnen,
+  type ExternPost, type LessonOverride, type LessonRecord,
+  type LokalPlanering, type PlacedLesson, type SubjectFile,
 } from '@planner/core';
 import { setCalOverride } from '../state/store.js';
 
@@ -40,7 +41,13 @@ export interface KalenderProps {
   onChanged: () => void;
   /** FR-CAL-009: öppna lektionskortet i planeringen. */
   onOpenLesson: (kapitel: number, globalIdx: number) => void;
+  /** Del 13: lokala planeringar (andra ämnen) som visas bredvid datakällans. */
+  planeringar: LokalPlanering[];
+  onTaBortPlanering: (id: string) => void;
 }
+
+export const ALLA = '__alla__';
+type PlacedX = Placed & { cid: string };
 
 /** FR-CAL-005: händelsetypernas färger — paritet med prototypens CAL_COLORS. */
 const TYPE_COLORS: Record<string, string> = {
@@ -52,23 +59,49 @@ const TYPE_LABELS: Array<[string, string]> = [
   ['ovaformagor', 'Öva förmågor'], ['exam', 'PROV'],
 ];
 
-export default function Kalender({ subject, placedByClass, onChanged, onOpenLesson }: KalenderProps) {
+export default function Kalender({ subject, placedByClass, onChanged, onOpenLesson, planeringar, onTaBortPlanering }: KalenderProps) {
   const [mode, setMode] = useState<CalMode>('vecka');
-  const [classId, setClassId] = useState(Object.keys(placedByClass)[0] ?? '8B');
+  const [classId, setClassId] = useState<string>(Object.keys(placedByClass)[0] ?? '8B');
+  const [amneFilter, setAmneFilter] = useState<string>(ALLA);
+  const enKlass = classId !== ALLA && Object.keys(placedByClass).includes(classId);
   const [anchor, setAnchor] = useState(() => new Date());
   const [weekends, setWeekends] = useState(false);
   const [moveModal, setMoveModal] = useState<{ globalIdx: number; date: string; start: string; end: string; reason: string } | null>(null);
   const [editModal, setEditModal] = useState<{ p: Placed; reason: string; choice: 'remove' | 'shift' | 'restore' | null } | null>(null); // FR-CAL-011/012/015 (fig 5)
 
-  const placed = placedByClass[classId] ?? [];
+  const placed = enKlass ? (placedByClass[classId] ?? []) : [];
+  const datakallaSynlig = amneFilter === ALLA || amneFilter === subject.meta.ämne;
   const byDate = useMemo(() => {
-    const m = new Map<string, Placed[]>();
-    for (const p of placed) if (p.slot) {
+    const m = new Map<string, PlacedX[]>();
+    if (!datakallaSynlig) return m;
+    const kallor: Array<[string, Placed[]]> = classId === ALLA
+      ? Object.entries(placedByClass)
+      : enKlass ? [[classId, placedByClass[classId] ?? []]] : [];
+    for (const [cid, list] of kallor) for (const p of list) if (p.slot) {
       const arr = m.get(p.slot.date) ?? [];
-      arr.push(p); m.set(p.slot.date, arr);
+      arr.push({ ...p, cid }); m.set(p.slot.date, arr);
     }
     return m;
-  }, [placed]);
+  }, [placedByClass, classId, enKlass, datakallaSynlig]);
+  // Del 13: lokala planeringars poster (skrivskyddade), filtrerade på klass + ämne
+  const externByDate = useMemo(() => {
+    const m = new Map<string, ExternPost[]>();
+    for (const pl of planeringar) {
+      if (classId !== ALLA && pl.klassNamn !== classId) continue;
+      if (amneFilter !== ALLA && pl.amne !== amneFilter) continue;
+      for (const post of byggExternaPoster(pl, subject.läsår)) {
+        const arr = m.get(post.date) ?? [];
+        arr.push(post); m.set(post.date, arr);
+      }
+    }
+    return m;
+  }, [planeringar, classId, amneFilter, subject]);
+  const klassVal = useMemo(() => {
+    const ids = new Set(Object.keys(placedByClass));
+    for (const pl of planeringar) ids.add(pl.klassNamn);
+    return [...ids].sort((a, b) => a.localeCompare(b, 'sv'));
+  }, [placedByClass, planeringar]);
+  const amnesVal = unikaAmnen([subject.meta.ämne, ...planeringar.map((pl) => pl.amne)]);
 
   const startYear = subject.läsår.startdatum[0];
   const nav = (dir: -1 | 1) => {
@@ -80,6 +113,7 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
 
   const onDropDay = (e: DragEvent, dateIso: string) => {
     e.preventDefault();
+    if (!enKlass) return; // flytt kräver en vald klass
     const gi = parseInt(e.dataTransfer.getData('text/plain'), 10);
     if (Number.isNaN(gi)) return;
     const target = placed.find((p) => p.globalIdx === gi);
@@ -91,17 +125,25 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
     setMoveModal({ globalIdx: gi, date: dateIso, start: pass?.start ?? '08:00', end: pass?.end ?? '09:00', reason: '' });
   };
 
-  const chip = (p: Placed, withTime = true) => (
-    <div key={p.globalIdx} draggable className={`cal-chip ${p.override ? 'ov' : ''}`}
+  const chip = (p: PlacedX, withTime = true) => (
+    <div key={`${p.cid}-${p.globalIdx}`} draggable={enKlass} className={`cal-chip ${p.override ? 'ov' : ''}`}
       style={{ borderLeft: `4px solid ${KAP_COLORS[p.kapitel] ?? '#888'}` }}
-      title={`Kap ${p.kapitel} · ${p.lesson.avsnitt}${p.override ? ` (${p.override.type}: ${p.override.reason})` : ''} — klicka för att öppna`}
+      title={`${subject.meta.ämne} ${p.cid} · Kap ${p.kapitel} · ${p.lesson.avsnitt}${p.override ? ` (${p.override.type}: ${p.override.reason})` : ''} — klicka för att öppna`}
       onClick={() => onOpenLesson(p.kapitel, p.globalIdx)}
       onDragStart={(e) => e.dataTransfer.setData('text/plain', String(p.globalIdx))}>
       <span className="tdot" style={{ background: TYPE_COLORS[p.lesson.type] ?? '#3b82f6' }} />
-      {withTime && <small>{p.slot!.start}</small>} {p.kapitel}.{p.lesson.id} {p.lesson.avsnitt.replace(/^\d+\.\d+\s*/, '').slice(0, 20)}
+      {classId === ALLA && <b>{p.cid}</b>} {withTime && <small>{p.slot!.start}</small>} {p.kapitel}.{p.lesson.id} {p.lesson.avsnitt.replace(/^\d+\.\d+\s*/, '').slice(0, 20)}
       {p.override?.type === 'moved' && ' 📍'}
-      <button className="chip-x" title="Ändra lektion (ställ in / flytta / återställ)"
-        onClick={(e) => { e.stopPropagation(); setEditModal({ p, reason: p.override?.reason ?? '', choice: null }); }}>×</button>
+      {enKlass && <button className="chip-x" title="Ändra lektion (ställ in / flytta / återställ)"
+        onClick={(e) => { e.stopPropagation(); setEditModal({ p, reason: p.override?.reason ?? '', choice: null }); }}>×</button>}
+    </div>
+  );
+  const externChip = (post: ExternPost, withTime = true) => (
+    <div key={`x-${post.planeringId}-${post.date}-${post.start}`} className="cal-chip"
+      style={{ borderLeft: `4px solid ${post.farg}` }}
+      title={`${post.amne} ${post.klassNamn} · ${post.bokTitel} · ${post.start}–${post.end}`}>
+      <span className="tdot" style={{ background: post.farg }} />
+      {withTime && <small>{post.start}</small>} {post.amne} {post.klassNamn}
     </div>
   );
 
@@ -138,16 +180,28 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
                   const top = ((toMin(p.slot!.start) - DAY_START * 60) / 60) * H;
                   const h = Math.max(22, ((toMin(p.slot!.end) - toMin(p.slot!.start)) / 60) * H);
                   return (
-                    <div key={p.globalIdx} draggable className="cal-block"
+                    <div key={`${p.cid}-${p.globalIdx}`} draggable={enKlass} className="cal-block"
                       style={{ top, height: h, background: KAP_COLORS[p.kapitel] ?? '#555' }}
-                      title={`${p.lesson.avsnitt} · ${p.slot!.start}–${p.slot!.end} — klicka för att öppna`}
+                      title={`${subject.meta.ämne} ${p.cid} · ${p.lesson.avsnitt} · ${p.slot!.start}–${p.slot!.end} — klicka för att öppna`}
                       onClick={() => onOpenLesson(p.kapitel, p.globalIdx)}
                       onDragStart={(e) => e.dataTransfer.setData('text/plain', String(p.globalIdx))}>
                       <span className="tdot" style={{ background: TYPE_COLORS[p.lesson.type] ?? '#3b82f6' }} />
-                      <b>{p.kapitel}.{p.lesson.id}</b> {p.lesson.avsnitt.replace(/^\d+\.\d+\s*/, '')}
+                      <b>{classId === ALLA ? `${p.cid} · ` : ''}{p.kapitel}.{p.lesson.id}</b> {p.lesson.avsnitt.replace(/^\d+\.\d+\s*/, '')}
                       <small>{p.slot!.start}–{p.slot!.end}{p.override?.type === 'moved' ? ' 📍' : ''}</small>
-                      <button className="chip-x" title="Ändra lektion"
-                        onClick={(e) => { e.stopPropagation(); setEditModal({ p, reason: p.override?.reason ?? '', choice: null }); }}>×</button>
+                      {enKlass && <button className="chip-x" title="Ändra lektion"
+                        onClick={(e) => { e.stopPropagation(); setEditModal({ p, reason: p.override?.reason ?? '', choice: null }); }}>×</button>}
+                    </div>
+                  );
+                })}
+                {(externByDate.get(di) ?? []).map((post) => {
+                  const top = ((toMin(post.start) - DAY_START * 60) / 60) * H;
+                  const h = Math.max(22, ((toMin(post.end) - toMin(post.start)) / 60) * H);
+                  return (
+                    <div key={`x-${post.planeringId}-${post.start}`} className="cal-block"
+                      style={{ top, height: h, background: post.farg, opacity: 0.92 }}
+                      title={`${post.amne} ${post.klassNamn} · ${post.bokTitel} · ${post.start}–${post.end}`}>
+                      <b>{post.amne}</b> {post.klassNamn}
+                      <small>{post.start}–{post.end}</small>
                     </div>
                   );
                 })}
@@ -192,6 +246,7 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
                     <span className="d">{d.getUTCDate()}</span>
                     {lov && <span className="lovlabel">{lov.split(' ')[0]}</span>}
                     {(byDate.get(di) ?? []).map((p) => chip(p))}
+                    {(externByDate.get(di) ?? []).map((post) => externChip(post))}
                   </div>
                 );
               })}
@@ -223,12 +278,14 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
               <div className="cal-minigrid" style={{ gridTemplateColumns: `repeat(${weekends ? 7 : 5}, 1fr)` }}>
                 {cells.filter((d) => weekends || ((d.getUTCDay() + 6) % 7) < 5).map((d) => {
                   const di = iso(d);
-                  const n = (byDate.get(di) ?? []).length;
+                  const egna = byDate.get(di) ?? [];
+                  const externa = externByDate.get(di) ?? [];
+                  const n = egna.length + externa.length;
                   const lov = !!breakLabelFor(di, subject);
                   return (
                     <span key={di}
                       className={`mini-d ${d.getUTCMonth() !== ms.getUTCMonth() ? 'dim' : ''} ${lov ? 'lov' : ''} ${n ? 'has' : ''}`}
-                      style={n ? { background: KAP_COLORS[(byDate.get(di) ?? [])[0].kapitel] } : undefined}>
+                      style={n ? { background: egna[0] ? KAP_COLORS[egna[0].kapitel] : externa[0]?.farg } : undefined}>
                       {d.getUTCDate()}
                     </span>
                   );
@@ -290,10 +347,18 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
             <button key={m} className={`btn sec ${mode === m ? 'active' : ''}`} onClick={() => setMode(m)}>{m[0].toUpperCase() + m.slice(1)}</button>
           ))}
           <span className="sep" />
-          {Object.keys(placedByClass).map((c) => (
+          <button className={`btn sec ${classId === ALLA ? 'active' : ''}`} onClick={() => setClassId(ALLA)}>Alla klasser</button>
+          {klassVal.map((c) => (
             <button key={c} className={`btn sec ${classId === c ? 'active' : ''}`} onClick={() => setClassId(c)}>{c}</button>
           ))}
           <span className="sep" />
+          {amnesVal.length > 1 && (<>
+            <button className={`btn sec ${amneFilter === ALLA ? 'active' : ''}`} onClick={() => setAmneFilter(ALLA)}>Alla ämnen</button>
+            {amnesVal.map((a) => (
+              <button key={a} className={`btn sec ${amneFilter === a ? 'active' : ''}`} onClick={() => setAmneFilter(amneFilter === a ? ALLA : a)}>{a}</button>
+            ))}
+            <span className="sep" />
+          </>)}
           {(mode === 'vecka' || mode === 'månad') && (<>
             <button className="btn sec" onClick={() => nav(-1)}>←</button>
             <button className="btn sec" onClick={() => setAnchor(new Date())}>Idag</button>
@@ -305,6 +370,20 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
         </div>
       </div>
 
+      {(planeringar.length > 0 || classId === ALLA) && (
+        <div className="cal-legend">{/* Del 13: planeringar i kalendern */}
+          <span className="muted">Planeringar:</span>
+          <span className="leg"><span className="tdot" style={{ background: '#3b82f6' }} /> {subject.meta.ämne} · {Object.keys(placedByClass).join(' & ')} (datakälla)</span>
+          {planeringar.map((pl) => (
+            <span key={pl.id} className="leg">
+              <span className="tdot" style={{ background: pl.farg }} /> {pl.amne} · {pl.klassNamn} ({pl.bokTitel})
+              <button className="chip-x" title="Ta bort planeringen ur kalendern"
+                onClick={() => { if (window.confirm(`Ta bort ${pl.amne} · ${pl.klassNamn} ur kalendern?`)) onTaBortPlanering(pl.id); }}>×</button>
+            </span>
+          ))}
+          {!enKlass && <span className="muted">— flytt och inställning av lektioner kräver att en klass är vald</span>}
+        </div>
+      )}
       <div className="cal-legend">{/* FR-CAL-005 */}
         {TYPE_LABELS.map(([t, label]) => (
           <span key={t}><i className="tdot" style={{ background: TYPE_COLORS[t] }} />{label}</span>

@@ -21,6 +21,8 @@ export interface SetupWizardProps {
   uppdatera: (patch: PartialSetup) => void;
   /** Frivillig: fyll fälten från datakällans kompletta planering. */
   onHamtaFranDatakallan?: () => void;
+  /** Frivillig: visa komplett initiering som planering i kalendern; returnerar statusrad. */
+  onVisaIKalendern?: () => string;
 }
 
 const rad: React.CSSProperties = {
@@ -66,7 +68,8 @@ function faltOk(field: SetupField, v: SetupValidation): boolean {
  * skapas förrän samtliga är gröna — spärren ligger i @planner/core
  * (canCreateOverview), den här komponenten visar bara tillståndet.
  */
-export function SetupWizard({ setup, validation, uppdatera, onHamtaFranDatakallan }: SetupWizardProps): React.JSX.Element {
+export function SetupWizard({ setup, validation, uppdatera, onHamtaFranDatakallan, onVisaIKalendern }: SetupWizardProps): React.JSX.Element {
+  const [kalenderMsg, setKalenderMsg] = React.useState('');
   const schema = setup.amnesschema ?? [];
 
   const uppdateraPass = (index: number, patch: Partial<SchemaPass>): void => {
@@ -251,6 +254,13 @@ export function SetupWizard({ setup, validation, uppdatera, onHamtaFranDatakalla
           ↺ Hämta från datakällan
         </button>
       )}
+      {onVisaIKalendern && (
+        <button type="button" disabled={!validation.complete} style={{ marginLeft: 8 }}
+          onClick={() => setKalenderMsg(onVisaIKalendern())}>
+          🗓 Visa i kalendern
+        </button>
+      )}
+      {kalenderMsg !== '' && <p style={{ fontSize: 13, marginTop: 6 }}>{kalenderMsg}</p>}
     </div>
   );
 }

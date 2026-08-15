@@ -10,6 +10,7 @@ import {
   type SubjectFile,
   type Elev,
   type LokalBok,
+  type LokalPlanering,
 } from '@planner/core';
 import { githubReader } from './githubReader.js';
 import { DEMO_BEGREPP, DEMO_FLIP, DEMO_LESSONS, DEMO_SUBJECT } from '../data/demo.js';
@@ -125,6 +126,16 @@ export function deleteLokalBok(bokId: string): void {
   write(BOCKER_KEY, getLokalaBocker().filter((b) => b.bok.id !== bokId));
 }
 
+// ── Lokala planeringar i kalendern (del 13) ───────────────────
+const PLANERINGAR_KEY = 'classroom-planner.planeringar.v1';
+export function getLokalaPlaneringar(): LokalPlanering[] { return read<LokalPlanering[]>(PLANERINGAR_KEY, []); }
+export function saveLokalPlanering(p: LokalPlanering): void {
+  write(PLANERINGAR_KEY, [...getLokalaPlaneringar().filter((x) => x.id !== p.id), p]);
+}
+export function deleteLokalPlanering(id: string): void {
+  write(PLANERINGAR_KEY, getLokalaPlaneringar().filter((x) => x.id !== id));
+}
+
 /** Slår ihop bas + egna − borttagna till kapitlets faktiska sekvens. */
 export function composeChapter(kapitel: number, base: LessonRecord[]): LessonRecord[] {
   const removed = new Set(getRemovedIds().filter((r) => r.kapitel === kapitel).map((r) => r.id));
@@ -163,6 +174,7 @@ export function exportBackup(): string {
     lessonVariants: lsGet(VARIANTS_KEY),
     elever: lsGet(ELEVER_KEY),
     bocker: lsGet(BOCKER_KEY),
+    planeringar: lsGet(PLANERINGAR_KEY),
   }, null, 2);
 }
 export function importBackup(json: string): void {
@@ -183,6 +195,7 @@ export function importBackup(json: string): void {
   if (typeof b.lessonVariants === 'string') lsSet(VARIANTS_KEY, b.lessonVariants);
   if (typeof b.elever === 'string') lsSet(ELEVER_KEY, b.elever);
   if (typeof b.bocker === 'string') lsSet(BOCKER_KEY, b.bocker);
+  if (typeof b.planeringar === 'string') lsSet(PLANERINGAR_KEY, b.planeringar);
 }
 
 // ── Klassregister-overlay (FR-CM-002…008) ─────────────────────

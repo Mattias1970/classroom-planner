@@ -37,6 +37,8 @@ export interface SettingsPanelProps {
   renderBackup?: () => React.ReactNode;
   /** Frivillig: hämta initieringen från datakällan (visas som knapp i wizarden). */
   onHamtaFranDatakallan?: () => void;
+  /** Frivillig: spara komplett initiering som planering i kalendern; returnerar statusrad. */
+  onVisaIKalendern?: () => string;
   /** Version/testläge som visas under Om. */
   version?: string;
   testlage?: boolean;
@@ -95,6 +97,7 @@ export function SettingsPanel({
   renderUtseende,
   renderBackup,
   onHamtaFranDatakallan,
+  onVisaIKalendern,
   version = 'utveckling',
   testlage = false,
 }: SettingsPanelProps): React.JSX.Element {
@@ -150,7 +153,7 @@ export function SettingsPanel({
 
           {aktiv === 'initiering' && (
             <SetupWizard setup={setup} validation={validation} uppdatera={uppdateraSetup}
-              onHamtaFranDatakallan={onHamtaFranDatakallan} />
+              onHamtaFranDatakallan={onHamtaFranDatakallan} onVisaIKalendern={onVisaIKalendern} />
           )}
 
           {aktiv === 'datakalla' &&
