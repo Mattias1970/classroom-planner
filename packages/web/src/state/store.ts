@@ -9,6 +9,7 @@ import {
   type LessonRecord,
   type SubjectFile,
   type Elev,
+  type LokalBok,
 } from '@planner/core';
 import { githubReader } from './githubReader.js';
 import { DEMO_BEGREPP, DEMO_FLIP, DEMO_LESSONS, DEMO_SUBJECT } from '../data/demo.js';
@@ -113,6 +114,17 @@ export function setElever(classId: string, elever: Elev[]): void {
   write(ELEVER_KEY, { ...all, [classId]: elever });
 }
 
+// ── Lokala böcker (del 12) ────────────────────────────────────
+const BOCKER_KEY = 'classroom-planner.bocker.v1';
+export function getLokalaBocker(): LokalBok[] { return read<LokalBok[]>(BOCKER_KEY, []); }
+export function saveLokalBok(bok: LokalBok): void {
+  const all = getLokalaBocker().filter((b) => b.bok.id !== bok.bok.id);
+  write(BOCKER_KEY, [...all, bok]);
+}
+export function deleteLokalBok(bokId: string): void {
+  write(BOCKER_KEY, getLokalaBocker().filter((b) => b.bok.id !== bokId));
+}
+
 /** Slår ihop bas + egna − borttagna till kapitlets faktiska sekvens. */
 export function composeChapter(kapitel: number, base: LessonRecord[]): LessonRecord[] {
   const removed = new Set(getRemovedIds().filter((r) => r.kapitel === kapitel).map((r) => r.id));
@@ -150,6 +162,7 @@ export function exportBackup(): string {
     prompts: lsGet(PROMPTS_KEY),
     lessonVariants: lsGet(VARIANTS_KEY),
     elever: lsGet(ELEVER_KEY),
+    bocker: lsGet(BOCKER_KEY),
   }, null, 2);
 }
 export function importBackup(json: string): void {
@@ -169,6 +182,7 @@ export function importBackup(json: string): void {
   if (typeof b.prompts === 'string') lsSet(PROMPTS_KEY, b.prompts);
   if (typeof b.lessonVariants === 'string') lsSet(VARIANTS_KEY, b.lessonVariants);
   if (typeof b.elever === 'string') lsSet(ELEVER_KEY, b.elever);
+  if (typeof b.bocker === 'string') lsSet(BOCKER_KEY, b.bocker);
 }
 
 // ── Klassregister-overlay (FR-CM-002…008) ─────────────────────

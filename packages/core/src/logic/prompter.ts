@@ -15,6 +15,8 @@ export interface PromptTemplate {
   innehall: string;      // hela prompttexten (markdown)
   kalla: PromptKalla;
   uppdaterad?: string;   // ISO-tid för egna varianter
+  /** Ämne prompten hör till (del 12); saknas → grupperas som Allmänt. */
+  amne?: string;
 }
 
 /** Slår samman källorna med precedens egen > datakälla > inbyggd per id. */

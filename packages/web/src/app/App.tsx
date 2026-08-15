@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   applyClassEdits, applySchemaEdits, buildBegreppTabell, computeTimes, defaultBamTimeline, diffMinutes,
+  grupperaPerAmne,
   mergePromptSources, parseFilmState, parsePrototypeLinks, parseTokenExpiry, promptIdFromName,
   resolveBegrepp,
   summarizePrototypeLinks,
@@ -18,6 +19,8 @@ import { SetupGate } from '../components/SetupGate.js';
 import { useSetup } from '../state/useSetup.js';
 import PROTO_FILMER from '../data/prototyp-filmer.json';
 import PROMPT_LEKTIONSGEN from '../data/prompter/lektionsgenerator.md?raw';
+import PROMPT_BOKIMPORT from '../data/prompter/bokimport.md?raw';
+import { BokBibliotek } from '../views/BokBibliotek.js';
 import { BottomNav, ScreenSizeModal, useMobile, useScreenSize, useScrollToNextChapter } from '../views/Mobil.js';
 import Kalender from '../views/Kalender.js';
 import Arsoversikt, { type InnerTab } from '../views/Arsoversikt.js';
@@ -1191,6 +1194,13 @@ const INBYGGDA_PROMPTER: PromptTemplate[] = [{
   beskrivning: 'Skapar komplett lektionsplanering ur 10 boksidor åt gången: Binogi-filmer, genomgångsexempel, flippat underlag, Socrative-quiz (Excel) och NotebookLM-filmprompt. Utdata i appens fältformat.',
   innehall: PROMPT_LEKTIONSGEN,
   kalla: 'inbyggd',
+  amne: 'Matematik',
+}, {
+  id: 'bokimport',
+  namn: 'Bokimport (valfritt ämne)',
+  beskrivning: 'Bygger en boks lektionsstruktur ur fotograferade boksidor och levererar JSON-filen som importeras under Böcker. Fungerar för alla ämnen.',
+  innehall: PROMPT_BOKIMPORT,
+  kalla: 'inbyggd',
 }];
 
 function PromptBibliotek(props: { lib: LoadedLibrary; onChange: () => void }) {
@@ -1225,8 +1235,10 @@ function PromptBibliotek(props: { lib: LoadedLibrary; onChange: () => void }) {
   return (
     <div className="card">
       <div className="title">📜 Promptbibliotek</div>
-      <p className="note">Promptmallar för AI-genererat lektionsinnehåll. Inbyggda följer appen och kan inte försvinna; lägg en prompter/-katalog i datakällan för att uppdatera utan appsläpp; egna varianter sparas i webbläsaren och ingår i backupen.</p>
-      {all.map((p) => (
+      <p className="note">Promptmallar för AI-genererat lektionsinnehåll, indelade per ämne. Inbyggda följer appen och kan inte försvinna; lägg en prompter/-katalog i datakällan för att uppdatera utan appsläpp; egna varianter sparas i webbläsaren och ingår i backupen.</p>
+      {grupperaPerAmne(all).map(([amne, prompter]) => (<div key={amne}>
+      <h4 className="cm-h">{amne.toUpperCase()}</h4>
+      {prompter.map((p) => (
         <div key={`${p.kalla}-${p.id}`} className="prompt-row">
           <div className="prompt-head" onClick={() => setOpenId(openId === p.id ? null : p.id)}>
             <b>{p.namn}</b>
@@ -1265,6 +1277,7 @@ function PromptBibliotek(props: { lib: LoadedLibrary; onChange: () => void }) {
           )}
         </div>
       ))}
+      </div>))}
       {msg && <p className="status">{msg}</p>}
     </div>
   );
@@ -1367,6 +1380,7 @@ function BibliotekView(props: { lib: LoadedLibrary; onLoaded: (l: LoadedLibrary)
   return (
     <main className="main">
       <PrototypImportCard lib={props.lib} onChange={props.onChange} />
+      <BokBibliotek lib={props.lib} onChange={props.onChange} />
       <PromptBibliotek lib={props.lib} onChange={props.onChange} />
       <h2>Bibliotek — datakällor</h2>
       <div className="card">
