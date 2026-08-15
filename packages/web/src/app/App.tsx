@@ -359,7 +359,14 @@ function PlaneringView(props: {
   const gotoLesson = (i: number) => {
     const n = Math.max(0, Math.min(lessons.length - 1, i));
     setSel(n);
-    document.getElementById(`lesson-card-${kapitel}-${n}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Scrolla aldrig förbi lektionsramens överkant (del 17): linjera kortets
+    // överkant strax under den sticky planeringstoppen — oavsett korthöjd.
+    const el = document.getElementById(`lesson-card-${kapitel}-${n}`);
+    if (!el) return;
+    const sticky = document.querySelector('.plan-sticky');
+    const offset = (sticky instanceof HTMLElement ? sticky.getBoundingClientRect().height : 0) + 8;
+    const top = el.getBoundingClientRect().top + window.scrollY - offset;
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
   };
   useEffect(() => { // FR-CAL-009: fokusera lektion vald i kalendern
     if (focus === null) return;
