@@ -20,7 +20,21 @@ export interface LayoutBox {
   align: LayoutAlign;
   /** Visa fältets etikett före värdet ("Genomgång: …"). */
   visaEtikett: boolean;
+  /** Linje runt ytan (del 21). */
+  ram?: boolean;
+  /** Ljus bakgrundsplatta, hexfärg ur LJUSA_FARGER (del 21). Tom/undefined = ingen. */
+  bakgrund?: string;
 }
+
+/** Ljusa färgplattor för ytor (del 21). */
+export const LJUSA_FARGER: ReadonlyArray<{ namn: string; hex: string }> = [
+  { namn: 'Ingen', hex: '' },
+  { namn: 'Ljusgrön', hex: '#e7f6ec' },
+  { namn: 'Ljusblå', hex: '#e8f0fe' },
+  { namn: 'Ljusröd', hex: '#fdecec' },
+  { namn: 'Ljusgul', hex: '#fef7e0' },
+  { namn: 'Ljusgrå', hex: '#f2f4f7' },
+] as const;
 
 export interface UtskriftsLayout { boxar: LayoutBox[] }
 
@@ -32,6 +46,7 @@ export const LAYOUT_FALT: ReadonlyArray<{ id: string; etikett: string }> = [
   { id: 'avsnitt', etikett: 'Avsnitt' },
   { id: 'typ', etikett: 'Lektionstyp' },
   { id: 'del', etikett: 'Del' },
+  { id: 'arbete', etikett: 'Arbete' },
   { id: 'grön', etikett: 'Grön' },
   { id: 'blå', etikett: 'Blå' },
   { id: 'röd', etikett: 'Röd' },
@@ -65,6 +80,12 @@ export function layoutFaltVarde(faltId: string, lesson: LessonRecord, extra: Lay
     case 'datum': return extra.datum ?? '';
     case 'tid': return extra.tid ?? '';
     case 'typ': return TYP_ETIKETT[lesson.type] ?? lesson.type;
+    case 'arbete': {
+      const delar = ([['Grön', lesson.grön], ['Blå', lesson.blå], ['Röd', lesson.röd]] as const)
+        .filter(([, v]) => v !== '' && v !== '—')
+        .map(([n, v]) => `${n}: ${v}`);
+      return delar.join('  ·  ');
+    }
     case 'del': return `Del ${lesson.del}`;
     default: {
       const v = (lesson as unknown as Record<string, unknown>)[faltId];
@@ -162,4 +183,13 @@ export function defaultUtskriftslayout(): UtskriftsLayout {
       { id: 'box-9', falt: 'laxa', xMm: M, yMm: 41, wMm: W, hMm: 8, fontPt: 9, align: 'left', visaEtikett: true },
     ],
   };
+}
+
+/** Skär två rektanglar varandra? (för markering med gummiband, del 21) */
+export function rektanglarKorsar(
+  a: { xMm: number; yMm: number; wMm: number; hMm: number },
+  b: { xMm: number; yMm: number; wMm: number; hMm: number },
+): boolean {
+  return a.xMm < b.xMm + b.wMm && a.xMm + a.wMm > b.xMm
+    && a.yMm < b.yMm + b.hMm && a.yMm + a.hMm > b.yMm;
 }

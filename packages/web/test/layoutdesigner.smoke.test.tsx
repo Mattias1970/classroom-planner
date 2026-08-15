@@ -31,7 +31,7 @@ beforeEach(() => { localStorage.clear(); document.body.innerHTML = ''; });
 describe('LayoutDesigner (render smoke)', () => {
   it('visar fältpalett med lektionsplaneringens fält samt exportknappar', () => {
     const host = render(<LayoutDesigner {...props()} />);
-    for (const falt of ['Avsnitt', 'Genomgång', 'Grön', 'Blå', 'Röd', 'Läxa', 'Datum', 'Exit ticket']) {
+    for (const falt of ['Arbete', 'Avsnitt', 'Genomgång', 'Grön', 'Blå', 'Röd', 'Läxa', 'Datum', 'Exit ticket']) {
       expect(host.textContent).toContain(falt);
     }
     expect(host.textContent).toContain('PDF (Skriv ut)');
@@ -52,5 +52,24 @@ describe('LayoutDesigner (render smoke)', () => {
     expect(host.textContent).toContain('VALD YTA — Avsnitt');
     expect(host.textContent).toContain('Fyll sidled');
     expect(host.textContent).toContain('Ta bort');
+  });
+});
+
+
+describe('Flermarkering (del 21)', () => {
+  it('shift+klick markerar flera ytor och panelen visar antal + platta/ram', () => {
+    const host = render(<LayoutDesigner {...props()} />);
+    const ytor = [host.querySelector('[title="Lektionsnummer"]'), host.querySelector('[title="Avsnitt"]')];
+    act(() => {
+      ytor[0]?.dispatchEvent(new window.PointerEvent('pointerdown', { bubbles: true }));
+      ytor[0]?.dispatchEvent(new window.PointerEvent('pointerup', { bubbles: true }));
+    });
+    act(() => {
+      ytor[1]?.dispatchEvent(new window.PointerEvent('pointerdown', { bubbles: true, shiftKey: true }));
+      ytor[1]?.dispatchEvent(new window.PointerEvent('pointerup', { bubbles: true }));
+    });
+    expect(host.textContent).toContain('2 YTOR VALDA');
+    expect(host.textContent).toContain('Platta:');
+    expect(host.textContent).toContain('Ram');
   });
 });

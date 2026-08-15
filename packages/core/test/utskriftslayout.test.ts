@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  BLAD, bandHojd, defaultUtskriftslayout, fyllSidled, layoutFaltVarde,
+  BLAD, LAYOUT_FALT, LJUSA_FARGER, rektanglarKorsar, bandHojd, defaultUtskriftslayout, fyllSidled, layoutFaltVarde,
   normaliseraRuta, nyBoxId, snapBox,
 } from '../src/domain/utskriftslayout.js';
 import type { LessonRecord } from '../src/records/lesson-record.js';
@@ -83,5 +83,23 @@ describe('layoutFaltVarde', () => {
     expect(layoutFaltVarde('lektionsnr', lektion, { lektionsNr: 3 })).toBe('L3');
     expect(layoutFaltVarde('datum', lektion, { datum: '2026-08-20' })).toBe('2026-08-20');
     expect(layoutFaltVarde('tid', lektion, { tid: '08:10–09:10' })).toBe('08:10–09:10');
+  });
+});
+
+describe('Arbete-fältet + färgplattor + markeringskorsning (del 21)', () => {
+  it('arbete sammansätter Grön/Blå/Röd och hoppar tomma', () => {
+    expect(layoutFaltVarde('arbete', lektion)).toBe('Grön: 1–6  ·  Blå: 7–12  ·  Röd: 13–15');
+    expect(layoutFaltVarde('arbete', { ...lektion, röd: '—' })).toBe('Grön: 1–6  ·  Blå: 7–12');
+    expect(layoutFaltVarde('arbete', { ...lektion, grön: '—', blå: '—', röd: '—' })).toBe('');
+  });
+  it('Arbete finns i fältkatalogen och LJUSA_FARGER har Ingen först', () => {
+    expect(LAYOUT_FALT.some((f) => f.id === 'arbete' && f.etikett === 'Arbete')).toBe(true);
+    expect(LJUSA_FARGER[0]).toEqual({ namn: 'Ingen', hex: '' });
+  });
+  it('rektanglarKorsar: överlapp, kant-i-kant och separata', () => {
+    const a = { xMm: 10, yMm: 10, wMm: 20, hMm: 10 };
+    expect(rektanglarKorsar(a, { xMm: 25, yMm: 15, wMm: 20, hMm: 10 })).toBe(true);
+    expect(rektanglarKorsar(a, { xMm: 30, yMm: 10, wMm: 5, hMm: 5 })).toBe(false); // kant-i-kant räknas inte
+    expect(rektanglarKorsar(a, { xMm: 0, yMm: 40, wMm: 5, hMm: 5 })).toBe(false);
   });
 });

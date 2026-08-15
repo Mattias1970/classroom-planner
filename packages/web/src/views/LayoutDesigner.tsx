@@ -12,7 +12,8 @@ import {
   AlignmentType, Document, HeadingLevel, Packer, Paragraph, TextRun,
 } from 'docx';
 import {
-  BLAD, LAYOUT_FALT, bandHojd, defaultUtskriftslayout, faltEtikett, fyllSidled,
+  BLAD, LAYOUT_FALT, LJUSA_FARGER, bandHojd, defaultUtskriftslayout, faltEtikett, fyllSidled,
+  rektanglarKorsar,
   layoutFaltVarde, normaliseraRuta, nyBoxId, snapBox, svDateLabel,
   type LayoutBox, type ScheduledSlot, type LessonRecord, type SnapGuide, type UtskriftsLayout,
 } from '@planner/core';
@@ -32,22 +33,23 @@ export interface LayoutDesignerProps {
 
 type Drag =
   | { typ: 'rita'; falt: string; x1: number; y1: number; x2: number; y2: number }
-  | { typ: 'flytt'; id: string; startX: number; startY: number; orig: LayoutBox }
+  | { typ: 'markera'; x1: number; y1: number; x2: number; y2: number }
+  | { typ: 'flytt'; id: string; startX: number; startY: number; origs: Record<string, LayoutBox> }
   | { typ: 'storlek'; id: string; startX: number; startY: number; orig: LayoutBox };
 
 export function LayoutDesigner(props: LayoutDesignerProps) {
   const { lib, kapitel, lessons, slotFor, classId, onClose } = props;
   const [layout, setLayout] = useState<UtskriftsLayout>(() => getUtskriftslayout() ?? defaultUtskriftslayout());
   const [valtFalt, setValtFalt] = useState<string | null>(null);
-  const [valdBox, setValdBox] = useState<string | null>(null);
+  const [valda, setValda] = useState<string[]>([]); // del 21: flermarkering
   const [drag, setDrag] = useState<Drag | null>(null);
   const [guides, setGuides] = useState<SnapGuide[]>([]);
   const [msg, setMsg] = useState('');
   const bladRef = useRef<HTMLDivElement>(null);
 
   const spara = (l: UtskriftsLayout) => { setLayout(l); setUtskriftslayout(l); };
-  const boxFor = (id: string | null) => layout.boxar.find((b) => b.id === id) ?? null;
-  const vald = boxFor(valdBox);
+  const valdaBoxar = layout.boxar.filter((b) => valda.includes(b.id));
+  const vald = valdaBoxar.length >= 1 ? valdaBoxar[0]! : null;
 
   const mmPos = (e: RPointerEvent): { x: number; y: number } => {
     const r = bladRef.current?.getBoundingClientRect();
@@ -56,27 +58,45 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
   };
 
   const pekaNed = (e: RPointerEvent) => {
-    if (valtFalt === null) return;
     const p = mmPos(e);
-    setDrag({ typ: 'rita', falt: valtFalt, x1: p.x, y1: p.y, x2: p.x, y2: p.y });
+    if (valtFalt !== null) {
+      setDrag({ typ: 'rita', falt: valtFalt, x1: p.x, y1: p.y, x2: p.x, y2: p.y });
+    } else {
+      // del 21: gummiband på tom yta = markera flera
+      setDrag({ typ: 'markera', x1: p.x, y1: p.y, x2: p.x, y2: p.y });
+      if (!e.shiftKey) setValda([]);
+    }
     (e.target as Element).setPointerCapture(e.pointerId);
   };
 
   const pekaFlytta = (e: RPointerEvent) => {
     if (drag === null) return;
     const p = mmPos(e);
-    if (drag.typ === 'rita') { setDrag({ ...drag, x2: p.x, y2: p.y }); return; }
+    if (drag.typ === 'rita' || drag.typ === 'markera') { setDrag({ ...drag, x2: p.x, y2: p.y }); return; }
     const dx = p.x - drag.startX, dy = p.y - drag.startY;
-    const andra = layout.boxar.filter((b) => b.id !== drag.id);
+    const flyttade = drag.typ === 'flytt' ? Object.keys(drag.origs) : [drag.id];
+    const andra = layout.boxar.filter((b) => !flyttade.includes(b.id));
     if (drag.typ === 'flytt') {
+      const led = drag.origs[drag.id]!;
       const grov = {
-        xMm: Math.max(0, Math.min(drag.orig.xMm + dx, BLAD.breddMm - drag.orig.wMm)),
-        yMm: Math.max(0, Math.min(drag.orig.yMm + dy, BLAD.hojdMm - drag.orig.hMm)),
-        wMm: drag.orig.wMm, hMm: drag.orig.hMm,
+        xMm: Math.max(0, Math.min(led.xMm + dx, BLAD.breddMm - led.wMm)),
+        yMm: Math.max(0, Math.min(led.yMm + dy, BLAD.hojdMm - led.hMm)),
+        wMm: led.wMm, hMm: led.hMm,
       };
       const s = snapBox(grov, andra, 'flytt');
       setGuides(s.guides);
-      spara({ boxar: layout.boxar.map((b) => (b.id === drag.id ? { ...b, ...s } : b)) });
+      const sdx = s.xMm - led.xMm, sdy = s.yMm - led.yMm; // snappad delta gäller hela gruppen
+      spara({
+        boxar: layout.boxar.map((b) => {
+          const o = drag.origs[b.id];
+          if (o === undefined) return b;
+          return {
+            ...b,
+            xMm: Math.max(0, Math.min(o.xMm + sdx, BLAD.breddMm - o.wMm)),
+            yMm: Math.max(0, Math.min(o.yMm + sdy, BLAD.hojdMm - o.hMm)),
+          };
+        }),
+      });
     } else {
       const grov = {
         xMm: drag.orig.xMm, yMm: drag.orig.yMm,
@@ -90,6 +110,13 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
   };
 
   const pekaUpp = () => {
+    if (drag?.typ === 'markera') {
+      const r = normaliseraRuta(drag.x1, drag.y1, drag.x2, drag.y2, 0.1);
+      const traffar = layout.boxar.filter((b) => rektanglarKorsar(r, b)).map((b) => b.id);
+      setValda((prev) => [...new Set([...prev, ...traffar])]);
+      setDrag(null); setGuides([]);
+      return;
+    }
     if (drag?.typ === 'rita') {
       const r = normaliseraRuta(drag.x1, drag.y1, drag.x2, drag.y2);
       const id = nyBoxId(layout.boxar.map((b) => b.id));
@@ -98,19 +125,19 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
           id, falt: drag.falt, ...r, fontPt: 10, align: 'left', visaEtikett: true,
         }],
       });
-      setValdBox(id); setValtFalt(null);
+      setValda([id]); setValtFalt(null);
     }
     setDrag(null); setGuides([]);
   };
 
-  const uppdateraVald = (patch: Partial<LayoutBox>) => {
-    if (vald === null) return;
-    spara({ boxar: layout.boxar.map((b) => (b.id === vald.id ? { ...b, ...patch } : b)) });
+  const uppdateraValda = (patch: Partial<LayoutBox>) => {
+    if (valda.length === 0) return;
+    spara({ boxar: layout.boxar.map((b) => (valda.includes(b.id) ? { ...b, ...patch } : b)) });
   };
-  const taBortVald = () => {
-    if (vald === null) return;
-    spara({ boxar: layout.boxar.filter((b) => b.id !== vald.id) });
-    setValdBox(null);
+  const taBortValda = () => {
+    if (valda.length === 0) return;
+    spara({ boxar: layout.boxar.filter((b) => !valda.includes(b.id)) });
+    setValda([]);
   };
 
   // ── Utskriftsdata: kapitelrubrik + alla lektioner efter varandra ──
@@ -135,11 +162,14 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
     const boxHtml = (b: LayoutBox, lesson: LessonRecord, idx: number) => {
       const varde = layoutFaltVarde(b.falt, lesson, extraFor(idx));
       const text = b.visaEtikett && varde !== '' ? `<b>${faltEtikett(b.falt)}:</b> ${varde}` : varde;
+      const ram = b.ram === true ? 'border:0.35mm solid #333;' : '';
+      const platta = b.bakgrund !== undefined && b.bakgrund !== '' ? `background:${b.bakgrund};` : '';
       return `<div style="position:absolute;left:${b.xMm}mm;top:${b.yMm}mm;width:${b.wMm}mm;height:${b.hMm}mm;` +
+        `${ram}${platta}box-sizing:border-box;padding:0.6mm;` +
         `font-size:${b.fontPt}pt;text-align:${b.align};overflow:hidden;line-height:1.25">${text}</div>`;
     };
     const bandHtml = lessons.map((l, i) =>
-      `<div style="position:relative;height:${band}mm;page-break-inside:avoid;border-bottom:0.3mm solid #ddd">` +
+      `<div style="position:relative;height:${band}mm;page-break-inside:avoid;border-bottom:1mm solid #334155">` +
       layout.boxar.map((b) => boxHtml(b, l, i)).join('') + `</div>`).join('');
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Planering kap ${kapitel}</title>
       <style>@page{size:A4;margin:0}body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#111}
@@ -166,6 +196,8 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
         if (varde === '') continue;
         barn.push(new Paragraph({
           alignment: alignOf(b.align),
+          ...(b.bakgrund !== undefined && b.bakgrund !== ''
+            ? { shading: { type: 'clear' as const, fill: b.bakgrund.replace('#', '') } } : {}),
           children: [
             ...(b.visaEtikett ? [new TextRun({ text: `${faltEtikett(b.falt)}: `, bold: true, size: b.fontPt * 2 })] : []),
             new TextRun({ text: varde, size: b.fontPt * 2 }),
@@ -207,24 +239,38 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
             </div>
 
             {vald && (<>
-              <h4 className="cm-h">VALD YTA — {faltEtikett(vald.falt)}</h4>
+              <h4 className="cm-h">{valda.length > 1 ? `${valda.length} YTOR VALDA` : `VALD YTA — ${faltEtikett(vald.falt)}`}</h4>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                 <label>Font <input type="number" min={6} max={36} style={{ width: 54 }} value={vald.fontPt}
-                  onChange={(e) => uppdateraVald({ fontPt: Number(e.target.value) })} /> pt</label>
+                  onChange={(e) => uppdateraValda({ fontPt: Number(e.target.value) })} /> pt</label>
                 <span>
                   {(['left', 'center', 'right'] as const).map((a) => (
                     <button key={a} className={`icon-btn ${vald.align === a ? 'on' : ''}`}
                       title={a === 'left' ? 'Vänsterställt' : a === 'center' ? 'Centrerat' : 'Högerställt'}
-                      onClick={() => uppdateraVald({ align: a })}>
+                      onClick={() => uppdateraValda({ align: a })}>
                       {a === 'left' ? '⯇' : a === 'center' ? '≡' : '⯈'}
                     </button>
                   ))}
                 </span>
                 <label className="radio"><input type="checkbox" checked={vald.visaEtikett}
-                  onChange={(e) => uppdateraVald({ visaEtikett: e.target.checked })} /> Etikett</label>
+                  onChange={(e) => uppdateraValda({ visaEtikett: e.target.checked })} /> Etikett</label>
+                <label className="radio"><input type="checkbox" checked={vald.ram === true}
+                  onChange={(e) => uppdateraValda({ ram: e.target.checked })} /> Ram</label>
                 <button className="btn sec" title="Fyll bladet i sidled"
-                  onClick={() => spara({ boxar: layout.boxar.map((b) => (b.id === vald.id ? fyllSidled(b) : b)) })}>⇔ Fyll sidled</button>
-                <button className="btn warn" onClick={taBortVald}>🗑 Ta bort</button>
+                  onClick={() => spara({ boxar: layout.boxar.map((b) => (valda.includes(b.id) ? fyllSidled(b) : b)) })}>⇔ Fyll sidled</button>
+                <button className="btn warn" onClick={taBortValda}>🗑 Ta bort</button>
+              </div>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
+                <span className="muted">Platta:</span>
+                {LJUSA_FARGER.map((f) => (
+                  <button key={f.namn} title={f.namn}
+                    onClick={() => uppdateraValda({ bakgrund: f.hex })}
+                    style={{
+                      width: 22, height: 22, borderRadius: 4, cursor: 'pointer',
+                      background: f.hex === '' ? '#fff' : f.hex,
+                      border: (vald.bakgrund ?? '') === f.hex ? '2px solid #175cd3' : '1px solid #d0d5dd',
+                    }}>{f.hex === '' ? '∅' : ''}</button>
+                ))}
               </div>
             </>)}
 
@@ -232,7 +278,7 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
             <div className="modal-actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}>
               <button className="btn" onClick={skrivUt}>⬇ PDF (Skriv ut)</button>
               <button className="btn sec" onClick={() => void exportWord()}>⬇ Word (.docx)</button>
-              <button className="btn sec" onClick={() => { spara(defaultUtskriftslayout()); setValdBox(null); }}>↺ Standardlayout</button>
+              <button className="btn sec" onClick={() => { spara(defaultUtskriftslayout()); setValda([]); }}>↺ Standardlayout</button>
             </div>
             {msg && <p className="status">{msg}</p>}
           </div>
@@ -261,20 +307,28 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
                   <div key={b.id}
                     onPointerDown={(e) => {
                       e.stopPropagation();
-                      setValdBox(b.id); setValtFalt(null);
+                      setValtFalt(null);
+                      const nyaValda = e.shiftKey
+                        ? (valda.includes(b.id) ? valda.filter((x) => x !== b.id) : [...valda, b.id])
+                        : (valda.includes(b.id) ? valda : [b.id]);
+                      setValda(nyaValda);
+                      if (e.shiftKey && !nyaValda.includes(b.id)) return; // avmarkerad — dra inte
                       const p = mmPos(e);
-                      setDrag({ typ: 'flytt', id: b.id, startX: p.x, startY: p.y, orig: b });
+                      const origs: Record<string, LayoutBox> = {};
+                      for (const x of layout.boxar) if (nyaValda.includes(x.id)) origs[x.id] = x;
+                      setDrag({ typ: 'flytt', id: b.id, startX: p.x, startY: p.y, origs });
                       (e.target as Element).setPointerCapture(e.pointerId);
                     }}
                     style={{
                       position: 'absolute', left: mm(b.xMm), top: mm(b.yMm), width: mm(b.wMm), height: mm(b.hMm),
-                      border: valdBox === b.id ? '2px solid #175cd3' : '1px solid #98a2b3',
-                      background: 'rgba(23,92,211,0.04)', overflow: 'hidden', cursor: 'move',
+                      border: valda.includes(b.id) ? '2px solid #175cd3' : b.ram === true ? '1.5px solid #344054' : '1px solid #cbd5e1',
+                      background: b.bakgrund !== undefined && b.bakgrund !== '' ? b.bakgrund : 'rgba(23,92,211,0.04)',
+                      overflow: 'hidden', cursor: 'move',
                       fontSize: b.fontPt * PX * 0.353, textAlign: b.align, lineHeight: 1.25, padding: 1,
                     }}
                     title={faltEtikett(b.falt)}>
                     {b.visaEtikett ? <b>{faltEtikett(b.falt)}: </b> : null}{varde || <i style={{ color: '#98a2b3' }}>{faltEtikett(b.falt)}</i>}
-                    {valdBox === b.id && (
+                    {valda.length === 1 && valda[0] === b.id && (
                       <div onPointerDown={(e) => {
                         e.stopPropagation();
                         const p = mmPos(e);
@@ -287,6 +341,10 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
                 );
               })}
               {/* gummiband */}
+              {drag?.typ === 'markera' && (() => {
+                const r = normaliseraRuta(drag.x1, drag.y1, drag.x2, drag.y2, 0.1);
+                return <div style={{ position: 'absolute', left: mm(r.xMm), top: mm(r.yMm), width: mm(r.wMm), height: mm(r.hMm), border: '1.5px dashed #667085', background: 'rgba(102,112,133,0.08)', pointerEvents: 'none' }} />;
+              })()}
               {drag?.typ === 'rita' && (() => {
                 const r = normaliseraRuta(drag.x1, drag.y1, drag.x2, drag.y2, 0.1);
                 return <div style={{ position: 'absolute', left: mm(r.xMm), top: mm(r.yMm), width: mm(r.wMm), height: mm(r.hMm), border: '1.5px dashed #175cd3', background: 'rgba(23,92,211,0.06)', pointerEvents: 'none' }} />;
