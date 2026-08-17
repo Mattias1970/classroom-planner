@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { createContext, lazy, Suspense, useContext, useEffect, useMemo, useState } from 'react';
 import {
   applyClassEdits, applySchemaEdits, buildBegreppTabell, computeTimes, defaultBamTimeline, diffMinutes,
   grupperaPerAmne,
@@ -9,6 +9,7 @@ import {
   distinctEditedFields, generateSlots, normalizeUrl, placeLessons, summarizeEdits,
   weeksLabel, KAP_COLORS,
   ALLA_AMNEN, amnesSummering, deriveSetup, isSetupComplete, planeringFromSetup, type SchemaPass,
+  NIVA_GRON_BLA_ROD, type NivaEtiketter,
   type LessonRecord, type PlacedLesson, type ScheduledSlot, type SubjectFile,
 } from '@planner/core';
 import { SchedulePanel, TimeBand } from '../views/SchemaOchTidsband.js';
@@ -36,6 +37,7 @@ import {
   getPrio, setPrio, PRIO_ALL,
   getClassEdits, getClassNote, setClassNote, lsGet, lsSet,
   deleteLokalPlanering, getLokalaBocker, getLokalaPlaneringar, saveLokalPlanering,
+  applyLokalBok, resolveAktivBok,
   deleteCustomPrompt, getCustomPrompts, saveCustomPrompt,
   deleteVariant, getCacheInfo, getTokenExpiryHeader, getVariants,
   saveAsVariant, setActiveVariant, setVariantField,
@@ -46,6 +48,10 @@ import './styles.css';
 
 const SuperTeachPanel = lazy(() => import('../features/superteach/SuperTeachPanel.js'));
 const FLAG = 'classroom-planner.superteach.enabled';
+
+/** Del 26: nivånamn (Grön/Blå/Röd eller ETT/TVÅ/TRE) — följer aktiv bok. */
+const NivaCtx = createContext<NivaEtiketter>(NIVA_GRON_BLA_ROD);
+function useNiva(): NivaEtiketter { return useContext(NivaCtx); }
 
 type Tab = 'arsoversikt' | 'planering' | 'kalender' | 'klasser' | 'bibliotek' | 'superteach';
 const TABS: Array<[Tab, string]> = [
@@ -64,11 +70,14 @@ export default function App() {
   const stOn = lsGet(FLAG) === 'true';
   const [showEdits, setShowEdits] = useState(false); // FR-EDIT-008
 
-  // FR-SCH + FR-CM: lokala schema- och klassändringar appliceras ovanpå datakällan
-  const libEff = useMemo<LoadedLibrary>(
-    () => ({ ...lib, subject: applyClassEdits(applySchemaEdits(lib.subject, getSchemaEdits()), getClassEdits()) }),
-    [lib, tick],
-  );
+  // Del 9: initieringstillstånd per planering (slug), spärr via canCreateOverview
+  const { setup, validation, uppdatera } = useSetup(`cp.setup.v1.${getSettings().slug}`);
+  // Del 26: vald bok (Bibliotek → Böcker eller initieringens bokval) fyller planeringen;
+  // FR-SCH + FR-CM: lokala schema- och klassändringar appliceras ovanpå.
+  const libEff = useMemo<LoadedLibrary>(() => {
+    const medBok = applyLokalBok(lib, resolveAktivBok(setup.bok));
+    return { ...medBok, subject: applyClassEdits(applySchemaEdits(medBok.subject, getSchemaEdits()), getClassEdits()) };
+  }, [lib, tick, setup.bok?.titel, setup.bok?.forlag]);
   useEffect(() => { // Krav 4: token används automatiskt vid start; krav 3 gör starten snabb
     if (getSettings().githubToken === '') return;
     let cancelled = false;
@@ -84,8 +93,6 @@ export default function App() {
   const [sizeModal, setSizeModal] = useState(false);
   const [classMgr, setClassMgr] = useState(false); // FR-CM-001
   const [settingsOpen, setSettingsOpen] = useState(false); // Del 9: kugghjulspanel
-  // Del 9: initieringstillstånd per planering (slug), spärr via canCreateOverview
-  const { setup, validation, uppdatera } = useSetup(`cp.setup.v1.${getSettings().slug}`);
   const editCount = useMemo(() => distinctEditedFields(getOverrides()), [tick]); // FR-EDIT-007
   // Del 16: ämnesval i årsöversikten styr topbarens summering (null = datakällans ämne)
   const [oversiktAmne, setOversiktAmne] = useState<string | null>(null);
@@ -169,9 +176,11 @@ export default function App() {
   };
 
   return (
+    <NivaCtx.Provider value={libEff.nivaer ?? NIVA_GRON_BLA_ROD}>
     <div className="app">
       <header className="topbar">
         <span className="logo">📘 Classroom Planner</span>
+        {libEff.bookId && <span className="pill book-pill" title="Planeringen bygger på denna bok (Bibliotek → Böcker)">📗 {libEff.subject.meta.lärobok}</span>}
         {TABS.filter(([t]) => t !== 'superteach' || stOn).map(([t, label]) => (
           <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>{label}</button>
         ))}
@@ -308,6 +317,7 @@ export default function App() {
         </div>
       )}
     </div>
+    </NivaCtx.Provider>
   );
 }
 
@@ -513,10 +523,11 @@ function OversiktTab(props: {
   onOpenRow: (idx: number) => void;
 }) {
   const { kapitel, lessons, slotFor, onOpenRow } = props;
+  const N = useNiva();
   return (
     <table className="tbl clickable">
       <thead><tr><th>Lek.</th><th>Vecka</th><th>Datum</th><th>Tid</th><th>Avsnitt</th><th>Typ</th>
-        <th>🟢 Grön</th><th>🔵 Blå</th><th>🔴 Röd</th></tr></thead>
+        <th>🟢 {N.grön}</th><th>🔵 {N.blå}</th><th>🔴 {N.röd}</th></tr></thead>
       <tbody>
         {lessons.map((l, i) => {
           const sl = slotFor(kapitel, i);
@@ -541,14 +552,15 @@ function OversiktTab(props: {
 
 function UppgifterTab(props: { kapitel: number; lessons: LessonRecord[] }) {
   const { kapitel, lessons } = props;
+  const N = useNiva();
   const har = (v: string) => !!v && v !== '—';
   return (<>
     <div className="card">{/* FR-UPP-002 + FR-EXT-002 */}
       <div className="title">📌 Inlämning</div>
       <ul className="rules-ul">
         <li>Foto på beräkningar laddas upp i <b>Google Classroom</b></li>
-        <li><span className="rg grön">Grön</span> + <span className="rg blå">Blå</span> är <b>obligatoriska</b></li>
-        <li><span className="rg röd">Röd</span> — görs och lämnas in om lektionstid finns, annars frivillig fördjupning</li>
+        <li><span className="rg grön">{N.grön}</span> + <span className="rg blå">{N.blå}</span> är <b>obligatoriska</b></li>
+        <li><span className="rg röd">{N.röd}</span> — görs och lämnas in om lektionstid finns, annars frivillig fördjupning</li>
       </ul>
     </div>
     {lessons.map((l, i) => {
@@ -559,14 +571,14 @@ function UppgifterTab(props: { kapitel: number; lessons: LessonRecord[] }) {
         <div key={`${l.id}-${i}`} className="upp-card">
           <div className="upp-head">
             <b>Lektion {i + 1} — {effectiveField(kapitel, l, 'avsnitt')}</b>
-            {l.del === 1 && <span className="pill min">Lek 1: min. Grön</span>}
-            {l.del === 2 && <span className="pill min">Lek 2: min. Blå</span>}
+            {l.del === 1 && <span className="pill min">Lek 1: min. {N.grön}</span>}
+            {l.del === 2 && <span className="pill min">Lek 2: min. {N.blå}</span>}
             {har(l.sidor_teori) && <span className="muted">📖 {l.sidor_teori}</span>}
           </div>
           <div className="upp-levels">
-            {har(g) && <div className="upp-lv grön"><h6>🟢 GRÖN – INTRODUKTION</h6><p>Uppg. {g}</p><span className="pill min">Obligatorisk</span></div>}
-            {har(b) && <div className="upp-lv blå"><h6>🔵 BLÅ – E-NIVÅ</h6><p>Uppg. {b}</p><span className="pill min">Obligatorisk</span></div>}
-            {har(r) && <div className="upp-lv röd"><h6>🔴 RÖD – C/A-NIVÅ</h6><p>Uppg. {r}</p><span className="pill">Frivillig / vid lektionstid</span></div>}
+            {har(g) && <div className="upp-lv grön"><h6>🟢 {N.grön.toUpperCase()} – INTRODUKTION</h6><p>Uppg. {g}</p><span className="pill min">Obligatorisk</span></div>}
+            {har(b) && <div className="upp-lv blå"><h6>🔵 {N.blå.toUpperCase()} – E-NIVÅ</h6><p>Uppg. {b}</p><span className="pill min">Obligatorisk</span></div>}
+            {har(r) && <div className="upp-lv röd"><h6>🔴 {N.röd.toUpperCase()} – C/A-NIVÅ</h6><p>Uppg. {r}</p><span className="pill">Frivillig / vid lektionstid</span></div>}
           </div>
         </div>
       );
@@ -747,6 +759,7 @@ function LessonCard(props: {
   flip?: import('@planner/core').FlipDoc; onChange: () => void; onAddAfter: () => void;
 }) {
   const { kapitel, lesson, slot, globalIdx, classId, socRoom, defs, perDelkapitel, bookLinks, override, flip, onChange, onAddAfter } = props;
+  const N = useNiva();
   const har = (v: string) => !!v && v !== '—';
   const begreppList = effBegrepp(kapitel, lesson, perDelkapitel);
   const [cancelDlg, setCancelDlg] = useState(false);
@@ -821,9 +834,9 @@ function LessonCard(props: {
                   <b>{seg.label}</b><span>{seg.from}–{seg.to}</span>
                   {seg.kind === 'work' && ( /* fig 11: nivåintervall i segmentet */
                     <i className="seg-levels">{[
-                      har(effectiveField(kapitel, lesson, 'grön')) && `Grön ${effectiveField(kapitel, lesson, 'grön')}`,
-                      har(effectiveField(kapitel, lesson, 'blå')) && `Blå ${effectiveField(kapitel, lesson, 'blå')}`,
-                      har(effectiveField(kapitel, lesson, 'röd')) && `Röd ${effectiveField(kapitel, lesson, 'röd')}`,
+                      har(effectiveField(kapitel, lesson, 'grön')) && `${N.grön} ${effectiveField(kapitel, lesson, 'grön')}`,
+                      har(effectiveField(kapitel, lesson, 'blå')) && `${N.blå} ${effectiveField(kapitel, lesson, 'blå')}`,
+                      har(effectiveField(kapitel, lesson, 'röd')) && `${N.röd} ${effectiveField(kapitel, lesson, 'röd')}`,
                     ].filter(Boolean).join(' · ')}</i>
                   )}
                 </div>
@@ -880,30 +893,30 @@ function LessonCard(props: {
               <p className="work-intro">
                 <b>Lektion {lesson.del} av 2 — {effectiveField(kapitel, lesson, 'avsnitt')}</b><br />
                 {lesson.del === 1
-                  ? <>Alla börjar med <span className="rg grön">Gröna</span> uppgifter (introduktion, obligatorisk). Fortsätt med <span className="rg blå">Blå</span> om du är klar med gröna.</>
-                  : <>Minimum: gör klart <span className="rg blå">Blå</span> (E-nivå). Fortsätt med <span className="rg röd">Röda</span> för fördjupning mot C/A-nivå.</>}
+                  ? <>Alla börjar med <span className="rg grön">{N.grön}</span>-uppgifter (introduktion, obligatorisk). Fortsätt med <span className="rg blå">{N.blå}</span> om du är klar med {N.grön}.</>
+                  : <>Minimum: gör klart <span className="rg blå">{N.blå}</span> (E-nivå). Fortsätt med <span className="rg röd">{N.röd}</span> för fördjupning mot C/A-nivå.</>}
               </p>
             )}
             <div className="upp-levels">
               {har(effectiveField(kapitel, lesson, 'grön')) && (
-                <div className="upp-lv grön"><h6>🟢 GRÖN – INTRODUKTION</h6>
+                <div className="upp-lv grön"><h6>🟢 {N.grön.toUpperCase()} – INTRODUKTION</h6>
                   <p>Uppg. <span className="inline-wrap sm"><Editable kapitel={kapitel} lesson={lesson} field="grön" onChange={onChange} /></span></p>
                   <small>Alla elever · Obligatorisk</small>
                   {lesson.del === 1 && <span className="pill min">Minimum lektion 1</span>}</div>
               )}
               {har(effectiveField(kapitel, lesson, 'blå')) && (
-                <div className="upp-lv blå"><h6>🔵 BLÅ – E-NIVÅ</h6>
+                <div className="upp-lv blå"><h6>🔵 {N.blå.toUpperCase()} – E-NIVÅ</h6>
                   <p>Uppg. <span className="inline-wrap sm"><Editable kapitel={kapitel} lesson={lesson} field="blå" onChange={onChange} /></span></p>
-                  <small>{lesson.del === 1 ? 'När grön är klar · Obligatorisk' : 'Alla elever · Obligatorisk'}</small>
+                  <small>{lesson.del === 1 ? `När ${N.grön} är klar · Obligatorisk` : 'Alla elever · Obligatorisk'}</small>
                   {lesson.del === 2 && <span className="pill min">Minimum lektion 2</span>}</div>
               )}
               {har(effectiveField(kapitel, lesson, 'röd')) && (
-                <div className="upp-lv röd"><h6>🔴 RÖD – C/A-NIVÅ</h6>
+                <div className="upp-lv röd"><h6>🔴 {N.röd.toUpperCase()} – C/A-NIVÅ</h6>
                   <p>Uppg. <span className="inline-wrap sm"><Editable kapitel={kapitel} lesson={lesson} field="röd" onChange={onChange} /></span></p>
                   <small>Frivillig · görs om lektionstid finns</small></div>
               )}
             </div>
-            <p className="note">📷 <b>Inlämning via Google Classroom.</b> Fotografera beräkningarna och ladda upp i Classroom. <b>Minst gröna och blå uppgifter</b> ska laddas upp — det är obligatoriskt. Röda uppgifter är frivilliga. Det som inte hinns med görs klart hemma eller på stödtid och lämnas sedan in.</p>
+            <p className="note">📷 <b>Inlämning via Google Classroom.</b> Fotografera beräkningarna och ladda upp i Classroom. <b>Minst {N.grön}- och {N.blå}-uppgifter</b> ska laddas upp — det är obligatoriskt. {N.röd}-uppgifter är frivilliga. Det som inte hinns med görs klart hemma eller på stödtid och lämnas sedan in.</p>
           </div>
         )}
 
@@ -917,7 +930,7 @@ function LessonCard(props: {
             </div>
           </>)}
           <Editable kapitel={kapitel} lesson={lesson} field="laxa" onChange={onChange} />
-          <p className="note">Gröna och blå uppgifter ska vara klara och inlämnade via Google Classroom innan nästa lektion om de ej gjorts på lektionstid.</p>
+          <p className="note">{N.grön}- och {N.blå}-uppgifter ska vara klara och inlämnade via Google Classroom innan nästa lektion om de ej gjorts på lektionstid.</p>
         </div>
       </div>
 

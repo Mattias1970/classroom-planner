@@ -7,17 +7,20 @@
  */
 import { useMemo, useState } from 'react';
 import {
-  STANDARD_AMNEN, filterBocker, raknaLektioner, validateBokImport,
-  type BookFile, type LessonRecord, type LokalBok,
+  NIVA_GRON_BLA_ROD, STANDARD_AMNEN, filterBocker, raknaLektioner, validateBokImport,
+  type BookFile, type LessonRecord, type LokalBok, type NivaEtiketter,
 } from '@planner/core';
-import { deleteLokalBok, getLokalaBocker, saveLokalBok, type LoadedLibrary } from '../state/store.js';
+import {
+  deleteLokalBok, getAktivBokId, getLokalaBocker, saveLokalBok, setAktivBokId, type LoadedLibrary,
+} from '../state/store.js';
 
-interface BokRad { bok: BookFile; lektioner: Record<number, LessonRecord[]>; kalla: 'datakalla' | 'egen'; }
+interface BokRad { bok: BookFile; lektioner: Record<number, LessonRecord[]>; kalla: 'datakalla' | 'egen'; nivaer: NivaEtiketter; }
 
 function datakallansBok(lib: LoadedLibrary): BokRad {
   const meta = lib.subject.meta;
   return {
     kalla: 'datakalla',
+    nivaer: NIVA_GRON_BLA_ROD,
     lektioner: lib.lessons,
     bok: {
       id: '__datakalla__',
@@ -41,8 +44,11 @@ export function BokBibliotek(props: { lib: LoadedLibrary; onChange: () => void }
 
   const alla = useMemo<BokRad[]>(() => [
     datakallansBok(lib),
-    ...getLokalaBocker().map((b: LokalBok) => ({ ...b, kalla: 'egen' as const })),
+    ...getLokalaBocker().map((b: LokalBok) => ({ ...b, nivaer: b.nivaer ?? NIVA_GRON_BLA_ROD, kalla: 'egen' as const })),
   ], [lib, tick]);
+  // Del 26: vilken bok planeringen bygger på. null ⇒ datakällans (eller initieringens bokval).
+  const aktivId = getAktivBokId();
+  const aktivEffektiv = lib.bookId ?? '__datakalla__';
 
   const amnen = useMemo(() => {
     const iBruk = new Set(alla.map((b) => b.bok.ämne));
@@ -60,12 +66,23 @@ export function BokBibliotek(props: { lib: LoadedLibrary; onChange: () => void }
       if (bok.bok.id === '__datakalla__') { setMsg('✗ Bok-id:t är reserverat.'); return; }
       const fannsRedan = getLokalaBocker().some((b) => b.bok.id === bok.bok.id);
       saveLokalBok(bok);
+      const aktiveras = getAktivBokId() === null && lib.bookId === undefined;
+      if (aktiveras) setAktivBokId(bok.bok.id);
       bump((t) => t + 1); onChange();
       setVald(bok.bok.id); setValdKap(null);
-      setMsg(`✓ "${bok.bok.titel}" (${bok.bok.ämne}, åk ${bok.bok.årskurs}) ${fannsRedan ? 'uppdaterad' : 'importerad'} — ${raknaLektioner(bok.lektioner)} lektioner.`);
+      const niv = bok.nivaer ?? NIVA_GRON_BLA_ROD;
+      setMsg(`✓ "${bok.bok.titel}" (${bok.bok.ämne}, åk ${bok.bok.årskurs}, nivåer ${niv.grön}/${niv.blå}/${niv.röd}) ${fannsRedan ? 'uppdaterad' : 'importerad'} — ${raknaLektioner(bok.lektioner)} lektioner.${aktiveras ? ' Boken används nu i planeringen: årsöversikt, lektionsplaner, begrepp och läxor är ifyllda.' : ''}`);
     } catch (e) {
       setMsg(`✗ ${(e as Error).message}`);
     }
+  };
+
+  const anvand = (id: string | null, titel: string) => {
+    setAktivBokId(id);
+    bump((t) => t + 1); onChange();
+    setMsg(id
+      ? `✓ Planeringen bygger nu på "${titel}" — årsöversikt, kalender, lektionsplaner, uppgiftsnivåer och begrepp fylls i ur bokens lektionsblad. Klasser, schema och läsår är oförändrade.`
+      : '✓ Planeringen bygger nu på datakällans bok igen.');
   };
 
   const taBort = (id: string, titel: string) => {
@@ -82,7 +99,10 @@ export function BokBibliotek(props: { lib: LoadedLibrary; onChange: () => void }
       <p className="note">
         Böcker delas in i ämnen och årskurser. Importera en egen bok: fotografera bokens sidor,
         kör prompten <b>Bokimport</b> (Promptbiblioteket nedan) i en AI-chatt med bilderna, och
-        importera JSON-filen här. Välj sedan boken för att se innehållet som lektioner.
+        importera JSON-filen här. <b>▶ Använd i planeringen</b> fyller årsöversikt, kalender,
+        lektionsplaner, uppgiftsnivåer (t.ex. ETT/TVÅ/TRE), begrepp och läxor automatiskt ur
+        bokens lektionsblad — klasser, schema och läsår behålls. Egna fältredigeringar ligger
+        kvar som overlay per kapitel och lektions-id.
       </p>
 
       <div className="modal-actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}>
@@ -112,9 +132,17 @@ export function BokBibliotek(props: { lib: LoadedLibrary; onChange: () => void }
               </small>
             </div>
             <div className="cm-actions">
+              {aktivEffektiv === r.bok.id && <span className="pill book-pill" title="Planeringen bygger på denna bok">▶ I planeringen</span>}
               <span className={`pill src-${r.kalla === 'datakalla' ? 'datakalla' : 'egen'}`}>
                 {r.kalla === 'datakalla' ? 'Datakälla' : 'Egen'}
               </span>
+              <span className="pill" title="Bokens nivånamn">{r.nivaer.grön}/{r.nivaer.blå}/{r.nivaer.röd}</span>
+              {aktivEffektiv !== r.bok.id && (
+                <button className="btn" onClick={() => anvand(r.kalla === 'datakalla' ? null : r.bok.id, r.bok.titel)}>▶ Använd i planeringen</button>
+              )}
+              {aktivEffektiv === r.bok.id && r.kalla === 'egen' && aktivId === r.bok.id && (
+                <button className="btn sec" title="Gå tillbaka till datakällans bok" onClick={() => anvand(null, '')}>↩ Datakällans bok</button>
+              )}
               <button className="btn sec" onClick={() => { setVald(vald === r.bok.id ? null : r.bok.id); setValdKap(null); }}>
                 {vald === r.bok.id ? 'Dölj innehåll' : '📖 Visa innehåll'}
               </button>
@@ -136,7 +164,7 @@ export function BokBibliotek(props: { lib: LoadedLibrary; onChange: () => void }
               </div>
               {valdKap !== null && (
                 <table className="tbl">
-                  <thead><tr><th>#</th><th>Avsnitt</th><th>Del</th><th>Typ</th><th>Grön</th><th>Blå</th><th>Röd</th><th>Begrepp</th></tr></thead>
+                  <thead><tr><th>#</th><th>Avsnitt</th><th>Del</th><th>Typ</th><th>{valdRad.nivaer.grön}</th><th>{valdRad.nivaer.blå}</th><th>{valdRad.nivaer.röd}</th><th>Begrepp</th></tr></thead>
                   <tbody>
                     {(valdRad.lektioner[valdKap] ?? []).map((l) => (
                       <tr key={l.id}>

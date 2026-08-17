@@ -105,3 +105,56 @@ describe('raknaLektioner', () => {
     expect(raknaLektioner(b.lektioner)).toBe(2);
   });
 });
+
+// ── Del 26: ETT/TVÅ/TRE, begrepp per delkapitel, härledd kapitelMeta, bokval ──
+import {
+  NIVA_ETT_TVA_TRE, NIVA_GRON_BLA_ROD, begreppPerDelkapitel, delkapitelKey,
+  detectNivaer, hittaBokForVal,
+} from '../src/domain/bocker.js';
+
+const matteY = {
+  schema: BOK_IMPORT_SCHEMA, version: 1,
+  bok: { id: 'liber-matematik-y', titel: 'Matematik Y', förlag: 'Liber', ämne: 'Matematik', årskurs: 8,
+    kapitelMeta: { '4': { name: 'Algebra', col: '#2f5aa8' } } },
+  lektioner: { '4': [
+    { id: 1, type: 'regular', avsnitt: '4.6 Ekvationer', del: 1, ett: '133–137', två: '138–143', tre: '—', sidor_teori: 's. 187–190', begrepp: 'ekvation, obekant, balansmetoden' },
+    { id: 2, type: 'regular', avsnitt: '4.6 Ekvationer', del: 2, ett: '—', två: '144–150', tre: '151–159', begrepp: 'Ekvation, vänster led' },
+    { id: 3, type: 'review', avsnitt: 'Sammanfattning', del: 1, sidor_teori: 's. 264–265' },
+    { id: 4, type: 'exam', avsnitt: '4 Prov', del: 1 },
+  ] },
+};
+
+describe('bocker – ETT/TVÅ/TRE (Matematik Y)', () => {
+  it('mappar ett/två/tre till interna fält och känner av nivåsystemet', () => {
+    const b = validateBokImport(matteY);
+    expect(b.nivaer).toEqual(NIVA_ETT_TVA_TRE);
+    expect(b.lektioner[4][0]).toMatchObject({ grön: '133–137', blå: '138–143', röd: '—' });
+    expect(b.lektioner[4][1]).toMatchObject({ grön: '—', blå: '144–150', röd: '151–159' });
+  });
+  it('grön/blå/röd-böcker får Grön/Blå/Röd', () => {
+    expect(validateBokImport(giltigImport).nivaer).toEqual(NIVA_GRON_BLA_ROD);
+    expect(detectNivaer([])).toEqual(NIVA_GRON_BLA_ROD);
+  });
+  it('härleder sammanfattning och prov till kapitelMeta', () => {
+    const m = validateBokImport(matteY).bok.kapitelMeta['4'];
+    expect(m.lektioner).toBe(4);
+    expect(m.sidor_samm).toBe('s. 264–265');
+    expect(m.prov).toBe('4 Prov');
+    expect(m.col).toBe('#2f5aa8');
+  });
+  it('begrepp per delkapitel utan dubbletter, bara ur N.M-avsnitt', () => {
+    const b = validateBokImport(matteY);
+    expect(begreppPerDelkapitel(b.lektioner)).toEqual({ '4.6': ['ekvation', 'obekant', 'balansmetoden', 'vänster led'] });
+    expect(delkapitelKey('4.6 Ekvationer')).toBe('4.6');
+    expect(delkapitelKey('Blandade uppgifter')).toBeNull();
+    expect(delkapitelKey('4 Prov')).toBeNull();
+  });
+  it('hittaBokForVal matchar titel och prioriterar förlag', () => {
+    const y = validateBokImport(matteY);
+    const y2 = { ...y, bok: { ...y.bok, id: 'annat', förlag: 'Annat' } };
+    expect(hittaBokForVal([y2, y], { titel: 'matematik y', forlag: 'Liber' })?.bok.id).toBe('liber-matematik-y');
+    expect(hittaBokForVal([y2, y], { titel: 'Matematik Y' })?.bok.id).toBe('annat');
+    expect(hittaBokForVal([y], { titel: 'Prio 8' })).toBeNull();
+    expect(hittaBokForVal([y], null)).toBeNull();
+  });
+});

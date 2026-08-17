@@ -483,3 +483,6 @@ html.is-mobile.phone-large { font-size: 17px; }
 .inline-wrap .inline-edit { font: inherit; padding: 1px 6px; }
 .pill.teori .inline-edit { background: transparent; border-color: transparent; width: 90px; }
 .pill.teori .edit-wrap.has-edit .inline-edit { background: #fef9c3; }
+
+/* Del 26: aktiv bok i planeringen */
+.book-pill { background: #e6f2e6; color: #1e5a2e; border: 1px solid #b7d8b7; }

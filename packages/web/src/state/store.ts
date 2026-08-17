@@ -10,6 +10,8 @@ import {
   type SubjectFile,
   type Elev,
   type LokalBok,
+  type NivaEtiketter,
+  NIVA_GRON_BLA_ROD, begreppPerDelkapitel, hittaBokForVal,
   type LokalPlanering,
   sorteraBetygsdatum,
   type AmnesreglerMap, type Betygsdatum, type Lektionsregel, type UtskriftsLayout,
@@ -126,6 +128,58 @@ export function saveLokalBok(bok: LokalBok): void {
 }
 export function deleteLokalBok(bokId: string): void {
   write(BOCKER_KEY, getLokalaBocker().filter((b) => b.bok.id !== bokId));
+  if (getAktivBokId() === bokId) setAktivBokId(null);
+}
+
+// ── Aktiv bok i planeringen (del 26) ─────────────────────────
+// null = följ initieringens bokval (om det pekar på en lokal bok), annars datakällan.
+const AKTIV_BOK_KEY = 'classroom-planner.aktiv-bok.v1';
+export function getAktivBokId(): string | null {
+  const v = lsGet(AKTIV_BOK_KEY);
+  return v && v !== '' ? v : null;
+}
+export function setAktivBokId(id: string | null): void { lsSet(AKTIV_BOK_KEY, id ?? ''); }
+
+/**
+ * Vilken lokal bok planeringen ska bygga på: uttryckligt val i Bibliotek
+ * vinner, annars initieringens bokval (titel/förlag) om det matchar en
+ * importerad bok. null ⇒ datakällans bok.
+ */
+export function resolveAktivBok(setupBok?: { titel: string; forlag?: string } | null): LokalBok | null {
+  const bocker = getLokalaBocker();
+  const id = getAktivBokId();
+  if (id) return bocker.find((b) => b.bok.id === id) ?? null;
+  return hittaBokForVal(bocker, setupBok);
+}
+
+/**
+ * Lägger den aktiva boken ovanpå det inlästa biblioteket: kapitel, lektioner
+ * och begrepp kommer från boken; klasser, schema och läsår behålls från
+ * datakällan så årsöversikt, kalender och lektionsplaner fylls i automatiskt.
+ * Flip-dokument och boklänkar nollställs (de hör till datakällans bok).
+ */
+export function applyLokalBok(lib: LoadedLibrary, bok: LokalBok | null): LoadedLibrary {
+  if (!bok) return { ...lib, nivaer: lib.nivaer ?? NIVA_GRON_BLA_ROD };
+  return {
+    ...lib,
+    bookId: bok.bok.id,
+    nivaer: bok.nivaer ?? NIVA_GRON_BLA_ROD,
+    subject: {
+      ...lib.subject,
+      bookId: bok.bok.id,
+      kapitelMeta: bok.bok.kapitelMeta,
+      meta: {
+        ...lib.subject.meta,
+        lärobok: bok.bok.förlag ? `${bok.bok.titel}, ${bok.bok.förlag}` : bok.bok.titel,
+        ämne: bok.bok.ämne,
+        årskurs: bok.bok.årskurs || lib.subject.meta.årskurs,
+      },
+    },
+    lessons: bok.lektioner,
+    flip: {},
+    lankar: {},
+    begrepp: { perDelkapitel: begreppPerDelkapitel(bok.lektioner), definitioner: {} },
+  };
 }
 
 // ── Lokala planeringar i kalendern (del 13) ───────────────────
@@ -197,6 +251,7 @@ export function exportBackup(): string {
     lessonVariants: lsGet(VARIANTS_KEY),
     elever: lsGet(ELEVER_KEY),
     bocker: lsGet(BOCKER_KEY),
+    aktivBok: lsGet(AKTIV_BOK_KEY),
     planeringar: lsGet(PLANERINGAR_KEY),
     betygsdatum: lsGet(BETYGSDATUM_KEY),
     amnesregler: lsGet(AMNESREGLER_KEY),
@@ -221,6 +276,7 @@ export function importBackup(json: string): void {
   if (typeof b.lessonVariants === 'string') lsSet(VARIANTS_KEY, b.lessonVariants);
   if (typeof b.elever === 'string') lsSet(ELEVER_KEY, b.elever);
   if (typeof b.bocker === 'string') lsSet(BOCKER_KEY, b.bocker);
+  if (typeof b.aktivBok === 'string') lsSet(AKTIV_BOK_KEY, b.aktivBok);
   if (typeof b.planeringar === 'string') lsSet(PLANERINGAR_KEY, b.planeringar);
   if (typeof b.betygsdatum === 'string') lsSet(BETYGSDATUM_KEY, b.betygsdatum);
   if (typeof b.amnesregler === 'string') lsSet(AMNESREGLER_KEY, b.amnesregler);
@@ -358,6 +414,10 @@ export interface LoadedLibrary {
   lankar: Record<string, import('@planner/core').BookLink[]>;
   /** Promptmallar ur datakällans prompter/-katalog. */
   prompter: PromptTemplate[];
+  /** Aktiv lokal bok (Bibliotek → Böcker → Använd i planeringen); undefined = datakällans. */
+  bookId?: string;
+  /** Nivånamn: Grön/Blå/Röd eller ETT/TVÅ/TRE. */
+  nivaer?: NivaEtiketter;
 }
 
 export function demoLibrary(): LoadedLibrary {

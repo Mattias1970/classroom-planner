@@ -17,9 +17,60 @@ import { STANDARD_AMNEN } from './setup.js';
 
 export const BOK_IMPORT_SCHEMA = 'classroom-planner-bok';
 
+/** Etiketter för de tre uppgiftsnivåerna (intro / E / C–A). Internt heter fälten alltid grön/blå/röd. */
+export interface NivaEtiketter { grön: string; blå: string; röd: string; }
+export const NIVA_GRON_BLA_ROD: NivaEtiketter = { grön: 'Grön', blå: 'Blå', röd: 'Röd' };
+export const NIVA_ETT_TVA_TRE: NivaEtiketter = { grön: 'ETT', blå: 'TVÅ', röd: 'TRE' };
+
 export interface LokalBok {
   bok: BookFile;
   lektioner: Record<number, LessonRecord[]>;
+  /** Bokens nivånamn (t.ex. ETT/TVÅ/TRE för Matematik Y). Saknas ⇒ Grön/Blå/Röd. */
+  nivaer?: NivaEtiketter;
+}
+
+/** Avgör nivåsystem ur råa lektionsobjekt: majoritet av ett/två/tre ⇒ ETT/TVÅ/TRE. */
+export function detectNivaer(rader: Array<Record<string, unknown>>): NivaEtiketter {
+  let ett = 0, gron = 0;
+  for (const r of rader) {
+    if ('ett' in r || 'två' in r || 'tva' in r || 'tre' in r) ett++;
+    if ('grön' in r || 'gron' in r || 'blå' in r || 'bla' in r || 'röd' in r || 'rod' in r) gron++;
+  }
+  return ett > 0 && ett >= gron ? NIVA_ETT_TVA_TRE : NIVA_GRON_BLA_ROD;
+}
+
+/** Delkapitelnyckel "4.6" ur avsnitt "4.6 Ekvationer" (null för t.ex. "Blandade uppgifter"). */
+export function delkapitelKey(avsnitt: string): string | null {
+  const m = avsnitt.match(/^([1-9]\d?)\.(\d{1,2})\b/);
+  return m ? `${m[1]}.${m[2]}` : null;
+}
+
+/** Begrepp per delkapitel, härledda ur lektionernas begrepp-fält (dedupe, ordning bevaras). */
+export function begreppPerDelkapitel(lektioner: Record<number, LessonRecord[]>): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const list of Object.values(lektioner)) for (const l of list) {
+    const key = delkapitelKey(l.avsnitt);
+    if (!key || l.begrepp === '—') continue;
+    const acc = out[key] ?? [];
+    const seen = new Set(acc.map((b) => b.toLowerCase()));
+    for (const b of l.begrepp.split(',')) {
+      const t = b.trim();
+      if (t === '' || t === '—' || seen.has(t.toLowerCase())) continue;
+      seen.add(t.toLowerCase()); acc.push(t);
+    }
+    out[key] = acc;
+  }
+  return out;
+}
+
+/** Hittar den lokala bok som initieringens bokval pekar på (titel, ev. förlag). */
+export function hittaBokForVal(bocker: LokalBok[], val: { titel: string; forlag?: string } | null | undefined): LokalBok | null {
+  if (!val || val.titel.trim() === '') return null;
+  const t = val.titel.trim().toLowerCase();
+  const kandidater = bocker.filter((b) => b.bok.titel.trim().toLowerCase() === t);
+  if (kandidater.length === 0) return null;
+  const f = (val.forlag ?? '').trim().toLowerCase();
+  return (f !== '' ? kandidater.find((b) => b.bok.förlag.trim().toLowerCase() === f) : undefined) ?? kandidater[0];
 }
 
 function kravSträng(v: unknown, falt: string): string {
@@ -43,7 +94,9 @@ export function normalizeLesson(raw: Record<string, unknown>, kapitel: number, i
   const del = Number(raw.del);
   return {
     id, type: typ, avsnitt, del: Number.isFinite(del) ? del : 1,
-    grön: tillText(raw['grön'] ?? raw['gron']), blå: tillText(raw['blå'] ?? raw['bla']), röd: tillText(raw['röd'] ?? raw['rod']),
+    grön: tillText(raw['grön'] ?? raw['gron'] ?? raw['ett']),
+    blå: tillText(raw['blå'] ?? raw['bla'] ?? raw['två'] ?? raw['tva']),
+    röd: tillText(raw['röd'] ?? raw['rod'] ?? raw['tre']),
     sidor_teori: tillText(raw.sidor_teori), begrepp: tillText(raw.begrepp),
     soc_start: tillText(raw.soc_start), exit: tillText(raw.exit), genomgang: tillText(raw.genomgang),
     bam_gora: tillText(raw.bam_gora), bam_lara: tillText(raw.bam_lara), bam_ex: tillText(raw.bam_ex),
@@ -80,6 +133,7 @@ export function validateBokImport(data: unknown): LokalBok {
   const kapitelMetaIn = (typeof b.kapitelMeta === 'object' && b.kapitelMeta !== null
     ? b.kapitelMeta : {}) as Record<string, Partial<KapitelMeta>>;
   const kapitelMeta: Record<string, KapitelMeta> = {};
+  const allaRader: Array<Record<string, unknown>> = [];
 
   for (const [kapStr, list] of Object.entries(lektionerRaw as Record<string, unknown>)) {
     const kap = Number(kapStr);
@@ -87,6 +141,7 @@ export function validateBokImport(data: unknown): LokalBok {
     if (!Array.isArray(list)) throw new Error(`Kapitel ${kap}: "lektioner" måste vara en lista.`);
     const rader = list.map((row, i) => {
       if (typeof row !== 'object' || row === null) throw new Error(`Kapitel ${kap}, lektion ${i + 1}: inte ett objekt.`);
+      allaRader.push(row as Record<string, unknown>);
       return normalizeLesson(row as Record<string, unknown>, kap, i);
     });
     const ids = new Set<number>();
@@ -96,11 +151,16 @@ export function validateBokImport(data: unknown): LokalBok {
     }
     lektioner[kap] = rader;
     const metaIn = kapitelMetaIn[kapStr] ?? {};
+    // Sammanfattnings- och provsidor härleds ur lektionsbladen om boken inte anger dem.
+    const samm = rader.find((l) => l.type === 'review') ?? rader.find((l) => /sammanfattning/i.test(l.avsnitt));
+    const prov = rader.find((l) => l.type === 'exam') ?? rader.find((l) => l.type === 'test');
     kapitelMeta[kapStr] = {
       ...DEFAULT_KAPMETA,
       ...metaIn,
       name: typeof metaIn.name === 'string' && metaIn.name.trim() !== '' ? metaIn.name : `Kapitel ${kap}`,
       lektioner: rader.length,
+      sidor_samm: metaIn.sidor_samm || (samm && samm.sidor_teori !== '—' ? samm.sidor_teori : ''),
+      prov: metaIn.prov || (prov ? (prov.sidor_teori !== '—' ? `${prov.avsnitt} (${prov.sidor_teori})` : prov.avsnitt) : ''),
     };
   }
   if (Object.keys(lektioner).length === 0) throw new Error('Boken innehåller inga kapitel.');
@@ -113,7 +173,7 @@ export function validateBokImport(data: unknown): LokalBok {
     årskurs: arskurs,
     kapitelMeta,
   };
-  return { bok, lektioner };
+  return { bok, lektioner, nivaer: detectNivaer(allaRader) };
 }
 
 export interface BokFilter { amne?: string | null; arskurs?: number | null; }
