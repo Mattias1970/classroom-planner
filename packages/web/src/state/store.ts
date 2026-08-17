@@ -11,7 +11,7 @@ import {
   type Elev,
   type LokalBok,
   type NivaEtiketter,
-  NIVA_GRON_BLA_ROD, begreppPerDelkapitel, hittaBokForVal,
+  NIVA_GRON_BLA_ROD, begreppPerDelkapitel, hittaBokForVal, klassBokVal,
   type LokalPlanering,
   sorteraBetygsdatum,
   type AmnesreglerMap, type Betygsdatum, type Lektionsregel, type UtskriftsLayout,
@@ -150,6 +150,38 @@ export function resolveAktivBok(setupBok?: { titel: string; forlag?: string } | 
   const id = getAktivBokId();
   if (id) return bocker.find((b) => b.bok.id === id) ?? null;
   return hittaBokForVal(bocker, setupBok);
+}
+
+/**
+ * Del 27: bok för en viss klass. Klassens eget val (importerad bok eller
+ * uttryckligen datakällan) vinner; annars planeringens gemensamma bokval.
+ */
+export function resolveBokForClass(
+  subject: SubjectFile, classId: string, setupBok?: { titel: string; forlag?: string } | null,
+): LokalBok | null {
+  const c = subject.meta.klasser.find((x) => x.id === classId);
+  const val = klassBokVal(c ?? {});
+  if (val.typ === 'datakalla') return null;
+  if (val.typ === 'lokal') return getLokalaBocker().find((b) => b.bok.id === val.bokId) ?? null;
+  return resolveAktivBok(setupBok);
+}
+
+/**
+ * Del 27: biblioteket sett från en klass — klassens bok fyller kapitel/lektioner/
+ * begrepp, klassens ämne (om satt) styr meta.ämne. Klasser, schema och läsår
+ * kommer alltid från subjectEff (datakälla + lokala klass-/schemaändringar).
+ */
+export function libForClass(
+  base: LoadedLibrary, subjectEff: SubjectFile, classId: string,
+  setupBok?: { titel: string; forlag?: string } | null,
+): LoadedLibrary {
+  const withSubject: LoadedLibrary = { ...base, subject: subjectEff };
+  const lib = applyLokalBok(withSubject, resolveBokForClass(subjectEff, classId, setupBok));
+  const c = subjectEff.meta.klasser.find((x) => x.id === classId);
+  if (c?.ämne && c.ämne.trim() !== '' && c.ämne !== lib.subject.meta.ämne) {
+    return { ...lib, subject: { ...lib.subject, meta: { ...lib.subject.meta, ämne: c.ämne } } };
+  }
+  return lib;
 }
 
 /**

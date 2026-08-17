@@ -11,7 +11,7 @@ export interface AddedClass { klass: ClassMeta; schema: SchedulePass[]; }
 export interface ClassEdits {
   added?: AddedClass[];
   /** Patchar per klass-id (FR-CM-003). */
-  renamed?: Record<string, Partial<Pick<ClassMeta, 'namn' | 'läsår' | 'socrative'>>>;
+  renamed?: Record<string, Partial<Pick<ClassMeta, 'namn' | 'läsår' | 'socrative' | 'ämne' | 'bokId'>>>;
   /** true = arkiverad, false = återaktiverad (FR-CM-005/006). */
   archived?: Record<string, boolean>;
   /** Permanent borttagna klass-id:n (FR-CM-007). */
@@ -45,6 +45,19 @@ export function applyClassEdits(subject: SubjectFile, edits: ClassEdits): Subjec
   for (const id of deleted) delete schema[id];
 
   return { ...subject, meta: { ...subject.meta, klasser }, schema };
+}
+
+/**
+ * Del 27: vilket bokval en klass har.
+ *  - 'lokal'      → bokId pekar på en importerad bok
+ *  - 'datakalla'  → uttryckligen datakällans bok
+ *  - 'arv'        → inget eget val, följer planeringens gemensamma bokval
+ */
+export type KlassBokVal = { typ: 'lokal'; bokId: string } | { typ: 'datakalla' } | { typ: 'arv' };
+export function klassBokVal(c: Pick<ClassMeta, 'bokId'>): KlassBokVal {
+  if (c.bokId === undefined || c.bokId === '') return { typ: 'arv' };
+  if (c.bokId === '__datakalla__') return { typ: 'datakalla' };
+  return { typ: 'lokal', bokId: c.bokId };
 }
 
 /** Unikt klass-id ur önskat namn: '8A' → '8A', krockar → '8A-2', '8A-3' … */

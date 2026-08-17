@@ -37,7 +37,7 @@ import {
   getPrio, setPrio, PRIO_ALL,
   getClassEdits, getClassNote, setClassNote, lsGet, lsSet,
   deleteLokalPlanering, getLokalaBocker, getLokalaPlaneringar, saveLokalPlanering,
-  applyLokalBok, resolveAktivBok,
+  libForClass, resolveAktivBok,
   deleteCustomPrompt, getCustomPrompts, saveCustomPrompt,
   deleteVariant, getCacheInfo, getTokenExpiryHeader, getVariants,
   saveAsVariant, setActiveVariant, setVariantField,
@@ -74,10 +74,20 @@ export default function App() {
   const { setup, validation, uppdatera } = useSetup(`cp.setup.v1.${getSettings().slug}`);
   // Del 26: vald bok (Bibliotek → Böcker eller initieringens bokval) fyller planeringen;
   // FR-SCH + FR-CM: lokala schema- och klassändringar appliceras ovanpå.
-  const libEff = useMemo<LoadedLibrary>(() => {
-    const medBok = applyLokalBok(lib, resolveAktivBok(setup.bok));
-    return { ...medBok, subject: applyClassEdits(applySchemaEdits(medBok.subject, getSchemaEdits()), getClassEdits()) };
-  }, [lib, tick, setup.bok?.titel, setup.bok?.forlag]);
+  // Del 27: klasser/schema/läsår är gemensamma; bok och ämne kan vara per klass.
+  const subjectEff = useMemo<SubjectFile>(
+    () => applyClassEdits(applySchemaEdits(lib.subject, getSchemaEdits()), getClassEdits()),
+    [lib, tick],
+  );
+  const activeIds = subjectEff.meta.klasser.filter((c) => !c.arkiverad).map((c) => c.id);
+  const safeClassId = activeIds.includes(classId) ? classId : (activeIds[0] ?? classId);
+  const libByClass = useMemo<Record<string, LoadedLibrary>>(() => {
+    const out: Record<string, LoadedLibrary> = {};
+    for (const id of activeIds) out[id] = libForClass(lib, subjectEff, id, setup.bok);
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lib, subjectEff, tick, activeIds.join('|'), setup.bok?.titel, setup.bok?.forlag]);
+  const libEff = libByClass[safeClassId] ?? libForClass(lib, subjectEff, safeClassId, setup.bok);
   useEffect(() => { // Krav 4: token används automatiskt vid start; krav 3 gör starten snabb
     if (getSettings().githubToken === '') return;
     let cancelled = false;
@@ -110,27 +120,29 @@ export default function App() {
     () => composeChapter(kapitel, libEff.lessons[kapitel] ?? []),
     [libEff, kapitel, tick],
   );
-  const sequence = useMemo(
-    () => chapters.flatMap((k) => composeChapter(k, libEff.lessons[k] ?? []).map((lesson) => ({ kapitel: k, lesson }))),
-    [libEff, tick],
-  );
+  // Del 27: varje klass får sin egen lektionssekvens ur sin egen bok.
+  const sequenceFor = (l: LoadedLibrary) => Object.keys(l.subject.kapitelMeta).map(Number).sort((a, b) => a - b)
+    .flatMap((k) => composeChapter(k, l.lessons[k] ?? []).map((lesson) => ({ kapitel: k, lesson })));
+  const sequence = useMemo(() => sequenceFor(libEff), [libEff, tick]); // eslint-disable-line react-hooks/exhaustive-deps
   const placedByClass = useMemo(() => {
     const out: Record<string, PlacedLesson<LessonRecord>[]> = {};
-    for (const c of libEff.subject.meta.klasser.filter((x) => !x.arkiverad)) {
-      const slots = generateSlots(libEff.subject, c.id, sequence.length + 20);
-      out[c.id] = placeLessons(sequence, slots, getCalOverrides(c.id));
+    for (const id of activeIds) {
+      const l = libByClass[id] ?? libEff;
+      const seq = sequenceFor(l);
+      out[id] = placeLessons(seq, generateSlots(l.subject, id, seq.length + 20), getCalOverrides(id));
     }
     return out;
-  }, [libEff, sequence, tick]);
+  }, [libByClass, libEff, activeIds, tick]); // eslint-disable-line react-hooks/exhaustive-deps
   // FR-YR-005/007: baslinje = samma sekvens utan kalenderöverstyrningar
   const baselineByClass = useMemo(() => {
     const out: Record<string, PlacedLesson<LessonRecord>[]> = {};
-    for (const c of libEff.subject.meta.klasser.filter((x) => !x.arkiverad)) {
-      const slots = generateSlots(libEff.subject, c.id, sequence.length + 20);
-      out[c.id] = placeLessons(sequence, slots);
+    for (const id of activeIds) {
+      const l = libByClass[id] ?? libEff;
+      const seq = sequenceFor(l);
+      out[id] = placeLessons(seq, generateSlots(l.subject, id, seq.length + 20));
     }
     return out;
-  }, [libEff, sequence, tick]);
+  }, [libByClass, libEff, activeIds, tick]); // eslint-disable-line react-hooks/exhaustive-deps
   const goTo = (kap: number, section: InnerTab) => { setKapitel(kap); setInner(section); setTab('planering'); }; // FR-GEN-005
   const [focus, setFocus] = useState<{ idx: number; token: number } | null>(null); // FR-CAL-009
   const openLesson = (kap: number, globalIdx: number) => {
@@ -139,8 +151,6 @@ export default function App() {
     setKapitel(kap); setInner('lektionsplan'); setTab('planering');
     setFocus({ idx: globalIdx - before, token: Date.now() });
   };
-  const activeIds = libEff.subject.meta.klasser.filter((c) => !c.arkiverad).map((c) => c.id);
-  const safeClassId = activeIds.includes(classId) ? classId : (activeIds[0] ?? classId);
   if (safeClassId !== classId) setTimeout(() => setClassId(safeClassId), 0);
   const placed = placedByClass[safeClassId] ?? [];
   // Del 9/11: befintlig komplett data (t.ex. Prio 8) häver spärren automatiskt —
@@ -180,7 +190,7 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <span className="logo">📘 Classroom Planner</span>
-        {libEff.bookId && <span className="pill book-pill" title="Planeringen bygger på denna bok (Bibliotek → Böcker)">📗 {libEff.subject.meta.lärobok}</span>}
+        {libEff.bookId && <span className="pill book-pill" title={`Klass ${safeClassId} planeras efter denna bok (Klasser / Bibliotek → Böcker)`}>📗 {libEff.subject.meta.lärobok}</span>}
         {TABS.filter(([t]) => t !== 'superteach' || stOn).map(([t, label]) => (
           <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>{label}</button>
         ))}
@@ -296,7 +306,7 @@ export default function App() {
         <button className="fab-size" title="Skärmstorlek" onClick={() => setSizeModal(true)}>📱</button>
       )}
       {sizeModal && <ScreenSizeModal size={screenSize} onPick={setScreenSize} onClose={() => setSizeModal(false)} />}
-      {classMgr && <KlassHanterare subject={libEff.subject} onClose={() => setClassMgr(false)} onChange={refresh} />}
+      {classMgr && <KlassHanterare subject={subjectEff} datakallansBok={{ titel: lib.subject.meta.lärobok, amne: lib.subject.meta.ämne }} onClose={() => setClassMgr(false)} onChange={refresh} />}
 
       {showEdits && ( /* FR-EDIT-008 */
         <div className="overlay" role="dialog" onClick={() => setShowEdits(false)}>

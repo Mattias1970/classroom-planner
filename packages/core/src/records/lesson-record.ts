@@ -41,7 +41,16 @@ export interface FlipDoc {
 
 export interface ClassMeta {
   id: string; namn: string; läsår: string; socrative: string; arkiverad: boolean;
+  /** Del 27: klassens ämne (saknas ⇒ planeringens ämne). */
+  ämne?: string;
+  /**
+   * Del 27: klassens bok — id på en importerad bok, DATAKALLA_BOK_ID för
+   * datakällans bok, eller undefined ⇒ följ planeringens gemensamma bokval.
+   */
+  bokId?: string;
 }
+/** Reserverat bok-id: klassen använder datakällans bok uttryckligen. */
+export const DATAKALLA_BOK_ID = '__datakalla__';
 export interface SchedulePass { day: number; start: string; end: string; }
 /** [år, månad(0-index), dag] — exakt som JavaScripts Date-konstruktor. */
 export type YmdTuple = [number, number, number];

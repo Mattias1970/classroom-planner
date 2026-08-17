@@ -486,3 +486,7 @@ html.is-mobile.phone-large { font-size: 17px; }
 
 /* Del 26: aktiv bok i planeringen */
 .book-pill { background: #e6f2e6; color: #1e5a2e; border: 1px solid #b7d8b7; }
+
+/* Del 27: ämne/bok per klass */
+.cm-klassval { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.cm-klassval select { font-size: 12px; max-width: 260px; }

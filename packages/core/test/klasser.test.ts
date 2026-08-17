@@ -107,3 +107,27 @@ describe('nextChapterOf (FR-MOB-008/009)', () => {
     expect(nextChapterOf([1, 2], 7)).toBeNull();
   });
 });
+
+// ── Del 27: ämne och bok per klass ──────────────────────────
+import { klassBokVal } from '../src/logic/klasser.js';
+import { DATAKALLA_BOK_ID } from '../src/records/lesson-record.js';
+describe('klasser – ämne/bok per klass (del 27)', () => {
+  it('klassBokVal skiljer arv, datakälla och lokal bok', () => {
+    expect(klassBokVal({})).toEqual({ typ: 'arv' });
+    expect(klassBokVal({ bokId: '' })).toEqual({ typ: 'arv' });
+    expect(klassBokVal({ bokId: DATAKALLA_BOK_ID })).toEqual({ typ: 'datakalla' });
+    expect(klassBokVal({ bokId: 'liber-matematik-y' })).toEqual({ typ: 'lokal', bokId: 'liber-matematik-y' });
+  });
+});
+describe('applyClassEdits – ämne/bokId per klass (del 27)', () => {
+  it('nya klasser kan bära ämne och bokId; renamed kan sätta/ändra dem', () => {
+    const out = applyClassEdits(SUBJECT, {
+      added: [{ klass: { id: '8A', namn: '8A', läsår: '2026/27', socrative: 'Matte8A', arkiverad: false, ämne: 'Matematik', bokId: 'liber-matematik-y' }, schema: [] }],
+      renamed: { '8F': { ämne: 'Fysik', bokId: DATAKALLA_BOK_ID } },
+    });
+    expect(out.meta.klasser.find((c) => c.id === '8A')).toMatchObject({ ämne: 'Matematik', bokId: 'liber-matematik-y' });
+    expect(out.meta.klasser.find((c) => c.id === '8F')).toMatchObject({ ämne: 'Fysik', bokId: DATAKALLA_BOK_ID });
+    expect(out.meta.klasser.find((c) => c.id === '8B')?.bokId).toBeUndefined();
+    expect(SUBJECT.meta.klasser[1].bokId).toBeUndefined(); // ingen mutation
+  });
+});

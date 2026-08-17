@@ -114,3 +114,46 @@ describe('BokBibliotek – använd bok i planeringen (del 26)', () => {
     setAktivBokId(null);
   });
 });
+
+// ── Del 27: bok och ämne per klass ───────────────────────────
+import { libForClass, resolveBokForClass, saveClassEdits } from '../src/state/store';
+import { DATAKALLA_BOK_ID, applyClassEdits } from '@planner/core';
+
+describe('bok per klass (del 27)', () => {
+  it('klassens eget bokval vinner över gemensamt val; datakälla kan väljas uttryckligen', () => {
+    setAktivBokId(null);
+    saveLokalBok(matteY());
+    const lib = demoLibrary();
+    const subj = applyClassEdits(lib.subject, {
+      added: [{ klass: { id: '8A', namn: '8A', läsår: '2026/27', socrative: 'Matte8A', arkiverad: false, ämne: 'Matematik', bokId: 'liber-matematik-y' }, schema: [] }],
+      renamed: { '8F': { bokId: DATAKALLA_BOK_ID } },
+    });
+    // 8A → Matematik Y, 8F → uttryckligen datakällan, 8B → gemensamt (här datakällan)
+    expect(resolveBokForClass(subj, '8A')?.bok.id).toBe('liber-matematik-y');
+    expect(resolveBokForClass(subj, '8F', { titel: 'Matematik Y' })).toBeNull();
+    expect(resolveBokForClass(subj, '8B')).toBeNull();
+    // gemensamt val slår igenom på 8B men inte 8F
+    setAktivBokId('liber-matematik-y');
+    expect(resolveBokForClass(subj, '8B')?.bok.id).toBe('liber-matematik-y');
+    expect(resolveBokForClass(subj, '8F')).toBeNull();
+    setAktivBokId(null);
+    // libForClass: egen lektionsuppsättning per klass, klasser/schema gemensamma
+    const l8A = libForClass(lib, subj, '8A');
+    const l8F = libForClass(lib, subj, '8F');
+    expect(l8A.bookId).toBe('liber-matematik-y');
+    expect(Object.keys(l8A.subject.kapitelMeta)).toEqual(['4']);
+    expect(l8F.bookId).toBeUndefined();
+    expect(l8F.lessons).toBe(lib.lessons);
+    expect(l8A.subject.meta.klasser).toEqual(subj.meta.klasser);
+    expect(l8A.subject.schema).toEqual(subj.schema);
+    expect(l8A.nivaer?.grön).toBe('ETT');
+    expect(l8F.nivaer?.grön).toBe('Grön');
+  });
+  it('klassens ämne styr meta.ämne för klassens planering', () => {
+    const lib = demoLibrary();
+    saveClassEdits({ renamed: { '8B': { ämne: 'Fysik', bokId: DATAKALLA_BOK_ID } } });
+    const subj = applyClassEdits(lib.subject, { renamed: { '8B': { ämne: 'Fysik', bokId: DATAKALLA_BOK_ID } } });
+    expect(libForClass(lib, subj, '8B').subject.meta.ämne).toBe('Fysik');
+    saveClassEdits({});
+  });
+});
