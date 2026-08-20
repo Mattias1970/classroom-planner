@@ -11,7 +11,8 @@ import {
   type Elev,
   type LokalBok,
   type NivaEtiketter,
-  NIVA_GRON_BLA_ROD, begreppPerDelkapitel, hittaBokForVal, klassBokVal,
+  NIVA_GRON_BLA_ROD, begreppPerDelkapitel, hittaBokForVal, klassBokVal, normaliseraKalendarium,
+  type KalenderDag,
   type LokalPlanering,
   sorteraBetygsdatum,
   type AmnesreglerMap, type Betygsdatum, type Lektionsregel, type UtskriftsLayout,
@@ -214,6 +215,13 @@ export function applyLokalBok(lib: LoadedLibrary, bok: LokalBok | null): LoadedL
   };
 }
 
+// ── Kalendarium: temadagar & halvdagar (del 28) ──────────────
+const KALENDARIUM_KEY = 'classroom-planner.kalendarium.v1';
+export function getKalendarium(): KalenderDag[] { return read<KalenderDag[]>(KALENDARIUM_KEY, []); }
+export function saveKalendarium(dagar: KalenderDag[]): void { write(KALENDARIUM_KEY, normaliseraKalendarium(dagar)); }
+export function addKalendariumDagar(dagar: KalenderDag[]): void { saveKalendarium([...getKalendarium(), ...dagar]); }
+export function removeKalendariumDag(datum: string): void { saveKalendarium(getKalendarium().filter((d) => d.datum !== datum)); }
+
 // ── Lokala planeringar i kalendern (del 13) ───────────────────
 const PLANERINGAR_KEY = 'classroom-planner.planeringar.v1';
 export function getLokalaPlaneringar(): LokalPlanering[] { return read<LokalPlanering[]>(PLANERINGAR_KEY, []); }
@@ -284,6 +292,7 @@ export function exportBackup(): string {
     elever: lsGet(ELEVER_KEY),
     bocker: lsGet(BOCKER_KEY),
     aktivBok: lsGet(AKTIV_BOK_KEY),
+    kalendarium: lsGet(KALENDARIUM_KEY),
     planeringar: lsGet(PLANERINGAR_KEY),
     betygsdatum: lsGet(BETYGSDATUM_KEY),
     amnesregler: lsGet(AMNESREGLER_KEY),
@@ -309,6 +318,7 @@ export function importBackup(json: string): void {
   if (typeof b.elever === 'string') lsSet(ELEVER_KEY, b.elever);
   if (typeof b.bocker === 'string') lsSet(BOCKER_KEY, b.bocker);
   if (typeof b.aktivBok === 'string') lsSet(AKTIV_BOK_KEY, b.aktivBok);
+  if (typeof b.kalendarium === 'string') lsSet(KALENDARIUM_KEY, b.kalendarium);
   if (typeof b.planeringar === 'string') lsSet(PLANERINGAR_KEY, b.planeringar);
   if (typeof b.betygsdatum === 'string') lsSet(BETYGSDATUM_KEY, b.betygsdatum);
   if (typeof b.amnesregler === 'string') lsSet(AMNESREGLER_KEY, b.amnesregler);

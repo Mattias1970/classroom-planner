@@ -7,6 +7,7 @@
  * SubjectFile, så lov och svenska röda dagar respekteras automatiskt.
  */
 import { generateSlots, type ScheduledSlot } from '../records/schedule.js';
+import type { KalenderDag } from '../logic/kalendarium.js';
 import type { SubjectFile } from '../records/lesson-record.js';
 import { STANDARD_AMNEN, type SchemaPass, type SetupState } from './setup.js';
 import { raknaLektioner, type LokalBok } from './bocker.js';
@@ -86,10 +87,10 @@ export interface ExternPost {
 const VECKOR_PER_LASAR = 40;
 
 /** Genererar planeringens alla kalenderposter för läsåret. */
-export function byggExternaPoster(p: LokalPlanering, lasar: SubjectFile['läsår']): ExternPost[] {
+export function byggExternaPoster(p: LokalPlanering, lasar: SubjectFile['läsår'], kalendarium: KalenderDag[] = []): ExternPost[] {
   if (p.schema.length === 0) return [];
   const slots: ScheduledSlot[] = generateSlots(
-    planeringSubject(p, lasar), p.klassNamn, p.schema.length * VECKOR_PER_LASAR,
+    planeringSubject(p, lasar), p.klassNamn, p.schema.length * VECKOR_PER_LASAR, kalendarium,
   );
   return slots.map((s) => ({
     date: s.date, week: s.week, weekday: s.weekday, start: s.start, end: s.end,

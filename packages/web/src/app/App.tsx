@@ -37,7 +37,7 @@ import {
   getPrio, setPrio, PRIO_ALL,
   getClassEdits, getClassNote, setClassNote, lsGet, lsSet,
   deleteLokalPlanering, getLokalaBocker, getLokalaPlaneringar, saveLokalPlanering,
-  libForClass, resolveAktivBok,
+  getKalendarium, libForClass, resolveAktivBok,
   deleteCustomPrompt, getCustomPrompts, saveCustomPrompt,
   deleteVariant, getCacheInfo, getTokenExpiryHeader, getVariants,
   saveAsVariant, setActiveVariant, setVariantField,
@@ -129,7 +129,7 @@ export default function App() {
     for (const id of activeIds) {
       const l = libByClass[id] ?? libEff;
       const seq = sequenceFor(l);
-      out[id] = placeLessons(seq, generateSlots(l.subject, id, seq.length + 20), getCalOverrides(id));
+      out[id] = placeLessons(seq, generateSlots(l.subject, id, seq.length + 20, getKalendarium()), getCalOverrides(id));
     }
     return out;
   }, [libByClass, libEff, activeIds, tick]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -139,7 +139,7 @@ export default function App() {
     for (const id of activeIds) {
       const l = libByClass[id] ?? libEff;
       const seq = sequenceFor(l);
-      out[id] = placeLessons(seq, generateSlots(l.subject, id, seq.length + 20));
+      out[id] = placeLessons(seq, generateSlots(l.subject, id, seq.length + 20, getKalendarium()));
     }
     return out;
   }, [libByClass, libEff, activeIds, tick]); // eslint-disable-line react-hooks/exhaustive-deps

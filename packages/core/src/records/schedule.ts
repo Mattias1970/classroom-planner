@@ -3,6 +3,7 @@
  * subject.json — lektionspass, läsårsstart, lov och svenska röda dagar.
  */
 import type { LovPeriod, SchedulePass, SubjectFile, YmdTuple } from './lesson-record.js';
+import { sparrEtikett, type KalenderDag } from '../logic/kalendarium.js';
 
 function ymd(t: YmdTuple): Date { return new Date(Date.UTC(t[0], t[1], t[2])); }
 function iso(d: Date): string { return d.toISOString().slice(0, 10); }
@@ -59,9 +60,10 @@ export function isoWeek(d: Date): number {
 
 /**
  * Genererar de N första lektionstillfällena för en klass.
- * Hoppar över helger, lov och röda dagar.
+ * Hoppar över helger, lov, röda dagar samt kalendariets temadagar och
+ * halvdagar (del 28) — bortfallna pass förskjuter planeringen framåt.
  */
-export function generateSlots(subject: SubjectFile, classId: string, count: number): ScheduledSlot[] {
+export function generateSlots(subject: SubjectFile, classId: string, count: number, kalendarium: KalenderDag[] = []): ScheduledSlot[] {
   const passes = subject.schema[classId];
   if (!passes || passes.length === 0) return [];
   const byDay = new Map<number, SchedulePass>(passes.map((p) => [p.day, p]));
@@ -76,7 +78,8 @@ export function generateSlots(subject: SubjectFile, classId: string, count: numb
     const weekday = d.getUTCDay() === 0 ? 7 : d.getUTCDay();
     const pass = byDay.get(weekday);
     const dateIso = iso(d);
-    if (pass && weekday <= 5 && !holidays.has(dateIso) && inLov(dateIso, subject.läsår.lov) === null) {
+    if (pass && weekday <= 5 && !holidays.has(dateIso) && inLov(dateIso, subject.läsår.lov) === null
+      && sparrEtikett(dateIso, pass.start, kalendarium) === null) {
       slots.push({ date: dateIso, week: isoWeek(d), weekday, start: pass.start, end: pass.end });
     }
     d = addDays(d, 1);

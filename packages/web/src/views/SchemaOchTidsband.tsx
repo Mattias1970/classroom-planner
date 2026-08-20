@@ -6,13 +6,80 @@
  */
 import { useMemo, useState } from 'react';
 import {
-  isValidPass, parseIcsEvents, parseWeekday, suggestSchedulePasses, svDateLabel,
-  type LessonRecord, type PlacedLesson, type SchedulePass, type SubjectFile, type YmdTuple,
+  isValidPass, kalendariumFromIcs, parseIcsEvents, parseKalendarium, parseWeekday,
+  suggestSchedulePasses, svDateLabel,
+  type KalenderDag, type LessonRecord, type PlacedLesson, type SchedulePass, type SubjectFile, type YmdTuple,
 } from '@planner/core';
-import { getSchemaEdits, saveSchemaEdits } from '../state/store.js';
+import {
+  addKalendariumDagar, getKalendarium, getSchemaEdits, removeKalendariumDag, saveSchemaEdits,
+} from '../state/store.js';
 
 const DAY_SHORT = ['', 'Mån', 'Tis', 'Ons', 'Tor', 'Fre'];
 const DAY_LONG = ['', 'Måndag', 'Tisdag', 'Onsdag', 'Torsdag', 'Fredag'];
+
+// ── Kalendarium: temadagar & halvdagar (del 28) ───────────────
+function KalendariumPanel(props: { onChange: () => void }) {
+  const { onChange } = props;
+  const [tick, bump] = useState(0);
+  const [text, setText] = useState('');
+  const [msg, setMsg] = useState('');
+  const dagar = useMemo(() => getKalendarium(), [tick]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const laggTill = (nya: KalenderDag[], källa: string) => {
+    addKalendariumDagar(nya);
+    bump((t) => t + 1); onChange();
+    const heldagar = nya.filter((d) => d.typ === 'heldag').length;
+    setMsg(`✓ ${nya.length} dagar tillagda från ${källa} (${heldagar} heldagar, ${nya.length - heldagar} halvdagar). Berörda lektioner har tagits bort ur planeringen och resten förskjutits.`);
+  };
+  const importIcs = async (file: File) => {
+    try { laggTill(kalendariumFromIcs(await file.text()), file.name); }
+    catch (e) { setMsg(`✗ ${(e as Error).message}`); }
+  };
+  const importText = () => {
+    try { laggTill(parseKalendarium(text), 'texten'); setText(''); }
+    catch (e) { setMsg(`✗ ${(e as Error).message}`); }
+  };
+
+  return (
+    <div className="kalendarium">
+      <h4 className="cm-h">📅 KALENDARIUM — TEMADAGAR & HALVDAGAR</h4>
+      <p className="note">
+        Dagar här spärrar lektionspass: <b>heldag</b> tar bort alla klassers lektioner den dagen,
+        <b> halvdag</b> tar bort pass som börjar vid eller efter sluttiden. Bortfallna lektioner
+        försvinner ur planeringen och resten förskjuts framåt. Dagarna markeras i kalendern.
+      </p>
+      <div className="modal-actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}>
+        <label className="btn sec file-btn">⬆ Ladda upp kalendarium (.ics)
+          <input type="file" accept=".ics,text/calendar" hidden
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) void importIcs(f); e.target.value = ''; }} />
+        </label>
+      </div>
+      <div className="kal-paste">
+        <textarea rows={3} value={text} onChange={(e) => setText(e.target.value)}
+          placeholder={'En dag per rad:\n2026-09-15 Temadag\n2026-10-02 halvdag 11:30 Öppet hus'} />
+        <button className="btn sec" disabled={text.trim() === ''} onClick={importText}>➕ Lägg till från text</button>
+      </div>
+      {dagar.length > 0 && (
+        <table className="tbl">
+          <thead><tr><th>Datum</th><th>Typ</th><th>Etikett</th><th></th></tr></thead>
+          <tbody>
+            {dagar.map((d) => (
+              <tr key={d.datum}>
+                <td>{d.datum}</td>
+                <td>{d.typ === 'heldag' ? 'Heldag' : `Halvdag — slutar ${d.slut}`}</td>
+                <td>{d.label}</td>
+                <td><button className="icon-btn" title="Ta bort dag"
+                  onClick={() => { removeKalendariumDag(d.datum); bump((t) => t + 1); onChange(); }}>🗑</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {dagar.length === 0 && <p className="muted">Inga temadagar eller halvdagar inlagda.</p>}
+      {msg && <p className="status">{msg}</p>}
+    </div>
+  );
+}
 
 // ── Schemapanel ───────────────────────────────────────────────
 export function SchedulePanel(props: { subject: SubjectFile; onChange: () => void }) {
@@ -117,6 +184,7 @@ export function SchedulePanel(props: { subject: SubjectFile; onChange: () => voi
           <p className="note">Exportera schemat från Google Kalender (Inställningar → Importera och exportera → Exportera) och ladda upp .ics-filen. Passen fylls i ovan — inget sparas förrän du klickar Spara schema.</p>
           <button className="btn" onClick={save}>{saved ? '✓ Sparat!' : 'Spara schema'}</button>
           <p className="note">Ändringarna sparas i webbläsaren och ligger ovanpå datakällan — de följer med i backupen.</p>
+          <KalendariumPanel onChange={onChange} />
         </div>
       )}
     </div>

@@ -45,6 +45,7 @@ export * from './logic/redigering.js';
 export * from './logic/verktyg.js';
 export * from './logic/klasser.js';
 export * from './logic/ical.js';
+export * from './logic/kalendarium.js';
 export * from './logic/prototyp-import.js';
 export * from './logic/prompter.js';
 export * from './logic/varianter.js';

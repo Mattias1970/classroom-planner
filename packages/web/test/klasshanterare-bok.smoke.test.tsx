@@ -39,18 +39,23 @@ describe('KlassHanterare – ämne och bok per klass (del 27)', () => {
     expect(host.textContent).toContain('planeras nu efter Matematik Y, Liber');
   });
 
-  it('ny klass kan skapas med ämne och bok', () => {
+  it('ny klass kräver eget schema (inget arv) och skapas med ämne, bok och pass', () => {
     const lib = demoLibrary();
     const host = render(<KlassHanterare subject={lib.subject} onClose={() => {}} onChange={() => {}} />);
-    const namn = host.querySelector<HTMLInputElement>('input[placeholder^="Namn"]')!;
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
-    act(() => { setter.call(namn, '8X'); namn.dispatchEvent(new Event('input', { bubbles: true })); });
+    expect(host.textContent).not.toContain('Ärv schema'); // del 28: arv borttaget
+    const inSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    const type = (el: HTMLInputElement, v: string) => act(() => { inSetter.call(el, v); el.dispatchEvent(new Event('input', { bubbles: true })); });
+    type(host.querySelector<HTMLInputElement>('input[placeholder^="Namn"]')!, '8X');
     act(() => { setSelect(host.querySelector<HTMLSelectElement>('select[aria-label="Ämne för ny klass"]')!, 'Fysik'); });
-    const btn = [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('Lägg till'))!;
+    const btn = [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('Lägg till klass'))!;
+    expect(btn.disabled).toBe(true); // inget giltigt pass ännu
+    type(host.querySelector<HTMLInputElement>('input[aria-label="Veckodag pass 1"]')!, 'Onsdag');
+    expect(btn.disabled).toBe(false);
     act(() => { btn.click(); });
     const added = getClassEdits().added ?? [];
     expect(added).toHaveLength(1);
     expect(added[0].klass).toMatchObject({ namn: '8X', ämne: 'Fysik' });
     expect(added[0].klass.bokId).toBeUndefined();
+    expect(added[0].schema).toEqual([{ day: 3, start: '08:10', end: '09:10' }]); // bokens lektioner mappas på detta
   });
 });

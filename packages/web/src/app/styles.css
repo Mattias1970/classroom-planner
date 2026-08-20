@@ -490,3 +490,17 @@ html.is-mobile.phone-large { font-size: 17px; }
 /* Del 27: ämne/bok per klass */
 .cm-klassval { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
 .cm-klassval select { font-size: 12px; max-width: 260px; }
+
+/* Del 28: kalendarium — temadagar & halvdagar */
+.cal-break.tema { background: #fff3e0; color: #8a4b08; border-color: #f0c48a; }
+.cal-break.tema.halv { background: #fff8e1; }
+.cal-daycol.tema { background: repeating-linear-gradient(45deg, #fff3e0, #fff3e0 8px, #ffe8c7 8px, #ffe8c7 16px); }
+.cal-daycol.tema-halv { background: linear-gradient(180deg, transparent 45%, #fff3e0 45%); }
+.cal-cell.tema { background: #fff3e0; }
+.cal-cell.tema-halv { background: linear-gradient(180deg, #ffffff 50%, #fff3e0 50%); }
+.temalabel { display: block; font-size: 10px; color: #8a4b08; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-d.tema { background: #ffd9a8; border-radius: 3px; }
+.kalendarium textarea { width: 100%; font-family: inherit; font-size: 13px; }
+.kal-paste { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start; margin: 6px 0; }
+.cm-schema { display: grid; gap: 6px; margin-top: 6px; }
+.cm-schema .sched-row { display: flex; gap: 6px; align-items: center; }

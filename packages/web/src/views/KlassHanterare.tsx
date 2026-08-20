@@ -5,8 +5,9 @@
  */
 import { useState } from 'react';
 import {
-  DATAKALLA_BOK_ID, STANDARD_AMNEN, applyClassEdits, klassBokVal, uniqueClassId, validateClassBackup,
-  type ClassMeta, type SubjectFile,
+  DATAKALLA_BOK_ID, STANDARD_AMNEN, applyClassEdits, isValidPass, klassBokVal, parseWeekday,
+  uniqueClassId, validateClassBackup,
+  type ClassMeta, type SchedulePass, type SubjectFile,
 } from '@planner/core';
 import { getClassEdits, getLokalaBocker, saveClassEdits } from '../state/store.js';
 import { EleverPanel } from './Elever.js';
@@ -38,25 +39,30 @@ export function KlassHanterare(props: {
   const archivedList = subject.meta.klasser.filter((c) => c.arkiverad);
   const [namn, setNamn] = useState('');
   const [lasar, setLasar] = useState(active[0]?.läsår ?? '2026/27');
-  const [inheritFrom, setInheritFrom] = useState(active[0]?.id ?? '');
   const [msg, setMsg] = useState('');
+  // Del 28: schemat ärvs inte — den nya klassen får de pass som anges här,
+  // och bokens lektioner mappas sedan på det schemat.
+  const [nyaPass, setNyaPass] = useState<Array<{ dayText: string; start: string; end: string }>>([
+    { dayText: '', start: '08:10', end: '09:10' },
+  ]);
+  const tolkadePass: SchedulePass[] = nyaPass
+    .map((r) => ({ day: parseWeekday(r.dayText) ?? 0, start: r.start, end: r.end }))
+    .filter(isValidPass);
   const [eleverFor, setEleverFor] = useState<string | null>(null); // del 10
 
   const edits = getClassEdits();
   const save = (e: typeof edits) => { saveClassEdits(e); onChange(); };
 
-  const addClass = (srcId: string, newNamn: string, newLasar: string, amne?: string, bokId?: string) => { /* FR-CM-002/004 + del 27 */
+  const addClass = (newNamn: string, newLasar: string, amne: string, bokId: string, schema: SchedulePass[]) => { /* FR-CM-002 + del 27/28 */
     const id = uniqueClassId(newNamn, subject.meta.klasser.map((c) => c.id));
-    const schema = (subject.schema[srcId] ?? []).map((p) => ({ ...p })); // djupkopia
-    const src = subject.meta.klasser.find((c) => c.id === srcId);
     const klass: ClassMeta = {
       id, namn: newNamn, läsår: newLasar, socrative: `Matte${newNamn.replace(/\s+/g, '')}`, arkiverad: false,
-      ...(amne !== undefined ? (amne.trim() !== '' ? { ämne: amne.trim() } : {}) : (src?.ämne ? { ämne: src.ämne } : {})),
-      ...(bokId !== undefined ? (bokId !== '' ? { bokId } : {}) : (src?.bokId ? { bokId: src.bokId } : {})),
+      ...(amne.trim() !== '' ? { ämne: amne.trim() } : {}),
+      ...(bokId !== '' ? { bokId } : {}),
     };
     save({ ...edits, added: [...(edits.added ?? []), { klass, schema }] });
     const bok = bokAlt.find((b) => b.id === klass.bokId)?.titel ?? 'gemensamt bokval';
-    setMsg(`✓ Klass ${newNamn} skapad — ${klass.ämne ?? subject.meta.ämne}, ${bok} (schema ärvt från ${srcId}).`);
+    setMsg(`✓ Klass ${newNamn} skapad — ${klass.ämne ?? subject.meta.ämne}, ${bok}, ${schema.length} pass/vecka. Bokens lektioner mappas nu på schemat; finjustera under 🗓 Schemavy.`);
   };
 
   /** Del 27: sätt ämne/bok för befintlig klass ('' ⇒ följ gemensamt bokval). */
@@ -159,9 +165,16 @@ export function KlassHanterare(props: {
             </div>
             <div className="cm-actions">
               <button className="icon-btn" title="Byt namn/metadata" onClick={() => rename(c.id)}>✎</button>
-              <button className="icon-btn" title="Kopiera planering till ny klass" onClick={() => {
-                const n = window.prompt('Namn på den nya klassen:', `${c.namn}-kopia`);
-                if (n) addClass(c.id, n.trim(), c.läsår);
+              <button className="icon-btn" title="Kopiera klass (samma schema, ämne och bok — uttrycklig kopia)" onClick={() => {
+                const n = window.prompt('Namn på den nya klassen (kopierar schema, ämne och bok):', `${c.namn}-kopia`);
+                if (n) {
+                  const id = uniqueClassId(n.trim(), subject.meta.klasser.map((x) => x.id));
+                  save({ ...edits, added: [...(edits.added ?? []), {
+                    klass: { ...c, id, namn: n.trim(), socrative: `Matte${n.trim().replace(/\s+/g, '')}`, arkiverad: false },
+                    schema: (subject.schema[c.id] ?? []).map((p) => ({ ...p })),
+                  }] });
+                  setMsg(`✓ ${n.trim()} skapad som kopia av ${c.namn}.`);
+                }
               }}>⧉</button>
               <button className="icon-btn" title="Arkivera" disabled={active.length <= 1}
                 onClick={() => setArchived(c.id, true)}>🗄</button>
@@ -176,13 +189,10 @@ export function KlassHanterare(props: {
             onChange={onChange} />
         )}
 
-        <h4 className="cm-h">LÄGG TILL NY KLASS</h4>{/* FR-CM-002 */}
+        <h4 className="cm-h">LÄGG TILL NY KLASS</h4>{/* FR-CM-002 + del 28: eget schema krävs */}
         <div className="cm-add">
           <input placeholder="Namn, t.ex. 8A" value={namn} onChange={(e) => setNamn(e.target.value)} />
           <input placeholder="Läsår, t.ex. 2026/27" value={lasar} onChange={(e) => setLasar(e.target.value)} />
-          <select value={inheritFrom} onChange={(e) => setInheritFrom(e.target.value)}>
-            {active.map((c) => <option key={c.id} value={c.id}>Ärv schema från {c.namn}</option>)}
-          </select>
           <select aria-label="Ämne för ny klass" value={nyAmne} onChange={(e) => { setNyAmne(e.target.value); setNyBok(''); }}>
             {amnen.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
@@ -190,10 +200,33 @@ export function KlassHanterare(props: {
             <option value="">Bok: gemensamt bokval</option>
             {bokAlt.filter((b) => b.amne === nyAmne).map((b) => <option key={b.id} value={b.id}>{b.titel}</option>)}
           </select>
-          <button className="btn" disabled={namn.trim() === ''}
-            onClick={() => { addClass(inheritFrom, namn.trim(), lasar.trim() || '2026/27', nyAmne, nyBok); setNamn(''); }}>➕ Lägg till</button>
         </div>
-        <p className="note">Den nya klassen ärver schema från vald klass och planeras efter valt ämne och bok. Böcker importeras under Bibliotek → Böcker.</p>
+        <div className="cm-schema">{/* Del 28: klassens lektionspass */}
+          <span className="muted">SCHEMA (minst ett pass — bokens lektioner mappas på passen)</span>
+          {nyaPass.map((r, i) => (
+            <div key={i} className="sched-row">
+              <input aria-label={`Veckodag pass ${i + 1}`} placeholder="Veckodag, t.ex. Måndag" value={r.dayText}
+                onChange={(e) => setNyaPass(nyaPass.map((x, j) => (j === i ? { ...x, dayText: e.target.value } : x)))} />
+              <input aria-label={`Start pass ${i + 1}`} type="time" value={r.start}
+                onChange={(e) => setNyaPass(nyaPass.map((x, j) => (j === i ? { ...x, start: e.target.value } : x)))} />
+              <span>–</span>
+              <input aria-label={`Slut pass ${i + 1}`} type="time" value={r.end}
+                onChange={(e) => setNyaPass(nyaPass.map((x, j) => (j === i ? { ...x, end: e.target.value } : x)))} />
+              <button className="icon-btn" title="Ta bort pass" disabled={nyaPass.length <= 1}
+                onClick={() => setNyaPass(nyaPass.filter((_, j) => j !== i))}>🗑</button>
+            </div>
+          ))}
+          <div>
+            <button className="btn sec" onClick={() => setNyaPass([...nyaPass, { dayText: '', start: '08:10', end: '09:10' }])}>➕ Pass</button>{' '}
+            <button className="btn" disabled={namn.trim() === '' || tolkadePass.length === 0}
+              title={tolkadePass.length === 0 ? 'Ange minst ett giltigt pass (veckodag mån–fre och start < slut)' : ''}
+              onClick={() => {
+                addClass(namn.trim(), lasar.trim() || '2026/27', nyAmne, nyBok, tolkadePass);
+                setNamn(''); setNyaPass([{ dayText: '', start: '08:10', end: '09:10' }]);
+              }}>➕ Lägg till klass</button>
+          </div>
+        </div>
+        <p className="note">Schemat ärvs inte — ange klassens egna lektionspass här (eller finjustera efteråt under 🗓 Schemavy). Bokens lektioner läggs sedan ut på passen i ordning; lov, röda dagar och kalendariets temadagar/halvdagar hoppas över automatiskt.</p>
 
         {archivedList.length > 0 && (<>
           <h4 className="cm-h">ARKIVERADE KLASSER</h4>

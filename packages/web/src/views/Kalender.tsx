@@ -9,7 +9,8 @@ import {
   type ExternPost, type LessonOverride, type LessonRecord,
   type LokalPlanering, type PlacedLesson, type SubjectFile,
 } from '@planner/core';
-import { getBetygsdatum, setCalOverride } from '../state/store.js';
+import { getBetygsdatum, getKalendarium, setCalOverride } from '../state/store.js';
+import { kalenderDagFor, type KalenderDag } from '@planner/core';
 
 const DAY_START = 7, DAY_END = 17;
 const DAY_NAMES = ['Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön'];
@@ -25,6 +26,15 @@ function startOfWeek(d: Date): Date {
   return addDays(x, 1 - dow);
 }
 function toMin(t: string): number { const [h, m] = t.split(':').map(Number); return h * 60 + m; }
+
+/** Del 28: kalendariets etikett för en dag ('🎪 Temadag' / '🕛 ½ Öppet hus 11:30'). */
+function temaFor(dateIso: string, dagar: KalenderDag[]): { text: string; halv: boolean } | null {
+  const d = kalenderDagFor(dateIso, dagar);
+  if (!d) return null;
+  return d.typ === 'heldag'
+    ? { text: `🎪 ${d.label}`, halv: false }
+    : { text: `🕛 ${d.label} — slutar ${d.slut}`, halv: true };
+}
 
 function breakLabelFor(dateIso: string, subject: SubjectFile): string | null {
   for (const p of subject.läsår.lov) {
@@ -89,7 +99,7 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
     for (const pl of planeringar) {
       if (classId !== ALLA && pl.klassNamn !== classId) continue;
       if (amneFilter !== ALLA && pl.amne !== amneFilter) continue;
-      for (const post of byggExternaPoster(pl, subject.läsår)) {
+      for (const post of byggExternaPoster(pl, subject.läsår, getKalendarium())) {
         const arr = m.get(post.date) ?? [];
         arr.push(post); m.set(post.date, arr);
       }
@@ -161,11 +171,17 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
     const ws = startOfWeek(anchor);
     const days = (weekends ? [0, 1, 2, 3, 4, 5, 6] : [0, 1, 2, 3, 4]).map((i) => addDays(ws, i));
     const lov = breakLabelFor(iso(days[0]), subject);
+    const kalDagar = getKalendarium();
     const H = 46; // px per timme
     return (
       <>
         <h3 className="cal-sub">Vecka {isoWeek(ws)} · {ws.toLocaleDateString('sv-SE', { month: 'long', year: 'numeric' })}</h3>
         {lov && <div className="cal-break">🏖 {lov} — inga lektioner schemaläggs</div>}
+        {days.map(iso).map((di) => temaFor(di, kalDagar) && (
+          <div key={di} className={`cal-break tema ${temaFor(di, kalDagar)!.halv ? 'halv' : ''}`}>
+            {temaFor(di, kalDagar)!.text} ({di.slice(8)}/{Number(di.slice(5, 7))}) — {temaFor(di, kalDagar)!.halv ? 'lektioner efter sluttiden utgår' : 'inga lektioner denna dag'}
+          </div>
+        ))}
         <div className="cal-timegrid" style={{ gridTemplateColumns: `48px repeat(${days.length}, 1fr)` }}>
           <div />
           {days.map((d) => (
@@ -181,8 +197,9 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
           {days.map((d) => {
             const di = iso(d);
             const dayLov = breakLabelFor(di, subject);
+            const tema = temaFor(di, kalDagar);
             return (
-              <div key={di} className={`cal-daycol ${dayLov ? 'lov' : ''}`}
+              <div key={di} className={`cal-daycol ${dayLov ? 'lov' : ''} ${tema ? (tema.halv ? 'tema-halv' : 'tema') : ''}`}
                 style={{ height: (DAY_END - DAY_START) * H }}
                 onDragOver={(e) => e.preventDefault()} onDrop={(e) => onDropDay(e, di)}>
                 {(byDate.get(di) ?? []).map((p) => {
@@ -253,13 +270,15 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
               {days.slice(0, cols).map((d) => {
                 const di = iso(d);
                 const lov = breakLabelFor(di, subject);
+                const tema = temaFor(di, getKalendarium());
                 const inMonth = d.getUTCMonth() === first.getUTCMonth();
                 return (
                   <div key={di}
-                    className={`cal-cell ${inMonth ? '' : 'dim'} ${lov ? 'lov' : ''} ${di === iso(new Date()) ? 'today' : ''}`}
+                    className={`cal-cell ${inMonth ? '' : 'dim'} ${lov ? 'lov' : ''} ${tema ? (tema.halv ? 'tema-halv' : 'tema') : ''} ${di === iso(new Date()) ? 'today' : ''}`}
                     onDragOver={(e) => e.preventDefault()} onDrop={(e) => onDropDay(e, di)}>
                     <span className="d">{d.getUTCDate()}</span>
                     {lov && <span className="lovlabel">{lov.split(' ')[0]}</span>}
+                    {tema && <span className="temalabel" title={tema.text}>{tema.text}</span>}
                     {(betygsByDate.get(di) ?? []).map((b) => (
                       <div key={b.id} className="cal-chip" style={{ border: '2px solid #000', borderLeft: '4px solid #7f1d1d', borderRadius: 4 }} title={b.label}>
                         <span className="tdot" style={{ background: '#7f1d1d' }} />🎓 {b.label}
@@ -303,9 +322,10 @@ export default function Kalender({ subject, placedByClass, onChanged, onOpenLess
                   const betyg = betygsByDate.get(di) ?? [];
                   const n = egna.length + externa.length + betyg.length;
                   const lov = !!breakLabelFor(di, subject);
+                  const tema = !!kalenderDagFor(di, getKalendarium());
                   return (
                     <span key={di}
-                      className={`mini-d ${d.getUTCMonth() !== ms.getUTCMonth() ? 'dim' : ''} ${lov ? 'lov' : ''} ${n ? 'has' : ''}`}
+                      className={`mini-d ${d.getUTCMonth() !== ms.getUTCMonth() ? 'dim' : ''} ${lov ? 'lov' : ''} ${tema ? 'tema' : ''} ${n ? 'has' : ''}`}
                       style={n ? { background: betyg.length > 0 ? '#7f1d1d' : egna[0] ? KAP_COLORS[egna[0].kapitel] : externa[0]?.farg } : undefined}>
                       {d.getUTCDate()}
                     </span>
