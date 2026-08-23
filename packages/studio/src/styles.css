@@ -63,3 +63,8 @@ body { margin: 0; font: 14px/1.45 system-ui, 'Segoe UI', sans-serif; background:
   .card { border: 0; max-width: none; }
   .lkort { border-width: 1px; margin: 0; }
 }
+
+/* Spara-status */
+.schema-red { border: 1px dashed var(--ram); border-radius: 8px; padding: 8px 10px; margin: 8px 0; }
+.schema-red h3 { margin: 0 0 6px; }
+.osparat { color: #b3392f; font-size: 12px; margin-left: 8px; }

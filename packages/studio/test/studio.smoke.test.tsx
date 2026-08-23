@@ -209,3 +209,63 @@ describe('Lektionskort i planeringen', () => {
     expect(host.querySelector('[data-testid="lektionskort"]')!.textContent).toContain('minimum: TVÅ');
   });
 });
+
+describe('Spara-knappar och automatisk nästa veckodag', () => {
+  async function tillKlass(host: HTMLElement) {
+    skriv(input(host, 'Skolårets namn'), '2026/2027');
+    act(() => { knapp(host, '➕ Skolår').click(); });
+    act(() => { knapp(host, '2026/2027').click(); });
+    await importeraBok(host);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Tjänst').click(); });
+    act(() => { knapp(host, 'Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Klass').click(); });
+    act(() => { knapp(host, '8B').click(); });
+  }
+
+  it('➕ Pass hoppar till nästa veckodag med samma tider; fredag slår om till måndag', async () => {
+    const host = render();
+    await tillKlass(host);
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Pass').click(); });          // mån → tis
+    expect(select(host, 'Veckodag pass 2').value).toBe('2');
+    expect(input(host, 'Start pass 2').value).toBe('09:00'); // tider kopieras
+    valj(select(host, 'Veckodag pass 2'), '5');
+    act(() => { knapp(host, '➕ Pass').click(); });          // fre → mån (omslag)
+    expect(select(host, 'Veckodag pass 3').value).toBe('1');
+  });
+
+  it('Socrative-rummet sparas först vid 💾 Spara och kvitterar ✓ Sparat!', async () => {
+    const host = render();
+    await tillKlass(host);
+    skriv(input(host, 'Socrative-rum'), 'Fysik8B');
+    expect(lasStruktur().klasser[0].socrative).toBe('Matte8B'); // inte sparat än
+    act(() => { knapp(host, '💾 Spara').click(); });
+    expect(lasStruktur().klasser[0].socrative).toBe('Fysik8B');
+    expect(host.textContent).toContain('✓ Sparat!');
+  });
+
+  it('ämnets schema redigeras, sparas uttryckligen och planeringen räknas om', async () => {
+    const host = render();
+    await tillKlass(host);
+    skriv(input(host, 'Ämnets namn'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    expect(host.textContent).toContain('2026-08-19');            // onsdag
+    // Ändra till torsdag — osparad markering syns, planeringen orörd
+    valj(select(host, 'Veckodag pass 1'), '4');
+    expect(host.textContent).toContain('osparade ändringar');
+    expect(lasStruktur().amnen[0].schema[0].dag).toBe(3);
+    // Spara — kvitto + omräknade datum
+    act(() => { knapp(host, '💾 Spara schema').click(); });
+    expect(lasStruktur().amnen[0].schema[0].dag).toBe(4);
+    expect(host.textContent).toContain('✓ Sparat!');
+    expect(host.textContent).toContain('2026-08-20');            // torsdag
+    expect(host.textContent).not.toContain('2026-08-19');
+  });
+});

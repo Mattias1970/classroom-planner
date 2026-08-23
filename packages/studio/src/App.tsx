@@ -253,6 +253,34 @@ function TjanstPanel({ s, id, kor }: { s: Struktur; id: string; kor: (fn: () => 
   );
 }
 
+// ── Passredigerare (delas av Klass- och Ämnespanelen) ────────
+type PassRad = { dag: number; start: string; slut: string };
+/** Nästa veckodag mån–fre med omslag: mån→tis … fre→mån. */
+function nastaDag(dag: number): number { return (dag % 5) + 1; }
+
+function PassRedigerare(props: { pass: PassRad[]; onChange: (p: PassRad[]) => void }) {
+  const { pass, onChange } = props;
+  return (
+    <>
+      {pass.map((p, i) => (
+        <div key={i} className="ny rad">
+          <select aria-label={`Veckodag pass ${i + 1}`} value={p.dag} onChange={(e) => onChange(pass.map((x, j) => (j === i ? { ...x, dag: Number(e.target.value) } : x)))}>
+            {[1, 2, 3, 4, 5].map((d) => <option key={d} value={d}>{DAGNAMN[d]}</option>)}
+          </select>
+          <input aria-label={`Start pass ${i + 1}`} type="time" value={p.start} onChange={(e) => onChange(pass.map((x, j) => (j === i ? { ...x, start: e.target.value } : x)))} />
+          <span>–</span>
+          <input aria-label={`Slut pass ${i + 1}`} type="time" value={p.slut} onChange={(e) => onChange(pass.map((x, j) => (j === i ? { ...x, slut: e.target.value } : x)))} />
+          <button className="icon-btn" title="Ta bort pass" disabled={pass.length <= 1} onClick={() => onChange(pass.filter((_, j) => j !== i))}>🗑</button>
+        </div>
+      ))}
+      <button className="btn sec" onClick={() => {
+        const sista = pass[pass.length - 1] ?? { dag: 0, start: '08:10', slut: '09:10' };
+        onChange([...pass, { ...sista, dag: nastaDag(sista.dag) }]); // dagen hoppar automatiskt vidare
+      }}>➕ Pass</button>
+    </>
+  );
+}
+
 // ── Klass ────────────────────────────────────────────────────
 function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn: () => Struktur, m: string) => void; setVald: (v: Vald) => void }) {
   const k = s.klasser.find((x) => x.id === id);
@@ -264,10 +292,7 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
   return (
     <div className="card">
       <h2>👥 {k.namn}</h2>
-      <label>Socrative-rum:{' '}
-        <input aria-label="Socrative-rum" value={k.socrative ?? ''} placeholder={`t.ex. Matte${k.namn.replace(/\s+/g, '')}`}
-          onChange={(e) => kor(() => uppdateraKlass(lasStruktur(), id, { socrative: e.target.value }), 'Socrative-rum sparat — används i lektionskortens läxförhör och exit tickets.')} />
-      </label>
+      <SocrativeFalt key={k.id} klass={k} kor={kor} />
       <p className="note">Varje ämne får sitt eget schema — inget ärvs. Bokens lektioner mappas sedan på schemat.</p>
       <h3>Nytt ämne</h3>
       <div className="ny rad">
@@ -277,19 +302,8 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
           {s.bocker.map((b) => <option key={b.id} value={b.id}>{b.titel} ({b.amne})</option>)}
         </select>
       </div>
-      {pass.map((p, i) => (
-        <div key={i} className="ny rad">
-          <select aria-label={`Veckodag pass ${i + 1}`} value={p.dag} onChange={(e) => setPass(pass.map((x, j) => (j === i ? { ...x, dag: Number(e.target.value) } : x)))}>
-            {[1, 2, 3, 4, 5].map((d) => <option key={d} value={d}>{DAGNAMN[d]}</option>)}
-          </select>
-          <input aria-label={`Start pass ${i + 1}`} type="time" value={p.start} onChange={(e) => setPass(pass.map((x, j) => (j === i ? { ...x, start: e.target.value } : x)))} />
-          <span>–</span>
-          <input aria-label={`Slut pass ${i + 1}`} type="time" value={p.slut} onChange={(e) => setPass(pass.map((x, j) => (j === i ? { ...x, slut: e.target.value } : x)))} />
-          <button className="icon-btn" disabled={pass.length <= 1} onClick={() => setPass(pass.filter((_, j) => j !== i))}>🗑</button>
-        </div>
-      ))}
+      <PassRedigerare pass={pass} onChange={setPass} />
       <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
-        <button className="btn sec" onClick={() => setPass([...pass, { dag: 1, start: '08:10', slut: '09:10' }])}>➕ Pass</button>
         <button className="btn" disabled={namn.trim() === '' || giltiga.length === 0}
           onClick={() => {
             const amne: Amne = { id: nyttId('am'), klassId: id, namn: namn.trim(), bokId: bokId === '' ? undefined : bokId, schema: giltiga as Pass[] };
@@ -302,6 +316,25 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
           if (window.confirm(`Ta bort klass ${k.namn} med alla ämnen och planeringar?`)) kor(() => taBortKlass(lasStruktur(), id), 'Klass borttagen.');
         }}>🗑 Ta bort klass</button>
       </div>
+    </div>
+  );
+}
+
+function SocrativeFalt({ klass, kor }: { klass: Klass; kor: (fn: () => Struktur, m: string) => void }) {
+  const [rum, setRum] = useState(klass.socrative ?? '');
+  const [sparat, setSparat] = useState(false);
+  const andrad = rum !== (klass.socrative ?? '');
+  return (
+    <div className="ny rad">
+      <label>Socrative-rum:{' '}
+        <input aria-label="Socrative-rum" value={rum} placeholder={`t.ex. Matte${klass.namn.replace(/\s+/g, '')}`}
+          onChange={(e) => { setRum(e.target.value); setSparat(false); }} />
+      </label>
+      <button className="btn" disabled={!andrad} onClick={() => {
+        kor(() => uppdateraKlass(lasStruktur(), klass.id, { socrative: rum.trim() }),
+          'Socrative-rum sparat — används i lektionskortens läxförhör och exit tickets.');
+        setSparat(true); setTimeout(() => setSparat(false), 2500);
+      }}>{sparat ? '✓ Sparat!' : '💾 Spara'}</button>
     </div>
   );
 }
@@ -320,7 +353,7 @@ function AmnePanel({ s, id, kor }: { s: Struktur; id: string; kor: (fn: () => St
   return (
     <div className="card">
       <h2>📖 {klass.namn} · {a.namn}</h2>
-      <p className="muted">{a.schema.map((p) => `${DAGNAMN[p.dag]} ${p.start}–${p.slut}`).join(' · ')}</p>
+      <AmneSchemaRedigerare key={a.id} amne={a} kor={kor} />
       <label>Bok:{' '}
         <select aria-label="Bok för ämnet" value={a.bokId ?? ''}
           onChange={(e) => kor(() => uppdateraAmne(lasStruktur(), id, { bokId: e.target.value }),
@@ -452,6 +485,28 @@ function KapitelDetalj({ s, bok, kap, kor }: { s: Struktur; bok: Bok; kap: Kapit
         <button className="btn" disabled={titel.trim() === '' || !url.startsWith('http')}
           onClick={() => { uppdateraKap({ resurser: { ...res, filmer: [...res.filmer, { titel: titel.trim(), url: url.trim() }] } }, 'Film tillagd.'); setTitel(''); setUrl(''); }}>➕ Film</button>
       </div>
+    </div>
+  );
+}
+
+// ── Ämnets schema: redigeras och sparas uttryckligen ─────────
+function AmneSchemaRedigerare({ amne, kor }: { amne: Amne; kor: (fn: () => Struktur, m: string) => void }) {
+  const [rows, setRows] = useState<PassRad[]>(amne.schema.map((p) => ({ ...p })));
+  const [sparat, setSparat] = useState(false);
+  const giltiga = rows.every((p) => giltigtPass(p as Pass));
+  const andrad = JSON.stringify(rows) !== JSON.stringify(amne.schema);
+  return (
+    <div className="schema-red">
+      <h3>Schema <small className="muted">{amne.schema.map((p) => `${DAGNAMN[p.dag]} ${p.start}–${p.slut}`).join(' · ')}</small></h3>
+      <PassRedigerare pass={rows} onChange={(p) => { setRows(p); setSparat(false); }} />
+      <button className="btn" disabled={!andrad || !giltiga || rows.length === 0}
+        title={!giltiga ? 'Minst ett pass är ogiltigt (start < slut, mån–fre)' : !andrad ? 'Inga osparade ändringar' : ''}
+        onClick={() => {
+          kor(() => uppdateraAmne(lasStruktur(), amne.id, { schema: rows.map((p) => ({ ...p })) }),
+            `Schema sparat (${rows.length} pass/vecka) — planeringen har räknats om med de nya tiderna.`);
+          setSparat(true); setTimeout(() => setSparat(false), 2500);
+        }}>{sparat ? '✓ Sparat!' : '💾 Spara schema'}</button>
+      {andrad && !sparat && <span className="osparat">● osparade ändringar</span>}
     </div>
   );
 }
