@@ -4,8 +4,9 @@
  * struktur och ett skolår, returnerar datum→händelser och månadsrutor med
  * lov/temadags-markeringar. Ingen presentation.
  */
+import { amneBakgrund } from './amnen.js';
 import { isoVecka } from './skolar.js';
-import { skapaPlanering } from './struktur.js';
+import { noBudget, skapaPlanering } from './struktur.js';
 import type { IsoDatum, Skolar, Struktur } from './typer.js';
 
 export interface KalenderHandelse {
@@ -18,6 +19,8 @@ export interface KalenderHandelse {
   grupp?: 'A' | 'B';
   kapitel: number;
   kapitelFarg: string;
+  /** Bakgrundsfärg i kalendern (per ämne). */
+  amnesFarg: string;
   avsnitt: string;
   vecka: number;
 }
@@ -59,16 +62,20 @@ export function kalenderHandelser(s: Struktur, skolarId: string): KalenderHandel
     const bok = s.bocker.find((b) => b.id === plan.bokId);
     if (!bok) continue;
     const farg = (kap: number) => bok.kapitel.find((k) => k.nr === kap)?.farg ?? '#5c6b7a';
+    const amnesFarg = amneBakgrund(amne.namn);
+    // NO+Tk: delämnet börjar efter föregående delämnens block (offset).
+    const offset = amne.noGrupp !== undefined && amne.noOrder !== undefined
+      ? amne.noOrder * noBudget(skolar, amne.schema) : 0;
     const grupper: Array<{ grupp?: 'A' | 'B'; schema: typeof amne.schema }> = amne.halvklass === true
       ? [{ grupp: 'A', schema: amne.schema }, { grupp: 'B', schema: amne.schemaB ?? [] }]
       : [{ grupp: undefined, schema: amne.schema }];
     for (const g of grupper) {
-      for (const p of skapaPlanering(skolar, g.schema, bok)) {
+      for (const p of skapaPlanering(skolar, g.schema, bok, offset)) {
         if (p.datum === null || p.start === null || p.slutTid === null || p.vecka === null) continue;
         ut.push({
           datum: p.datum, start: p.start, slut: p.slutTid,
           klassId: klass.id, klassNamn: klass.namn, amnesNamn: amne.namn, grupp: g.grupp,
-          kapitel: p.kapitel, kapitelFarg: farg(p.kapitel), avsnitt: p.lektion.avsnitt, vecka: p.vecka,
+          kapitel: p.kapitel, kapitelFarg: farg(p.kapitel), amnesFarg, avsnitt: p.lektion.avsnitt, vecka: p.vecka,
         });
       }
     }

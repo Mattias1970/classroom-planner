@@ -158,3 +158,7 @@ body { margin: 0; font: 14px/1.45 system-ui, 'Segoe UI', sans-serif; background:
 .sch-linje { position: absolute; left: 0; right: 0; border-top: 1px solid #eef1f5; }
 .sch-lekt { position: absolute; left: 2px; right: 2px; color: #fff; border-radius: 5px; padding: 2px 5px; overflow: hidden; font-size: 11px; display: flex; flex-direction: column; line-height: 1.2; }
 .sch-lekt b { font-size: 11px; } .sch-lekt span { font-size: 10px; opacity: .95; } .sch-lekt small { font-size: 9px; opacity: .85; margin-top: auto; }
+
+/* NO+Tk */
+.no-ordning { border: 1px dashed var(--ram); border-radius: 8px; padding: 8px 10px; margin: 6px 0; }
+.no-ordning select { border: 1px solid var(--ram); border-radius: 6px; padding: 4px 8px; }

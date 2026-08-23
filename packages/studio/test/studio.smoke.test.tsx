@@ -458,8 +458,8 @@ describe('Kalender', () => {
     // Lektionen ligger onsdag; en händelsechip finns i rutnätet
     expect([...panel.querySelectorAll('.kh')].length).toBeGreaterThan(0);
     expect(panel.textContent).toContain('1.1 Bråk');
-    expect(panel.textContent).toContain('Färg per kapitel');
-    expect(panel.textContent).toContain('Matematik kap 1');
+    expect(panel.textContent).toContain('Ämne (bakgrund)');
+    expect(panel.textContent).toContain('Klass (färg)');
   });
 
   it('lägena Vecka och Läsår renderar; klassfiltret finns', async () => {
@@ -587,5 +587,83 @@ describe('Fritt schemaförval, veckonummer och dolda helgdagar', () => {
     expect(panel.textContent).toContain('Temadag');                       // skolans dag syns
     expect(panel.textContent).not.toContain('Juldagen');                  // röd dag döljs
     expect(panel.textContent).not.toContain('Annandag jul');
+  });
+})
+
+describe('NO+Tk blockkurs och kalenderfärger', () => {
+  async function noKlass(host: HTMLElement) {
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host);
+    skriv(input(host, 'Tjänstens namn'), 'NO');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 NO').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+  }
+
+  it('NO+Tk skapar fyra länkade delämnen i vald ordning med block-position', async () => {
+    const host = render();
+    await noKlass(host);
+    valj(select(host, 'Ämne'), 'NO+Tk');
+    // schema (halvklass): Grupp A tis, Grupp B tor
+    valj(select(host, 'Veckodag pass 1'), '2');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    valj(select(host, 'Grupp B veckodag pass 1'), '4');
+    skriv(input(host, 'Grupp B start pass 1'), '09:00');
+    skriv(input(host, 'Grupp B slut pass 1'), '10:00');
+    // Ordning: sätt block 1 = Kemi (byter plats med Biologi)
+    valj(select(host, 'NO-block 1'), 'Kemi');
+    act(() => { knapp(host, '➕ Skapa NO+Tk (fyra block)').click(); });
+    const amnen = lasStruktur().amnen.filter((x) => x.noGrupp !== undefined);
+    expect(amnen).toHaveLength(4);
+    expect(amnen.every((x) => x.halvklass === true)).toBe(true);
+    const iOrder = amnen.slice().sort((x, y) => (x.noOrder ?? 0) - (y.noOrder ?? 0)).map((x) => x.namn);
+    expect(iOrder[0]).toBe('Kemi');                       // block 1 = Kemi
+    expect(new Set(iOrder)).toEqual(new Set(['Biologi', 'Fysik', 'Kemi', 'Teknik']));
+  });
+
+  it('ämnespanelen visar NO-block och varnar när boken är för lång för budgeten', async () => {
+    const host = render();
+    await noKlass(host);
+    valj(select(host, 'Ämne'), 'NO+Tk');
+    valj(select(host, 'Veckodag pass 1'), '2');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    valj(select(host, 'Grupp B veckodag pass 1'), '4');
+    skriv(input(host, 'Grupp B start pass 1'), '09:00');
+    skriv(input(host, 'Grupp B slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Skapa NO+Tk (fyra block)').click(); });
+    // Öppna första delämnet, koppla den korta boken (3 lektioner < budget → ingen varning)
+    const forsta = lasStruktur().amnen.filter((x) => x.noGrupp !== undefined).sort((x, y) => (x.noOrder ?? 0) - (y.noOrder ?? 0))[0];
+    act(() => { treeKnapp(host, `📖 ${forsta.namn}`).click(); });
+    expect(host.querySelector('.panel')!.textContent).toContain('NO+Tk block 1/4');
+    expect(host.querySelector('.panel')!.textContent).toContain('budget');
+  });
+
+  it('kalendern färgar bakgrund per ämne och klassnamn i egen färg', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
+    valj(select(host, 'Veckodag pass 1'), '2');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '📆 Kalender').click(); });
+    const lekt = host.querySelector('.sch-lekt') as HTMLElement;
+    expect(lekt).not.toBeNull();
+    expect(lekt.style.background).not.toBe('');           // ämnesbakgrund satt
+    expect(host.querySelector('.kal-forkl')!.textContent).toContain('Ämne (bakgrund)');
+    expect(host.querySelector('.kal-forkl')!.textContent).toContain('Klass (färg)');
   });
 })

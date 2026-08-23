@@ -4,6 +4,7 @@
  * Borttag kaskaderar nedåt; böcker är fristående och kopplas via bokId.
  */
 import { bokLektioner } from './bok.js';
+import { NO_TK_AMNEN } from './amnen.js';
 import { isoVecka, passSparr } from './skolar.js';
 import type {
   Amne, Bok, Elev, Klass, Larare, Pass, PlaneradLektion, Planering, Skolar, Struktur, Tjanst,
@@ -259,45 +260,64 @@ export function passKonflikter(s: Struktur, klassId: string, nyaPass: Pass[], ig
 }
 
 // ── Planering: bok + ämnesschema + skolår → datumsatta lektioner ──
-/**
- * Lägger bokens lektioner i ordning på ämnets pass inom skolåret.
- * Helger, röda dagar, lov, temadagar och halvdagar hoppas över —
- * bortfallna pass förskjuter planeringen; lektioner som inte ryms före
- * skolårets slut får datum null.
- */
-export function skapaPlanering(skolar: Skolar, schema: Pass[], bok: Bok): PlaneradLektion[] {
-  const lektioner = bokLektioner(bok);
+interface Slot { datum: string; vecka: number; start: string; slut: string; }
+
+/** Alla lediga lektionsslots i skolåret (helger/röda dagar/lov/temadagar/halvdagar hoppas över). */
+function samlaSlots(skolar: Skolar, schema: Pass[]): Slot[] {
   const perDag = new Map<number, Pass[]>();
   for (const p of schema.filter(giltigtPass)) {
     if (!perDag.has(p.dag)) perDag.set(p.dag, []);
     perDag.get(p.dag)!.push(p);
   }
   for (const list of perDag.values()) list.sort((a, b) => a.start.localeCompare(b.start));
-
-  const ut: PlaneradLektion[] = [];
-  let i = 0;
+  const slots: Slot[] = [];
   const d = new Date(`${skolar.start}T00:00:00Z`);
-  const slut = skolar.slut;
   let guard = 0;
-  while (i < lektioner.length && guard++ < 500) {
+  while (guard++ < 400) {
     const di = d.toISOString().slice(0, 10);
-    if (di > slut) break;
+    if (di > skolar.slut) break;
     const veckodag = d.getUTCDay() === 0 ? 7 : d.getUTCDay();
     for (const pass of perDag.get(veckodag) ?? []) {
-      if (i >= lektioner.length) break;
       if (veckodag <= 5 && passSparr(di, pass.start, skolar) === null) {
-        const { kapitel, lektion } = lektioner[i];
-        ut.push({ kapitel, lektion, datum: di, vecka: isoVecka(di), start: pass.start, slutTid: pass.slut });
-        i++;
+        slots.push({ datum: di, vecka: isoVecka(di), start: pass.start, slut: pass.slut });
       }
     }
     d.setUTCDate(d.getUTCDate() + 1);
   }
-  for (; i < lektioner.length; i++) {
-    const { kapitel, lektion } = lektioner[i];
-    ut.push({ kapitel, lektion, datum: null, vecka: null, start: null, slutTid: null });
-  }
-  return ut;
+  return slots;
+}
+
+/** Antal lediga lektionsslots i skolåret för ett schema. */
+export function antalSlots(skolar: Skolar, schema: Pass[]): number {
+  return samlaSlots(skolar, schema).length;
+}
+
+/**
+ * NO+Tk: lika många lektioner per delämne = en fjärdedel av läsårets slots.
+ */
+export function noBudget(skolar: Skolar, schema: Pass[]): number {
+  return Math.floor(antalSlots(skolar, schema) / NO_TK_AMNEN.length);
+}
+
+/** Sant om bokens lektioner är fler än delämnets budget (för varning). */
+export function noOverBudget(bok: Bok, budget: number): boolean {
+  return bokLektioner(bok).length > budget;
+}
+
+/**
+ * Lägger bokens lektioner i ordning på ämnets pass inom skolåret. offset
+ * hoppar över de första N slotsen (används av NO+Tk så delämne 2 börjar efter
+ * delämne 1 osv.). Lektioner som inte ryms före skolårets slut får datum null.
+ */
+export function skapaPlanering(skolar: Skolar, schema: Pass[], bok: Bok, offset = 0): PlaneradLektion[] {
+  const lektioner = bokLektioner(bok);
+  const slots = samlaSlots(skolar, schema).slice(offset);
+  return lektioner.map(({ kapitel, lektion }, i) => {
+    const s = slots[i];
+    return s
+      ? { kapitel, lektion, datum: s.datum, vecka: s.vecka, start: s.start, slutTid: s.slut }
+      : { kapitel, lektion, datum: null, vecka: null, start: null, slutTid: null };
+  });
 }
 
 /** Registrerar en planering (ersätter tidigare för samma ämne). */

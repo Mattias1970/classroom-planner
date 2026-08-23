@@ -257,3 +257,37 @@ describe('ledigtStandardpass — undviker krock i tjänstens schema', () => {
     expect(giltigtPass(p)).toBe(true);
   });
 });
+
+// ── NO+Tk-blockkurs: lika budget, offset, över-budget-varning ──
+import { antalSlots, noBudget, noOverBudget, skapaPlanering as skapaPl } from '../src/domain/struktur.js';
+import { amneBakgrund, klassFarg, NO_TK_AMNEN } from '../src/domain/amnen.js';
+
+describe('NO+Tk blockplanering', () => {
+  const la: Skolar = { id: 'la', namn: 'x', start: '2026-08-17', slut: '2027-06-11', dagar: [] };
+  const schema = [{ dag: 2, start: '09:00', slut: '10:00' }]; // en lektion/vecka
+  it('budget = en fjärdedel av läsårets slots; fyra delämnen', () => {
+    expect(NO_TK_AMNEN).toEqual(['Biologi', 'Fysik', 'Kemi', 'Teknik']);
+    const n = antalSlots(la, schema);
+    expect(n).toBeGreaterThan(30);
+    expect(noBudget(la, schema)).toBe(Math.floor(n / 4));
+  });
+  it('offset gör att delämne 2 börjar efter delämne 1:s block', () => {
+    const budget = noBudget(la, schema);
+    const forsta = skapaPl(la, schema, BOK).filter((p) => p.datum !== null); // liten bok (3 lekt)
+    const andra = skapaPl(la, schema, BOK, budget).filter((p) => p.datum !== null);
+    expect(andra[0].datum! > forsta[forsta.length - 1].datum!).toBe(true); // andra börjar senare
+  });
+  it('noOverBudget varnar när bokens lektioner överstiger budgeten', () => {
+    expect(noOverBudget(BOK, 2)).toBe(true);   // BOK har 3 lektioner > 2
+    expect(noOverBudget(BOK, 5)).toBe(false);
+  });
+});
+
+describe('kalenderfärger', () => {
+  it('olika ämnen får olika bakgrund; klassfärg är deterministisk och ljus', () => {
+    expect(amneBakgrund('Matematik')).not.toBe(amneBakgrund('Biologi'));
+    expect(amneBakgrund('Fysik')).not.toBe(amneBakgrund('Kemi'));
+    expect(klassFarg('8A')).toBe(klassFarg('8A'));      // stabil
+    expect(klassFarg('8A')).not.toBe(klassFarg('8B'));  // olika klasser
+  });
+});

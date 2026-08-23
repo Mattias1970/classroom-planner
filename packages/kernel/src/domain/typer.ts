@@ -66,6 +66,10 @@ export interface Amne {
   halvklass?: boolean;
   /** Grupp B:s schema (krävs när halvklass är satt). */
   schemaB?: Pass[];
+  /** NO+Tk-blockkurs: gemensamt id för de fyra delämnena som läses i följd. */
+  noGrupp?: string;
+  /** Position 0–3 i NO+Tk-blockens läsordning. */
+  noOrder?: number;
 }
 
 // ── Bok (fristående bibliotek) ───────────────────────────────

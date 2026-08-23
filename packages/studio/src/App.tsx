@@ -8,7 +8,8 @@
 import { Fragment, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
-  STANDARD_AMNEN, arbetsNivaer, arHalvklass, handelserPerDatum, kalenderHandelser,
+  NO_TK, NO_TK_AMNEN, STANDARD_AMNEN, amneBakgrund, antalSlots, arbetsNivaer, arHalvklass,
+  handelserPerDatum, kalenderHandelser, klassFarg, noBudget, noOverBudget,
   kapitelKort, manadsRutor, skolarManader, veckaRutor, viktigaDatum, bamTidslinje, begreppForLektion, bokBegrepp,
   bokFromImport, bokSidregister, bokSidregisterCsv, elevSchema, exitStart, giltigtPass,
   kalendariumFromIcs, laggTillAmne, laggTillElev, laggTillKlass, laggTillLarare,
@@ -448,8 +449,10 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
   const [passB, setPassB] = useState<PassRad[]>([{ ...forvalA, dag: nastaDag(forvalA.dag) }]);
   const [konfliktSteg, setKonfliktSteg] = useState(0);
   const [konfliktMsg, setKonfliktMsg] = useState('');
+  const [noOrdning, setNoOrdning] = useState<string[]>([...NO_TK_AMNEN]);
   if (!k) return null;
-  const halv = arHalvklass(namn);
+  const arNoTk = namn === NO_TK;
+  const halv = arNoTk || arHalvklass(namn); // NO+Tk läses i halvklass
   const giltiga = pass.filter((p) => giltigtPass(p as Pass));
   const giltigaB = passB.filter((p) => giltigtPass(p as Pass));
   const bocker = s.bocker.filter((b) => b.amne === namn);
@@ -463,12 +466,31 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
       <div className="ny rad">
         <select aria-label="Ämne" value={namn} onChange={(e) => { setNamn(e.target.value); setBokId(''); }}>
           {STANDARD_AMNEN.map((a) => <option key={a} value={a}>{a}{arHalvklass(a) ? ' (halvklass)' : ''}</option>)}
+          <option value={NO_TK}>NO+Tk (Biologi, Fysik, Kemi, Teknik i följd)</option>
         </select>
-        <select aria-label="Bok för ämnet" value={bokId} onChange={(e) => setBokId(e.target.value)}>
-          <option value="">— bok senare —</option>
-          {bocker.map((b) => <option key={b.id} value={b.id}>{b.titel} ({b.amne})</option>)}
-        </select>
+        {!arNoTk && (
+          <select aria-label="Bok för ämnet" value={bokId} onChange={(e) => setBokId(e.target.value)}>
+            <option value="">— bok senare —</option>
+            {bocker.map((b) => <option key={b.id} value={b.id}>{b.titel} ({b.amne})</option>)}
+          </select>
+        )}
       </div>
+      {arNoTk && (
+        <div className="no-ordning">
+          <p className="note">NO+Tk delas i fyra lika stora block på det gemensamma schemat: budget ≈ {noBudget({ id: '', namn: '', start: s.skolar.find((x) => x.id === (s.tjanster.find((t) => t.id === k.tjanstId)?.skolarId))?.start ?? '2026-08-17', slut: s.skolar.find((x) => x.id === (s.tjanster.find((t) => t.id === k.tjanstId)?.skolarId))?.slut ?? '2027-06-11', dagar: [] }, giltiga.length > 0 ? giltiga as Pass[] : [{ dag: 2, start: '09:00', slut: '10:00' }])} lektioner per delämne. Välj läsordning:</p>
+          <div className="rad" style={{ flexWrap: 'wrap', gap: 6 }}>
+            {noOrdning.map((amn, i) => (
+              <select key={i} aria-label={`NO-block ${i + 1}`} value={amn} onChange={(e) => {
+                const nytt = [...noOrdning]; const gammalt = nytt[i];
+                const j = nytt.indexOf(e.target.value); nytt[i] = e.target.value; nytt[j] = gammalt; // byt plats
+                setNoOrdning(nytt);
+              }}>
+                {NO_TK_AMNEN.map((a) => <option key={a} value={a}>{i + 1}. {a}</option>)}
+              </select>
+            ))}
+          </div>
+        </div>
+      )}
       {halv && <h4 className="grupp-h">Grupp A <small className="muted">· rum {socrativeRum(namn, k.namn)}</small></h4>}
       <PassRedigerare pass={pass} onChange={setPass} />
       {halv && (<>
@@ -484,6 +506,27 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
             if (krock.length > 0 && konfliktSteg < 2) {
               const steg = konfliktSteg + 1; setKonfliktSteg(steg); setKonfliktMsg(konfliktText(krock, steg)); return;
             }
+            if (arNoTk) {
+              const grupp = nyttId('no');
+              let forsta = '';
+              kor(() => {
+                let st = lasStruktur();
+                noOrdning.forEach((amn, order) => {
+                  const aid = nyttId('am');
+                  if (order === 0) forsta = aid;
+                  st = laggTillAmne(st, {
+                    id: aid, klassId: id, namn: amn, schema: giltiga as Pass[],
+                    halvklass: true, schemaB: giltigaB as Pass[], noGrupp: grupp, noOrder: order,
+                  });
+                });
+                return st;
+              }, `NO+Tk skapat: ${noOrdning.join(' → ')} i fyra lika block.`);
+              setKonfliktSteg(0); setKonfliktMsg('');
+              const nyttForval = ledigtStandardpass(lasStruktur(), id);
+              setPass([nyttForval]); setPassB([{ ...nyttForval, dag: nastaDag(nyttForval.dag) }]);
+              if (forsta !== '') setVald({ typ: 'amne', id: forsta });
+              return;
+            }
             const amne: Amne = {
               id: nyttId('am'), klassId: id, namn, bokId: bokId === '' ? undefined : bokId,
               schema: giltiga as Pass[],
@@ -494,7 +537,7 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
             const nyttForval = ledigtStandardpass(lasStruktur(), id);
             setPass([nyttForval]); setPassB([{ ...nyttForval, dag: nastaDag(nyttForval.dag) }]);
             setVald({ typ: 'amne', id: amne.id });
-          }}>{konfliktSteg > 0 ? `⚠ Lägg till ändå (${konfliktSteg}/2)` : '➕ Lägg till ämne'}</button>
+          }}>{konfliktSteg > 0 ? `⚠ Lägg till ändå (${konfliktSteg}/2)` : arNoTk ? '➕ Skapa NO+Tk (fyra block)' : '➕ Lägg till ämne'}</button>
       </div>
       {konfliktMsg && <p className="status warn">{konfliktMsg}</p>}
       <Elevlista s={s} klassId={id} klassNamn={k.namn} kor={kor} />
@@ -572,17 +615,27 @@ function AmnePanel({ s, id, kor }: { s: Struktur; id: string; kor: (fn: () => St
   const tjanst = s.tjanster.find((t) => t.id === klass?.tjanstId);
   const la = s.skolar.find((x) => x.id === tjanst?.skolarId);
   const bok = s.bocker.find((b) => b.id === a?.bokId);
-  const plan = useMemo(() => (a && la && bok ? skapaPlanering(la, a.schema, bok) : []), [a, la, bok]);
-  const planB = useMemo(() => (a && la && bok && a.halvklass === true ? skapaPlanering(la, a.schemaB ?? [], bok) : []), [a, la, bok]);
+  const budget = useMemo(() => (a && la && a.noGrupp !== undefined ? noBudget(la, a.schema) : 0), [a, la]);
+  const offset = a?.noGrupp !== undefined && a.noOrder !== undefined ? a.noOrder * budget : 0;
+  const plan = useMemo(() => (a && la && bok ? skapaPlanering(la, a.schema, bok, offset) : []), [a, la, bok, offset]);
+  const planB = useMemo(() => (a && la && bok && a.halvklass === true ? skapaPlanering(la, a.schemaB ?? [], bok, offset) : []), [a, la, bok, offset]);
   const harPlanering = s.planeringar.some((p) => p.amneId === id);
   if (!a || !klass || !la) return null;
   const halv = a.halvklass === true;
+  const overBudget = a.noGrupp !== undefined && bok !== undefined && noOverBudget(bok, budget);
+  const noSyskon = a.noGrupp !== undefined ? s.amnen.filter((x) => x.noGrupp === a.noGrupp).sort((x, y) => (x.noOrder ?? 0) - (y.noOrder ?? 0)) : [];
   const rum = socrativeRum(a.namn, klass.namn);
   const [flik, setFlik] = useState<'planering' | 'arsoversikt'>('planering');
   return (
     <div className="card">
-      <h2>📖 {klass.namn} · {a.namn}{halv ? <span className="pillm">halvklass A/B</span> : null}</h2>
+      <h2>📖 {klass.namn} · {a.namn}{halv ? <span className="pillm">halvklass A/B</span> : null}{a.noGrupp !== undefined ? <span className="pillm">NO+Tk block {(a.noOrder ?? 0) + 1}/4</span> : null}</h2>
       <p className="muted">Socrative-rum: <b>{rum}</b>{halv ? ' (delas av Grupp A och B)' : ''} — läxförhör och exit tickets.</p>
+      {a.noGrupp !== undefined && (
+        <p className="note">NO+Tk-ordning: {noSyskon.map((x, i) => `${i + 1}. ${x.namn}`).join(' → ')}. Detta delämne har budget <b>{budget}</b> lektioner (block {(a.noOrder ?? 0) + 1}) och startar efter föregående block.</p>
+      )}
+      {overBudget && (
+        <p className="status warn">⚠ {bok!.titel} har {bok!.kapitel.reduce((n, k2) => n + k2.delkapitel.reduce((m, d) => m + d.lektioner.length, 0) + k2.extraLektioner.length, 0)} lektioner men blocket rymmer bara {budget}. De sista lektionerna trängs in i nästa delämnes block — korta boken eller lägg fler NO-pass.</p>
+      )}
       <div className="flikar no-print">
         <button className={`flik ${flik === 'planering' ? 'act' : ''}`} onClick={() => setFlik('planering')}>📝 Planering</button>
         <button className={`flik ${flik === 'arsoversikt' ? 'act' : ''}`} onClick={() => setFlik('arsoversikt')}>📊 Årsöversikt</button>
@@ -1007,8 +1060,8 @@ function KalenderVy({ s }: { s: Struktur }) {
 
 function Handelsechip({ h }: { h: KalenderHandelse }) {
   return (
-    <span className="kh" style={{ background: h.kapitelFarg }} title={`${h.start}–${h.slut} ${h.klassNamn}${h.grupp !== undefined ? ` (Grupp ${h.grupp})` : ''} · ${h.amnesNamn} · ${h.avsnitt}`}>
-      {h.start} {h.klassNamn}{h.grupp !== undefined ? h.grupp : ''} {h.avsnitt}
+    <span className="kh" style={{ background: h.amnesFarg }} title={`${h.start}–${h.slut} ${h.klassNamn}${h.grupp !== undefined ? ` (Grupp ${h.grupp})` : ''} · ${h.amnesNamn} · ${h.avsnitt}`}>
+      <b style={{ color: klassFarg(h.klassNamn) }}>{h.klassNamn}{h.grupp !== undefined ? h.grupp : ''}</b> {h.start} {h.avsnitt}
     </span>
   );
 }
@@ -1077,9 +1130,9 @@ function VeckoSchema({ rutor, onPrev, onNext, onIdag }: {
           <div key={r.datum} className={`sch-kol ${r.ledig ? 'ledig' : ''}`}>
             {timmar.map((h) => <div key={h} className="sch-linje" style={{ top: `${topp(`${String(h).padStart(2, '0')}:00`)}%` }} />)}
             {r.handelser.map((h, i) => (
-              <div key={i} className="sch-lekt" style={{ top: `${topp(h.start)}%`, height: `${hojd(h.start, h.slut)}%`, background: h.kapitelFarg }}
+              <div key={i} className="sch-lekt" style={{ top: `${topp(h.start)}%`, height: `${hojd(h.start, h.slut)}%`, background: h.amnesFarg }}
                 title={`${h.start}–${h.slut} ${h.klassNamn}${h.grupp !== undefined ? ` (Grupp ${h.grupp})` : ''} · ${h.amnesNamn} · ${h.avsnitt}`}>
-                <b>{h.klassNamn}{h.grupp !== undefined ? h.grupp : ''} · {h.amnesNamn}</b>
+                <b style={{ color: klassFarg(h.klassNamn) }}>{h.klassNamn}{h.grupp !== undefined ? h.grupp : ''} · {h.amnesNamn}</b>
                 <span>{h.avsnitt}</span>
                 <small>{h.start}–{h.slut}</small>
               </div>
@@ -1117,17 +1170,23 @@ function MiniManad({ ar, manad0, skolar, perDatum }: {
 }
 
 function Kapitelforklaring({ handelser }: { handelser: KalenderHandelse[] }) {
-  const farger = new Map<string, { farg: string; namn: string }>();
+  const amnen = new Map<string, string>();
+  const klasser = new Map<string, string>();
   for (const h of handelser) {
-    const nyckel = `${h.amnesNamn}-${h.kapitel}`;
-    if (!farger.has(nyckel)) farger.set(nyckel, { farg: h.kapitelFarg, namn: `${h.amnesNamn} kap ${h.kapitel}` });
+    if (!amnen.has(h.amnesNamn)) amnen.set(h.amnesNamn, h.amnesFarg);
+    if (!klasser.has(h.klassNamn)) klasser.set(h.klassNamn, klassFarg(h.klassNamn));
   }
-  if (farger.size === 0) return null;
+  if (amnen.size === 0) return null;
   return (
     <div className="kal-forkl">
-      <b className="muted small">Färg per kapitel:</b>
-      {[...farger.values()].map((f) => (
-        <span key={f.namn} className="forkl-item"><span className="prick" style={{ background: f.farg }} />{f.namn}</span>
+      <b className="muted small">Ämne (bakgrund):</b>
+      {[...amnen].map(([namn, farg]) => (
+        <span key={namn} className="forkl-item"><span className="prick" style={{ background: farg }} />{namn}</span>
+      ))}
+      <span className="kal-filter-sep" />
+      <b className="muted small">Klass (färg):</b>
+      {[...klasser].map(([namn, farg]) => (
+        <span key={namn} className="forkl-item"><b style={{ color: farg, background: '#333', padding: '0 5px', borderRadius: 3 }}>{namn}</b></span>
       ))}
     </div>
   );
