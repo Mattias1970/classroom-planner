@@ -1,13 +1,13 @@
 import tsParser from '@typescript-eslint/parser';
 import tsPlugin from '@typescript-eslint/eslint-plugin';
 
-// I2: Förbjudna plattformsord i packages/core/src
+// I2: Förbjudna plattformsord i kärnpaketen (core + kernel)
 const FORBIDDEN_GLOBALS = ['fetch', 'window', 'document', 'localStorage'];
 const FORBIDDEN_IDENTIFIERS = ['google', 'googleapis'];
 
 export default [
   {
-    files: ['packages/core/src/**/*.ts'],
+    files: ['packages/core/src/**/*.ts', 'packages/kernel/src/**/*.ts'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {

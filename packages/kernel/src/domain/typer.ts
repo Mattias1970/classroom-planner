@@ -1,0 +1,153 @@
+/**
+ * Classroom Planner v2 — domäntyper (Ring 1, ren kärna).
+ *
+ * Trädet:  Skolår ─ Tjänst ─ Klass ─ Ämne ─ (Bok, Planering)
+ * Böcker är fristående: lektioner utan koppling till schema, lärare eller
+ * klass. En planering uppstår när ett ämnes bok läggs på klassens schema.
+ * En lärare kopplas till en tjänst; lärarens schema HÄRLEDS ur tjänstens
+ * klassers ämnespass — det lagras aldrig separat.
+ */
+
+// ── Skolår ───────────────────────────────────────────────────
+/** 'YYYY-MM-DD'. */
+export type IsoDatum = string;
+
+/** Avvikande dag i skolåret. Röda dagar beräknas och lagras inte här. */
+export interface SkolarDag {
+  datum: IsoDatum;
+  /** T.ex. 'Höstlov', 'Temadag', 'Idrottsdag', 'Öppet hus'. */
+  label: string;
+  typ: 'lov' | 'heldag' | 'halvdag';
+  /** Endast halvdag: pass som börjar vid/efter denna tid utgår ('HH:MM'). */
+  slut?: string;
+}
+
+export interface Skolar {
+  id: string;
+  /** 'Läsåret 2026/2027'. */
+  namn: string;
+  start: IsoDatum;
+  slut: IsoDatum;
+  dagar: SkolarDag[];
+}
+
+// ── Personal & organisation ──────────────────────────────────
+export interface Larare { id: string; namn: string; signatur: string; }
+
+/** En tjänst hör till ett skolår och kan (men måste inte) ha en lärare. */
+export interface Tjanst { id: string; skolarId: string; namn: string; larareId?: string; }
+
+export interface Klass { id: string; tjanstId: string; namn: string; }
+
+/** Lektionspass: veckodag 1=mån … 5=fre, tider 'HH:MM'. */
+export interface Pass { dag: number; start: string; slut: string; }
+
+/**
+ * Ett ämne som en klass läser inom tjänsten. Schemat ligger här:
+ * klassens schema är unionen av dess ämnens pass (olika ämnen har olika
+ * tider). Planering kan skapas utan lärare.
+ */
+export interface Amne {
+  id: string;
+  klassId: string;
+  namn: string;
+  /** Fristående bok ur biblioteket; undefined = ingen bok vald ännu. */
+  bokId?: string;
+  schema: Pass[];
+}
+
+// ── Bok (fristående bibliotek) ───────────────────────────────
+/** Bokens namn på de tre uppgiftsnivåerna (intro / E / C–A). */
+export interface NivaEtiketter { niva1: string; niva2: string; niva3: string; }
+
+export type LektionsTyp = 'regular' | 'test' | 'repetition' | 'review' | 'ovaformagor' | 'exam';
+
+export interface Lektion {
+  id: number;
+  typ: LektionsTyp;
+  /** Rubrik ur boken, t.ex. '4.6 Ekvationer' eller 'Blandade uppgifter'. */
+  avsnitt: string;
+  del: number;
+  /** Uppgiftsintervall per nivå ('—' om saknas). */
+  niva1: string; niva2: string; niva3: string;
+  sidorTeori: string;
+  begrepp: string;
+  genomgang: string;
+  laxa: string;
+}
+
+/** Delkapitel '4.6' med sina lektioner (del 1/2) och begrepp. */
+export interface Delkapitel {
+  kod: string;
+  namn: string;
+  sidor: string;
+  begrepp: string[];
+  lektioner: Lektion[];
+}
+
+/** Kapitelresurser — öppna listor som läraren fyller på. */
+export interface KapitelResurser {
+  filmer: Array<{ titel: string; url: string }>;
+  /** Word-fil med teorisammanfattning för flippat klassrum. */
+  flippSammanfattningUrl?: string;
+  flippFilmUrl?: string;
+  flippQuizUrl?: string;
+}
+
+export interface Kapitel {
+  nr: number;
+  namn: string;
+  farg: string;
+  /** Sammanfattat sidspann, t.ex. 's. 157–212'. */
+  sidor: string;
+  delkapitel: Delkapitel[];
+  /** Lektioner utan delkapitelkod: blandade uppgifter, prov, träna … */
+  extraLektioner: Lektion[];
+  /** Kapitlets alla begrepp i bokordning (härledd, dedupad). */
+  begreppslista: string[];
+  resurser: KapitelResurser;
+}
+
+export interface Bok {
+  id: string;
+  titel: string;
+  forlag: string;
+  amne: string;
+  arskurs: number;
+  nivaer: NivaEtiketter;
+  kapitel: Kapitel[];
+}
+
+// ── Planering ────────────────────────────────────────────────
+/** En bok utlagd på ett ämnes schema inom ett skolår. */
+export interface Planering {
+  id: string;
+  amneId: string;
+  bokId: string;
+  skapad: string;
+}
+
+export interface PlaneradLektion {
+  kapitel: number;
+  lektion: Lektion;
+  /** null = ryms inte inom skolåret (hamnar efter slutdatum). */
+  datum: IsoDatum | null;
+  vecka: number | null;
+  start: string | null;
+  slutTid: string | null;
+}
+
+// ── Aggregat ─────────────────────────────────────────────────
+export interface Struktur {
+  skolar: Skolar[];
+  larare: Larare[];
+  tjanster: Tjanst[];
+  klasser: Klass[];
+  amnen: Amne[];
+  bocker: Bok[];
+  planeringar: Planering[];
+}
+
+export function tomStruktur(): Struktur {
+  return { skolar: [], larare: [], tjanster: [], klasser: [], amnen: [], bocker: [], planeringar: [] };
+}

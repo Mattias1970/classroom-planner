@@ -12,6 +12,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@planner/core': resolve(__dirname, 'packages/core/src/index.ts'),
+      '@planner/kernel': resolve(__dirname, 'packages/kernel/src/index.ts'),
     },
   },
 });

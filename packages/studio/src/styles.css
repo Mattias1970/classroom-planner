@@ -1,0 +1,39 @@
+:root { --bla: #2f5aa8; --ram: #d7dde6; --bg: #f6f8fb; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.45 system-ui, 'Segoe UI', sans-serif; background: var(--bg); color: #1c2430; }
+.studio { display: flex; flex-direction: column; height: 100vh; }
+.topbar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: #fff; border-bottom: 1px solid var(--ram); }
+.logo { font-size: 16px; }
+.spacer { flex: 1; }
+.cols { display: grid; grid-template-columns: 300px 1fr; flex: 1; min-height: 0; }
+.tree { border-right: 1px solid var(--ram); background: #fff; overflow: auto; padding: 8px; }
+.tree-h { font-size: 11px; letter-spacing: .06em; color: #66738a; margin: 12px 4px 4px; }
+.node { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 5px 8px; border-radius: 6px; cursor: pointer; font: inherit; }
+.node:hover { background: #eef2f8; }
+.node.act { background: #e3ebf8; font-weight: 600; }
+.ind { margin-left: 14px; border-left: 1px solid var(--ram); padding-left: 4px; }
+.panel { overflow: auto; padding: 16px; }
+.card { background: #fff; border: 1px solid var(--ram); border-radius: 10px; padding: 16px; max-width: 980px; }
+.card h2 { margin: 0 0 8px; }
+.btn { border: 1px solid var(--bla); background: var(--bla); color: #fff; border-radius: 7px; padding: 6px 12px; cursor: pointer; font: inherit; }
+.btn.sec { background: #fff; color: var(--bla); }
+.btn.warn { border-color: #b3392f; background: #fff; color: #b3392f; }
+.btn:disabled { opacity: .45; cursor: default; }
+.icon-btn { border: 0; background: none; cursor: pointer; font-size: 14px; }
+.file-btn { position: relative; overflow: hidden; display: inline-block; }
+.ny { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; align-items: center; }
+.ny input, .ny select, .kal-paste textarea { border: 1px solid var(--ram); border-radius: 6px; padding: 5px 8px; font: inherit; }
+.rad { display: flex; gap: 8px; align-items: center; }
+.tbl { border-collapse: collapse; width: 100%; margin: 10px 0; }
+.tbl th, .tbl td { border-bottom: 1px solid var(--ram); text-align: left; padding: 5px 8px; vertical-align: top; }
+.tbl thead th { font-size: 12px; color: #66738a; }
+.plan tr.saknas td { color: #a33; background: #fdf0ef; }
+.status { background: #eef6ee; border: 1px solid #bcd9bc; border-radius: 7px; padding: 7px 10px; }
+.note, .muted { color: #66738a; font-size: 13px; }
+.kal-paste { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start; }
+.kap-farg { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+.kapdetalj { border-top: 2px solid var(--ram); margin-top: 12px; padding-top: 8px; }
+.begrepp li { margin: 2px 0; }
+.steg li { margin: 6px 0; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+.larare { border-top: 1px solid var(--ram); padding-top: 8px; margin-top: 8px; }
