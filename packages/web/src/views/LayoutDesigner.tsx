@@ -66,7 +66,7 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
       setDrag({ typ: 'markera', x1: p.x, y1: p.y, x2: p.x, y2: p.y });
       if (!e.shiftKey) setValda([]);
     }
-    (e.target as Element).setPointerCapture(e.pointerId);
+    (e.target as Element).setPointerCapture?.(e.pointerId); // jsdom saknar Pointer Events-API
   };
 
   const pekaFlytta = (e: RPointerEvent) => {
@@ -403,7 +403,7 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
                       const origs: Record<string, LayoutBox> = {};
                       for (const x of layout.boxar) if (nyaValda.includes(x.id)) origs[x.id] = x;
                       setDrag({ typ: 'flytt', id: b.id, startX: p.x, startY: p.y, origs });
-                      (e.target as Element).setPointerCapture(e.pointerId);
+                      (e.target as Element).setPointerCapture?.(e.pointerId); // jsdom saknar Pointer Events-API
                     }}
                     style={{
                       position: 'absolute', left: mm(b.xMm), top: mm(b.yMm), width: mm(b.wMm), height: mm(b.hMm),
@@ -426,7 +426,7 @@ export function LayoutDesigner(props: LayoutDesignerProps) {
                         e.stopPropagation();
                         const p = mmPos(e);
                         setDrag({ typ: 'storlek', id: b.id, startX: p.x, startY: p.y, orig: b });
-                        (e.target as Element).setPointerCapture(e.pointerId);
+                        (e.target as Element).setPointerCapture?.(e.pointerId); // jsdom saknar Pointer Events-API
                       }}
                         style={{ position: 'absolute', right: -1, bottom: -1, width: 10, height: 10, background: '#175cd3', cursor: 'nwse-resize' }} />
                     )}
