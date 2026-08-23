@@ -24,9 +24,26 @@ function skriv(el: HTMLInputElement, v: string) { act(() => { inSetter.call(el, 
 function skrivArea(el: HTMLTextAreaElement, v: string) { act(() => { taSetter.call(el, v); el.dispatchEvent(new Event('input', { bubbles: true })); }); }
 function valj(el: HTMLSelectElement, v: string) { act(() => { seSetter.call(el, v); el.dispatchEvent(new Event('change', { bubbles: true })); }); }
 function knapp(host: HTMLElement, text: string): HTMLButtonElement {
-  const b = [...host.querySelectorAll('button')].find((x) => x.textContent?.includes(text));
+  const panelen = host.querySelector('.panel');
+  const iPanel = panelen ? [...panelen.querySelectorAll('button')].find((x) => x.textContent?.includes(text)) : undefined;
+  const b = iPanel ?? [...host.querySelectorAll('button')].find((x) => x.textContent?.includes(text));
   if (!b) throw new Error(`Hittar inte knappen "${text}"`);
   return b;
+}
+// Trädknapp (nav eller "Lägg till"-panelöppnare) — söker i vänstermenyn.
+function treeKnapp(host: HTMLElement, text: string): HTMLButtonElement {
+  const tree = host.querySelector('.tree')!;
+  const b = [...tree.querySelectorAll('button')].find((x) => x.textContent?.includes(text));
+  if (!b) throw new Error(`Hittar inte trädknappen "${text}"`);
+  return b;
+}
+/** Skapar ett skolår: öppnar panelen via trädet, fyller fälten, lägger till. */
+function skapaSkolar(host: HTMLElement, namn: string, start = '2026-08-17', slut = '2027-06-11') {
+  act(() => { treeKnapp(host, '➕ Lägg till skolår').click(); });
+  skriv(input(host, 'Skolårets namn'), namn);
+  skriv(input(host, 'Start'), start);
+  skriv(input(host, 'Slut'), slut);
+  act(() => { knapp(host, '➕ Lägg till skolår').click(); });
 }
 const input = (host: HTMLElement, label: string) => host.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
 const select = (host: HTMLElement, label: string) => host.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)!;
@@ -43,12 +60,17 @@ const BOKJSON = JSON.stringify({
 
 /** Importerar boken genom filväljaren i trädet. */
 async function importeraBok(host: HTMLElement) {
+  act(() => { treeKnapp(host, '➕ Lägg till bok').click(); }); // öppna importpanelen
   const fil = new File([BOKJSON], 'book.json', { type: 'application/json' });
   const inp = [...host.querySelectorAll<HTMLInputElement>('input[type="file"]')]
     .find((x) => x.accept.includes('.json'))!;
   Object.defineProperty(inp, 'files', { value: [fil] });
   await act(async () => { inp.dispatchEvent(new Event('change', { bubbles: true })); await Promise.resolve(); });
   await act(async () => { await Promise.resolve(); });
+  // Importen navigerar till bokpanelen — återgå till skolåret om ett finns, så
+  // att efterföljande tjänst-/klasstillägg sker i rätt panel.
+  const skolarNod = [...host.querySelector('.tree')!.querySelectorAll('button')].find((b) => b.textContent?.startsWith('📅'));
+  if (skolarNod) act(() => { skolarNod.click(); });
 }
 
 describe('Studio v2 — hela kedjan', () => {
@@ -56,10 +78,7 @@ describe('Studio v2 — hela kedjan', () => {
     const host = render();
 
     // 1. Skolår
-    skriv(input(host, 'Skolårets namn'), 'Läsåret 2026/2027');
-    skriv(input(host, 'Start'), '2026-08-17');
-    skriv(input(host, 'Slut'), '2027-06-11');
-    act(() => { knapp(host, '➕ Lägg till skolår').click(); });
+    skapaSkolar(host, 'Läsåret 2026/2027', '2026-08-17', '2027-06-11');
     expect(lasStruktur().skolar).toHaveLength(1);
     act(() => { knapp(host, 'Läsåret 2026/2027').click(); });
 
@@ -72,7 +91,7 @@ describe('Studio v2 — hela kedjan', () => {
     // 3. Bok importeras fristående (utan koppling till schema/lärare/klass)
     await importeraBok(host);
     expect(lasStruktur().bocker.map((b) => b.titel)).toEqual(['Matematik Y']);
-    expect(host.textContent).toContain('utan koppling till schema');
+    expect(host.textContent).toContain('koppla den till ett ämne');
 
     // 4. Tjänst (utan lärare) → klass
     skriv(input(host, 'Tjänstens namn'), 'Ma åk 8');
@@ -104,8 +123,7 @@ describe('Studio v2 — hela kedjan', () => {
 
   it('lärare kopplas till tjänsten och får härlett schema; ämnen planeras utan lärare', async () => {
     const host = render();
-    skriv(input(host, 'Skolårets namn'), '2026/2027');
-    act(() => { knapp(host, '➕ Lägg till skolår').click(); });
+    skapaSkolar(host, '2026/2027');
     act(() => { knapp(host, '2026/2027').click(); });
     await importeraBok(host);
     skriv(input(host, 'Tjänstens namn'), 'Ma');
@@ -119,13 +137,13 @@ describe('Studio v2 — hela kedjan', () => {
     expect(lasStruktur().amnen).toHaveLength(1);
 
     // Lärare läggs till och kopplas — schemat härleds ur ämnespasset
-    act(() => { knapp(host, '🧑‍🏫 Lärare').click(); });
+    act(() => { treeKnapp(host, '➕ Lägg till lärare').click(); });
     skriv(input(host, 'Lärarens namn'), 'Mattias');
     skriv(input(host, 'Signatur'), 'MT');
     act(() => { knapp(host, '➕ Lägg till lärare').click(); });
-    act(() => { knapp(host, '💼 Ma').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
     valj(select(host, 'Lärare för tjänsten'), lasStruktur().larare[0].id);
-    act(() => { knapp(host, '🧑‍🏫 Lärare').click(); });
+    act(() => { treeKnapp(host, '🧑‍🏫 Mattias').click(); });
     expect(host.textContent).toContain('Måndag');
     expect(host.textContent).toContain('08:10–09:10');
     expect(host.textContent).toContain('8B');
@@ -133,8 +151,7 @@ describe('Studio v2 — hela kedjan', () => {
 
   it('ämne utan giltigt pass kan inte skapas — knappen är låst tills schema angetts', async () => {
     const host = render();
-    skriv(input(host, 'Skolårets namn'), '2026/2027');
-    act(() => { knapp(host, '➕ Lägg till skolår').click(); });
+    skapaSkolar(host, '2026/2027');
     act(() => { knapp(host, '2026/2027').click(); });
     skriv(input(host, 'Tjänstens namn'), 'Ma');
     act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
@@ -152,7 +169,7 @@ describe('Studio v2 — hela kedjan', () => {
   it('bokpanelen visar sidregister-data, begrepp och flipp-resurser per kapitel', async () => {
     const host = render();
     await importeraBok(host);
-    act(() => { knapp(host, '📗 Matematik Y').click(); });
+    act(() => { treeKnapp(host, '📗 Matematik Y').click(); });
     expect(host.textContent).toContain('s. 10–15');       // kapitlets sidspann
     expect(host.textContent).toContain('täljare, nämnare');
     act(() => { knapp(host, 'Öppna').click(); });
@@ -170,10 +187,7 @@ describe('Studio v2 — hela kedjan', () => {
 describe('Lektionskort i planeringen', () => {
   it('klick på planeringsrad öppnar kort med tavelrubrik, BAM-tider, Socrative-rum, nivåer och begrepp', async () => {
     const host = render();
-    skriv(input(host, 'Skolårets namn'), '2026/2027');
-    skriv(input(host, 'Start'), '2026-08-17');
-    skriv(input(host, 'Slut'), '2027-06-11');
-    act(() => { knapp(host, '➕ Lägg till skolår').click(); });
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
     act(() => { knapp(host, '2026/2027').click(); });
     await importeraBok(host);
     skriv(input(host, 'Tjänstens namn'), 'Ma');
@@ -211,8 +225,7 @@ describe('Lektionskort i planeringen', () => {
 
 describe('Spara-knappar och automatisk nästa veckodag', () => {
   async function tillKlass(host: HTMLElement) {
-    skriv(input(host, 'Skolårets namn'), '2026/2027');
-    act(() => { knapp(host, '➕ Lägg till skolår').click(); });
+    skapaSkolar(host, '2026/2027');
     act(() => { knapp(host, '2026/2027').click(); });
     await importeraBok(host);
     skriv(input(host, 'Tjänstens namn'), 'Ma');
@@ -290,15 +303,13 @@ describe('Spara-knappar och automatisk nästa veckodag', () => {
 describe('Skolår: redigering och unika namn', () => {
   it('valt skolår kan redigeras och sparas; dubblettnamn avvisas', async () => {
     const host = render();
-    skriv(input(host, 'Skolårets namn'), 'Läsåret 2026/2027');
-    act(() => { knapp(host, '➕ Lägg till skolår').click(); });
+    skapaSkolar(host, 'Läsåret 2026/2027');
     // Dubblettnamn vid tillägg avvisas med svenskt fel
-    skriv(input(host, 'Skolårets namn'), 'läsåret 2026/2027');
-    act(() => { knapp(host, '➕ Lägg till skolår').click(); });
+    skapaSkolar(host, 'läsåret 2026/2027');
     expect(host.textContent).toContain('finns redan');
     expect(lasStruktur().skolar).toHaveLength(1);
     // Redigera valt skolår
-    act(() => { knapp(host, 'Läsåret 2026/2027').click(); });
+    act(() => { treeKnapp(host, 'Läsåret 2026/2027').click(); });
     skriv(input(host, 'Redigera skolårets namn'), 'Läsåret 2027/2028');
     skriv(input(host, 'Redigera slut'), '2028-06-09');
     expect(host.textContent).toContain('osparade ändringar');
@@ -311,10 +322,7 @@ describe('Skolår: redigering och unika namn', () => {
 describe('Halvklassämne i planeringen', () => {
   it('Biologi får Grupp A- och B-scheman, två planeringar och gruppmärkta lektionskort', async () => {
     const host = render();
-    skriv(input(host, 'Skolårets namn'), '2026/2027');
-    skriv(input(host, 'Start'), '2026-08-17');
-    skriv(input(host, 'Slut'), '2027-06-11');
-    act(() => { knapp(host, '➕ Lägg till skolår').click(); });
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
     act(() => { knapp(host, '2026/2027').click(); });
     await importeraBok(host);
     skriv(input(host, 'Tjänstens namn'), 'NO');
@@ -353,5 +361,69 @@ describe('Halvklassämne i planeringen', () => {
     expect(kort.textContent).toContain('Grupp B');
     expect(kort.textContent).toContain('Biologi8BB');
     expect(kort.textContent).toContain('13:50–14:00');
+  });
+});
+
+describe('Vänstermeny, tjänstöversikt och årsöversikt', () => {
+  async function byggUpp(host: HTMLElement) {
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host);
+    skriv(input(host, 'Tjänstens namn'), 'Ma åk 8');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma åk 8').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+  }
+
+  it('vänstermenyn listar skolår, tjänster, böcker och lärare med Lägg till-knappar', async () => {
+    const host = render();
+    await byggUpp(host);
+    const tree = host.querySelector('.tree')!;
+    expect(tree.textContent).toContain('SKOLÅR');
+    expect(tree.textContent).toContain('TJÄNSTER');
+    expect(tree.textContent).toContain('BÖCKER');
+    expect(tree.textContent).toContain('LÄRARE');
+    expect(tree.textContent).toContain('➕ Lägg till skolår');
+    expect(tree.textContent).toContain('➕ Lägg till bok');
+    expect(tree.textContent).toContain('➕ Lägg till lärare');
+    expect(tree.textContent).toContain('💼 Ma åk 8');
+    expect(tree.textContent).toContain('📗 Matematik Y');
+  });
+
+  it('tjänstöversikten visar klasser med ämnen, bok och planeringsstatus', async () => {
+    const host = render();
+    await byggUpp(host);
+    act(() => { treeKnapp(host, '💼 Ma åk 8').click(); });
+    const panel = host.querySelector('.panel')!;
+    expect(panel.textContent).toContain('Klasser och ämnen');
+    expect(panel.textContent).toContain('8B');
+    expect(panel.textContent).toContain('Matematik');
+    expect(panel.textContent).toContain('Matematik Y');
+    expect(panel.textContent).toContain('ej skapad');       // bok kopplad men ingen planering än
+    // Öppna ämnet via tjänstöversikten och skapa planering
+    act(() => { knapp(host, 'Öppna / planera →').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { treeKnapp(host, '💼 Ma åk 8').click(); });
+    expect(host.querySelector('.panel')!.textContent).toContain('✓ planerad');
+  });
+
+  it('årsöversikten visar kapitelkort och lektionsregler för ämnet', async () => {
+    const host = render();
+    await byggUpp(host);
+    act(() => { knapp(host, '📊 Årsöversikt').click(); });
+    const panel = host.querySelector('.panel')!;
+    expect(panel.textContent).toContain('Årsöversikt — Matematik Y');
+    expect(panel.textContent).toContain('Kapitel 1');
+    expect(panel.textContent).toContain('begrepp');
+    expect(panel.textContent).toContain('Lektionsregler');
+    expect(panel.textContent).toContain('Läxförhör via Socrative');
+    expect(panel.textContent).toContain('ETT');              // bokens nivånamn i reglerna
   });
 });

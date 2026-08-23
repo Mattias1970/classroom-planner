@@ -74,3 +74,23 @@ body { margin: 0; font: 14px/1.45 system-ui, 'Segoe UI', sans-serif; background:
 .pillm { font-size: 11px; background: #e3ebf8; color: #2f5aa8; border-radius: 10px; padding: 2px 8px; margin-left: 8px; vertical-align: middle; }
 .elevlista { border-top: 2px solid var(--ram); margin-top: 14px; padding-top: 8px; }
 .elev-schema td { background: #f6f8fb; }
+
+/* Flikar + tjänstöversikt + årsöversikt */
+.node.add { color: var(--bla); font-weight: 600; }
+.node.small { font-size: 11px; }
+.lank { border: 0; background: none; color: var(--bla); cursor: pointer; font: inherit; padding: 0; }
+.tj-klass { border-top: 1px solid var(--ram); padding-top: 8px; margin-top: 8px; }
+.ok { color: #1e5a2e; }
+.btn.sm { padding: 3px 9px; font-size: 12px; }
+.flikar { display: flex; gap: 6px; margin: 10px 0; border-bottom: 2px solid var(--ram); }
+.flik { border: 0; background: none; padding: 7px 12px; cursor: pointer; font: inherit; border-bottom: 3px solid transparent; margin-bottom: -2px; }
+.flik.act { border-bottom-color: var(--bla); font-weight: 600; color: var(--bla); }
+.kapkort-rad { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 10px 0; }
+.kapkort { border: 1px solid var(--ram); border-top: 4px solid; border-radius: 8px; overflow: hidden; }
+.kk-huvud { color: #fff; font-size: 11px; padding: 3px 8px; letter-spacing: .04em; }
+.kapkort h4 { margin: 6px 8px 2px; }
+.kk-stat { font-size: 12px; margin: 2px 8px; }
+.vd-prov td { background: #fdecea; } .vd-diagnos td { background: #fef8e3; } .vd-repetition td { background: #eef4fb; }
+.regler { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.regel { border: 1px solid var(--ram); border-radius: 8px; padding: 8px 10px; }
+.regel h4 { margin: 0 0 4px; }

@@ -8,7 +8,7 @@
 import { useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
-  STANDARD_AMNEN, arbetsNivaer, arHalvklass, bamTidslinje, begreppForLektion, bokBegrepp,
+  STANDARD_AMNEN, arbetsNivaer, arHalvklass, kapitelKort, viktigaDatum, bamTidslinje, begreppForLektion, bokBegrepp,
   bokFromImport, bokSidregister, bokSidregisterCsv, elevSchema, exitStart, giltigtPass,
   kalendariumFromIcs, laggTillAmne, laggTillElev, laggTillKlass, laggTillLarare,
   laggTillSkolar, laggTillTjanst, larareSchema, normaliseraDagar, nyttId, parseKalendarium,
@@ -24,7 +24,8 @@ const DAGNAMN = ['', 'Måndag', 'Tisdag', 'Onsdag', 'Torsdag', 'Fredag'];
 type Vald =
   | { typ: 'skolar'; id: string } | { typ: 'tjanst'; id: string }
   | { typ: 'klass'; id: string } | { typ: 'amne'; id: string }
-  | { typ: 'bok'; id: string } | { typ: 'larare' } | null;
+  | { typ: 'bok'; id: string } | { typ: 'larare' }
+  | { typ: 'nyttSkolar' } | { typ: 'nyBok' } | null;
 
 export function App() {
   const [s, setS] = useState<Struktur>(() => lasStruktur());
@@ -62,11 +63,13 @@ export function App() {
           {msg && <p className="status">{msg}</p>}
           {vald === null && <Start s={s} />}
           {vald?.typ === 'skolar' && <SkolarPanel s={s} id={vald.id} kor={kor} />}
-          {vald?.typ === 'tjanst' && <TjanstPanel s={s} id={vald.id} kor={kor} />}
+          {vald?.typ === 'tjanst' && <TjanstPanel s={s} id={vald.id} kor={kor} setVald={setVald} />}
           {vald?.typ === 'klass' && <KlassPanel s={s} id={vald.id} kor={kor} setVald={setVald} />}
           {vald?.typ === 'amne' && <AmnePanel s={s} id={vald.id} kor={kor} />}
           {vald?.typ === 'bok' && <BokPanel s={s} id={vald.id} kor={kor} />}
           {vald?.typ === 'larare' && <LararePanel s={s} kor={kor} />}
+          {vald?.typ === 'nyttSkolar' && <NyttSkolarPanel kor={kor} setVald={setVald} />}
+          {vald?.typ === 'nyBok' && <NyBokPanel kor={kor} setVald={setVald} />}
         </main>
       </div>
     </div>
@@ -90,7 +93,7 @@ function Start({ s }: { s: Struktur }) {
 
 // ── Trädet ───────────────────────────────────────────────────
 function Trad(props: { s: Struktur; vald: Vald; setVald: (v: Vald) => void; kor: (fn: () => Struktur, m: string) => void }) {
-  const { s, vald, setVald, kor } = props;
+  const { s, vald, setVald } = props;
   const ar = (v: Vald) => JSON.stringify(v) === JSON.stringify(vald);
   return (
     <>
@@ -119,37 +122,77 @@ function Trad(props: { s: Struktur; vald: Vald; setVald: (v: Vald) => void; kor:
           ))}
         </div>
       ))}
-      <NyttSkolar kor={kor} />
-      <div className="tree-h">BIBLIOTEK</div>
+      <button className="node add" onClick={() => setVald({ typ: 'nyttSkolar' })}>➕ Lägg till skolår</button>
+
+      <div className="tree-h">TJÄNSTER</div>
+      {s.tjanster.length === 0 && <div className="node muted">Inga tjänster ännu</div>}
+      {s.tjanster.map((t) => {
+        const la = s.skolar.find((x) => x.id === t.skolarId);
+        const antalK = s.klasser.filter((k) => k.tjanstId === t.id).length;
+        return (
+          <button key={t.id} className={`node ${ar({ typ: 'tjanst', id: t.id }) ? 'act' : ''}`} onClick={() => setVald({ typ: 'tjanst', id: t.id })}>
+            💼 {t.namn} <small className="muted">{la?.namn ?? ''} · {antalK} klasser</small>
+          </button>
+        );
+      })}
+      <span className="node muted small">Tjänster läggs till på ett skolår</span>
+
+      <div className="tree-h">BÖCKER</div>
       {s.bocker.map((b) => (
         <button key={b.id} className={`node ${ar({ typ: 'bok', id: b.id }) ? 'act' : ''}`} onClick={() => setVald({ typ: 'bok', id: b.id })}>📗 {b.titel}</button>
       ))}
-      <label className="node file-btn">⬆ Importera bok (JSON)
-        <input type="file" accept="application/json,.json" hidden onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) void f.text().then((t) => kor(() => { const bok = bokFromImport(t); return sparaBok(lasStruktur(), bok); },
-            'Bok importerad — lektioner skapade utan koppling till schema, lärare eller klass.'));
-          e.currentTarget.value = '';
-        }} />
-      </label>
+      <button className="node add" onClick={() => setVald({ typ: 'nyBok' })}>➕ Lägg till bok</button>
+
       <div className="tree-h">LÄRARE</div>
-      <button className={`node ${ar({ typ: 'larare' }) ? 'act' : ''}`} onClick={() => setVald({ typ: 'larare' })}>🧑‍🏫 Lärare ({s.larare.length})</button>
+      {s.larare.map((l) => (
+        <button key={l.id} className={`node ${ar({ typ: 'larare' }) ? 'act' : ''}`} onClick={() => setVald({ typ: 'larare' })}>🧑‍🏫 {l.namn} <small className="muted">{l.signatur}</small></button>
+      ))}
+      <button className="node add" onClick={() => setVald({ typ: 'larare' })}>➕ Lägg till lärare</button>
     </>
   );
 }
 
-function NyttSkolar({ kor }: { kor: (fn: () => Struktur, m: string) => void }) {
+function NyttSkolarPanel({ kor, setVald }: { kor: (fn: () => Struktur, m: string) => void; setVald: (v: Vald) => void }) {
   const [namn, setNamn] = useState('Läsåret 2026/2027');
   const [start, setStart] = useState('2026-08-17');
   const [slut, setSlut] = useState('2027-06-11');
+  const giltigt = namn.trim() !== '' && start !== '' && slut > start;
   return (
-    <div className="ny">
-      <input aria-label="Skolårets namn" value={namn} onChange={(e) => setNamn(e.target.value)} />
-      <input aria-label="Start" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
-      <input aria-label="Slut" type="date" value={slut} onChange={(e) => setSlut(e.target.value)} />
-      <button className="btn" disabled={namn.trim() === '' || start === '' || slut === '' || slut <= start}
-        onClick={() => kor(() => laggTillSkolar(lasStruktur(), { id: nyttId('la'), namn: namn.trim(), start, slut, dagar: [] }),
-          `Skolår ${namn.trim()} skapat — röda dagar beräknas automatiskt; lägg till lov och temadagar i panelen.`)}>➕ Lägg till skolår</button>
+    <div className="card">
+      <h2>➕ Lägg till skolår</h2>
+      <p className="note">Röda dagar (helgdagar) beräknas automatiskt. Lov, temadagar, idrottsdagar och halvdagar lägger du till i skolårets panel efteråt. Skolårets namn måste vara unikt.</p>
+      <div className="ny rad">
+        <input aria-label="Skolårets namn" value={namn} onChange={(e) => setNamn(e.target.value)} />
+        <input aria-label="Start" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+        <input aria-label="Slut" type="date" value={slut} onChange={(e) => setSlut(e.target.value)} />
+      </div>
+      <button className="btn" disabled={!giltigt} onClick={() => {
+        const id = nyttId('la');
+        kor(() => laggTillSkolar(lasStruktur(), { id, namn: namn.trim(), start, slut, dagar: [] }),
+          `Skolår ${namn.trim()} skapat.`);
+        if (lasStruktur().skolar.some((x) => x.id === id)) setVald({ typ: 'skolar', id });
+      }}>➕ Lägg till skolår</button>
+    </div>
+  );
+}
+
+function NyBokPanel({ kor, setVald }: { kor: (fn: () => Struktur, m: string) => void; setVald: (v: Vald) => void }) {
+  return (
+    <div className="card">
+      <h2>➕ Lägg till bok</h2>
+      <p className="note">Böcker är fristående: lektioner skapas utan koppling till schema, lärare eller klass, och kopplas sedan till ett ämne. Skapa bokfilen (JSON) genom att fotografera boksidor och köra prompten <b>Bokimport</b> — importera den här.</p>
+      <label className="btn file-btn">⬆ Importera bok (JSON)
+        <input type="file" accept="application/json,.json" hidden onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void f.text().then((t) => {
+            let nyId = '';
+            kor(() => { const bok = bokFromImport(t); nyId = bok.id; return sparaBok(lasStruktur(), bok); },
+              'Bok importerad — koppla den till ett ämne för att skapa en planering.');
+            if (nyId !== '' && lasStruktur().bocker.some((b) => b.id === nyId)) setVald({ typ: 'bok', id: nyId });
+          });
+          e.currentTarget.value = '';
+        }} />
+      </label>
     </div>
   );
 }
@@ -257,13 +300,15 @@ function NyTjanst({ s, skolarId, kor }: { s: Struktur; skolarId: string; kor: (f
 }
 
 // ── Tjänst ───────────────────────────────────────────────────
-function TjanstPanel({ s, id, kor }: { s: Struktur; id: string; kor: (fn: () => Struktur, m: string) => void }) {
+function TjanstPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn: () => Struktur, m: string) => void; setVald: (v: Vald) => void }) {
   const t = s.tjanster.find((x) => x.id === id);
   const [namn, setNamn] = useState('');
   if (!t) return null;
+  const la = s.skolar.find((x) => x.id === t.skolarId);
+  const klasser = s.klasser.filter((k) => k.tjanstId === id);
   return (
     <div className="card">
-      <h2>💼 {t.namn}</h2>
+      <h2>💼 {t.namn} <small className="muted">{la?.namn ?? ''}</small></h2>
       <label>Lärare:{' '}
         <select aria-label="Lärare för tjänsten" value={t.larareId ?? ''}
           onChange={(e) => kor(() => sattLarare(lasStruktur(), id, e.target.value === '' ? undefined : e.target.value),
@@ -272,6 +317,39 @@ function TjanstPanel({ s, id, kor }: { s: Struktur; id: string; kor: (fn: () => 
           {s.larare.map((l) => <option key={l.id} value={l.id}>{l.namn} ({l.signatur})</option>)}
         </select>
       </label>
+
+      <h3>Klasser och ämnen</h3>
+      {klasser.length === 0 && <p className="muted">Inga klasser ännu — lägg till en nedan.</p>}
+      {klasser.map((k) => {
+        const amnen = s.amnen.filter((a) => a.klassId === k.id);
+        const antalElever = s.elever.filter((e) => e.klassId === k.id).length;
+        return (
+          <div key={k.id} className="tj-klass">
+            <div className="rad">
+              <button className="lank" onClick={() => setVald({ typ: 'klass', id: k.id })}>👥 <b>{k.namn}</b></button>
+              <span className="muted">· {amnen.length} ämnen · {antalElever} elever</span>
+            </div>
+            {amnen.length === 0
+              ? <p className="muted small">Inga ämnen — öppna klassen för att lägga till.</p>
+              : <table className="tbl">
+                  <thead><tr><th>Ämne</th><th>Bok</th><th>Planering</th><th></th></tr></thead>
+                  <tbody>{amnen.map((a) => {
+                    const bok = s.bocker.find((b) => b.id === a.bokId);
+                    const harPlan = s.planeringar.some((p) => p.amneId === a.id);
+                    return (
+                      <tr key={a.id}>
+                        <td>{a.namn}{a.halvklass === true ? ' (A/B)' : ''}</td>
+                        <td>{bok ? bok.titel : <span className="muted">— ingen bok —</span>}</td>
+                        <td>{harPlan ? <span className="ok">✓ planerad</span> : bok ? <span className="muted">ej skapad</span> : <span className="muted">kräver bok</span>}</td>
+                        <td><button className="btn sec sm" onClick={() => setVald({ typ: 'amne', id: a.id })}>Öppna / planera →</button></td>
+                      </tr>
+                    );
+                  })}</tbody>
+                </table>}
+          </div>
+        );
+      })}
+
       <div className="ny rad">
         <input aria-label="Klassens namn" placeholder="Ny klass, t.ex. 8B" value={namn} onChange={(e) => setNamn(e.target.value)} />
         <button className="btn" disabled={namn.trim() === ''}
@@ -280,7 +358,7 @@ function TjanstPanel({ s, id, kor }: { s: Struktur; id: string; kor: (fn: () => 
       </div>
       <div className="modal-actions">
         <button className="btn warn" onClick={() => {
-          if (window.confirm(`Ta bort tjänsten ${t.namn} med alla klasser och ämnen?`)) kor(() => taBortTjanst(lasStruktur(), id), 'Tjänst borttagen.');
+          if (window.confirm(`Ta bort tjänsten ${t.namn} med alla klasser och ämnen?`)) { kor(() => taBortTjanst(lasStruktur(), id), 'Tjänst borttagen.'); setVald(null); }
         }}>🗑 Ta bort tjänst</button>
       </div>
     </div>
@@ -467,10 +545,18 @@ function AmnePanel({ s, id, kor }: { s: Struktur; id: string; kor: (fn: () => St
   const halv = a.halvklass === true;
   const rumA = socrativeRum(a.namn, klass.namn, 'A');
   const rumB = socrativeRum(a.namn, klass.namn, 'B');
+  const [flik, setFlik] = useState<'planering' | 'arsoversikt'>('planering');
   return (
     <div className="card">
       <h2>📖 {klass.namn} · {a.namn}{halv ? <span className="pillm">halvklass A/B</span> : null}</h2>
       <p className="muted">Socrative-rum: <b>{rumA}</b>{halv ? <> (Grupp A) · <b>{rumB}</b> (Grupp B)</> : <> · <b>{rumB}</b></>} — läxförhör och exit tickets.</p>
+      <div className="flikar no-print">
+        <button className={`flik ${flik === 'planering' ? 'act' : ''}`} onClick={() => setFlik('planering')}>📝 Planering</button>
+        <button className={`flik ${flik === 'arsoversikt' ? 'act' : ''}`} onClick={() => setFlik('arsoversikt')}>📊 Årsöversikt</button>
+      </div>
+      {flik === 'arsoversikt' && bok && <Arsoversikt bok={bok} plan={plan} nivaText={`${bok.nivaer.niva1} = introduktion · ${bok.nivaer.niva2} = E-nivå · ${bok.nivaer.niva3} = C/A-nivå`} />}
+      {flik === 'arsoversikt' && !bok && <p className="muted">Koppla en bok för att se årsöversikten.</p>}
+      {flik === 'planering' && (<>
       <AmneSchemaRedigerare key={a.id} amne={a} kor={kor} falt="schema"
         rubrik={halv ? `Schema Grupp A · rum ${rumA}` : 'Schema'} />
       {halv && <AmneSchemaRedigerare key={`${a.id}-B`} amne={a} kor={kor} falt="schemaB"
@@ -498,8 +584,53 @@ function AmnePanel({ s, id, kor }: { s: Struktur; id: string; kor: (fn: () => St
         <GruppPlanering plan={planB} bok={bok} amnesNamn={a.namn} klassNamn={klass.namn}
           rum={rumB} grupp="B" rubrik={`Grupp B · rum ${rumB}`} />
       </>)}
+      </>)}
       <div className="modal-actions">
         <button className="btn warn" onClick={() => kor(() => taBortAmne(lasStruktur(), id), 'Ämne borttaget.')}>🗑 Ta bort ämne</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Årsöversikt per klass/ämne (kapitelkort + viktiga datum) ──
+function Arsoversikt({ bok, plan, nivaText }: { bok: Bok; plan: PlaneradLektion[]; nivaText: string }) {
+  const kort = kapitelKort(bok, plan);
+  const vd = viktigaDatum(plan);
+  const dat = (d: string | null, v: number | null) => (d !== null ? `v.${v} · ${d.slice(8)}/${Number(d.slice(5, 7))}` : 'ryms ej');
+  return (
+    <div className="arsov">
+      <h3>Årsöversikt — {bok.titel}</h3>
+      <div className="kapkort-rad">
+        {kort.map((k) => (
+          <div key={k.nr} className="kapkort" style={{ borderTopColor: k.farg }}>
+            <div className="kk-huvud" style={{ background: k.farg }}>Kapitel {k.nr}</div>
+            <h4>{k.namn}</h4>
+            <p className="muted small">{k.antalLektioner} lektioner{k.forstaVecka !== null ? ` · v.${k.forstaVecka}–${k.sistaVecka}` : ''}</p>
+            <div className="kk-stat">💡 {k.begreppAntal} begrepp</div>
+            <div className="kk-stat">🎬 {k.filmAntal} filmer</div>
+          </div>
+        ))}
+      </div>
+      {vd.length > 0 && (<>
+        <h3>Viktiga datum — repetition, diagnoser och prov</h3>
+        <table className="tbl">
+          <thead><tr><th>Kap</th><th>Typ</th><th>Moment</th><th>När</th></tr></thead>
+          <tbody>{vd.map((v, i) => (
+            <tr key={i} className={`vd-${v.typ}`}>
+              <td>{v.kapitel}</td>
+              <td>{v.typ === 'diagnos' ? 'Diagnos/test' : v.typ === 'prov' ? 'PROV' : v.typ === 'repetition' ? 'Repetition' : 'Öva förmågor'}</td>
+              <td>{v.etikett}</td>
+              <td>{dat(v.datum, v.vecka)}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </>)}
+      <h3>Lektionsregler — {bok.amne} (gemensam grund)</h3>
+      <div className="regler">
+        <div className="regel"><h4>Lektionsstruktur (BAM)</h4><p>Tavlan högst upp: [Ämne] [starttid]–[sluttid]. Läxförhör via Socrative → Genomgång → Arbete → Exit ticket i slutet (Socrative).</p></div>
+        <div className="regel"><h4>Uppgiftsnivåer</h4><p>{nivaText}. Varje delkapitel har två lektioner: del 1 arbetar {bok.nivaer.niva1}/{bok.nivaer.niva2} (minimum {bok.nivaer.niva1} klart), del 2 arbetar {bok.nivaer.niva2}/{bok.nivaer.niva3}.</p></div>
+        <div className="regel"><h4>Inlämning</h4><p>{bok.nivaer.niva1}- och {bok.nivaer.niva2}-uppgifter är obligatoriska: fotografera och ladda upp i klassens inlämningsyta (Teams, Classroom m.fl.). {bok.nivaer.niva3} är frivillig fördjupning.</p></div>
+        <div className="regel"><h4>Läxor</h4><p>Läxa till varje delkapitel: alla begrepp som hör till delkapitlet. Läxförhör i början av nästa lektion via Socrative.</p></div>
       </div>
     </div>
   );
