@@ -207,3 +207,35 @@ describe('elever med Grupp A/B', () => {
     expect(taBortKlass(s, 'k8b').elever).toHaveLength(0);
   });
 });
+
+// ── Schemakonflikter (samma tid) ─────────────────────────────
+import { passKonflikter, passOverlapp } from '../src/domain/struktur.js';
+
+describe('passKonflikter — varnar för lektioner på samma tid', () => {
+  it('passOverlapp kräver samma dag och överlappande tider', () => {
+    expect(passOverlapp({ dag: 1, start: '09:00', slut: '10:00' }, { dag: 1, start: '09:30', slut: '10:30' })).toBe(true);
+    expect(passOverlapp({ dag: 1, start: '09:00', slut: '10:00' }, { dag: 1, start: '10:00', slut: '11:00' })).toBe(false);
+    expect(passOverlapp({ dag: 1, start: '09:00', slut: '10:00' }, { dag: 2, start: '09:00', slut: '10:00' })).toBe(false);
+  });
+
+  it('flaggar krock mot klassens andra ämnen', () => {
+    const { s } = bygg(); // Matematik ons 09:00–10:00 i 8B
+    const krock = passKonflikter(s, 'k8b', [{ dag: 3, start: '09:30', slut: '10:30' }]);
+    expect(krock).toHaveLength(1);
+    expect(krock[0]).toMatchObject({ amnesNamn: 'Matematik', dag: 3 });
+    // annan tid samma dag ⇒ ingen krock
+    expect(passKonflikter(s, 'k8b', [{ dag: 3, start: '10:00', slut: '11:00' }])).toHaveLength(0);
+    // samma ämne ignoreras vid redigering
+    expect(passKonflikter(s, 'k8b', [{ dag: 3, start: '09:30', slut: '10:30' }], 'am')).toHaveLength(0);
+  });
+
+  it('flaggar krock mot lärarens andra klasser (dubbelbokning)', () => {
+    let { s } = bygg();
+    s = laggTillLarare(s, { id: 'lar', namn: 'M', signatur: 'M' });
+    s = sattLarare(s, 'tj', 'lar');
+    s = laggTillKlass(s, { id: 'k8a', tjanstId: 'tj', namn: '8A' });
+    // 8A får matte samtidigt som 8B (ons 09:00) ⇒ läraren dubbelbokad
+    const krock = passKonflikter(s, 'k8a', [{ dag: 3, start: '09:00', slut: '10:00' }]);
+    expect(krock.some((r) => r.klassNamn === '8B')).toBe(true);
+  });
+});

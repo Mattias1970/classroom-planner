@@ -13,10 +13,11 @@ import {
   bokFromImport, bokSidregister, bokSidregisterCsv, elevSchema, exitStart, giltigtPass,
   kalendariumFromIcs, laggTillAmne, laggTillElev, laggTillKlass, laggTillLarare,
   laggTillSkolar, laggTillTjanst, larareSchema, normaliseraDagar, nyttId, parseKalendarium,
-  registreraPlanering, sattLarare, schemaKonflikter, skapaPlanering, socrativeRum, sparaBok,
+  passKonflikter, registreraPlanering, sattLarare, schemaKonflikter, skapaPlanering,
+  socrativeRum, sparaBok,
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
-  type Amne, type Bok, type Grupp, type KalenderDagRuta, type KalenderHandelse,
+  type Amne, type Bok, type Grupp, type KalenderDagRuta, type KalenderHandelse, type SchemaRad,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
 } from '@planner/kernel';
 import { exportJson, importJson, lasStruktur, sparaStruktur } from './store.js';
@@ -26,11 +27,12 @@ type Vald =
   | { typ: 'skolar'; id: string } | { typ: 'tjanst'; id: string }
   | { typ: 'klass'; id: string } | { typ: 'amne'; id: string }
   | { typ: 'bok'; id: string } | { typ: 'larare' }
-  | { typ: 'nyttSkolar' } | { typ: 'nyBok' } | { typ: 'kalender' } | null;
+  | { typ: 'nyttSkolar' } | { typ: 'nyBok' } | null;
 
 export function App() {
   const [s, setS] = useState<Struktur>(() => lasStruktur());
   const [vald, setVald] = useState<Vald>(null);
+  const [huvudvy, setHuvudvy] = useState<'struktur' | 'kalender'>('struktur');
   const [msg, setMsg] = useState('');
   const spara = (ny: Struktur, m = '') => { sparaStruktur(ny); setS(ny); if (m) setMsg(m); };
   const kor = (fn: () => Struktur, m: string) => {
@@ -41,6 +43,10 @@ export function App() {
     <div className="studio">
       <header className="topbar">
         <span className="logo">📘 Classroom Planner <b>Studio</b> <small>v2</small></span>
+        <nav className="toppflik" aria-label="Huvudvy">
+          <button className={`tflik ${huvudvy === 'struktur' ? 'act' : ''}`} onClick={() => setHuvudvy('struktur')}>🗂 Struktur</button>
+          <button className={`tflik ${huvudvy === 'kalender' ? 'act' : ''}`} onClick={() => setHuvudvy('kalender')}>📆 Kalender</button>
+        </nav>
         <span className="spacer" />
         <button className="btn sec" onClick={() => {
           const a = document.createElement('a');
@@ -56,24 +62,30 @@ export function App() {
           }} />
         </label>
       </header>
-      <div className="cols">
-        <nav className="tree" aria-label="Struktur">
-          <Trad s={s} vald={vald} setVald={setVald} kor={kor} />
-        </nav>
-        <main className="panel">
+      {huvudvy === 'kalender' ? (
+        <main className="panel full">
           {msg && <p className="status">{msg}</p>}
-          {vald === null && <Start s={s} />}
-          {vald?.typ === 'skolar' && <SkolarPanel s={s} id={vald.id} kor={kor} />}
-          {vald?.typ === 'tjanst' && <TjanstPanel s={s} id={vald.id} kor={kor} setVald={setVald} />}
-          {vald?.typ === 'klass' && <KlassPanel s={s} id={vald.id} kor={kor} setVald={setVald} />}
-          {vald?.typ === 'amne' && <AmnePanel s={s} id={vald.id} kor={kor} />}
-          {vald?.typ === 'bok' && <BokPanel s={s} id={vald.id} kor={kor} />}
-          {vald?.typ === 'larare' && <LararePanel s={s} kor={kor} />}
-          {vald?.typ === 'nyttSkolar' && <NyttSkolarPanel kor={kor} setVald={setVald} />}
-          {vald?.typ === 'nyBok' && <NyBokPanel kor={kor} setVald={setVald} />}
-          {vald?.typ === 'kalender' && <KalenderVy s={s} />}
+          <KalenderVy s={s} />
         </main>
-      </div>
+      ) : (
+        <div className="cols">
+          <nav className="tree" aria-label="Struktur">
+            <Trad s={s} vald={vald} setVald={setVald} kor={kor} />
+          </nav>
+          <main className="panel">
+            {msg && <p className="status">{msg}</p>}
+            {vald === null && <Start s={s} />}
+            {vald?.typ === 'skolar' && <SkolarPanel s={s} id={vald.id} kor={kor} />}
+            {vald?.typ === 'tjanst' && <TjanstPanel s={s} id={vald.id} kor={kor} setVald={setVald} />}
+            {vald?.typ === 'klass' && <KlassPanel s={s} id={vald.id} kor={kor} setVald={setVald} />}
+            {vald?.typ === 'amne' && <AmnePanel s={s} id={vald.id} kor={kor} />}
+            {vald?.typ === 'bok' && <BokPanel s={s} id={vald.id} kor={kor} />}
+            {vald?.typ === 'larare' && <LararePanel s={s} kor={kor} />}
+            {vald?.typ === 'nyttSkolar' && <NyttSkolarPanel kor={kor} setVald={setVald} />}
+            {vald?.typ === 'nyBok' && <NyBokPanel kor={kor} setVald={setVald} />}
+          </main>
+        </div>
+      )}
     </div>
   );
 }
@@ -99,7 +111,6 @@ function Trad(props: { s: Struktur; vald: Vald; setVald: (v: Vald) => void; kor:
   const ar = (v: Vald) => JSON.stringify(v) === JSON.stringify(vald);
   return (
     <>
-      <button className={`node stor ${ar({ typ: 'kalender' }) ? 'act' : ''}`} onClick={() => setVald({ typ: 'kalender' })}>📆 Kalender</button>
       <div className="tree-h">SKOLÅR</div>
       {s.skolar.map((la) => (
         <div key={la.id}>
@@ -368,6 +379,13 @@ function TjanstPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (f
   );
 }
 
+// ── Konfliktvarning: kräver två bekräftelser för samma tid ────
+const DAGKORT_KORT = ['Mån', 'Tis', 'Ons', 'Tor', 'Fre'];
+function konfliktText(krock: SchemaRad[], steg: number): string {
+  const lista = krock.map((r) => `${DAGKORT_KORT[r.dag - 1]} ${r.start}–${r.slut} ${r.klassNamn}${r.grupp !== undefined ? r.grupp : ''}/${r.amnesNamn}`).join('; ');
+  return `⚠ Krock med redan lagd lektion: ${lista}. Klicka igen för att lägga ändå (${steg}/2).`;
+}
+
 // ── Passredigerare (delas av Klass- och Ämnespanelen) ────────
 type PassRad = { dag: number; start: string; slut: string };
 /** Nästa veckodag mån–fre med omslag: mån→tis … fre→mån. */
@@ -426,6 +444,8 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
   const [bokId, setBokId] = useState('');
   const [pass, setPass] = useState<PassRad[]>([{ dag: 1, start: '08:10', slut: '09:10' }]);
   const [passB, setPassB] = useState<PassRad[]>([{ dag: 2, start: '08:10', slut: '09:10' }]);
+  const [konfliktSteg, setKonfliktSteg] = useState(0);
+  const [konfliktMsg, setKonfliktMsg] = useState('');
   if (!k) return null;
   const halv = arHalvklass(namn);
   const giltiga = pass.filter((p) => giltigtPass(p as Pass));
@@ -457,15 +477,22 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
         <button className="btn" disabled={giltiga.length === 0 || (halv && giltigaB.length === 0)}
           title={halv && giltigaB.length === 0 ? 'Halvklassämnen behöver schema för både Grupp A och Grupp B' : ''}
           onClick={() => {
+            const allaPass = [...giltiga, ...(halv ? giltigaB : [])] as Pass[];
+            const krock = passKonflikter(s, id, allaPass);
+            if (krock.length > 0 && konfliktSteg < 2) {
+              const steg = konfliktSteg + 1; setKonfliktSteg(steg); setKonfliktMsg(konfliktText(krock, steg)); return;
+            }
             const amne: Amne = {
               id: nyttId('am'), klassId: id, namn, bokId: bokId === '' ? undefined : bokId,
               schema: giltiga as Pass[],
               ...(halv ? { halvklass: true as const, schemaB: giltigaB as Pass[] } : {}),
             };
-            kor(() => laggTillAmne(lasStruktur(), amne), `Ämne ${namn} skapat${halv ? ' (halvklass, Grupp A/B)' : ''}.`);
+            kor(() => laggTillAmne(lasStruktur(), amne), `Ämne ${namn} skapat${halv ? ' (halvklass, Grupp A/B)' : ''}${krock.length > 0 ? ' — trots schemakrock' : ''}.`);
+            setKonfliktSteg(0); setKonfliktMsg('');
             setVald({ typ: 'amne', id: amne.id });
-          }}>➕ Lägg till ämne</button>
+          }}>{konfliktSteg > 0 ? `⚠ Lägg till ändå (${konfliktSteg}/2)` : '➕ Lägg till ämne'}</button>
       </div>
+      {konfliktMsg && <p className="status warn">{konfliktMsg}</p>}
       <Elevlista s={s} klassId={id} klassNamn={k.namn} kor={kor} />
       <div className="modal-actions">
         <button className="btn warn" onClick={() => {
@@ -560,9 +587,9 @@ function AmnePanel({ s, id, kor }: { s: Struktur; id: string; kor: (fn: () => St
       {flik === 'arsoversikt' && bok && <Arsoversikt bok={bok} plan={plan} nivaText={`${bok.nivaer.niva1} = introduktion · ${bok.nivaer.niva2} = E-nivå · ${bok.nivaer.niva3} = C/A-nivå`} />}
       {flik === 'arsoversikt' && !bok && <p className="muted">Koppla en bok för att se årsöversikten.</p>}
       {flik === 'planering' && (<>
-      <AmneSchemaRedigerare key={a.id} amne={a} kor={kor} falt="schema"
+      <AmneSchemaRedigerare key={a.id} s={s} amne={a} kor={kor} falt="schema"
         rubrik={halv ? `Schema Grupp A · rum ${rumA}` : 'Schema'} />
-      {halv && <AmneSchemaRedigerare key={`${a.id}-B`} amne={a} kor={kor} falt="schemaB"
+      {halv && <AmneSchemaRedigerare key={`${a.id}-B`} s={s} amne={a} kor={kor} falt="schemaB"
         rubrik={`Schema Grupp B · rum ${rumB}`} />}
       <label>Bok:{' '}
         <select aria-label="Bok för ämnet" value={a.bokId ?? ''}
@@ -768,27 +795,34 @@ function GruppPlanering(props: {
 }
 
 // ── Ämnets schema: redigeras och sparas uttryckligen ─────────
-function AmneSchemaRedigerare({ amne, kor, falt, rubrik }: {
-  amne: Amne; kor: (fn: () => Struktur, m: string) => void;
+function AmneSchemaRedigerare({ s, amne, kor, falt, rubrik }: {
+  s: Struktur; amne: Amne; kor: (fn: () => Struktur, m: string) => void;
   falt: 'schema' | 'schemaB'; rubrik: string;
 }) {
   const nuvarande = (falt === 'schema' ? amne.schema : amne.schemaB) ?? [];
   const [rows, setRows] = useState<PassRad[]>(nuvarande.map((p) => ({ ...p })));
   const [sparat, setSparat] = useState(false);
+  const [konfliktSteg, setKonfliktSteg] = useState(0);
+  const [konfliktMsg, setKonfliktMsg] = useState('');
   const giltiga = rows.every((p) => giltigtPass(p as Pass));
   const andrad = JSON.stringify(rows) !== JSON.stringify(nuvarande);
   return (
     <div className="schema-red">
       <h3>{rubrik} <small className="muted">{nuvarande.map((p) => `${DAGNAMN[p.dag]} ${p.start}–${p.slut}`).join(' · ')}</small></h3>
-      <PassRedigerare pass={rows} onChange={(p) => { setRows(p); setSparat(false); }} />
+      <PassRedigerare pass={rows} onChange={(p) => { setRows(p); setSparat(false); setKonfliktSteg(0); setKonfliktMsg(''); }} />
       <button className="btn" disabled={!andrad || !giltiga || rows.length === 0}
         title={!giltiga ? 'Minst ett pass är ogiltigt (start < slut, mån–fre)' : !andrad ? 'Inga osparade ändringar' : ''}
         onClick={() => {
+          const krock = passKonflikter(s, amne.klassId, rows as Pass[], amne.id);
+          if (krock.length > 0 && konfliktSteg < 2) {
+            const steg = konfliktSteg + 1; setKonfliktSteg(steg); setKonfliktMsg(konfliktText(krock, steg)); return;
+          }
           kor(() => uppdateraAmne(lasStruktur(), amne.id, { [falt]: rows.map((p) => ({ ...p })) }),
-            `Schema sparat (${rows.length} pass/vecka) — planeringen har räknats om med de nya tiderna.`);
-          setSparat(true); setTimeout(() => setSparat(false), 2500);
-        }}>{sparat ? '✓ Sparat!' : '💾 Spara schema'}</button>
-      {andrad && !sparat && <span className="osparat">● osparade ändringar</span>}
+            `Schema sparat (${rows.length} pass/vecka)${krock.length > 0 ? ' — trots schemakrock' : ''} — planeringen har räknats om.`);
+          setSparat(true); setKonfliktSteg(0); setKonfliktMsg(''); setTimeout(() => setSparat(false), 2500);
+        }}>{sparat ? '✓ Sparat!' : konfliktSteg > 0 ? `⚠ Spara ändå (${konfliktSteg}/2)` : '💾 Spara schema'}</button>
+      {andrad && !sparat && konfliktSteg === 0 && <span className="osparat">● osparade ändringar</span>}
+      {konfliktMsg && <p className="status warn">{konfliktMsg}</p>}
     </div>
   );
 }
@@ -881,21 +915,23 @@ const MANADSNAMN = ['januari','februari','mars','april','maj','juni','juli','aug
 
 function KalenderVy({ s }: { s: Struktur }) {
   const [skolarId, setSkolarId] = useState(s.skolar[0]?.id ?? '');
-  const [lage, setLage] = useState<'manad' | 'vecka' | 'lasar'>('manad');
+  const [lage, setLage] = useState<'lasar' | 'termin' | 'manad' | 'vecka'>('vecka');
   const [klassFilter, setKlassFilter] = useState<string>('__alla__');
+  const [amnesFilter, setAmnesFilter] = useState<string>('__alla__');
+  const [termin, setTermin] = useState<'HT' | 'VT'>('HT');
   const skolar = s.skolar.find((x) => x.id === skolarId) ?? s.skolar[0];
   const [ankare, setAnkare] = useState<string>(skolar?.start ?? '2026-08-17');
 
   const handelser = useMemo(() => (skolar ? kalenderHandelser(s, skolar.id) : []), [s, skolar]);
-  const filtrerade = useMemo(
-    () => (klassFilter === '__alla__' ? handelser : handelser.filter((h) => h.klassId === klassFilter)),
-    [handelser, klassFilter],
-  );
+  const filtrerade = useMemo(() => handelser.filter((h) =>
+    (klassFilter === '__alla__' || h.klassId === klassFilter)
+    && (amnesFilter === '__alla__' || h.amnesNamn === amnesFilter)), [handelser, klassFilter, amnesFilter]);
   const perDatum = useMemo(() => handelserPerDatum(filtrerade), [filtrerade]);
   const klasserMedPlan = useMemo(() => {
     const ids = new Set(handelser.map((h) => h.klassId));
     return s.klasser.filter((k) => ids.has(k.id));
   }, [s.klasser, handelser]);
+  const amnenMedPlan = useMemo(() => [...new Set(handelser.map((h) => h.amnesNamn))], [handelser]);
 
   if (!skolar) return <div className="card"><h2>📆 Kalender</h2><p className="muted">Skapa ett skolår och minst en planering först.</p></div>;
 
@@ -918,17 +954,29 @@ function KalenderVy({ s }: { s: Struktur }) {
         <select aria-label="Skolår" value={skolar.id} onChange={(e) => { setSkolarId(e.target.value); const ny = s.skolar.find((x) => x.id === e.target.value); if (ny) setAnkare(ny.start); }}>
           {s.skolar.map((la) => <option key={la.id} value={la.id}>{la.namn}</option>)}
         </select>
-        <select aria-label="Klassfilter" value={klassFilter} onChange={(e) => setKlassFilter(e.target.value)}>
-          <option value="__alla__">Alla klasser</option>
-          {klasserMedPlan.map((k) => <option key={k.id} value={k.id}>{k.namn}</option>)}
-        </select>
         <div className="kal-lagen">
-          {(['manad', 'vecka', 'lasar'] as const).map((l) => (
+          {(['lasar', 'termin', 'manad', 'vecka'] as const).map((l) => (
             <button key={l} className={`btn sec sm ${lage === l ? 'active' : ''}`} onClick={() => setLage(l)}>
-              {l === 'manad' ? 'Månad' : l === 'vecka' ? 'Vecka' : 'Läsår'}
+              {l === 'lasar' ? 'Läsår' : l === 'termin' ? 'Termin' : l === 'manad' ? 'Månad' : 'Vecka'}
             </button>
           ))}
         </div>
+      </div>
+      <div className="kal-filter">
+        <button className={`chipbtn ${klassFilter === '__alla__' ? 'act' : ''}`} onClick={() => setKlassFilter('__alla__')}>Alla klasser</button>
+        {klasserMedPlan.map((k) => (
+          <button key={k.id} className={`chipbtn ${klassFilter === k.id ? 'act' : ''}`} onClick={() => setKlassFilter(k.id)}>{k.namn}</button>
+        ))}
+        <span className="kal-filter-sep" />
+        <button className={`chipbtn ${amnesFilter === '__alla__' ? 'act' : ''}`} onClick={() => setAmnesFilter('__alla__')}>Alla ämnen</button>
+        {amnenMedPlan.map((a) => (
+          <button key={a} className={`chipbtn ${amnesFilter === a ? 'act' : ''}`} onClick={() => setAmnesFilter(a)}>{a}</button>
+        ))}
+        {lage === 'termin' && (<>
+          <span className="kal-filter-sep" />
+          <button className={`chipbtn ${termin === 'HT' ? 'act' : ''}`} onClick={() => setTermin('HT')}>HT</button>
+          <button className={`chipbtn ${termin === 'VT' ? 'act' : ''}`} onClick={() => setTermin('VT')}>VT</button>
+        </>)}
       </div>
 
       {handelser.length === 0 && <p className="note">Inga planeringar i det här skolåret ännu — skapa en planering på ett ämne, så dyker lektionerna upp här.</p>}
@@ -938,14 +986,16 @@ function KalenderVy({ s }: { s: Struktur }) {
           onPrev={() => flyttaManad(-1)} onNext={() => flyttaManad(1)} />
       )}
       {lage === 'vecka' && (
-        <VeckoLista rutor={veckaRutor(ankare, skolar, perDatum)}
-          onPrev={() => flyttaVecka(-1)} onNext={() => flyttaVecka(1)} />
+        <VeckoSchema rutor={veckaRutor(ankare, skolar, perDatum)}
+          onPrev={() => flyttaVecka(-1)} onNext={() => flyttaVecka(1)} onIdag={() => setAnkare(new Date().toISOString().slice(0, 10))} />
       )}
-      {lage === 'lasar' && (
+      {(lage === 'lasar' || lage === 'termin') && (
         <div className="lasar-grid">
-          {skolarManader(skolar).map(([y, m]) => (
-            <MiniManad key={`${y}-${m}`} ar={y} manad0={m} skolar={skolar} perDatum={perDatum} />
-          ))}
+          {skolarManader(skolar)
+            .filter(([, m]) => lage === 'lasar' || (termin === 'HT' ? m >= 6 : m <= 5))
+            .map(([y, m]) => (
+              <MiniManad key={`${y}-${m}`} ar={y} manad0={m} skolar={skolar} perDatum={perDatum} />
+            ))}
         </div>
       )}
       <Kapitelforklaring handelser={filtrerade} />
@@ -989,24 +1039,45 @@ function MonadsGrid({ ar, manad0, skolar, perDatum, onPrev, onNext }: {
   );
 }
 
-function VeckoLista({ rutor, onPrev, onNext }: { rutor: KalenderDagRuta[]; onPrev: () => void; onNext: () => void }) {
+function VeckoSchema({ rutor, onPrev, onNext, onIdag }: {
+  rutor: KalenderDagRuta[]; onPrev: () => void; onNext: () => void; onIdag: () => void;
+}) {
+  const DAG_START = 7, DAG_SLUT = 17;
+  const timmar = Array.from({ length: DAG_SLUT - DAG_START + 1 }, (_, i) => DAG_START + i);
+  const vardagar = rutor.filter((r) => r.dag <= 5); // Mån–Fre som ett schema
+  const min = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const topp = (t: string) => ((min(t) - DAG_START * 60) / ((DAG_SLUT - DAG_START) * 60)) * 100;
+  const hojd = (a: string, b: string) => ((min(b) - min(a)) / ((DAG_SLUT - DAG_START) * 60)) * 100;
   return (
     <div>
       <div className="rad kal-nav">
-        <button className="btn sec sm" onClick={onPrev}>◀ Föregående</button>
+        <button className="btn sec sm" onClick={onPrev}>◀</button>
+        <button className="btn sec sm" onClick={onIdag}>Idag</button>
+        <button className="btn sec sm" onClick={onNext}>▶</button>
         <b>Vecka {rutor[0] ? isoVeckaLbl(rutor[0].datum) : ''}</b>
-        <button className="btn sec sm" onClick={onNext}>Nästa ▶</button>
       </div>
-      <div className="vlista">
-        {rutor.map((r) => (
-          <div key={r.datum} className={`vrad ${r.helg ? 'helg' : ''} ${r.ledig ? 'ledig' : ''}`}>
-            <div className="vrad-d">
-              <b>{DAGKORT[r.dag - 1]}</b> {Number(r.datum.slice(8))}/{Number(r.datum.slice(5, 7))}
-              {r.ledig ? <span className="ledig-l"> {r.ledig}</span> : r.halvdag ? <span className="ledig-l"> ½ {r.halvdag}</span> : null}
-            </div>
-            <div className="vrad-h">
-              {r.handelser.length === 0 ? <span className="muted small">—</span> : r.handelser.map((h, i) => <Handelsechip key={i} h={h} />)}
-            </div>
+      <div className="schema" style={{ gridTemplateColumns: `48px repeat(${vardagar.length}, 1fr)` }}>
+        <div className="sch-hdr" />
+        {vardagar.map((r) => (
+          <div key={r.datum} className={`sch-hdr ${r.ledig ? 'ledig' : ''}`}>
+            {DAGKORT[r.dag - 1]} {Number(r.datum.slice(8))}/{Number(r.datum.slice(5, 7))}
+            {r.ledig ? <div className="ledig-l">{r.ledig}</div> : r.halvdag ? <div className="ledig-l">½ {r.halvdag}</div> : null}
+          </div>
+        ))}
+        <div className="sch-tidkol">
+          {timmar.map((h) => <div key={h} className="sch-tid">{String(h).padStart(2, '0')}:00</div>)}
+        </div>
+        {vardagar.map((r) => (
+          <div key={r.datum} className={`sch-kol ${r.ledig ? 'ledig' : ''}`}>
+            {timmar.map((h) => <div key={h} className="sch-linje" style={{ top: `${topp(`${String(h).padStart(2, '0')}:00`)}%` }} />)}
+            {r.handelser.map((h, i) => (
+              <div key={i} className="sch-lekt" style={{ top: `${topp(h.start)}%`, height: `${hojd(h.start, h.slut)}%`, background: h.kapitelFarg }}
+                title={`${h.start}–${h.slut} ${h.klassNamn}${h.grupp !== undefined ? ` (Grupp ${h.grupp})` : ''} · ${h.amnesNamn} · ${h.avsnitt}`}>
+                <b>{h.klassNamn}{h.grupp !== undefined ? h.grupp : ''} · {h.amnesNamn}</b>
+                <span>{h.avsnitt}</span>
+                <small>{h.start}–{h.slut}</small>
+              </div>
+            ))}
           </div>
         ))}
       </div>

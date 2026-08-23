@@ -128,3 +128,28 @@ body { margin: 0; font: 14px/1.45 system-ui, 'Segoe UI', sans-serif; background:
 .kal-forkl { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .forkl-item { font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
 .prick { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+/* Topptabbar */
+.toppflik { display: flex; gap: 4px; margin-left: 18px; }
+.tflik { border: 0; background: none; padding: 8px 14px; cursor: pointer; font: inherit; border-radius: 7px; }
+.tflik.act { background: #e3ebf8; color: var(--bla); font-weight: 600; }
+.panel.full { flex: 1; }
+.status.warn { background: #fdf0e6; border-color: #f0c48a; color: #8a4b08; }
+
+/* Kalenderfilter (knappar) */
+.kal-filter { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin: 8px 0 12px; }
+.chipbtn { border: 1px solid var(--ram); background: #fff; border-radius: 14px; padding: 3px 12px; cursor: pointer; font: inherit; font-size: 13px; }
+.chipbtn.act { background: var(--bla); color: #fff; border-color: var(--bla); }
+.kal-filter-sep { width: 1px; align-self: stretch; background: var(--ram); margin: 0 4px; }
+
+/* Veckoschema (tid × dag) */
+.schema { display: grid; gap: 1px; background: var(--ram); border: 1px solid var(--ram); border-radius: 8px; overflow: hidden; }
+.sch-hdr { background: #f6f8fb; text-align: center; font-size: 12px; font-weight: 600; padding: 6px 2px; }
+.sch-hdr.ledig { background: #fff3e0; color: #8a4b08; }
+.sch-tidkol { background: #fff; position: relative; }
+.sch-tid { height: 52px; font-size: 10px; color: #99a; text-align: right; padding-right: 4px; border-top: 1px solid #eef1f5; }
+.sch-kol { background: #fff; position: relative; min-height: 572px; }
+.sch-kol.ledig { background: repeating-linear-gradient(45deg, #fff8ef, #fff8ef 6px, #fff1de 6px, #fff1de 12px); }
+.sch-linje { position: absolute; left: 0; right: 0; border-top: 1px solid #eef1f5; }
+.sch-lekt { position: absolute; left: 2px; right: 2px; color: #fff; border-radius: 5px; padding: 2px 5px; overflow: hidden; font-size: 11px; display: flex; flex-direction: column; line-height: 1.2; }
+.sch-lekt b { font-size: 11px; } .sch-lekt span { font-size: 10px; opacity: .95; } .sch-lekt small { font-size: 9px; opacity: .85; margin-top: auto; }

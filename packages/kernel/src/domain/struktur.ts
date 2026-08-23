@@ -195,14 +195,51 @@ export function larareSchema(s: Struktur, larareId: string): SchemaRad[] {
     .sort((x, y) => x.dag - y.dag || x.start.localeCompare(y.start));
 }
 
+/** Två pass krockar om de ligger samma dag och tiderna överlappar. */
+export function passOverlapp(a: Pass, b: Pass): boolean {
+  return a.dag === b.dag && a.start < b.slut && b.start < a.slut;
+}
+
 /** Överlappande pass i ett schema (t.ex. lärarens) — för varningar i UI. */
 export function schemaKonflikter(rader: SchemaRad[]): Array<[SchemaRad, SchemaRad]> {
   const ut: Array<[SchemaRad, SchemaRad]> = [];
   for (let i = 0; i < rader.length; i++) for (let j = i + 1; j < rader.length; j++) {
-    const a = rader[i], b = rader[j];
-    if (a.dag === b.dag && a.start < b.slut && b.start < a.slut) ut.push([a, b]);
+    if (passOverlapp(rader[i], rader[j])) ut.push([rader[i], rader[j]]);
   }
   return ut;
+}
+
+/** Ett ämnes alla pass som schemarader (Grupp A + B för halvklass). */
+function amneRader(s: Struktur, amne: Amne): SchemaRad[] {
+  const klass = s.klasser.find((k) => k.id === amne.klassId);
+  if (!klass) return [];
+  const rader: SchemaRad[] = amne.schema.map((p) => ({
+    ...p, klassNamn: klass.namn, amnesNamn: amne.namn, grupp: amne.halvklass === true ? 'A' as const : undefined,
+  }));
+  if (amne.halvklass === true) {
+    rader.push(...(amne.schemaB ?? []).map((p) => ({ ...p, klassNamn: klass.namn, amnesNamn: amne.namn, grupp: 'B' as const })));
+  }
+  return rader;
+}
+
+/**
+ * Krockar mellan föreslagna pass och redan lagda lektioner: dels klassens
+ * övriga ämnen (klassen kan inte vara på två ställen), dels — om tjänsten har
+ * en lärare — lärarens andra klasser (läraren kan inte vara på två ställen).
+ * ignoreAmneId hoppar över ett ämne som redigeras.
+ */
+export function passKonflikter(s: Struktur, klassId: string, nyaPass: Pass[], ignoreAmneId?: string): SchemaRad[] {
+  const klass = s.klasser.find((k) => k.id === klassId);
+  if (!klass) return [];
+  const tjanst = s.tjanster.find((t) => t.id === klass.tjanstId);
+  const relevanta: Amne[] = s.amnen.filter((a) => a.klassId === klassId && a.id !== ignoreAmneId);
+  if (tjanst?.larareId !== undefined) {
+    const larartjanster = new Set(s.tjanster.filter((t) => t.larareId === tjanst.larareId).map((t) => t.id));
+    const andraKlasser = s.klasser.filter((k) => larartjanster.has(k.tjanstId) && k.id !== klassId).map((k) => k.id);
+    relevanta.push(...s.amnen.filter((a) => andraKlasser.includes(a.klassId) && a.id !== ignoreAmneId));
+  }
+  const rader = relevanta.flatMap((a) => amneRader(s, a));
+  return rader.filter((r) => nyaPass.some((p) => passOverlapp(p, r)));
 }
 
 // ── Planering: bok + ämnesschema + skolår → datumsatta lektioner ──

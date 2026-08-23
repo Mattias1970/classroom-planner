@@ -450,10 +450,10 @@ describe('Kalender', () => {
   it('kalendervyn visar månadsrutnät med lektioner och kapitelfärgförklaring', async () => {
     const host = render();
     await medPlanering(host);
-    act(() => { treeKnapp(host, '📆 Kalender').click(); });
+    act(() => { knapp(host, '📆 Kalender').click(); });
+    act(() => { knapp(host, 'Månad').click(); });
     const panel = host.querySelector('.panel')!;
     expect(panel.textContent).toContain('📆 Kalender');
-    // Månadsläge default: navigera till augusti (skolårets start) visas direkt
     expect(panel.querySelector('.mgrid')).not.toBeNull();
     // Lektionen ligger onsdag; en händelsechip finns i rutnätet
     expect([...panel.querySelectorAll('.kh')].length).toBeGreaterThan(0);
@@ -465,12 +465,86 @@ describe('Kalender', () => {
   it('lägena Vecka och Läsår renderar; klassfiltret finns', async () => {
     const host = render();
     await medPlanering(host);
-    act(() => { treeKnapp(host, '📆 Kalender').click(); });
+    act(() => { knapp(host, '📆 Kalender').click(); });
     act(() => { knapp(host, 'Läsår').click(); });
     expect(host.querySelector('.lasar-grid')).not.toBeNull();
     expect([...host.querySelectorAll('.minimanad')].length).toBe(11); // aug–jun
     act(() => { knapp(host, 'Vecka').click(); });
-    expect(host.querySelector('.vlista')).not.toBeNull();
-    expect(select(host, 'Klassfilter')).not.toBeNull();
+    expect(host.querySelector('.schema')).not.toBeNull();       // veckoschema-rutnät
+    // Filterknappar (klass + ämne) finns
+    expect([...host.querySelectorAll('.chipbtn')].some((b) => b.textContent === 'Alla klasser')).toBe(true);
+    expect([...host.querySelectorAll('.chipbtn')].some((b) => b.textContent === 'Alla ämnen')).toBe(true);
+    expect([...host.querySelectorAll('.chipbtn')].some((b) => b.textContent === '8B')).toBe(true);
+  });
+})
+
+describe('Veckoschema och schemakonflikter', () => {
+  async function tvaAmnenSammaTid(host: HTMLElement) {
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    // Ämne 1: Matematik onsdag 09:00–10:00
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+  }
+
+  it('veckovyn ritar ett schema-rutnät med lektionen på rätt dagkolumn', async () => {
+    const host = render();
+    await tvaAmnenSammaTid(host);
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '📆 Kalender').click(); });
+    // Default vecka-läge; navigera till skolårets start (aug) via schemat
+    expect(host.querySelector('.schema')).not.toBeNull();
+    // Onsdagskolumnen ska ha en lektionsruta
+    expect([...host.querySelectorAll('.sch-lekt')].length).toBeGreaterThan(0);
+    expect(host.textContent).toContain('1.1 Bråk');
+  });
+
+  it('att lägga ett ämne på samma tid kräver två varningar innan det går igenom', async () => {
+    const host = render();
+    await tvaAmnenSammaTid(host);          // Matematik ons 09:00–10:00 finns
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    // Ämne 2: Fysik samma tid (ons 09:00–10:00) → halvklass, båda grupperna krockar
+    valj(select(host, 'Ämne'), 'Fysik');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    valj(select(host, 'Grupp B veckodag pass 1'), '3');
+    skriv(input(host, 'Grupp B start pass 1'), '09:00');
+    skriv(input(host, 'Grupp B slut pass 1'), '10:00');
+    // Klick 1: varning 1/2, inget skapat
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    expect(host.textContent).toContain('Krock med redan lagd lektion');
+    expect(host.textContent).toContain('(1/2)');
+    expect(lasStruktur().amnen.filter((a) => a.namn === 'Fysik')).toHaveLength(0);
+    // Klick 2: varning 2/2, fortfarande inget skapat
+    act(() => { knapp(host, '⚠ Lägg till ändå (1/2)').click(); });
+    expect(host.textContent).toContain('(2/2)');
+    expect(lasStruktur().amnen.filter((a) => a.namn === 'Fysik')).toHaveLength(0);
+    // Klick 3: skapas trots krock
+    act(() => { knapp(host, '⚠ Lägg till ändå (2/2)').click(); });
+    expect(lasStruktur().amnen.filter((a) => a.namn === 'Fysik')).toHaveLength(1);
+  });
+
+  it('annan tid ger ingen varning', async () => {
+    const host = render();
+    await tvaAmnenSammaTid(host);
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');   // helklass, torsdag → ingen krock
+    valj(select(host, 'Veckodag pass 1'), '4');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    expect(host.textContent).not.toContain('Krock');
+    expect(lasStruktur().amnen).toHaveLength(2);
   });
 })
