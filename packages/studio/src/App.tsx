@@ -8,15 +8,16 @@
 import { useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
-  STANDARD_AMNEN, arbetsNivaer, arHalvklass, kapitelKort, viktigaDatum, bamTidslinje, begreppForLektion, bokBegrepp,
+  STANDARD_AMNEN, arbetsNivaer, arHalvklass, handelserPerDatum, kalenderHandelser,
+  kapitelKort, manadsRutor, skolarManader, veckaRutor, viktigaDatum, bamTidslinje, begreppForLektion, bokBegrepp,
   bokFromImport, bokSidregister, bokSidregisterCsv, elevSchema, exitStart, giltigtPass,
   kalendariumFromIcs, laggTillAmne, laggTillElev, laggTillKlass, laggTillLarare,
   laggTillSkolar, laggTillTjanst, larareSchema, normaliseraDagar, nyttId, parseKalendarium,
   registreraPlanering, sattLarare, schemaKonflikter, skapaPlanering, socrativeRum, sparaBok,
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
-  type Amne, type Bok, type Grupp, type Kapitel, type Klass, type Pass,
-  type PlaneradLektion, type Skolar, type Struktur,
+  type Amne, type Bok, type Grupp, type KalenderDagRuta, type KalenderHandelse,
+  type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
 } from '@planner/kernel';
 import { exportJson, importJson, lasStruktur, sparaStruktur } from './store.js';
 
@@ -25,7 +26,7 @@ type Vald =
   | { typ: 'skolar'; id: string } | { typ: 'tjanst'; id: string }
   | { typ: 'klass'; id: string } | { typ: 'amne'; id: string }
   | { typ: 'bok'; id: string } | { typ: 'larare' }
-  | { typ: 'nyttSkolar' } | { typ: 'nyBok' } | null;
+  | { typ: 'nyttSkolar' } | { typ: 'nyBok' } | { typ: 'kalender' } | null;
 
 export function App() {
   const [s, setS] = useState<Struktur>(() => lasStruktur());
@@ -70,6 +71,7 @@ export function App() {
           {vald?.typ === 'larare' && <LararePanel s={s} kor={kor} />}
           {vald?.typ === 'nyttSkolar' && <NyttSkolarPanel kor={kor} setVald={setVald} />}
           {vald?.typ === 'nyBok' && <NyBokPanel kor={kor} setVald={setVald} />}
+          {vald?.typ === 'kalender' && <KalenderVy s={s} />}
         </main>
       </div>
     </div>
@@ -97,6 +99,7 @@ function Trad(props: { s: Struktur; vald: Vald; setVald: (v: Vald) => void; kor:
   const ar = (v: Vald) => JSON.stringify(v) === JSON.stringify(vald);
   return (
     <>
+      <button className={`node stor ${ar({ typ: 'kalender' }) ? 'act' : ''}`} onClick={() => setVald({ typ: 'kalender' })}>📆 Kalender</button>
       <div className="tree-h">SKOLÅR</div>
       {s.skolar.map((la) => (
         <div key={la.id}>
@@ -871,6 +874,191 @@ function Lektionskort(props: {
       </table>
     </div>
   );
+}
+
+// ── Kalender (läsår / termin / månad / vecka) ────────────────
+const MANADSNAMN = ['januari','februari','mars','april','maj','juni','juli','augusti','september','oktober','november','december'];
+
+function KalenderVy({ s }: { s: Struktur }) {
+  const [skolarId, setSkolarId] = useState(s.skolar[0]?.id ?? '');
+  const [lage, setLage] = useState<'manad' | 'vecka' | 'lasar'>('manad');
+  const [klassFilter, setKlassFilter] = useState<string>('__alla__');
+  const skolar = s.skolar.find((x) => x.id === skolarId) ?? s.skolar[0];
+  const [ankare, setAnkare] = useState<string>(skolar?.start ?? '2026-08-17');
+
+  const handelser = useMemo(() => (skolar ? kalenderHandelser(s, skolar.id) : []), [s, skolar]);
+  const filtrerade = useMemo(
+    () => (klassFilter === '__alla__' ? handelser : handelser.filter((h) => h.klassId === klassFilter)),
+    [handelser, klassFilter],
+  );
+  const perDatum = useMemo(() => handelserPerDatum(filtrerade), [filtrerade]);
+  const klasserMedPlan = useMemo(() => {
+    const ids = new Set(handelser.map((h) => h.klassId));
+    return s.klasser.filter((k) => ids.has(k.id));
+  }, [s.klasser, handelser]);
+
+  if (!skolar) return <div className="card"><h2>📆 Kalender</h2><p className="muted">Skapa ett skolår och minst en planering först.</p></div>;
+
+  const flyttaManad = (steg: number) => {
+    const d = new Date(`${ankare}T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + steg);
+    setAnkare(d.toISOString().slice(0, 10));
+  };
+  const flyttaVecka = (steg: number) => {
+    const d = new Date(`${ankare}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + steg * 7);
+    setAnkare(d.toISOString().slice(0, 10));
+  };
+  const ankAr = Number(ankare.slice(0, 4));
+  const ankManad = Number(ankare.slice(5, 7)) - 1;
+
+  return (
+    <div className="card kalender">
+      <div className="rad kal-topp">
+        <h2>📆 Kalender <small className="muted">{skolar.namn}</small></h2>
+        <span className="spacer" />
+        <select aria-label="Skolår" value={skolar.id} onChange={(e) => { setSkolarId(e.target.value); const ny = s.skolar.find((x) => x.id === e.target.value); if (ny) setAnkare(ny.start); }}>
+          {s.skolar.map((la) => <option key={la.id} value={la.id}>{la.namn}</option>)}
+        </select>
+        <select aria-label="Klassfilter" value={klassFilter} onChange={(e) => setKlassFilter(e.target.value)}>
+          <option value="__alla__">Alla klasser</option>
+          {klasserMedPlan.map((k) => <option key={k.id} value={k.id}>{k.namn}</option>)}
+        </select>
+        <div className="kal-lagen">
+          {(['manad', 'vecka', 'lasar'] as const).map((l) => (
+            <button key={l} className={`btn sec sm ${lage === l ? 'active' : ''}`} onClick={() => setLage(l)}>
+              {l === 'manad' ? 'Månad' : l === 'vecka' ? 'Vecka' : 'Läsår'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {handelser.length === 0 && <p className="note">Inga planeringar i det här skolåret ännu — skapa en planering på ett ämne, så dyker lektionerna upp här.</p>}
+
+      {lage === 'manad' && (
+        <MonadsGrid ar={ankAr} manad0={ankManad} skolar={skolar} perDatum={perDatum}
+          onPrev={() => flyttaManad(-1)} onNext={() => flyttaManad(1)} />
+      )}
+      {lage === 'vecka' && (
+        <VeckoLista rutor={veckaRutor(ankare, skolar, perDatum)}
+          onPrev={() => flyttaVecka(-1)} onNext={() => flyttaVecka(1)} />
+      )}
+      {lage === 'lasar' && (
+        <div className="lasar-grid">
+          {skolarManader(skolar).map(([y, m]) => (
+            <MiniManad key={`${y}-${m}`} ar={y} manad0={m} skolar={skolar} perDatum={perDatum} />
+          ))}
+        </div>
+      )}
+      <Kapitelforklaring handelser={filtrerade} />
+    </div>
+  );
+}
+
+function Handelsechip({ h }: { h: KalenderHandelse }) {
+  return (
+    <span className="kh" style={{ background: h.kapitelFarg }} title={`${h.start}–${h.slut} ${h.klassNamn}${h.grupp !== undefined ? ` (Grupp ${h.grupp})` : ''} · ${h.amnesNamn} · ${h.avsnitt}`}>
+      {h.start} {h.klassNamn}{h.grupp !== undefined ? h.grupp : ''} {h.avsnitt}
+    </span>
+  );
+}
+
+const DAGKORT = ['Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön'];
+
+function MonadsGrid({ ar, manad0, skolar, perDatum, onPrev, onNext }: {
+  ar: number; manad0: number; skolar: Skolar; perDatum: Map<string, KalenderHandelse[]>;
+  onPrev: () => void; onNext: () => void;
+}) {
+  const rutor = manadsRutor(ar, manad0, skolar, perDatum);
+  const idag = new Date().toISOString().slice(0, 10);
+  return (
+    <div>
+      <div className="rad kal-nav">
+        <button className="btn sec sm" onClick={onPrev}>◀</button>
+        <b>{MANADSNAMN[manad0]} {ar}</b>
+        <button className="btn sec sm" onClick={onNext}>▶</button>
+      </div>
+      <div className="mgrid">
+        {DAGKORT.map((d) => <div key={d} className="mgrid-h">{d}</div>)}
+        {rutor.map((r) => (
+          <div key={r.datum} className={`mcell ${r.iManad ? '' : 'dim'} ${r.helg ? 'helg' : ''} ${r.ledig ? 'ledig' : ''} ${r.halvdag ? 'halvdag' : ''} ${r.datum === idag ? 'idag' : ''}`}>
+            <div className="mcell-d">{Number(r.datum.slice(8))}{r.ledig ? <span className="ledig-l">{r.ledig}</span> : r.halvdag ? <span className="ledig-l">½ {r.halvdag}</span> : null}</div>
+            {r.handelser.map((h, i) => <Handelsechip key={i} h={h} />)}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function VeckoLista({ rutor, onPrev, onNext }: { rutor: KalenderDagRuta[]; onPrev: () => void; onNext: () => void }) {
+  return (
+    <div>
+      <div className="rad kal-nav">
+        <button className="btn sec sm" onClick={onPrev}>◀ Föregående</button>
+        <b>Vecka {rutor[0] ? isoVeckaLbl(rutor[0].datum) : ''}</b>
+        <button className="btn sec sm" onClick={onNext}>Nästa ▶</button>
+      </div>
+      <div className="vlista">
+        {rutor.map((r) => (
+          <div key={r.datum} className={`vrad ${r.helg ? 'helg' : ''} ${r.ledig ? 'ledig' : ''}`}>
+            <div className="vrad-d">
+              <b>{DAGKORT[r.dag - 1]}</b> {Number(r.datum.slice(8))}/{Number(r.datum.slice(5, 7))}
+              {r.ledig ? <span className="ledig-l"> {r.ledig}</span> : r.halvdag ? <span className="ledig-l"> ½ {r.halvdag}</span> : null}
+            </div>
+            <div className="vrad-h">
+              {r.handelser.length === 0 ? <span className="muted small">—</span> : r.handelser.map((h, i) => <Handelsechip key={i} h={h} />)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MiniManad({ ar, manad0, skolar, perDatum }: {
+  ar: number; manad0: number; skolar: Skolar; perDatum: Map<string, KalenderHandelse[]>;
+}) {
+  const rutor = manadsRutor(ar, manad0, skolar, perDatum);
+  return (
+    <div className="minimanad">
+      <div className="mini-h">{MANADSNAMN[manad0]} {ar}</div>
+      <div className="mini-grid">
+        {DAGKORT.map((d) => <div key={d} className="mini-dh">{d[0]}</div>)}
+        {rutor.map((r) => (
+          <div key={r.datum}
+            className={`mini-d ${r.iManad ? '' : 'dim'} ${r.ledig ? 'ledig' : ''} ${r.handelser.length > 0 ? 'har' : ''}`}
+            title={r.handelser.map((h) => `${h.klassNamn}${h.grupp ?? ''} ${h.avsnitt}`).join('\n') || r.ledig || ''}>
+            {Number(r.datum.slice(8))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Kapitelforklaring({ handelser }: { handelser: KalenderHandelse[] }) {
+  const farger = new Map<string, { farg: string; namn: string }>();
+  for (const h of handelser) {
+    const nyckel = `${h.amnesNamn}-${h.kapitel}`;
+    if (!farger.has(nyckel)) farger.set(nyckel, { farg: h.kapitelFarg, namn: `${h.amnesNamn} kap ${h.kapitel}` });
+  }
+  if (farger.size === 0) return null;
+  return (
+    <div className="kal-forkl">
+      <b className="muted small">Färg per kapitel:</b>
+      {[...farger.values()].map((f) => (
+        <span key={f.namn} className="forkl-item"><span className="prick" style={{ background: f.farg }} />{f.namn}</span>
+      ))}
+    </div>
+  );
+}
+
+/** ISO-vecka som etikett (utan att importera fler helpers i UI-lagret). */
+function isoVeckaLbl(datum: string): number {
+  const d = new Date(`${datum}T00:00:00Z`);
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const y0 = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil(((d.getTime() - y0.getTime()) / 86400000 + 1) / 7);
 }
 
 // ── Lärare ───────────────────────────────────────────────────

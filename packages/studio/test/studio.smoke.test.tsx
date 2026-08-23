@@ -427,3 +427,50 @@ describe('Vänstermeny, tjänstöversikt och årsöversikt', () => {
     expect(panel.textContent).toContain('ETT');              // bokens nivånamn i reglerna
   });
 });
+
+describe('Kalender', () => {
+  async function medPlanering(host: HTMLElement) {
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+  }
+
+  it('kalendervyn visar månadsrutnät med lektioner och kapitelfärgförklaring', async () => {
+    const host = render();
+    await medPlanering(host);
+    act(() => { treeKnapp(host, '📆 Kalender').click(); });
+    const panel = host.querySelector('.panel')!;
+    expect(panel.textContent).toContain('📆 Kalender');
+    // Månadsläge default: navigera till augusti (skolårets start) visas direkt
+    expect(panel.querySelector('.mgrid')).not.toBeNull();
+    // Lektionen ligger onsdag; en händelsechip finns i rutnätet
+    expect([...panel.querySelectorAll('.kh')].length).toBeGreaterThan(0);
+    expect(panel.textContent).toContain('1.1 Bråk');
+    expect(panel.textContent).toContain('Färg per kapitel');
+    expect(panel.textContent).toContain('Matematik kap 1');
+  });
+
+  it('lägena Vecka och Läsår renderar; klassfiltret finns', async () => {
+    const host = render();
+    await medPlanering(host);
+    act(() => { treeKnapp(host, '📆 Kalender').click(); });
+    act(() => { knapp(host, 'Läsår').click(); });
+    expect(host.querySelector('.lasar-grid')).not.toBeNull();
+    expect([...host.querySelectorAll('.minimanad')].length).toBe(11); // aug–jun
+    act(() => { knapp(host, 'Vecka').click(); });
+    expect(host.querySelector('.vlista')).not.toBeNull();
+    expect(select(host, 'Klassfilter')).not.toBeNull();
+  });
+})
