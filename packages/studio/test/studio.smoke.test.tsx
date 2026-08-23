@@ -58,10 +58,20 @@ const BOKJSON = JSON.stringify({
   ] },
 });
 
+const BIOJSON = JSON.stringify({
+  schema: 'classroom-planner-bok', version: 1,
+  bok: { id: 'gleerups-biologi-8', titel: 'Biologi 8', förlag: 'Gleerups', ämne: 'Biologi', årskurs: 8,
+    kapitelMeta: { '4': { name: 'Fotosyntes och cellen', col: '#2e7d46' } } },
+  lektioner: { '4': [
+    { id: 1, type: 'regular', avsnitt: '4.1 Cellen', del: 1, ett: '1–6', begrepp: 'cell, cellmembran, cellkärna' },
+    { id: 2, type: 'regular', avsnitt: '4.2 Fotosyntes', del: 1, ett: '7–12', begrepp: 'fotosyntes, klorofyll' },
+  ] },
+});
+
 /** Importerar boken genom filväljaren i trädet. */
-async function importeraBok(host: HTMLElement) {
+async function importeraBok(host: HTMLElement, json: string = BOKJSON) {
   act(() => { treeKnapp(host, '➕ Lägg till bok').click(); }); // öppna importpanelen
-  const fil = new File([BOKJSON], 'book.json', { type: 'application/json' });
+  const fil = new File([json], 'book.json', { type: 'application/json' });
   const inp = [...host.querySelectorAll<HTMLInputElement>('input[type="file"]')]
     .find((x) => x.accept.includes('.json'))!;
   Object.defineProperty(inp, 'files', { value: [fil] });
@@ -731,5 +741,56 @@ describe('Inga dubblettämnen, redigerbar NO-ordning, GitHub-panel', () => {
     expect(input(host, 'GitHub owner')).not.toBeNull();
     expect(input(host, 'GitHub token')).not.toBeNull();
     expect((input(host, 'GitHub repo')).value).toBe('classroom-planner-data');
+  });
+})
+
+describe('Detaljerad NO-planering i lektionskortet', () => {
+  it('begreppsrum föreslås, fälten sparas och flipp-layouten förhandsvisas', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host, BIOJSON);
+    skriv(input(host, 'Tjänstens namn'), 'NO');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 NO').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Biologi');
+    valj(select(host, 'Bok för ämnet'), 'gleerups-biologi-8');
+    valj(select(host, 'Veckodag pass 1'), '2');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    valj(select(host, 'Grupp B veckodag pass 1'), '4');
+    skriv(input(host, 'Grupp B start pass 1'), '09:00');
+    skriv(input(host, 'Grupp B slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    // Öppna lektion 2 (4.2 Fotosyntes) i Grupp A-planeringen
+    const rad = [...host.querySelectorAll('table.plan tbody tr')].find((r) => r.textContent?.includes('4.2 Fotosyntes'))!;
+    act(() => { (rad as HTMLElement).click(); });
+    act(() => { knapp(host, '▼ Detaljerad planering (NO)').click(); });
+    const panel = host.querySelector('.no-planering')!;
+    // Begreppsrum-förslag: läxförhör aggregerat Biologi412, exit Biologi42
+    expect(panel.textContent).toContain('Biologi412');
+    expect(panel.textContent).toContain('Biologi42');
+    // Läxan är förifylld med delkapitlets begrepp
+    expect((panel.querySelector('textarea[aria-label="Läxa (begrepp)"]') as HTMLTextAreaElement).value).toContain('fotosyntes');
+    // Fyll NO-fält + laboration + flippat
+    skriv(input(host, 'Presentation'), 'Fotosyntes.pptx');
+    skrivArea(panel.querySelector('textarea[aria-label="Frågeställning (systematisk undersökning)"]')!, 'Hur påverkar ljusmängden fotosyntesens hastighet?');
+    skrivArea(panel.querySelector('textarea[aria-label="Kort teoritext"]')!, 'Fotosyntesen omvandlar ljus till energi.');
+    skriv(input(host, 'Länk till kort film'), 'https://binogi.se/fotosyntes');
+    skriv(input(host, 'Quiz (namn)'), 'Biologi42');
+    // Flipp-preview visar elevlayouten
+    expect(host.textContent).toContain('Det här skickas till eleven');
+    expect(host.textContent).toContain('Se filmen');
+    act(() => { knapp(host, '💾 Spara planering').click(); });
+    const sparad = lasStruktur().lektionsplaner.find((p) => p.presentation === 'Fotosyntes.pptx');
+    expect(sparad).toBeDefined();
+    expect(sparad?.labFraga).toContain('systematisk' === 'systematisk' ? 'ljusmängden' : '');
+    expect(sparad?.flippFilm).toBe('https://binogi.se/fotosyntes');
+    // Återöppning läser sparad plan
+    act(() => { knapp(host, '✕ Stäng').click(); });
+    act(() => { (rad as HTMLElement).click(); });
+    expect(host.textContent).toContain('ifylld');
   });
 })

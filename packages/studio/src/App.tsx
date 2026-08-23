@@ -9,7 +9,8 @@ import { Fragment, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
   NO_TK, NO_TK_AMNEN, STANDARD_AMNEN, amneBakgrund, antalSlots, arbetsNivaer, arHalvklass,
-  handelserPerDatum, kalenderHandelser, klassFarg, noBudget, noOverBudget,
+  begreppsRum, delkapitelUrAvsnitt, foreslagnaRum, hamtaLektionsplan,
+  handelserPerDatum, kalenderHandelser, klassFarg, noBudget, noOverBudget, sattLektionsplan,
   kapitelKort, manadsRutor, skolarManader, veckaRutor, viktigaDatum, bamTidslinje, begreppForLektion, bokBegrepp,
   bokFromImport, bokSidregister, bokSidregisterCsv, elevSchema, exitStart, giltigtPass,
   kalendariumFromIcs, laggTillAmne, laggTillElev, laggTillKlass, laggTillLarare,
@@ -19,7 +20,8 @@ import {
   socrativeRum, sparaBok,
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
-  type Amne, type Bok, type Grupp, type KalenderDagRuta, type KalenderHandelse, type SchemaRad,
+  type Amne, type Bok, type Grupp, type KalenderDagRuta, type KalenderHandelse,
+  type LektionsPlan, type SchemaRad,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
 } from '@planner/kernel';
 import { exportJson, importJson, lasStruktur, sparaStruktur } from './store.js';
@@ -680,12 +682,13 @@ function AmnePanel({ s, id, kor }: { s: Struktur; id: string; kor: (fn: () => St
             : `Planering skapad: ${bok!.titel} utlagd på ${klass.namn}s schema — ${plan.filter((p) => p.datum !== null).length} lektioner får datum.`)}>
         {harPlanering ? '↻ Uppdatera planering' : '▶ Skapa planering'}
       </button>
-      {bok && !halv && <GruppPlanering plan={plan} bok={bok} amnesNamn={a.namn} klassNamn={klass.namn} rum={rum} />}
+      {bok && !halv && <GruppPlanering plan={plan} bok={bok} amnesNamn={a.namn} klassNamn={klass.namn} rum={rum}
+        s={s} amneId={a.id} kor={kor} />}
       {bok && halv && (<>
         <GruppPlanering plan={plan} bok={bok} amnesNamn={a.namn} klassNamn={klass.namn}
-          rum={rum} grupp="A" rubrik={`Grupp A · rum ${rum}`} />
+          rum={rum} grupp="A" rubrik={`Grupp A · rum ${rum}`} s={s} amneId={a.id} kor={kor} />
         <GruppPlanering plan={planB} bok={bok} amnesNamn={a.namn} klassNamn={klass.namn}
-          rum={rum} grupp="B" rubrik={`Grupp B · rum ${rum}`} />
+          rum={rum} grupp="B" rubrik={`Grupp B · rum ${rum}`} s={s} amneId={a.id} kor={kor} />
       </>)}
       </>)}
       <div className="modal-actions">
@@ -877,8 +880,9 @@ function KapitelDetalj({ s, bok, kap, kor }: { s: Struktur; bok: Bok; kap: Kapit
 function GruppPlanering(props: {
   plan: PlaneradLektion[]; bok: Bok; amnesNamn: string; klassNamn: string;
   rum: string; grupp?: Grupp; rubrik?: string;
+  s?: Struktur; amneId?: string; kor?: (fn: () => Struktur, m: string) => void;
 }) {
-  const { plan, bok, amnesNamn, klassNamn, rum, grupp, rubrik } = props;
+  const { plan, bok, amnesNamn, klassNamn, rum, grupp, rubrik, s, amneId, kor } = props;
   const [valdRad, setValdRad] = useState<number | null>(null);
   if (plan.length === 0) return null;
   return (
@@ -898,7 +902,8 @@ function GruppPlanering(props: {
       </table>
       {valdRad !== null && plan[valdRad] && (
         <Lektionskort rad={plan[valdRad]} bok={bok} amnesNamn={amnesNamn} klassNamn={klassNamn}
-          rum={rum} grupp={grupp} nr={valdRad + 1} onStang={() => setValdRad(null)} />
+          rum={rum} grupp={grupp} nr={valdRad + 1} onStang={() => setValdRad(null)}
+          s={s} amneId={amneId} lektionsIndex={valdRad} kor={kor} />
       )}
     </>
   );
@@ -941,8 +946,9 @@ function AmneSchemaRedigerare({ s, amne, kor, falt, rubrik }: {
 function Lektionskort(props: {
   rad: PlaneradLektion; bok: Bok; amnesNamn: string; klassNamn: string;
   rum: string; grupp?: Grupp; nr: number; onStang: () => void;
+  s?: Struktur; amneId?: string; lektionsIndex?: number; kor?: (fn: () => Struktur, m: string) => void;
 }) {
-  const { rad, bok, amnesNamn, klassNamn, rum, grupp, nr, onStang } = props;
+  const { rad, bok, amnesNamn, klassNamn, rum, grupp, nr, onStang, s, amneId, lektionsIndex, kor } = props;
   const l = rad.lektion;
   const start = rad.start ?? '08:10';
   const slut = rad.slutTid ?? '09:10';
@@ -1016,6 +1022,92 @@ function Lektionskort(props: {
           <tr key={x.namn}><td>{x.ikon} {x.namn}</td><td>{x.start}–{x.slut}</td><td>{x.minuter}</td></tr>
         ))}</tbody>
       </table>
+      {s !== undefined && amneId !== undefined && lektionsIndex !== undefined && kor !== undefined && (
+        <NoPlanering s={s} amneId={amneId} lektionsIndex={lektionsIndex} kor={kor}
+          amnesNamn={amnesNamn} rad={rad} bok={bok} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Detaljerad planering (viktig i NO): presentation, sammanfattning, mål,
+ * läxa/läxförhör med begreppsrum (Biologi41/Biologi412 …), exit ticket,
+ * flippat underlag (teoritext, film, quiz + elevlayout) och laboration
+ * (länk eller frågeställning för systematisk undersökning).
+ */
+function NoPlanering({ s, amneId, lektionsIndex, kor, amnesNamn, rad, bok }: {
+  s: Struktur; amneId: string; lektionsIndex: number; kor: (fn: () => Struktur, m: string) => void;
+  amnesNamn: string; rad: PlaneradLektion; bok: Bok;
+}) {
+  const arNo = (NO_TK_AMNEN as readonly string[]).includes(amnesNamn);
+  const sparad = hamtaLektionsplan(s, amneId, lektionsIndex);
+  const dk = delkapitelUrAvsnitt(rad.lektion.avsnitt);
+  const forslag = dk !== null ? foreslagnaRum(amnesNamn, dk.kap, dk.del) : null;
+  const kapNamn = bok.kapitel.find((k) => k.nr === rad.kapitel)?.namn ?? '';
+  const defaultLaxa = begreppForLektion(bok, rad.kapitel, rad.lektion).join(', ');
+  const tomPlan: LektionsPlan = {
+    id: `lp-${amneId}-${lektionsIndex}`, amneId, lektionsIndex,
+    presentation: '', sammanfattning: '', mal: '',
+    laxa: defaultLaxa, laxforhorRum: forslag?.laxforhor ?? '', exitQuiz: '',
+    flippTeori: '', flippFilm: '', flippQuiz: '', labLank: '', labFraga: '',
+  };
+  const [plan, setPlan] = useState<LektionsPlan>({ ...tomPlan, ...(sparad ?? {}) });
+  const [oppen, setOppen] = useState(false);
+  const andra = (delta: Partial<LektionsPlan>) => setPlan((f) => ({ ...f, ...delta }));
+  const falt = (label: string, nyckel: keyof LektionsPlan, placeholder = '', rad3 = false) => (
+    <label className="np-falt">{label}
+      {rad3
+        ? <textarea aria-label={label} rows={3} value={(plan[nyckel] as string | undefined) ?? ''} placeholder={placeholder}
+            onChange={(e) => andra({ [nyckel]: e.target.value })} />
+        : <input aria-label={label} value={(plan[nyckel] as string | undefined) ?? ''} placeholder={placeholder}
+            onChange={(e) => andra({ [nyckel]: e.target.value })} />}
+    </label>
+  );
+  return (
+    <div className="no-planering no-print-safe">
+      <button className="btn sec sm" onClick={() => setOppen(!oppen)}>
+        {oppen ? '▲ Dölj detaljerad planering' : `▼ Detaljerad planering${arNo ? ' (NO)' : ''}${sparad !== null ? ' ·  ifylld' : ''}`}
+      </button>
+      {oppen && (
+        <div className="np-grid">
+          {falt('Presentation', 'presentation', 'T.ex. Fotosyntes.pptx')}
+          {falt('Sammanfattning av delkapitlet', 'sammanfattning', `Ur ${kapNamn}s sammanfattning …`, true)}
+          {falt('Vad ska vi lära oss (mål)', 'mal', 'Ur kapitlets sammanfattning …', true)}
+          {falt('Läxa (begrepp)', 'laxa', 'Delkapitlets begrepp', true)}
+          <div className="np-falt">
+            <span>Läxförhör · Socrative-rum {forslag !== null && (
+              <small className="muted">förslag: {forslag.laxforhor}
+                {dk !== null && dk.del > 1 && <> · enskilt: {begreppsRum(amnesNamn, dk.kap, [dk.del])}</>}
+              </small>
+            )}</span>
+            <input aria-label="Läxförhörsrum" value={plan.laxforhorRum ?? ''} placeholder={forslag?.laxforhor ?? ''}
+              onChange={(e) => andra({ laxforhorRum: e.target.value })} />
+          </div>
+          {falt('Exit ticket · quiznamn', 'exitQuiz', forslag !== null ? `Rum ${forslag.exit}` : 'T.ex. Quiz 4.2')}
+          <div className="np-sektion">🧪 Laboration <small className="muted">länk till laboration ELLER frågeställning för systematisk undersökning</small></div>
+          {falt('Länk till laboration', 'labLank', 'https://…')}
+          {falt('Frågeställning (systematisk undersökning)', 'labFraga', 'T.ex. Hur påverkar ljusmängden fotosyntesens hastighet?', true)}
+          <div className="np-sektion">🔁 Flippat underlag <small className="muted">skickas till eleven inför lektionen</small></div>
+          {falt('Kort teoritext', 'flippTeori', 'Kort teoritext eleven läser hemma …', true)}
+          {falt('Länk till kort film', 'flippFilm', 'https://binogi.se/…')}
+          {falt('Quiz (namn)', 'flippQuiz', forslag !== null ? `T.ex. ${forslag.exit}` : 'Quiznamn')}
+          {(plan.flippTeori !== '' || plan.flippFilm !== '' || plan.flippQuiz !== '') && (
+            <div className="flipp-preview">
+              <div className="fp-rubrik">📨 Det här skickas till eleven (flippad lektion)</div>
+              <div className="fp-kropp">
+                <p><b>{amnesNamn} · {rad.lektion.avsnitt}</b>{rad.datum !== null ? ` · inför ${rad.datum}` : ''}</p>
+                {plan.flippTeori !== '' && <p>{plan.flippTeori}</p>}
+                {plan.flippFilm !== '' && <p>🎬 Se filmen: <span className="fp-lank">{plan.flippFilm}</span></p>}
+                {plan.flippQuiz !== '' && <p>✅ Gör quizet <b>{plan.flippQuiz}</b> på socrative.com{forslag !== null ? <> · rum <b>{forslag.exit}</b></> : null}</p>}
+                {(plan.laxa ?? '') !== '' && <p>💡 Begrepp att kunna: {plan.laxa}</p>}
+              </div>
+            </div>
+          )}
+          <button className="btn" onClick={() => kor(() => sattLektionsplan(lasStruktur(), plan),
+            `Detaljerad planering sparad för lektion ${lektionsIndex + 1} (${rad.lektion.avsnitt}).`)}>💾 Spara planering</button>
+        </div>
+      )}
     </div>
   );
 }

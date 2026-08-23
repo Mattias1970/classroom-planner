@@ -7,7 +7,8 @@ import { bokLektioner } from './bok.js';
 import { NO_TK_AMNEN } from './amnen.js';
 import { isoVecka, passSparr } from './skolar.js';
 import type {
-  Amne, Bok, Elev, Klass, Larare, Pass, PlaneradLektion, Planering, Skolar, Struktur, Tjanst,
+  Amne, Bok, Elev, Klass, Larare, LektionsPlan, Pass, PlaneradLektion, Planering, Skolar,
+  Struktur, Tjanst,
 } from './typer.js';
 
 let seq = 0;
@@ -194,6 +195,18 @@ export function larareSchema(s: Struktur, larareId: string): SchemaRad[] {
   const klasser = s.klasser.filter((k) => tjanster.has(k.tjanstId));
   return klasser.flatMap((k) => klassSchema(s, k.id))
     .sort((x, y) => x.dag - y.dag || x.start.localeCompare(y.start));
+}
+
+/** Upsert av en detaljerad lektionsplan (nyckel: ämne + lektionsposition). */
+export function sattLektionsplan(s: Struktur, plan: LektionsPlan): Struktur {
+  if (!s.amnen.some((a) => a.id === plan.amneId)) throw new Error('Ämnet finns inte.');
+  const övriga = s.lektionsplaner.filter((p) => !(p.amneId === plan.amneId && p.lektionsIndex === plan.lektionsIndex));
+  return { ...s, lektionsplaner: [...övriga, plan] };
+}
+
+/** Hämtar lektionsplanen för en position, eller null. */
+export function hamtaLektionsplan(s: Struktur, amneId: string, lektionsIndex: number): LektionsPlan | null {
+  return s.lektionsplaner.find((p) => p.amneId === amneId && p.lektionsIndex === lektionsIndex) ?? null;
 }
 
 /** Två pass krockar om de ligger samma dag och tiderna överlappar. */

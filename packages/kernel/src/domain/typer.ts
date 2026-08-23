@@ -160,6 +160,40 @@ export interface PlaneradLektion {
 }
 
 // ── Aggregat ─────────────────────────────────────────────────
+/**
+ * Detaljerad, redigerbar lektionsplan (NO-planering): presentation,
+ * sammanfattning, mål, läxa, Socrative-rum, flippat underlag och laboration.
+ * En overlay per (ämne, lektionsposition) ovanpå bokens lektion.
+ */
+export interface LektionsPlan {
+  id: string;
+  amneId: string;
+  /** Position i ämnets planering (0-baserad). */
+  lektionsIndex: number;
+  /** Namn på presentationen som används på lektionen. */
+  presentation?: string;
+  /** Sammanfattning av delkapitlet. */
+  sammanfattning?: string;
+  /** Vad eleverna ska lära sig (ur kapitlets sammanfattning). */
+  mal?: string;
+  /** Läxa — default: delkapitlets begrepp. */
+  laxa?: string;
+  /** Socrative-rum för läxförhöret (t.ex. Biologi412 = begrepp 4.1–4.2). */
+  laxforhorRum?: string;
+  /** Namn på exit-quizet (rum = delkapitlets begreppsrum). */
+  exitQuiz?: string;
+  /** Flippat underlag: kort teoritext till eleven. */
+  flippTeori?: string;
+  /** Flippat underlag: länk till kort film. */
+  flippFilm?: string;
+  /** Flippat underlag: namn på quiz. */
+  flippQuiz?: string;
+  /** Laboration: länk till laborationen … */
+  labLank?: string;
+  /** … eller frågeställning som analyseras med systematisk undersökning. */
+  labFraga?: string;
+}
+
 export interface Struktur {
   skolar: Skolar[];
   larare: Larare[];
@@ -169,8 +203,9 @@ export interface Struktur {
   amnen: Amne[];
   bocker: Bok[];
   planeringar: Planering[];
+  lektionsplaner: LektionsPlan[];
 }
 
 export function tomStruktur(): Struktur {
-  return { skolar: [], larare: [], tjanster: [], klasser: [], elever: [], amnen: [], bocker: [], planeringar: [] };
+  return { skolar: [], larare: [], tjanster: [], klasser: [], elever: [], amnen: [], bocker: [], planeringar: [], lektionsplaner: [] };
 }

@@ -291,3 +291,39 @@ describe('kalenderfärger', () => {
     expect(klassFarg('8A')).not.toBe(klassFarg('8B'));  // olika klasser
   });
 });
+
+// ── NO-planering: begreppsrum + lektionsplaner ──
+import { begreppsRum, delkapitelUrAvsnitt, foreslagnaRum } from '../src/domain/amnen.js';
+import { hamtaLektionsplan, sattLektionsplan } from '../src/domain/struktur.js';
+
+describe('begreppsrum (NO)', () => {
+  it('följer mönstret Biologi41 / Biologi412 / Biologi4123 / Biologi42', () => {
+    expect(begreppsRum('Biologi', 4, [1])).toBe('Biologi41');
+    expect(begreppsRum('Biologi', 4, [1, 2])).toBe('Biologi412');
+    expect(begreppsRum('Biologi', 4, [1, 2, 3])).toBe('Biologi4123');
+    expect(begreppsRum('Biologi', 4, [2])).toBe('Biologi42');
+    expect(begreppsRum('Matematik', 1, [3])).toBe('Matte13'); // ämnesprefix gäller
+  });
+  it('delkapitelUrAvsnitt tolkar avsnittskoden', () => {
+    expect(delkapitelUrAvsnitt('4.2 Fotosyntes')).toEqual({ kap: 4, del: 2 });
+    expect(delkapitelUrAvsnitt('Repetition 1 (Blandade uppgifter)')).toBeNull();
+  });
+  it('foreslagnaRum: exit = delkapitlet, läxförhör = aggregatet t.o.m. delkapitlet', () => {
+    expect(foreslagnaRum('Biologi', 4, 3)).toEqual({ exit: 'Biologi43', laxforhor: 'Biologi4123' });
+    expect(foreslagnaRum('Fysik', 2, 1)).toEqual({ exit: 'Fysik21', laxforhor: 'Fysik21' });
+  });
+});
+
+describe('lektionsplaner (detaljerad NO-planering)', () => {
+  it('sattLektionsplan gör upsert per (ämne, position); hamtaLektionsplan läser', () => {
+    let { s } = bygg();
+    s = sattLektionsplan(s, { id: 'lp1', amneId: 'am', lektionsIndex: 0, presentation: 'Fotosyntes.pptx', labFraga: 'Hur påverkar ljus tillväxten?' });
+    expect(hamtaLektionsplan(s, 'am', 0)?.presentation).toBe('Fotosyntes.pptx');
+    // upsert ersätter
+    s = sattLektionsplan(s, { id: 'lp2', amneId: 'am', lektionsIndex: 0, presentation: 'Cellen.pptx' });
+    expect(s.lektionsplaner).toHaveLength(1);
+    expect(hamtaLektionsplan(s, 'am', 0)?.presentation).toBe('Cellen.pptx');
+    expect(hamtaLektionsplan(s, 'am', 5)).toBeNull();
+    expect(() => sattLektionsplan(s, { id: 'x', amneId: 'saknas', lektionsIndex: 0 })).toThrow('Ämnet finns inte');
+  });
+});

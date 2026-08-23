@@ -168,3 +168,15 @@ body { margin: 0; font: 14px/1.45 system-ui, 'Segoe UI', sans-serif; background:
 .gh-grid label { display: flex; flex-direction: column; font-size: 13px; gap: 3px; }
 .gh-grid input { border: 1px solid var(--ram); border-radius: 6px; padding: 6px 8px; font: inherit; }
 .gh-token { grid-column: 1 / -1; }
+
+/* Detaljerad NO-planering i lektionskortet */
+.no-planering { margin-top: 10px; border-top: 1px dashed var(--ram); padding-top: 8px; }
+.np-grid { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.np-falt { display: flex; flex-direction: column; gap: 3px; font-size: 13px; font-weight: 600; }
+.np-falt input, .np-falt textarea { border: 1px solid var(--ram); border-radius: 6px; padding: 6px 8px; font: inherit; font-weight: 400; }
+.np-sektion { font-weight: 700; margin-top: 6px; border-top: 1px solid var(--ram); padding-top: 8px; }
+.flipp-preview { border: 2px solid #7b3fa0; border-radius: 8px; overflow: hidden; }
+.fp-rubrik { background: #7b3fa0; color: #fff; padding: 4px 10px; font-size: 12px; font-weight: 600; }
+.fp-kropp { padding: 8px 10px; font-size: 13px; }
+.fp-kropp p { margin: 4px 0; }
+.fp-lank { color: var(--bla); text-decoration: underline; }

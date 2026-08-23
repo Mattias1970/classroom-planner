@@ -45,6 +45,36 @@ export function amneBakgrund(amnesNamn: string): string {
   return `hsl(${h}, 45%, 32%)`;
 }
 
+/**
+ * Socrative-BEGREPPSRUM per kapitel/delkapitel och aggregat (viktigt i NO):
+ * Biologi41 = begreppen för Biologi 4.1; Biologi42 = 4.2;
+ * Biologi412 = 4.1–4.2; Biologi4123 = 4.1–4.3. Mönster:
+ * <ämnesprefix><kapitel><delkapitelnummer i följd>.
+ */
+export function begreppsRum(amnesNamn: string, kapitel: number, delar: number[]): string {
+  const prefix = PREFIX[amnesNamn] ?? amnesNamn.replace(/\s+/g, '');
+  return `${prefix}${kapitel}${delar.join('')}`;
+}
+
+/** Tolkar '4.2 Fotosyntes' → { kap: 4, del: 2 } (null för repetition/prov m.m.). */
+export function delkapitelUrAvsnitt(avsnitt: string): { kap: number; del: number } | null {
+  const m = /^(\d+)\.(\d+)/.exec(avsnitt.trim());
+  return m === null ? null : { kap: Number(m[1]), del: Number(m[2]) };
+}
+
+/**
+ * Föreslagna Socrative-rum för en lektion i delkapitel kap.del:
+ * exit = delkapitlets rum (Biologi42); läxförhör = aggregatet t.o.m.
+ * aktuellt delkapitel (Biologi412 vid 4.2), så tidigare begrepp repeteras.
+ */
+export function foreslagnaRum(amnesNamn: string, kap: number, del: number): { exit: string; laxforhor: string } {
+  const alla = Array.from({ length: del }, (_, i) => i + 1);
+  return {
+    exit: begreppsRum(amnesNamn, kap, [del]),
+    laxforhor: begreppsRum(amnesNamn, kap, alla),
+  };
+}
+
 /** Ljus, egen färg per klass för klassnamnet (läsbart på mörk ämnesbakgrund). */
 const KLASS_LJUS = ['#ffd8a8', '#b2f2bb', '#a5d8ff', '#eebefa', '#ffec99', '#c3fae8', '#ffc9c9', '#d8f5a2'];
 export function klassFarg(klassNamn: string): string {
