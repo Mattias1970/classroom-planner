@@ -5,7 +5,7 @@
  * eller .ics), tjänst (lärare valfri), klass, ämne med eget schema, bok på
  * ämnet → "Skapa planering" ger datumsatt planering. Sidregister → Excel.
  */
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
   STANDARD_AMNEN, arbetsNivaer, arHalvklass, handelserPerDatum, kalenderHandelser,
@@ -13,7 +13,8 @@ import {
   bokFromImport, bokSidregister, bokSidregisterCsv, elevSchema, exitStart, giltigtPass,
   kalendariumFromIcs, laggTillAmne, laggTillElev, laggTillKlass, laggTillLarare,
   laggTillSkolar, laggTillTjanst, larareSchema, normaliseraDagar, nyttId, parseKalendarium,
-  passKonflikter, registreraPlanering, sattLarare, schemaKonflikter, skapaPlanering,
+  ledigtStandardpass, passKonflikter, registreraPlanering, sattLarare, schemaKonflikter,
+  skapaPlanering,
   socrativeRum, sparaBok,
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
@@ -442,8 +443,9 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
   const k = s.klasser.find((x) => x.id === id);
   const [namn, setNamn] = useState<string>(STANDARD_AMNEN[0]);
   const [bokId, setBokId] = useState('');
-  const [pass, setPass] = useState<PassRad[]>([{ dag: 1, start: '08:10', slut: '09:10' }]);
-  const [passB, setPassB] = useState<PassRad[]>([{ dag: 2, start: '08:10', slut: '09:10' }]);
+  const forvalA = useMemo(() => ledigtStandardpass(s, id), [s, id]);
+  const [pass, setPass] = useState<PassRad[]>([forvalA]);
+  const [passB, setPassB] = useState<PassRad[]>([{ ...forvalA, dag: nastaDag(forvalA.dag) }]);
   const [konfliktSteg, setKonfliktSteg] = useState(0);
   const [konfliktMsg, setKonfliktMsg] = useState('');
   if (!k) return null;
@@ -456,7 +458,7 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
       <h2>👥 {k.namn}</h2>
       <p className="note">Varje ämne får sitt eget schema — inget ärvs. Bokens lektioner mappas sedan på schemat.
         Biologi, Fysik, Kemi och Teknik läses i halvklass: Grupp A och Grupp B har varsin tid, och Socrative-rummen
-        heter t.ex. {socrativeRum('Biologi', k.namn, 'A')} / {socrativeRum('Biologi', k.namn, 'B')} (Matematik: {socrativeRum('Matematik', k.namn, 'A')}).</p>
+        Varje ämne har ett Socrative-rum per klass (t.ex. {socrativeRum('Matematik', k.namn)}, {socrativeRum('Biologi', k.namn)}).</p>
       <h3>Nytt ämne</h3>
       <div className="ny rad">
         <select aria-label="Ämne" value={namn} onChange={(e) => { setNamn(e.target.value); setBokId(''); }}>
@@ -467,10 +469,10 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
           {bocker.map((b) => <option key={b.id} value={b.id}>{b.titel} ({b.amne})</option>)}
         </select>
       </div>
-      {halv && <h4 className="grupp-h">Grupp A · rum {socrativeRum(namn, k.namn, 'A')}</h4>}
+      {halv && <h4 className="grupp-h">Grupp A <small className="muted">· rum {socrativeRum(namn, k.namn)}</small></h4>}
       <PassRedigerare pass={pass} onChange={setPass} />
       {halv && (<>
-        <h4 className="grupp-h">Grupp B · rum {socrativeRum(namn, k.namn, 'B')}</h4>
+        <h4 className="grupp-h">Grupp B <small className="muted">· rum {socrativeRum(namn, k.namn)}</small></h4>
         <PassRedigerareB pass={passB} onChange={setPassB} />
       </>)}
       <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
@@ -489,6 +491,8 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
             };
             kor(() => laggTillAmne(lasStruktur(), amne), `Ämne ${namn} skapat${halv ? ' (halvklass, Grupp A/B)' : ''}${krock.length > 0 ? ' — trots schemakrock' : ''}.`);
             setKonfliktSteg(0); setKonfliktMsg('');
+            const nyttForval = ledigtStandardpass(lasStruktur(), id);
+            setPass([nyttForval]); setPassB([{ ...nyttForval, dag: nastaDag(nyttForval.dag) }]);
             setVald({ typ: 'amne', id: amne.id });
           }}>{konfliktSteg > 0 ? `⚠ Lägg till ändå (${konfliktSteg}/2)` : '➕ Lägg till ämne'}</button>
       </div>
@@ -540,7 +544,7 @@ function Elevlista({ s, klassId, klassNamn, kor }: {
                 <td colSpan={4}>
                   {elevSchema(s, e.id).length === 0 ? <span className="muted">Inga pass ännu.</span>
                     : elevSchema(s, e.id).map((r, i) => (
-                      <span key={i} className="chip">{DAGNAMN[r.dag]} {r.start}–{r.slut} {r.amnesNamn}{r.grupp !== undefined ? ` (Grupp ${r.grupp}, rum ${socrativeRum(r.amnesNamn, klassNamn, r.grupp)})` : ''}</span>
+                      <span key={i} className="chip">{DAGNAMN[r.dag]} {r.start}–{r.slut} {r.amnesNamn}{r.grupp !== undefined ? ` (Grupp ${r.grupp}, rum ${socrativeRum(r.amnesNamn, klassNamn)})` : ''}</span>
                     ))}
                 </td>
               </tr>
@@ -573,13 +577,12 @@ function AmnePanel({ s, id, kor }: { s: Struktur; id: string; kor: (fn: () => St
   const harPlanering = s.planeringar.some((p) => p.amneId === id);
   if (!a || !klass || !la) return null;
   const halv = a.halvklass === true;
-  const rumA = socrativeRum(a.namn, klass.namn, 'A');
-  const rumB = socrativeRum(a.namn, klass.namn, 'B');
+  const rum = socrativeRum(a.namn, klass.namn);
   const [flik, setFlik] = useState<'planering' | 'arsoversikt'>('planering');
   return (
     <div className="card">
       <h2>📖 {klass.namn} · {a.namn}{halv ? <span className="pillm">halvklass A/B</span> : null}</h2>
-      <p className="muted">Socrative-rum: <b>{rumA}</b>{halv ? <> (Grupp A) · <b>{rumB}</b> (Grupp B)</> : <> · <b>{rumB}</b></>} — läxförhör och exit tickets.</p>
+      <p className="muted">Socrative-rum: <b>{rum}</b>{halv ? ' (delas av Grupp A och B)' : ''} — läxförhör och exit tickets.</p>
       <div className="flikar no-print">
         <button className={`flik ${flik === 'planering' ? 'act' : ''}`} onClick={() => setFlik('planering')}>📝 Planering</button>
         <button className={`flik ${flik === 'arsoversikt' ? 'act' : ''}`} onClick={() => setFlik('arsoversikt')}>📊 Årsöversikt</button>
@@ -588,9 +591,9 @@ function AmnePanel({ s, id, kor }: { s: Struktur; id: string; kor: (fn: () => St
       {flik === 'arsoversikt' && !bok && <p className="muted">Koppla en bok för att se årsöversikten.</p>}
       {flik === 'planering' && (<>
       <AmneSchemaRedigerare key={a.id} s={s} amne={a} kor={kor} falt="schema"
-        rubrik={halv ? `Schema Grupp A · rum ${rumA}` : 'Schema'} />
+        rubrik={halv ? 'Schema Grupp A' : 'Schema'} />
       {halv && <AmneSchemaRedigerare key={`${a.id}-B`} s={s} amne={a} kor={kor} falt="schemaB"
-        rubrik={`Schema Grupp B · rum ${rumB}`} />}
+        rubrik="Schema Grupp B" />}
       <label>Bok:{' '}
         <select aria-label="Bok för ämnet" value={a.bokId ?? ''}
           onChange={(e) => kor(() => uppdateraAmne(lasStruktur(), id, { bokId: e.target.value }),
@@ -606,13 +609,12 @@ function AmnePanel({ s, id, kor }: { s: Struktur; id: string; kor: (fn: () => St
             : `Planering skapad: ${bok!.titel} utlagd på ${klass.namn}s schema — ${plan.filter((p) => p.datum !== null).length} lektioner får datum.`)}>
         {harPlanering ? '↻ Uppdatera planering' : '▶ Skapa planering'}
       </button>
-      {bok && !halv && <GruppPlanering plan={plan} bok={bok} amnesNamn={a.namn} klassNamn={klass.namn}
-        rum={`${rumA} · ${rumB}`} />}
+      {bok && !halv && <GruppPlanering plan={plan} bok={bok} amnesNamn={a.namn} klassNamn={klass.namn} rum={rum} />}
       {bok && halv && (<>
         <GruppPlanering plan={plan} bok={bok} amnesNamn={a.namn} klassNamn={klass.namn}
-          rum={rumA} grupp="A" rubrik={`Grupp A · rum ${rumA}`} />
+          rum={rum} grupp="A" rubrik={`Grupp A · rum ${rum}`} />
         <GruppPlanering plan={planB} bok={bok} amnesNamn={a.namn} klassNamn={klass.namn}
-          rum={rumB} grupp="B" rubrik={`Grupp B · rum ${rumB}`} />
+          rum={rum} grupp="B" rubrik={`Grupp B · rum ${rum}`} />
       </>)}
       </>)}
       <div className="modal-actions">
@@ -1026,13 +1028,17 @@ function MonadsGrid({ ar, manad0, skolar, perDatum, onPrev, onNext }: {
         <b>{MANADSNAMN[manad0]} {ar}</b>
         <button className="btn sec sm" onClick={onNext}>▶</button>
       </div>
-      <div className="mgrid">
+      <div className="mgrid vecko">
+        <div className="mgrid-h vk">v.</div>
         {DAGKORT.map((d) => <div key={d} className="mgrid-h">{d}</div>)}
-        {rutor.map((r) => (
-          <div key={r.datum} className={`mcell ${r.iManad ? '' : 'dim'} ${r.helg ? 'helg' : ''} ${r.ledig ? 'ledig' : ''} ${r.halvdag ? 'halvdag' : ''} ${r.datum === idag ? 'idag' : ''}`}>
-            <div className="mcell-d">{Number(r.datum.slice(8))}{r.ledig ? <span className="ledig-l">{r.ledig}</span> : r.halvdag ? <span className="ledig-l">½ {r.halvdag}</span> : null}</div>
-            {r.handelser.map((h, i) => <Handelsechip key={i} h={h} />)}
-          </div>
+        {rutor.map((r, i) => (
+          <Fragment key={r.datum}>
+            {i % 7 === 0 && <div className="mgrid-vk">{isoVeckaLbl(r.datum)}</div>}
+            <div className={`mcell ${r.iManad ? '' : 'dim'} ${r.helg ? 'helg' : ''} ${r.ledig ? 'ledig' : ''} ${r.halvdag ? 'halvdag' : ''} ${r.datum === idag ? 'idag' : ''}`}>
+              <div className="mcell-d">{Number(r.datum.slice(8))}{r.ledig ? <span className="ledig-l">{r.ledig}</span> : r.halvdag ? <span className="ledig-l">½ {r.halvdag}</span> : null}</div>
+              {r.handelser.map((h, j) => <Handelsechip key={j} h={h} />)}
+            </div>
+          </Fragment>
         ))}
       </div>
     </div>
@@ -1092,14 +1098,18 @@ function MiniManad({ ar, manad0, skolar, perDatum }: {
   return (
     <div className="minimanad">
       <div className="mini-h">{MANADSNAMN[manad0]} {ar}</div>
-      <div className="mini-grid">
+      <div className="mini-grid vecko">
+        <div className="mini-dh vk">v</div>
         {DAGKORT.map((d) => <div key={d} className="mini-dh">{d[0]}</div>)}
-        {rutor.map((r) => (
-          <div key={r.datum}
-            className={`mini-d ${r.iManad ? '' : 'dim'} ${r.ledig ? 'ledig' : ''} ${r.handelser.length > 0 ? 'har' : ''}`}
-            title={r.handelser.map((h) => `${h.klassNamn}${h.grupp ?? ''} ${h.avsnitt}`).join('\n') || r.ledig || ''}>
-            {Number(r.datum.slice(8))}
-          </div>
+        {rutor.map((r, i) => (
+          <Fragment key={r.datum}>
+            {i % 7 === 0 && <div className="mini-vk">{isoVeckaLbl(r.datum)}</div>}
+            <div
+              className={`mini-d ${r.iManad ? '' : 'dim'} ${r.ledig ? 'ledig' : ''} ${r.handelser.length > 0 ? 'har' : ''}`}
+              title={r.handelser.map((h) => `${h.klassNamn}${h.grupp ?? ''} ${h.avsnitt}`).join('\n') || r.ledig || ''}>
+              {Number(r.datum.slice(8))}
+            </div>
+          </Fragment>
         ))}
       </div>
     </div>

@@ -4,7 +4,7 @@
  * struktur och ett skolår, returnerar datum→händelser och månadsrutor med
  * lov/temadags-markeringar. Ingen presentation.
  */
-import { helgdagar, isoVecka } from './skolar.js';
+import { isoVecka } from './skolar.js';
 import { skapaPlanering } from './struktur.js';
 import type { IsoDatum, Skolar, Struktur } from './typer.js';
 
@@ -89,8 +89,9 @@ export function handelserPerDatum(handelser: KalenderHandelse[]): Map<IsoDatum, 
 function dagRuta(datum: IsoDatum, iManad: boolean, skolar: Skolar, perDatum: Map<IsoDatum, KalenderHandelse[]>): KalenderDagRuta {
   const dag = veckodag(datum);
   const egen = skolar.dagar.find((d) => d.datum === datum);
-  const röd = helgdagar(Number(datum.slice(0, 4))).get(datum) ?? null;
-  const ledig = (egen && egen.typ !== 'halvdag') ? egen.label : röd;
+  // Röda dagar (helgdagar) markeras INTE i kalendern — bara skolans egna
+  // lov, temadagar och halvdagar. (Lektioner hamnar ändå aldrig på röda dagar.)
+  const ledig = (egen && egen.typ !== 'halvdag') ? egen.label : null;
   return {
     datum, dag, iManad,
     helg: dag >= 6,

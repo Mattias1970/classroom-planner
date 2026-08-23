@@ -72,9 +72,11 @@ describe('rutnät', () => {
     // dagar utanför augusti är markerade
     expect(rutor.some((r) => !r.iManad)).toBe(true);
   });
-  it('röda dagar markeras som lediga', () => {
+  it('röda dagar (helgdagar) markeras INTE i kalendern', () => {
     const rutor = manadsRutor(2027, 0, LA, perDatum); // januari 2027
-    expect(rutor.find((r) => r.datum === '2027-01-01')!.ledig).toBe('Nyårsdagen');
+    expect(rutor.find((r) => r.datum === '2027-01-01')!.ledig).toBeNull(); // Nyårsdagen döljs
+    // skolans egna dagar syns dock
+    expect(rutor.find((r) => r.datum === '2026-08-19')?.ledig ?? manadsRutor(2026, 7, LA, perDatum).find((x) => x.datum === '2026-08-19')!.ledig).toBe('Temadag');
   });
   it('veckaRutor ger måndag–söndag med rätt händelse', () => {
     const v = veckaRutor('2026-08-26', LA, perDatum);

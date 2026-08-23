@@ -102,6 +102,9 @@ body { margin: 0; font: 14px/1.45 system-ui, 'Segoe UI', sans-serif; background:
 .btn.sec.active { background: var(--bla); color: #fff; }
 .kal-nav { justify-content: center; gap: 14px; margin: 10px 0; }
 .mgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.mgrid.vecko { grid-template-columns: 34px repeat(7, 1fr); }
+.mgrid-h.vk, .mgrid-vk { font-size: 11px; color: #99a; display: flex; align-items: center; justify-content: center; }
+.mgrid-vk { background: #f6f8fb; border-radius: 5px; font-weight: 600; }
 .mgrid-h { text-align: center; font-size: 11px; color: #66738a; padding: 4px 0; }
 .mcell { min-height: 78px; border: 1px solid var(--ram); border-radius: 5px; padding: 2px 3px; overflow: hidden; background: #fff; }
 .mcell.dim { background: #f2f4f7; color: #9aa6b5; }
@@ -121,6 +124,8 @@ body { margin: 0; font: 14px/1.45 system-ui, 'Segoe UI', sans-serif; background:
 .minimanad { border: 1px solid var(--ram); border-radius: 8px; padding: 6px; }
 .mini-h { text-align: center; font-weight: 600; font-size: 13px; margin-bottom: 4px; }
 .mini-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; }
+.mini-grid.vecko { grid-template-columns: 16px repeat(7, 1fr); }
+.mini-dh.vk, .mini-vk { font-size: 8px; color: #aab; display: flex; align-items: center; justify-content: center; }
 .mini-dh { text-align: center; font-size: 9px; color: #99a; }
 .mini-d { text-align: center; font-size: 11px; padding: 3px 0; border-radius: 3px; }
 .mini-d.dim { color: #c3cbd6; } .mini-d.ledig { background: #ffe8c7; }

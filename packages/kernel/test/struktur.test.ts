@@ -166,10 +166,10 @@ describe('halvklasser och Socrative-rum per ämne', () => {
     expect(STANDARD_AMNEN).toEqual(['Matematik', 'Biologi', 'Fysik', 'Kemi', 'Teknik']);
     expect(arHalvklass('Matematik')).toBe(false);
     for (const a of ['Biologi', 'Fysik', 'Kemi', 'Teknik']) expect(arHalvklass(a)).toBe(true);
-    expect(socrativeRum('Matematik', '8A', 'A')).toBe('Matte8AA');
-    expect(socrativeRum('Matematik', '8B', 'B')).toBe('Matte8BB');
-    expect(socrativeRum('Biologi', '8A', 'A')).toBe('Biologi8AA');
-    expect(socrativeRum('Teknik', '8 F', 'B')).toBe('Teknik8FB');
+    expect(socrativeRum('Matematik', '8A')).toBe('Matte8AA');
+    expect(socrativeRum('Matematik', '8B')).toBe('Matte8BB');
+    expect(socrativeRum('Biologi', '8A')).toBe('Biologi8AA');
+    expect(socrativeRum('Teknik', '8 F')).toBe('Teknik8FF');
   });
   it('halvklassämnen kräver giltigt Grupp B-schema; klasschemat märker grupperna', () => {
     let { s } = bygg();
@@ -237,5 +237,23 @@ describe('passKonflikter — varnar för lektioner på samma tid', () => {
     // 8A får matte samtidigt som 8B (ons 09:00) ⇒ läraren dubbelbokad
     const krock = passKonflikter(s, 'k8a', [{ dag: 3, start: '09:00', slut: '10:00' }]);
     expect(krock.some((r) => r.klassNamn === '8B')).toBe(true);
+  });
+});
+
+import { ledigtStandardpass } from '../src/domain/struktur.js';
+describe('ledigtStandardpass — undviker krock i tjänstens schema', () => {
+  it('ger 08:10-passet när det är ledigt, annars en ledig dag/tid', () => {
+    const { s } = bygg(); // Matematik ons 09:00–10:00 i 8B
+    expect(ledigtStandardpass(s, 'k8b')).toEqual({ dag: 1, start: '08:10', slut: '09:10' }); // måndag fri
+    // fyll måndag–fredag 08:10 i tjänstens andra klass så 08:10 är upptaget överallt
+    let full = s;
+    full = laggTillLarare(full, { id: 'l', namn: 'M', signatur: 'M' });
+    full = sattLarare(full, 'tj', 'l');
+    full = laggTillKlass(full, { id: 'kx', tjanstId: 'tj', namn: '8X' });
+    full = laggTillAmne(full, { id: 'amx', klassId: 'kx', namn: 'Matematik',
+      schema: [1, 2, 3, 4, 5].map((d) => ({ dag: d, start: '08:10', slut: '09:10' })) });
+    const p = ledigtStandardpass(full, 'k8b');
+    expect(p.start).not.toBe('08:10'); // 08:10 upptaget alla dagar ⇒ senare tid
+    expect(giltigtPass(p)).toBe(true);
   });
 });

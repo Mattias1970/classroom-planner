@@ -209,7 +209,7 @@ describe('Lektionskort i planeringen', () => {
     const kort = host.querySelector('[data-testid="lektionskort"]')!;
     expect(kort.textContent).toContain('Matematik 09:00–10:00');          // tavelrubriken
     expect(kort.textContent).toContain('Läxförhör');
-    expect(kort.textContent).toContain('Matte8BA · Matte8BB');             // Socrative-rum per grupp
+    expect(kort.textContent).toContain('Matte8BB');                        // Socrative-rum per klass
     expect(kort.textContent).toContain('09:50–10:00');                     // exit ticket-tid
     expect(kort.textContent).toContain('ETT – INTRODUKTION');              // bokens nivånamn
     expect(kort.textContent).toContain('minimum: ETT');                    // del 1
@@ -269,7 +269,7 @@ describe('Spara-knappar och automatisk nästa veckodag', () => {
     const visa = [...host.querySelectorAll('button[title="Visa elevens lektioner"]')][0] as HTMLButtonElement;
     act(() => { visa.click(); });
     expect(host.textContent).toContain('Tisdag');
-    expect(host.textContent).toContain('Biologi8BA');
+    expect(host.textContent).toContain('Biologi8BB');
     expect(host.textContent).not.toContain('Torsdag 08:10');
     // Byt Alva till Grupp B — schemat följer med
     valj(select(host, 'Grupp för Alva'), 'B');
@@ -333,8 +333,8 @@ describe('Halvklassämne i planeringen', () => {
     act(() => { knapp(host, '8B').click(); });
 
     valj(select(host, 'Ämne'), 'Biologi');
-    expect(host.textContent).toContain('Grupp A · rum Biologi8BA');
-    expect(host.textContent).toContain('Grupp B · rum Biologi8BB');
+    expect(host.textContent).toContain('Grupp A');
+    expect(host.textContent).toContain('Biologi8BB');
     valj(select(host, 'Veckodag pass 1'), '2');            // Grupp A: tisdag
     skriv(input(host, 'Start pass 1'), '09:00');
     skriv(input(host, 'Slut pass 1'), '10:00');
@@ -349,7 +349,7 @@ describe('Halvklassämne i planeringen', () => {
     // Bok saknas för Biologi (Matematik Y filtreras bort) — koppla ändå via ämnespanelens bokval? Nej:
     // bokväljaren i ämnespanelen visar alla böcker; välj Matematik Y för planeringstestet.
     valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
-    expect(host.textContent).toContain('Grupp A · rum Biologi8BA');
+    expect(host.textContent).toContain('Grupp A');
     expect(host.textContent).toContain('2026-08-18');       // tisdag (Grupp A)
     expect(host.textContent).toContain('2026-08-20');       // torsdag (Grupp B)
     // Grupp B:s första rad → kort märkt Grupp B med rum Biologi8BB och exit 13:50
@@ -546,5 +546,46 @@ describe('Veckoschema och schemakonflikter', () => {
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     expect(host.textContent).not.toContain('Krock');
     expect(lasStruktur().amnen).toHaveLength(2);
+  });
+})
+
+describe('Fritt schemaförval, veckonummer och dolda helgdagar', () => {
+  it('nytt ämnes förval undviker en redan upptagen tid i klassen', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    // Lägg matte måndag 08:10 (förvalet)
+    valj(select(host, 'Ämne'), 'Matematik');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    // Nästa nya ämne: förvalet får INTE vara måndag 08:10 igen (upptaget)
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    const dag = select(host, 'Veckodag pass 1').value;
+    const start = input(host, 'Start pass 1').value;
+    expect(!(dag === '1' && start === '08:10')).toBe(true);
+  });
+
+  it('månadskalendern visar veckonummer och döljer röda dagar', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    // temadag så vi vet att skolans dagar ändå syns
+    act(() => { treeKnapp(host, '📅 2026/2027').click(); });
+    skrivArea(host.querySelector('textarea[aria-label="Kalendariumtext"]')!, '2026-12-01 Temadag');
+    act(() => { knapp(host, 'Lägg till från text').click(); });
+    act(() => { knapp(host, '📆 Kalender').click(); });
+    act(() => { knapp(host, 'Månad').click(); });
+    // bläddra till december 2026 (från augusti: 4 steg framåt)
+    for (let i = 0; i < 4; i++) act(() => { knapp(host, '▶').click(); });
+    const panel = host.querySelector('.panel')!;
+    expect(panel.textContent).toContain('december 2026');
+    expect(panel.querySelector('.mgrid.vecko')).not.toBeNull();          // veckonummerkolumn finns
+    expect([...panel.querySelectorAll('.mgrid-vk')].length).toBeGreaterThan(0);
+    expect(panel.textContent).toContain('Temadag');                       // skolans dag syns
+    expect(panel.textContent).not.toContain('Juldagen');                  // röd dag döljs
+    expect(panel.textContent).not.toContain('Annandag jul');
   });
 })

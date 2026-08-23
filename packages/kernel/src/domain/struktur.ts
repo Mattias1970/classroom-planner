@@ -228,6 +228,22 @@ function amneRader(s: Struktur, amne: Amne): SchemaRad[] {
  * en lärare — lärarens andra klasser (läraren kan inte vara på två ställen).
  * ignoreAmneId hoppar över ett ämne som redigeras.
  */
+/**
+ * Föreslår ett ledigt standardpass (mån–fre) som inte krockar med tjänstens
+ * övriga schema. Provar kl 08:10–09:10 mån→fre, sedan senare starttider.
+ */
+export function ledigtStandardpass(s: Struktur, klassId: string): Pass {
+  for (const start of ['08:10', '09:20', '10:30', '13:00', '14:10']) {
+    const [h, m] = start.split(':').map(Number);
+    const slut = `${String(h + 1).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    for (let dag = 1; dag <= 5; dag++) {
+      const p: Pass = { dag, start, slut };
+      if (passKonflikter(s, klassId, [p]).length === 0) return p;
+    }
+  }
+  return { dag: 1, start: '08:10', slut: '09:10' };
+}
+
 export function passKonflikter(s: Struktur, klassId: string, nyaPass: Pass[], ignoreAmneId?: string): SchemaRad[] {
   const klass = s.klasser.find((k) => k.id === klassId);
   if (!klass) return [];

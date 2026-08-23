@@ -3,9 +3,10 @@
  *
  * Matematik läses i helklass. Biologi, Fysik, Kemi och Teknik läses i
  * halvklass: varje klass är delad i Grupp A och Grupp B med varsin tid.
- * Varje ämne har Socrative-rum för läxförhör och exit tickets, ett per
- * grupp, med namnmönstret <ämnesprefix><klassnamn><grupp>:
- * Matematik → Matte8AA/Matte8AB, Biologi → Biologi8AA/Biologi8AB, osv.
+ * Varje ämne har ETT Socrative-rum per klass för läxförhör och exit tickets
+ * (halvklassgrupperna delar rum). Mönstret är
+ * <ämnesprefix><klassnamn><klassnamnets sista tecken>:
+ * Matematik 8A → Matte8AA, Matematik 8B → Matte8BB, Fysik 8A → Fysik8AA.
  */
 export const STANDARD_AMNEN = ['Matematik', 'Biologi', 'Fysik', 'Kemi', 'Teknik'] as const;
 
@@ -20,8 +21,9 @@ const PREFIX: Record<string, string> = { Matematik: 'Matte' };
 
 export type Grupp = 'A' | 'B';
 
-/** Socrative-rum för ett ämne, en klass och en grupp: 'Matte8AA', 'Biologi8BB' … */
-export function socrativeRum(amnesNamn: string, klassNamn: string, grupp: Grupp): string {
+/** Socrative-rum för ett ämne och en klass: 'Matte8AA', 'Matte8BB', 'Fysik8AA' … */
+export function socrativeRum(amnesNamn: string, klassNamn: string): string {
   const prefix = PREFIX[amnesNamn] ?? amnesNamn.replace(/\s+/g, '');
-  return `${prefix}${klassNamn.replace(/\s+/g, '')}${grupp}`;
+  const namn = klassNamn.replace(/\s+/g, '');
+  return `${prefix}${namn}${namn.slice(-1)}`;
 }
