@@ -180,3 +180,17 @@ body { margin: 0; font: 14px/1.45 system-ui, 'Segoe UI', sans-serif; background:
 .fp-kropp { padding: 8px 10px; font-size: 13px; }
 .fp-kropp p { margin: 4px 0; }
 .fp-lank { color: var(--bla); text-decoration: underline; }
+
+/* Planeringsflikar */
+.typ-chip { font-size: 10px; padding: 2px 8px; border-radius: 4px; letter-spacing: .04em; }
+.tbl.plan td.rod { color: #b02a2a; }
+.uppg-kort { border: 1px solid var(--ram); border-radius: 8px; padding: 8px 10px; margin: 8px 0; }
+.uppg-rad { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin-top: 6px; }
+.uppg-niva { border-radius: 8px; padding: 8px 10px; }
+.niva-gron { background: #e8f6ec; } .niva-bla { background: #e9f1fc; } .niva-rod { background: #fdecec; }
+.un-rubrik { font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+.un-uppg { margin: 3px 0; } .un-obl { font-size: 11px; color: #1e5a2e; }
+.niva-rod .un-obl { color: #8a2a2a; }
+.film-rad { border-bottom: 1px dashed var(--ram); padding: 2px 0; }
+.ant-rad { display: flex; flex-direction: column; gap: 3px; margin: 8px 0; }
+.ant-rad textarea { border: 1px solid var(--ram); border-radius: 6px; padding: 6px 8px; font: inherit; }

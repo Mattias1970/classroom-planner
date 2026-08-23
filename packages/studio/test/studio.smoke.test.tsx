@@ -794,3 +794,62 @@ describe('Detaljerad NO-planering i lektionskortet', () => {
     expect(host.textContent).toContain('ifylld');
   });
 })
+
+describe('Planeringsflikar (portade från v1)', () => {
+  async function amneMedPlan(host: HTMLElement) {
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
+    valj(select(host, 'Veckodag pass 1'), '2');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+  }
+
+  it('Översikt visar lektionstabell med typ och nivåer; Uppgifter visar nivåkort med min-nivå', async () => {
+    const host = render();
+    await amneMedPlan(host);
+    act(() => { knapp(host, 'ℹ Översikt').click(); });
+    const panel = host.querySelector('.panel')!;
+    expect(panel.textContent).toContain('LEKTION');
+    expect(panel.textContent).toContain('1.1 Bråk');
+    act(() => { knapp(host, '✏ Uppgifter').click(); });
+    expect(panel.textContent).toContain('ETT – introduktion');   // Matematik Y-nivåer
+    expect(panel.textContent).toContain('Obligatorisk');
+    expect(panel.textContent).toContain('min. ETT');             // lek 1 minimum
+    expect(panel.textContent).toContain('min. TVÅ');             // lek 2 minimum
+  });
+
+  it('Begrepp listar begrepp per lektion; Magma-länk och anteckning sparas per lektion', async () => {
+    const host = render();
+    await amneMedPlan(host);
+    act(() => { knapp(host, '💡 Begrepp').click(); });
+    expect(host.querySelector('.panel')!.textContent).toContain('täljare');
+    act(() => { knapp(host, '🟫 Magma').click(); });
+    expect(host.textContent).toContain('0 av 2 lektioner har en Magma-aktivitet');
+    skriv(input(host, 'Magma-länk lektion 1'), 'https://magma.example/tal');
+    expect(lasStruktur().lektionsplaner.find((p) => p.lektionsIndex === 0)?.magma).toBe('https://magma.example/tal');
+    act(() => { knapp(host, '👥 Anteckningar').click(); });
+    skrivArea(host.querySelector('textarea[aria-label="Anteckning lektion 2"]')!, 'Gick fort — repetera bråk.');
+    expect(lasStruktur().lektionsplaner.find((p) => p.lektionsIndex === 1)?.anteckning).toContain('repetera bråk');
+  });
+
+  it('Filmer läggs till och tas bort per lektion', async () => {
+    const host = render();
+    await amneMedPlan(host);
+    act(() => { knapp(host, '🎬 Filmer').click(); });
+    skriv(input(host, 'Ny film lektion 1'), 'Bråk – Binogi|https://binogi.se/brak');
+    act(() => { knapp(host, '+ Lägg till film').click(); });
+    expect(host.textContent).toContain('▶ Bråk – Binogi');
+    expect(lasStruktur().lektionsplaner.find((p) => p.lektionsIndex === 0)?.filmer).toEqual(['Bråk – Binogi|https://binogi.se/brak']);
+    act(() => { knapp(host, '✕').click(); });   // ta bort filmen
+    expect(lasStruktur().lektionsplaner.find((p) => p.lektionsIndex === 0)?.filmer).toEqual([]);
+  });
+})

@@ -192,6 +192,14 @@ export interface LektionsPlan {
   labLank?: string;
   /** … eller frågeställning som analyseras med systematisk undersökning. */
   labFraga?: string;
+  /** Genomgångstext (det läraren berättar). */
+  genomgang?: string;
+  /** Filmlänkar för lektionen ('Titel|https://…'). */
+  filmer?: string[];
+  /** Magma-aktivitet (länk). */
+  magma?: string;
+  /** Anteckningar om klassen för lektionen. */
+  anteckning?: string;
 }
 
 export interface Struktur {
