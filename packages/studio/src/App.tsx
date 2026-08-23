@@ -23,13 +23,17 @@ import {
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
 } from '@planner/kernel';
 import { exportJson, importJson, lasStruktur, sparaStruktur } from './store.js';
+import {
+  konfigKomplett, laddaFranGitHub, lasGitHubConfig, sparaGitHubConfig, sparaTillGitHub,
+  type GitHubConfig,
+} from './github.js';
 
 const DAGNAMN = ['', 'Måndag', 'Tisdag', 'Onsdag', 'Torsdag', 'Fredag'];
 type Vald =
   | { typ: 'skolar'; id: string } | { typ: 'tjanst'; id: string }
   | { typ: 'klass'; id: string } | { typ: 'amne'; id: string }
   | { typ: 'bok'; id: string } | { typ: 'larare' }
-  | { typ: 'nyttSkolar' } | { typ: 'nyBok' } | null;
+  | { typ: 'nyttSkolar' } | { typ: 'nyBok' } | { typ: 'github' } | null;
 
 export function App() {
   const [s, setS] = useState<Struktur>(() => lasStruktur());
@@ -50,6 +54,7 @@ export function App() {
           <button className={`tflik ${huvudvy === 'kalender' ? 'act' : ''}`} onClick={() => setHuvudvy('kalender')}>📆 Kalender</button>
         </nav>
         <span className="spacer" />
+        <button className="btn sec" onClick={() => { setHuvudvy('struktur'); setVald({ typ: 'github' }); }}>☁ GitHub</button>
         <button className="btn sec" onClick={() => {
           const a = document.createElement('a');
           a.href = URL.createObjectURL(new Blob([exportJson(s)], { type: 'application/json' }));
@@ -85,6 +90,7 @@ export function App() {
             {vald?.typ === 'larare' && <LararePanel s={s} kor={kor} />}
             {vald?.typ === 'nyttSkolar' && <NyttSkolarPanel kor={kor} setVald={setVald} />}
             {vald?.typ === 'nyBok' && <NyBokPanel kor={kor} setVald={setVald} />}
+            {vald?.typ === 'github' && <GitHubPanel s={s} spara={spara} setMsg={setMsg} />}
           </main>
         </div>
       )}
@@ -450,6 +456,13 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
   const [konfliktSteg, setKonfliktSteg] = useState(0);
   const [konfliktMsg, setKonfliktMsg] = useState('');
   const [noOrdning, setNoOrdning] = useState<string[]>([...NO_TK_AMNEN]);
+  const klassAmnen = s.amnen.filter((x) => x.klassId === id);
+  const redan = new Set(klassAmnen.map((x) => x.namn));
+  const tillgangliga = STANDARD_AMNEN.filter((a) => !redan.has(a));
+  const noMojligt = NO_TK_AMNEN.every((a) => !redan.has(a)); // inget NO-ämne får finnas
+  const alternativ = [...tillgangliga, ...(noMojligt ? [NO_TK] : [])];
+  // Håll valt ämne giltigt när listan ändras
+  if (k && alternativ.length > 0 && !alternativ.includes(namn)) { setNamn(alternativ[0]); }
   if (!k) return null;
   const arNoTk = namn === NO_TK;
   const halv = arNoTk || arHalvklass(namn); // NO+Tk läses i halvklass
@@ -463,10 +476,13 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
         Biologi, Fysik, Kemi och Teknik läses i halvklass: Grupp A och Grupp B har varsin tid, och Socrative-rummen
         Varje ämne har ett Socrative-rum per klass (t.ex. {socrativeRum('Matematik', k.namn)}, {socrativeRum('Biologi', k.namn)}).</p>
       <h3>Nytt ämne</h3>
+      {alternativ.length === 0
+        ? <p className="muted">Alla ämnen finns redan i klassen. Ta bort ett ämne för att lägga till ett annat.</p>
+        : <>
       <div className="ny rad">
         <select aria-label="Ämne" value={namn} onChange={(e) => { setNamn(e.target.value); setBokId(''); }}>
-          {STANDARD_AMNEN.map((a) => <option key={a} value={a}>{a}{arHalvklass(a) ? ' (halvklass)' : ''}</option>)}
-          <option value={NO_TK}>NO+Tk (Biologi, Fysik, Kemi, Teknik i följd)</option>
+          {tillgangliga.map((a) => <option key={a} value={a}>{a}{arHalvklass(a) ? ' (halvklass)' : ''}</option>)}
+          {noMojligt && <option value={NO_TK}>NO+Tk (Biologi, Fysik, Kemi, Teknik i följd)</option>}
         </select>
         {!arNoTk && (
           <select aria-label="Bok för ämnet" value={bokId} onChange={(e) => setBokId(e.target.value)}>
@@ -540,6 +556,7 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
           }}>{konfliktSteg > 0 ? `⚠ Lägg till ändå (${konfliktSteg}/2)` : arNoTk ? '➕ Skapa NO+Tk (fyra block)' : '➕ Lägg till ämne'}</button>
       </div>
       {konfliktMsg && <p className="status warn">{konfliktMsg}</p>}
+      </>}
       <Elevlista s={s} klassId={id} klassNamn={k.namn} kor={kor} />
       <div className="modal-actions">
         <button className="btn warn" onClick={() => {
@@ -630,9 +647,10 @@ function AmnePanel({ s, id, kor }: { s: Struktur; id: string; kor: (fn: () => St
     <div className="card">
       <h2>📖 {klass.namn} · {a.namn}{halv ? <span className="pillm">halvklass A/B</span> : null}{a.noGrupp !== undefined ? <span className="pillm">NO+Tk block {(a.noOrder ?? 0) + 1}/4</span> : null}</h2>
       <p className="muted">Socrative-rum: <b>{rum}</b>{halv ? ' (delas av Grupp A och B)' : ''} — läxförhör och exit tickets.</p>
-      {a.noGrupp !== undefined && (
-        <p className="note">NO+Tk-ordning: {noSyskon.map((x, i) => `${i + 1}. ${x.namn}`).join(' → ')}. Detta delämne har budget <b>{budget}</b> lektioner (block {(a.noOrder ?? 0) + 1}) och startar efter föregående block.</p>
-      )}
+      {a.noGrupp !== undefined && (<>
+        <p className="note">Detta delämne har budget <b>{budget}</b> lektioner (block {(a.noOrder ?? 0) + 1}) och startar efter föregående block.</p>
+        <NoOrdningRedigerare s={s} syskon={noSyskon} kor={kor} />
+      </>)}
       {overBudget && (
         <p className="status warn">⚠ {bok!.titel} har {bok!.kapitel.reduce((n, k2) => n + k2.delkapitel.reduce((m, d) => m + d.lektioner.length, 0) + k2.extraLektioner.length, 0)} lektioner men blocket rymmer bara {budget}. De sista lektionerna trängs in i nästa delämnes block — korta boken eller lägg fler NO-pass.</p>
       )}
@@ -673,6 +691,43 @@ function AmnePanel({ s, id, kor }: { s: Struktur; id: string; kor: (fn: () => St
       <div className="modal-actions">
         <button className="btn warn" onClick={() => kor(() => taBortAmne(lasStruktur(), id), 'Ämne borttaget.')}>🗑 Ta bort ämne</button>
       </div>
+    </div>
+  );
+}
+
+// ── NO+Tk: redigera läsordningen i efterhand ─────────────────
+function NoOrdningRedigerare({ s, syskon, kor }: {
+  s: Struktur; syskon: Amne[]; kor: (fn: () => Struktur, m: string) => void;
+}) {
+  const [ordning, setOrdning] = useState<string[]>(syskon.map((x) => x.namn));
+  const original = syskon.map((x) => x.namn);
+  const andrad = JSON.stringify(ordning) !== JSON.stringify(original);
+  const byt = (i: number, namn: string) => {
+    const nytt = [...ordning]; const j = nytt.indexOf(namn); const tmp = nytt[i];
+    nytt[i] = namn; nytt[j] = tmp; setOrdning(nytt);
+  };
+  return (
+    <div className="no-ordning">
+      <h4 style={{ margin: '0 0 6px' }}>NO+Tk-läsordning</h4>
+      <div className="rad" style={{ flexWrap: 'wrap', gap: 6 }}>
+        {ordning.map((namn, i) => (
+          <select key={i} aria-label={`Ändra NO-block ${i + 1}`} value={namn} onChange={(e) => byt(i, e.target.value)}>
+            {NO_TK_AMNEN.map((a) => <option key={a} value={a}>{i + 1}. {a}</option>)}
+          </select>
+        ))}
+      </div>
+      <button className="btn sec sm" disabled={!andrad} style={{ marginTop: 6 }}
+        onClick={() => kor(() => {
+          let st = lasStruktur();
+          // Sätt noOrder efter den nya ordningen (matcha på delämnets namn inom gruppen)
+          ordning.forEach((namn, order) => {
+            const am = syskon.find((x) => x.namn === namn);
+            if (am) st = uppdateraAmne(st, am.id, { noOrder: order });
+          });
+          return st;
+        }, `NO+Tk-ordning ändrad: ${ordning.join(' → ')} — planeringar och kalender räknas om.`)}>
+        {andrad ? '💾 Spara ny ordning' : 'Ordning sparad'}
+      </button>
     </div>
   );
 }
@@ -1199,6 +1254,48 @@ function isoVeckaLbl(datum: string): number {
   d.setUTCDate(d.getUTCDate() + 4 - day);
   const y0 = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
   return Math.ceil(((d.getTime() - y0.getTime()) / 86400000 + 1) / 7);
+}
+
+// ── GitHub-synk ──────────────────────────────────────────────
+function GitHubPanel({ s, spara, setMsg }: {
+  s: Struktur; spara: (ny: Struktur, m?: string) => void; setMsg: (m: string) => void;
+}) {
+  const [cfg, setCfg] = useState<GitHubConfig>(() => lasGitHubConfig());
+  const [arbetar, setArbetar] = useState<'' | 'spara' | 'ladda'>('');
+  const komplett = konfigKomplett(cfg);
+  const uppdatera = (delta: Partial<GitHubConfig>) => { const ny = { ...cfg, ...delta }; setCfg(ny); sparaGitHubConfig(ny); };
+
+  return (
+    <div className="card">
+      <h2>☁ Synka med GitHub (planner-data)</h2>
+      <p className="note">Hela planeringen (skolår, tjänster, klasser, ämnen, planeringar) sparas som en JSON-fil i ditt datarepo och kan laddas tillbaka på en annan dator. Böckerna ligger kvar som read-only innehåll i samma repo. Token är din egen fine-grained PAT med <b>Contents: Read and write</b> scopad till datarepot — den lagras bara lokalt i den här webbläsaren och skickas enbart till api.github.com.</p>
+      <div className="gh-grid">
+        <label>Ägare (owner)<input aria-label="GitHub owner" value={cfg.owner} placeholder="Mattias1970" onChange={(e) => uppdatera({ owner: e.target.value.trim() })} /></label>
+        <label>Repo<input aria-label="GitHub repo" value={cfg.repo} onChange={(e) => uppdatera({ repo: e.target.value.trim() })} /></label>
+        <label>Gren<input aria-label="GitHub branch" value={cfg.branch} onChange={(e) => uppdatera({ branch: e.target.value.trim() })} /></label>
+        <label>Sökväg<input aria-label="GitHub path" value={cfg.path} onChange={(e) => uppdatera({ path: e.target.value.trim() })} /></label>
+        <label className="gh-token">Token (PAT, Contents: R/W)<input aria-label="GitHub token" type="password" value={cfg.token} placeholder="github_pat_…" onChange={(e) => uppdatera({ token: e.target.value.trim() })} /></label>
+      </div>
+      <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
+        <button className="btn" disabled={!komplett || arbetar !== ''} onClick={() => {
+          setArbetar('spara'); setMsg('☁ Sparar till GitHub …');
+          void sparaTillGitHub(cfg, exportJson(s))
+            .then(() => setMsg(`✓ Sparat till ${cfg.owner}/${cfg.repo}/${cfg.path}.`))
+            .catch((e: unknown) => setMsg(`✗ ${(e as Error).message}`))
+            .finally(() => setArbetar(''));
+        }}>{arbetar === 'spara' ? '… Sparar' : '⬆ Spara till GitHub'}</button>
+        <button className="btn sec" disabled={!komplett || arbetar !== ''} onClick={() => {
+          if (!window.confirm('Ladda från GitHub och ersätta den lokala planeringen? Osparade lokala ändringar skrivs över.')) return;
+          setArbetar('ladda'); setMsg('☁ Laddar från GitHub …');
+          void laddaFranGitHub(cfg)
+            .then((json) => { spara(importJson(json), `✓ Laddat från ${cfg.owner}/${cfg.repo}/${cfg.path}.`); })
+            .catch((e: unknown) => setMsg(`✗ ${(e as Error).message}`))
+            .finally(() => setArbetar(''));
+        }}>{arbetar === 'ladda' ? '… Laddar' : '⬇ Ladda från GitHub'}</button>
+      </div>
+      {!komplett && <p className="muted small">Fyll i owner, repo, sökväg och token för att aktivera synk.</p>}
+    </div>
+  );
 }
 
 // ── Lärare ───────────────────────────────────────────────────

@@ -162,3 +162,9 @@ body { margin: 0; font: 14px/1.45 system-ui, 'Segoe UI', sans-serif; background:
 /* NO+Tk */
 .no-ordning { border: 1px dashed var(--ram); border-radius: 8px; padding: 8px 10px; margin: 6px 0; }
 .no-ordning select { border: 1px solid var(--ram); border-radius: 6px; padding: 4px 8px; }
+
+/* GitHub-panel */
+.gh-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 10px 0; }
+.gh-grid label { display: flex; flex-direction: column; font-size: 13px; gap: 3px; }
+.gh-grid input { border: 1px solid var(--ram); border-radius: 6px; padding: 6px 8px; font: inherit; }
+.gh-token { grid-column: 1 / -1; }

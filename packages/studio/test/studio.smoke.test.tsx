@@ -667,3 +667,69 @@ describe('NO+Tk blockkurs och kalenderfärger', () => {
     expect(host.querySelector('.kal-forkl')!.textContent).toContain('Klass (färg)');
   });
 })
+
+describe('Inga dubblettämnen, redigerbar NO-ordning, GitHub-panel', () => {
+  async function klassMedMatte(host: HTMLElement) {
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+  }
+
+  it('ämnesväljaren döljer ämnen som redan finns i klassen', async () => {
+    const host = render();
+    await klassMedMatte(host);
+    // Lägg Matematik
+    valj(select(host, 'Ämne'), 'Matematik');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    // Öppna klassen igen — Matematik ska inte längre vara valbart
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    const opts = [...select(host, 'Ämne').options].map((o) => o.value);
+    expect(opts).not.toContain('Matematik');
+    expect(opts).toContain('Biologi');
+  });
+
+  it('NO+Tk försvinner ur listan när ett NO-ämne redan finns, och tvärtom', async () => {
+    const host = render();
+    await klassMedMatte(host);
+    valj(select(host, 'Ämne'), 'Biologi');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    const opts = [...select(host, 'Ämne').options].map((o) => o.value);
+    expect(opts).not.toContain('NO+Tk');          // Biologi finns ⇒ NO+Tk döljs
+    expect(opts).not.toContain('Biologi');
+  });
+
+  it('NO+Tk-ordningen kan redigeras i efterhand från ämnespanelen', async () => {
+    const host = render();
+    await klassMedMatte(host);
+    valj(select(host, 'Ämne'), 'NO+Tk');
+    valj(select(host, 'Veckodag pass 1'), '2');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    valj(select(host, 'Grupp B veckodag pass 1'), '4');
+    skriv(input(host, 'Grupp B start pass 1'), '09:00');
+    skriv(input(host, 'Grupp B slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Skapa NO+Tk (fyra block)').click(); });
+    const forsta = lasStruktur().amnen.filter((x) => x.noGrupp !== undefined).sort((x, y) => (x.noOrder ?? 0) - (y.noOrder ?? 0))[0];
+    act(() => { treeKnapp(host, `📖 ${forsta.namn}`).click(); });
+    // Byt block 1 till Teknik via redigeraren
+    valj(select(host, 'Ändra NO-block 1'), 'Teknik');
+    act(() => { knapp(host, '💾 Spara ny ordning').click(); });
+    const teknik = lasStruktur().amnen.find((x) => x.namn === 'Teknik' && x.noGrupp !== undefined);
+    expect(teknik?.noOrder).toBe(0);              // Teknik ligger nu först
+  });
+
+  it('GitHub-panelen öppnas från topbaren och har konfigurationsfält', async () => {
+    const host = render();
+    act(() => { knapp(host, '☁ GitHub').click(); });
+    const panel = host.querySelector('.panel')!;
+    expect(panel.textContent).toContain('Synka med GitHub');
+    expect(input(host, 'GitHub owner')).not.toBeNull();
+    expect(input(host, 'GitHub token')).not.toBeNull();
+    expect((input(host, 'GitHub repo')).value).toBe('classroom-planner-data');
+  });
+})
