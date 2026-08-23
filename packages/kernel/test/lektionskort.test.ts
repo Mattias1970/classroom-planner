@@ -65,12 +65,12 @@ describe('begreppForLektion + socrative', () => {
     expect(l1.socStart).toBe('Fråga 1');
     expect(l1.exit).toBe('Exit 4.6');
   });
-  it('uppdateraKlass sätter Socrative-rum utan att röra id/tjänst', () => {
+  it('uppdateraKlass byter namn utan att röra id/tjänst', () => {
     let s = tomStruktur();
     s = laggTillSkolar(s, { id: 'la', namn: 'x', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
     s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
-    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B', socrative: 'Matte8B' });
-    const ny = uppdateraKlass(s, 'k', { socrative: 'Fysik8B', id: 'hack', tjanstId: 'hack' } as never);
-    expect(ny.klasser[0]).toEqual({ id: 'k', tjanstId: 'tj', namn: '8B', socrative: 'Fysik8B' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    const ny = uppdateraKlass(s, 'k', { namn: '8C', id: 'hack', tjanstId: 'hack' } as never);
+    expect(ny.klasser[0]).toEqual({ id: 'k', tjanstId: 'tj', namn: '8C' });
   });
 });

@@ -59,7 +59,7 @@ describe('Studio v2 — hela kedjan', () => {
     skriv(input(host, 'Skolårets namn'), 'Läsåret 2026/2027');
     skriv(input(host, 'Start'), '2026-08-17');
     skriv(input(host, 'Slut'), '2027-06-11');
-    act(() => { knapp(host, '➕ Skolår').click(); });
+    act(() => { knapp(host, '➕ Lägg till skolår').click(); });
     expect(lasStruktur().skolar).toHaveLength(1);
     act(() => { knapp(host, 'Läsåret 2026/2027').click(); });
 
@@ -76,14 +76,14 @@ describe('Studio v2 — hela kedjan', () => {
 
     // 4. Tjänst (utan lärare) → klass
     skriv(input(host, 'Tjänstens namn'), 'Ma åk 8');
-    act(() => { knapp(host, '➕ Tjänst').click(); });
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
     act(() => { knapp(host, 'Ma åk 8').click(); });
     skriv(input(host, 'Klassens namn'), '8B');
-    act(() => { knapp(host, '➕ Klass').click(); });
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
     act(() => { knapp(host, '8B').click(); });
 
     // 5. Ämne med eget schema (onsdag 09:00) + bok
-    skriv(input(host, 'Ämnets namn'), 'Matematik');
+    valj(select(host, 'Ämne'), 'Matematik');
     valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
     valj(select(host, 'Veckodag pass 1'), '3');
     skriv(input(host, 'Start pass 1'), '09:00');
@@ -105,16 +105,16 @@ describe('Studio v2 — hela kedjan', () => {
   it('lärare kopplas till tjänsten och får härlett schema; ämnen planeras utan lärare', async () => {
     const host = render();
     skriv(input(host, 'Skolårets namn'), '2026/2027');
-    act(() => { knapp(host, '➕ Skolår').click(); });
+    act(() => { knapp(host, '➕ Lägg till skolår').click(); });
     act(() => { knapp(host, '2026/2027').click(); });
     await importeraBok(host);
     skriv(input(host, 'Tjänstens namn'), 'Ma');
-    act(() => { knapp(host, '➕ Tjänst').click(); });
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
     act(() => { knapp(host, 'Ma').click(); });
     skriv(input(host, 'Klassens namn'), '8B');
-    act(() => { knapp(host, '➕ Klass').click(); });
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
     act(() => { knapp(host, '8B').click(); });
-    skriv(input(host, 'Ämnets namn'), 'Matematik');
+    valj(select(host, 'Ämne'), 'Matematik');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); }); // default måndag 08:10 — inget bokval, ingen lärare
     expect(lasStruktur().amnen).toHaveLength(1);
 
@@ -122,7 +122,7 @@ describe('Studio v2 — hela kedjan', () => {
     act(() => { knapp(host, '🧑‍🏫 Lärare').click(); });
     skriv(input(host, 'Lärarens namn'), 'Mattias');
     skriv(input(host, 'Signatur'), 'MT');
-    act(() => { knapp(host, '➕ Lärare').click(); });
+    act(() => { knapp(host, '➕ Lägg till lärare').click(); });
     act(() => { knapp(host, '💼 Ma').click(); });
     valj(select(host, 'Lärare för tjänsten'), lasStruktur().larare[0].id);
     act(() => { knapp(host, '🧑‍🏫 Lärare').click(); });
@@ -134,15 +134,15 @@ describe('Studio v2 — hela kedjan', () => {
   it('ämne utan giltigt pass kan inte skapas — knappen är låst tills schema angetts', async () => {
     const host = render();
     skriv(input(host, 'Skolårets namn'), '2026/2027');
-    act(() => { knapp(host, '➕ Skolår').click(); });
+    act(() => { knapp(host, '➕ Lägg till skolår').click(); });
     act(() => { knapp(host, '2026/2027').click(); });
     skriv(input(host, 'Tjänstens namn'), 'Ma');
-    act(() => { knapp(host, '➕ Tjänst').click(); });
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
     act(() => { knapp(host, 'Ma').click(); });
     skriv(input(host, 'Klassens namn'), '8B');
-    act(() => { knapp(host, '➕ Klass').click(); });
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
     act(() => { knapp(host, '8B').click(); });
-    skriv(input(host, 'Ämnets namn'), 'Fysik');
+    valj(select(host, 'Ämne'), 'Matematik');
     skriv(input(host, 'Slut pass 1'), '07:00'); // start 08:10 > slut ⇒ ogiltigt
     expect(knapp(host, '➕ Lägg till ämne').disabled).toBe(true);
     skriv(input(host, 'Slut pass 1'), '09:10');
@@ -173,17 +173,16 @@ describe('Lektionskort i planeringen', () => {
     skriv(input(host, 'Skolårets namn'), '2026/2027');
     skriv(input(host, 'Start'), '2026-08-17');
     skriv(input(host, 'Slut'), '2027-06-11');
-    act(() => { knapp(host, '➕ Skolår').click(); });
+    act(() => { knapp(host, '➕ Lägg till skolår').click(); });
     act(() => { knapp(host, '2026/2027').click(); });
     await importeraBok(host);
     skriv(input(host, 'Tjänstens namn'), 'Ma');
-    act(() => { knapp(host, '➕ Tjänst').click(); });
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
     act(() => { knapp(host, 'Ma').click(); });
     skriv(input(host, 'Klassens namn'), '8B');
-    act(() => { knapp(host, '➕ Klass').click(); });   // default Socrative-rum: Matte8B
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });   // default Socrative-rum: Matte8B
     act(() => { knapp(host, '8B').click(); });
-    expect(input(host, 'Socrative-rum').value).toBe('Matte8B');
-    skriv(input(host, 'Ämnets namn'), 'Matematik');
+    valj(select(host, 'Ämne'), 'Matematik');
     valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
     valj(select(host, 'Veckodag pass 1'), '3');
     skriv(input(host, 'Start pass 1'), '09:00');
@@ -196,7 +195,7 @@ describe('Lektionskort i planeringen', () => {
     const kort = host.querySelector('[data-testid="lektionskort"]')!;
     expect(kort.textContent).toContain('Matematik 09:00–10:00');          // tavelrubriken
     expect(kort.textContent).toContain('Läxförhör');
-    expect(kort.textContent).toContain('Matte8B');                         // Socrative-rum
+    expect(kort.textContent).toContain('Matte8BA · Matte8BB');             // Socrative-rum per grupp
     expect(kort.textContent).toContain('09:50–10:00');                     // exit ticket-tid
     expect(kort.textContent).toContain('ETT – INTRODUKTION');              // bokens nivånamn
     expect(kort.textContent).toContain('minimum: ETT');                    // del 1
@@ -213,14 +212,14 @@ describe('Lektionskort i planeringen', () => {
 describe('Spara-knappar och automatisk nästa veckodag', () => {
   async function tillKlass(host: HTMLElement) {
     skriv(input(host, 'Skolårets namn'), '2026/2027');
-    act(() => { knapp(host, '➕ Skolår').click(); });
+    act(() => { knapp(host, '➕ Lägg till skolår').click(); });
     act(() => { knapp(host, '2026/2027').click(); });
     await importeraBok(host);
     skriv(input(host, 'Tjänstens namn'), 'Ma');
-    act(() => { knapp(host, '➕ Tjänst').click(); });
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
     act(() => { knapp(host, 'Ma').click(); });
     skriv(input(host, 'Klassens namn'), '8B');
-    act(() => { knapp(host, '➕ Klass').click(); });
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
     act(() => { knapp(host, '8B').click(); });
   }
 
@@ -237,20 +236,38 @@ describe('Spara-knappar och automatisk nästa veckodag', () => {
     expect(select(host, 'Veckodag pass 3').value).toBe('1');
   });
 
-  it('Socrative-rummet sparas först vid 💾 Spara och kvitterar ✓ Sparat!', async () => {
+  it('elever läggs till med grupp; elevens lektioner följer gruppen', async () => {
     const host = render();
     await tillKlass(host);
-    skriv(input(host, 'Socrative-rum'), 'Fysik8B');
-    expect(lasStruktur().klasser[0].socrative).toBe('Matte8B'); // inte sparat än
-    act(() => { knapp(host, '💾 Spara').click(); });
-    expect(lasStruktur().klasser[0].socrative).toBe('Fysik8B');
-    expect(host.textContent).toContain('✓ Sparat!');
+    // Halvklassämne: Biologi med Grupp A (tis) och Grupp B (tor)
+    valj(select(host, 'Ämne'), 'Biologi');
+    valj(select(host, 'Veckodag pass 1'), '2');
+    valj(select(host, 'Grupp B veckodag pass 1'), '4');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '8B').click(); });        // tillbaka till klassen
+    skriv(input(host, 'Elevens namn'), 'Alva');
+    act(() => { knapp(host, '➕ Lägg till elev').click(); });     // Grupp A
+    skriv(input(host, 'Elevens namn'), 'Bo');
+    valj(select(host, 'Grupp för ny elev'), 'B');
+    act(() => { knapp(host, '➕ Lägg till elev').click(); });
+    expect(lasStruktur().elever.map((e) => `${e.namn}:${e.grupp}`)).toEqual(['Alva:A', 'Bo:B']);
+    expect(host.textContent).toContain('Grupp A: 1 · Grupp B: 1');
+    // Alvas schema: tisdag (Grupp A), rum Biologi8BA
+    const visa = [...host.querySelectorAll('button[title="Visa elevens lektioner"]')][0] as HTMLButtonElement;
+    act(() => { visa.click(); });
+    expect(host.textContent).toContain('Tisdag');
+    expect(host.textContent).toContain('Biologi8BA');
+    expect(host.textContent).not.toContain('Torsdag 08:10');
+    // Byt Alva till Grupp B — schemat följer med
+    valj(select(host, 'Grupp för Alva'), 'B');
+    act(() => { visa.click(); }); act(() => { visa.click(); });
+    expect(host.textContent).toContain('Biologi8BB');
   });
 
   it('ämnets schema redigeras, sparas uttryckligen och planeringen räknas om', async () => {
     const host = render();
     await tillKlass(host);
-    skriv(input(host, 'Ämnets namn'), 'Matematik');
+    valj(select(host, 'Ämne'), 'Matematik');
     valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
     valj(select(host, 'Veckodag pass 1'), '3');
     skriv(input(host, 'Start pass 1'), '09:00');
@@ -267,5 +284,74 @@ describe('Spara-knappar och automatisk nästa veckodag', () => {
     expect(host.textContent).toContain('✓ Sparat!');
     expect(host.textContent).toContain('2026-08-20');            // torsdag
     expect(host.textContent).not.toContain('2026-08-19');
+  });
+});
+
+describe('Skolår: redigering och unika namn', () => {
+  it('valt skolår kan redigeras och sparas; dubblettnamn avvisas', async () => {
+    const host = render();
+    skriv(input(host, 'Skolårets namn'), 'Läsåret 2026/2027');
+    act(() => { knapp(host, '➕ Lägg till skolår').click(); });
+    // Dubblettnamn vid tillägg avvisas med svenskt fel
+    skriv(input(host, 'Skolårets namn'), 'läsåret 2026/2027');
+    act(() => { knapp(host, '➕ Lägg till skolår').click(); });
+    expect(host.textContent).toContain('finns redan');
+    expect(lasStruktur().skolar).toHaveLength(1);
+    // Redigera valt skolår
+    act(() => { knapp(host, 'Läsåret 2026/2027').click(); });
+    skriv(input(host, 'Redigera skolårets namn'), 'Läsåret 2027/2028');
+    skriv(input(host, 'Redigera slut'), '2028-06-09');
+    expect(host.textContent).toContain('osparade ändringar');
+    act(() => { knapp(host, '💾 Spara skolår').click(); });
+    expect(host.textContent).toContain('✓ Sparat!');
+    expect(lasStruktur().skolar[0]).toMatchObject({ namn: 'Läsåret 2027/2028', slut: '2028-06-09' });
+  });
+});
+
+describe('Halvklassämne i planeringen', () => {
+  it('Biologi får Grupp A- och B-scheman, två planeringar och gruppmärkta lektionskort', async () => {
+    const host = render();
+    skriv(input(host, 'Skolårets namn'), '2026/2027');
+    skriv(input(host, 'Start'), '2026-08-17');
+    skriv(input(host, 'Slut'), '2027-06-11');
+    act(() => { knapp(host, '➕ Lägg till skolår').click(); });
+    act(() => { knapp(host, '2026/2027').click(); });
+    await importeraBok(host);
+    skriv(input(host, 'Tjänstens namn'), 'NO');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { knapp(host, 'NO').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { knapp(host, '8B').click(); });
+
+    valj(select(host, 'Ämne'), 'Biologi');
+    expect(host.textContent).toContain('Grupp A · rum Biologi8BA');
+    expect(host.textContent).toContain('Grupp B · rum Biologi8BB');
+    valj(select(host, 'Veckodag pass 1'), '2');            // Grupp A: tisdag
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    valj(select(host, 'Grupp B veckodag pass 1'), '4');    // Grupp B: torsdag
+    skriv(input(host, 'Grupp B start pass 1'), '13:00');
+    skriv(input(host, 'Grupp B slut pass 1'), '14:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+
+    const amne = lasStruktur().amnen[0];
+    expect(amne).toMatchObject({ namn: 'Biologi', halvklass: true });
+    expect(amne.schemaB).toEqual([{ dag: 4, start: '13:00', slut: '14:00' }]);
+    // Bok saknas för Biologi (Matematik Y filtreras bort) — koppla ändå via ämnespanelens bokval? Nej:
+    // bokväljaren i ämnespanelen visar alla böcker; välj Matematik Y för planeringstestet.
+    valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
+    expect(host.textContent).toContain('Grupp A · rum Biologi8BA');
+    expect(host.textContent).toContain('2026-08-18');       // tisdag (Grupp A)
+    expect(host.textContent).toContain('2026-08-20');       // torsdag (Grupp B)
+    // Grupp B:s första rad → kort märkt Grupp B med rum Biologi8BB och exit 13:50
+    const tabeller = [...host.querySelectorAll('table.plan')];
+    expect(tabeller).toHaveLength(2);
+    const radB = tabeller[1].querySelector('tbody tr') as HTMLTableRowElement;
+    act(() => { radB.click(); });
+    const kort = host.querySelector('[data-testid="lektionskort"]')!;
+    expect(kort.textContent).toContain('Grupp B');
+    expect(kort.textContent).toContain('Biologi8BB');
+    expect(kort.textContent).toContain('13:50–14:00');
   });
 });

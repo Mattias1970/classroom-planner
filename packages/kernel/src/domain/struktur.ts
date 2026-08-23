@@ -6,7 +6,7 @@
 import { bokLektioner } from './bok.js';
 import { isoVecka, passSparr } from './skolar.js';
 import type {
-  Amne, Bok, Klass, Larare, Pass, PlaneradLektion, Planering, Skolar, Struktur, Tjanst,
+  Amne, Bok, Elev, Klass, Larare, Pass, PlaneradLektion, Planering, Skolar, Struktur, Tjanst,
 } from './typer.js';
 
 let seq = 0;
@@ -19,10 +19,29 @@ export function giltigtPass(p: Pass): boolean {
 }
 
 // ── Skolår ───────────────────────────────────────────────────
+const normNamn = (n: string) => n.trim().toLowerCase();
+
+/** Flera skolår får finnas, men högst ett av varje (namnet är unikt). */
 export function laggTillSkolar(s: Struktur, skolar: Skolar): Struktur {
+  if (skolar.namn.trim() === '') throw new Error('Skolåret behöver ett namn.');
+  if (s.skolar.some((x) => normNamn(x.namn) === normNamn(skolar.namn))) {
+    throw new Error(`Ett skolår med namnet "${skolar.namn.trim()}" finns redan.`);
+  }
   return { ...s, skolar: [...s.skolar, skolar] };
 }
 export function uppdateraSkolar(s: Struktur, id: string, patch: Partial<Skolar>): Struktur {
+  if (patch.namn !== undefined) {
+    if (patch.namn.trim() === '') throw new Error('Skolåret behöver ett namn.');
+    if (s.skolar.some((x) => x.id !== id && normNamn(x.namn) === normNamn(patch.namn!))) {
+      throw new Error(`Ett skolår med namnet "${patch.namn.trim()}" finns redan.`);
+    }
+  }
+  if (patch.start !== undefined || patch.slut !== undefined) {
+    const nu = s.skolar.find((x) => x.id === id);
+    const start = patch.start ?? nu?.start ?? '';
+    const slut = patch.slut ?? nu?.slut ?? '';
+    if (slut <= start) throw new Error('Skolårets slutdatum måste vara efter startdatumet.');
+  }
   return { ...s, skolar: s.skolar.map((x) => (x.id === id ? { ...x, ...patch, id: x.id } : x)) };
 }
 export function taBortSkolar(s: Struktur, id: string): Struktur {
@@ -71,9 +90,26 @@ export function uppdateraKlass(s: Struktur, id: string, patch: Partial<Klass>): 
 }
 export function taBortKlass(s: Struktur, id: string): Struktur {
   const amnen = s.amnen.filter((a) => a.klassId === id).map((a) => a.id);
-  let ut: Struktur = { ...s, klasser: s.klasser.filter((k) => k.id !== id) };
+  let ut: Struktur = {
+    ...s,
+    klasser: s.klasser.filter((k) => k.id !== id),
+    elever: s.elever.filter((e) => e.klassId !== id),
+  };
   for (const a of amnen) ut = taBortAmne(ut, a);
   return ut;
+}
+
+// ── Elever (Grupp A/B per klass) ─────────────────────────────
+export function laggTillElev(s: Struktur, elev: Elev): Struktur {
+  if (!s.klasser.some((k) => k.id === elev.klassId)) throw new Error('Eleven måste höra till en klass.');
+  if (elev.namn.trim() === '') throw new Error('Eleven behöver ett namn.');
+  return { ...s, elever: [...s.elever, elev] };
+}
+export function uppdateraElev(s: Struktur, id: string, patch: Partial<Pick<Elev, 'namn' | 'grupp'>>): Struktur {
+  return { ...s, elever: s.elever.map((e) => (e.id === id ? { ...e, ...patch } : e)) };
+}
+export function taBortElev(s: Struktur, id: string): Struktur {
+  return { ...s, elever: s.elever.filter((e) => e.id !== id) };
 }
 
 // ── Ämne ─────────────────────────────────────────────────────
@@ -83,12 +119,18 @@ export function laggTillAmne(s: Struktur, amne: Amne): Struktur {
   if (amne.schema.length === 0 || !amne.schema.every(giltigtPass)) {
     throw new Error('Ämnet behöver minst ett giltigt lektionspass (veckodag mån–fre, start < slut).');
   }
+  if (amne.halvklass === true && (amne.schemaB === undefined || amne.schemaB.length === 0 || !amne.schemaB.every(giltigtPass))) {
+    throw new Error('Halvklassämnen behöver ett giltigt schema även för Grupp B.');
+  }
   if (amne.bokId !== undefined && !s.bocker.some((b) => b.id === amne.bokId)) throw new Error('Okänd bok.');
   return { ...s, amnen: [...s.amnen, amne] };
 }
 export function uppdateraAmne(s: Struktur, id: string, patch: Partial<Amne>): Struktur {
   if (patch.schema !== undefined && (patch.schema.length === 0 || !patch.schema.every(giltigtPass))) {
     throw new Error('Ämnet behöver minst ett giltigt lektionspass.');
+  }
+  if (patch.schemaB !== undefined && (patch.schemaB.length === 0 || !patch.schemaB.every(giltigtPass))) {
+    throw new Error('Grupp B behöver minst ett giltigt lektionspass.');
   }
   if (patch.bokId !== undefined && patch.bokId !== '' && !s.bocker.some((b) => b.id === patch.bokId)) {
     throw new Error('Okänd bok.');
@@ -124,15 +166,25 @@ export function taBortBok(s: Struktur, id: string): Struktur {
 }
 
 // ── Härledda scheman ─────────────────────────────────────────
-export interface SchemaRad extends Pass { klassNamn: string; amnesNamn: string; }
+export interface SchemaRad extends Pass { klassNamn: string; amnesNamn: string; grupp?: 'A' | 'B'; }
 
-/** Klassens schema = unionen av klassens ämnespass (sorterad dag, start). */
+/** Klassens schema = unionen av klassens ämnespass; halvklasspass märks med grupp. */
 export function klassSchema(s: Struktur, klassId: string): SchemaRad[] {
   const klass = s.klasser.find((k) => k.id === klassId);
   if (!klass) return [];
   return s.amnen.filter((a) => a.klassId === klassId)
-    .flatMap((a) => a.schema.map((p) => ({ ...p, klassNamn: klass.namn, amnesNamn: a.namn })))
+    .flatMap((a) => [
+      ...a.schema.map((p) => ({ ...p, klassNamn: klass.namn, amnesNamn: a.namn, grupp: a.halvklass === true ? 'A' as const : undefined })),
+      ...(a.halvklass === true ? (a.schemaB ?? []).map((p) => ({ ...p, klassNamn: klass.namn, amnesNamn: a.namn, grupp: 'B' as const })) : []),
+    ])
     .sort((x, y) => x.dag - y.dag || x.start.localeCompare(y.start));
+}
+
+/** Elevens schema: klassens helklasspass + halvklasspass för elevens grupp. */
+export function elevSchema(s: Struktur, elevId: string): SchemaRad[] {
+  const elev = s.elever.find((e) => e.id === elevId);
+  if (!elev) return [];
+  return klassSchema(s, elev.klassId).filter((r) => r.grupp === undefined || r.grupp === elev.grupp);
 }
 
 /** Lärarens schema HÄRLEDS: alla pass i lärarens tjänsters klassers ämnen. */

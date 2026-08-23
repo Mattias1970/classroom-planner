@@ -37,11 +37,14 @@ export interface Larare { id: string; namn: string; signatur: string; }
 /** En tjänst hör till ett skolår och kan (men måste inte) ha en lärare. */
 export interface Tjanst { id: string; skolarId: string; namn: string; larareId?: string; }
 
-export interface Klass {
-  id: string; tjanstId: string; namn: string;
-  /** Socrative-rum för läxförhör och exit tickets, t.ex. 'Matte8B'. */
-  socrative?: string;
-}
+export interface Klass { id: string; tjanstId: string; namn: string; }
+
+/**
+ * Elev i en klass. Varje klass är delad i Grupp A och Grupp B — halvklass-
+ * ämnen (Biologi/Fysik/Kemi/Teknik) läses gruppvis med olika tider, så
+ * gruppen avgör vilka lektioner som gäller för eleven.
+ */
+export interface Elev { id: string; klassId: string; namn: string; grupp: 'A' | 'B'; }
 
 /** Lektionspass: veckodag 1=mån … 5=fre, tider 'HH:MM'. */
 export interface Pass { dag: number; start: string; slut: string; }
@@ -57,7 +60,12 @@ export interface Amne {
   namn: string;
   /** Fristående bok ur biblioteket; undefined = ingen bok vald ännu. */
   bokId?: string;
+  /** Helklassens schema — eller Grupp A:s när ämnet läses i halvklass. */
   schema: Pass[];
+  /** Halvklass (Biologi/Fysik/Kemi/Teknik): Grupp A och B har olika tider. */
+  halvklass?: boolean;
+  /** Grupp B:s schema (krävs när halvklass är satt). */
+  schemaB?: Pass[];
 }
 
 // ── Bok (fristående bibliotek) ───────────────────────────────
@@ -153,11 +161,12 @@ export interface Struktur {
   larare: Larare[];
   tjanster: Tjanst[];
   klasser: Klass[];
+  elever: Elev[];
   amnen: Amne[];
   bocker: Bok[];
   planeringar: Planering[];
 }
 
 export function tomStruktur(): Struktur {
-  return { skolar: [], larare: [], tjanster: [], klasser: [], amnen: [], bocker: [], planeringar: [] };
+  return { skolar: [], larare: [], tjanster: [], klasser: [], elever: [], amnen: [], bocker: [], planeringar: [] };
 }

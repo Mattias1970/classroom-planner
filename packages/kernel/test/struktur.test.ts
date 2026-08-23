@@ -143,3 +143,67 @@ describe('skapaPlanering: bok + ämnesschema + skolår → datum', () => {
     expect(() => uppdateraAmne(s, 'am', { schema: [] })).toThrow(/lektionspass/);
   });
 });
+
+// ── Skolår är unika; halvklasser; elever med Grupp A/B ───────
+import {
+  elevSchema, laggTillElev, taBortElev, uppdateraElev, uppdateraSkolar,
+} from '../src/domain/struktur.js';
+import { STANDARD_AMNEN, arHalvklass, socrativeRum } from '../src/domain/amnen.js';
+
+describe('skolår är unika (högst ett av varje namn)', () => {
+  it('avvisar dubblettnamn vid tillägg och namnbyte, oavsett skiftläge', () => {
+    let s = laggTillSkolar(tomStruktur(), LA);
+    expect(() => laggTillSkolar(s, { ...LA, id: 'la2', namn: ' 2026/2027 ' })).toThrow(/finns redan/);
+    s = laggTillSkolar(s, { ...LA, id: 'la2', namn: '2027/2028' });
+    expect(() => uppdateraSkolar(s, 'la2', { namn: '2026/2027' })).toThrow(/finns redan/);
+    expect(uppdateraSkolar(s, 'la2', { namn: '2027/2028 HT' }).skolar[1].namn).toBe('2027/2028 HT');
+    expect(() => uppdateraSkolar(s, 'la2', { slut: '2026-01-01' })).toThrow(/efter startdatumet/);
+  });
+});
+
+describe('halvklasser och Socrative-rum per ämne', () => {
+  it('Matematik är helklass; Biologi/Fysik/Kemi/Teknik är halvklass; rumsnamn följer mönstret', () => {
+    expect(STANDARD_AMNEN).toEqual(['Matematik', 'Biologi', 'Fysik', 'Kemi', 'Teknik']);
+    expect(arHalvklass('Matematik')).toBe(false);
+    for (const a of ['Biologi', 'Fysik', 'Kemi', 'Teknik']) expect(arHalvklass(a)).toBe(true);
+    expect(socrativeRum('Matematik', '8A', 'A')).toBe('Matte8AA');
+    expect(socrativeRum('Matematik', '8B', 'B')).toBe('Matte8BB');
+    expect(socrativeRum('Biologi', '8A', 'A')).toBe('Biologi8AA');
+    expect(socrativeRum('Teknik', '8 F', 'B')).toBe('Teknik8FB');
+  });
+  it('halvklassämnen kräver giltigt Grupp B-schema; klasschemat märker grupperna', () => {
+    let { s } = bygg();
+    expect(() => laggTillAmne(s, { id: 'bi', klassId: 'k8b', namn: 'Biologi', halvklass: true, schema: [{ dag: 1, start: '10:00', slut: '11:00' }] }))
+      .toThrow(/Grupp B/);
+    s = laggTillAmne(s, {
+      id: 'bi', klassId: 'k8b', namn: 'Biologi', halvklass: true,
+      schema: [{ dag: 1, start: '10:00', slut: '11:00' }],
+      schemaB: [{ dag: 4, start: '10:00', slut: '11:00' }],
+    });
+    const rader = klassSchema(s, 'k8b');
+    expect(rader.map((r) => `${r.dag} ${r.amnesNamn}${r.grupp ?? ''}`)).toEqual([
+      '1 BiologiA', '3 Matematik', '4 BiologiB',
+    ]);
+    expect(() => uppdateraAmne(s, 'bi', { schemaB: [] })).toThrow(/Grupp B/);
+  });
+});
+
+describe('elever med Grupp A/B', () => {
+  it('elevens schema = helklasspass + halvklasspass för elevens grupp; kaskad vid klassborttag', () => {
+    let { s } = bygg(); // Matematik helklass ons 09:00
+    s = laggTillAmne(s, {
+      id: 'bi', klassId: 'k8b', namn: 'Biologi', halvklass: true,
+      schema: [{ dag: 1, start: '10:00', slut: '11:00' }],
+      schemaB: [{ dag: 4, start: '10:00', slut: '11:00' }],
+    });
+    expect(() => laggTillElev(s, { id: 'e0', klassId: 'saknas', namn: 'X', grupp: 'A' })).toThrow(/klass/);
+    s = laggTillElev(s, { id: 'e1', klassId: 'k8b', namn: 'Alva', grupp: 'A' });
+    s = laggTillElev(s, { id: 'e2', klassId: 'k8b', namn: 'Bo', grupp: 'B' });
+    expect(elevSchema(s, 'e1').map((r) => `${r.dag} ${r.amnesNamn}${r.grupp ?? ''}`)).toEqual(['1 BiologiA', '3 Matematik']);
+    expect(elevSchema(s, 'e2').map((r) => `${r.dag} ${r.amnesNamn}${r.grupp ?? ''}`)).toEqual(['3 Matematik', '4 BiologiB']);
+    s = uppdateraElev(s, 'e1', { grupp: 'B' });
+    expect(elevSchema(s, 'e1').some((r) => r.grupp === 'B')).toBe(true);
+    expect(taBortElev(s, 'e2').elever.map((e) => e.id)).toEqual(['e1']);
+    expect(taBortKlass(s, 'k8b').elever).toHaveLength(0);
+  });
+});
