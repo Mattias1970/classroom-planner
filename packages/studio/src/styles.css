@@ -37,3 +37,29 @@ body { margin: 0; font: 14px/1.45 system-ui, 'Segoe UI', sans-serif; background:
 .steg li { margin: 6px 0; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
 .larare { border-top: 1px solid var(--ram); padding-top: 8px; margin-top: 8px; }
+
+/* Lektionskort */
+.tbl.clickable tbody tr { cursor: pointer; }
+.tbl.clickable tbody tr:hover { background: #f2f6fc; }
+.tbl tr.vald td { background: #e3ebf8; }
+.lkort { border: 2px solid var(--bla); border-radius: 10px; padding: 14px; margin-top: 12px; background: #fff; }
+.lkort-topp { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.tavla { display: inline-block; background: #143a23; color: #f3f7f3; padding: 6px 14px; border-radius: 6px; font-weight: 700; letter-spacing: .03em; }
+.lkort-sekt { border-top: 1px solid var(--ram); margin-top: 10px; padding-top: 8px; }
+.lkort-sekt h4 { margin: 0 0 4px; }
+.nivaer { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.niva { border: 1px solid var(--ram); border-left-width: 5px; border-radius: 7px; padding: 6px 9px; }
+.niva h6 { margin: 0 0 3px; font-size: 11px; }
+.niva.n1 { border-left-color: #2e7d32; }
+.niva.n2 { border-left-color: #1d4ed8; }
+.niva.n3 { border-left-color: #b3392f; }
+.chip { display: inline-block; background: #eef2f7; border-radius: 10px; padding: 2px 9px; margin: 2px 4px 2px 0; font-size: 12px; }
+.tbl.bam { max-width: 380px; }
+
+@media print {
+  .tree, .topbar, .status, .note.no-print, .no-print, .tbl.plan, .card > .modal-actions, .card > h2, .card > p, .card > label, .card > button { display: none !important; }
+  .cols { display: block; }
+  .panel { padding: 0; }
+  .card { border: 0; max-width: none; }
+  .lkort { border-width: 1px; margin: 0; }
+}

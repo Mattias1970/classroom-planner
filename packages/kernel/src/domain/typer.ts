@@ -37,7 +37,11 @@ export interface Larare { id: string; namn: string; signatur: string; }
 /** En tjänst hör till ett skolår och kan (men måste inte) ha en lärare. */
 export interface Tjanst { id: string; skolarId: string; namn: string; larareId?: string; }
 
-export interface Klass { id: string; tjanstId: string; namn: string; }
+export interface Klass {
+  id: string; tjanstId: string; namn: string;
+  /** Socrative-rum för läxförhör och exit tickets, t.ex. 'Matte8B'. */
+  socrative?: string;
+}
 
 /** Lektionspass: veckodag 1=mån … 5=fre, tider 'HH:MM'. */
 export interface Pass { dag: number; start: string; slut: string; }
@@ -74,6 +78,12 @@ export interface Lektion {
   begrepp: string;
   genomgang: string;
   laxa: string;
+  /** Exempel att räkna tillsammans under genomgången. */
+  ex: string;
+  /** Startuppgift/läxförhörsfråga (Socrative) om boken anger en. */
+  socStart: string;
+  /** Exit ticket-uppgift om boken anger en. */
+  exit: string;
 }
 
 /** Delkapitel '4.6' med sina lektioner (del 1/2) och begrepp. */

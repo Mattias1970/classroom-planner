@@ -166,3 +166,46 @@ describe('Studio v2 — hela kedjan', () => {
     ]);
   });
 });
+
+describe('Lektionskort i planeringen', () => {
+  it('klick på planeringsrad öppnar kort med tavelrubrik, BAM-tider, Socrative-rum, nivåer och begrepp', async () => {
+    const host = render();
+    skriv(input(host, 'Skolårets namn'), '2026/2027');
+    skriv(input(host, 'Start'), '2026-08-17');
+    skriv(input(host, 'Slut'), '2027-06-11');
+    act(() => { knapp(host, '➕ Skolår').click(); });
+    act(() => { knapp(host, '2026/2027').click(); });
+    await importeraBok(host);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Tjänst').click(); });
+    act(() => { knapp(host, 'Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Klass').click(); });   // default Socrative-rum: Matte8B
+    act(() => { knapp(host, '8B').click(); });
+    expect(input(host, 'Socrative-rum').value).toBe('Matte8B');
+    skriv(input(host, 'Ämnets namn'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+
+    // Öppna första radens lektionskort
+    const rad = [...host.querySelectorAll('table.plan tbody tr')][0] as HTMLTableRowElement;
+    act(() => { rad.click(); });
+    const kort = host.querySelector('[data-testid="lektionskort"]')!;
+    expect(kort.textContent).toContain('Matematik 09:00–10:00');          // tavelrubriken
+    expect(kort.textContent).toContain('Läxförhör');
+    expect(kort.textContent).toContain('Matte8B');                         // Socrative-rum
+    expect(kort.textContent).toContain('09:50–10:00');                     // exit ticket-tid
+    expect(kort.textContent).toContain('ETT – INTRODUKTION');              // bokens nivånamn
+    expect(kort.textContent).toContain('minimum: ETT');                    // del 1
+    expect(kort.textContent).toContain('täljare');                         // delkapitlets begrepp
+    expect(kort.textContent).toContain('Teams, Classroom m.fl.');          // plattformsneutral inlämning
+    // Del 2-raden: minimum TVÅ
+    act(() => { rad.click(); });                                           // stäng
+    const rad2 = [...host.querySelectorAll('table.plan tbody tr')][1] as HTMLTableRowElement;
+    act(() => { rad2.click(); });
+    expect(host.querySelector('[data-testid="lektionskort"]')!.textContent).toContain('minimum: TVÅ');
+  });
+});

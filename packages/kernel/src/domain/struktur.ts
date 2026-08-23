@@ -66,6 +66,9 @@ export function laggTillKlass(s: Struktur, klass: Klass): Struktur {
   if (!s.tjanster.some((t) => t.id === klass.tjanstId)) throw new Error('Klassen måste höra till en tjänst.');
   return { ...s, klasser: [...s.klasser, klass] };
 }
+export function uppdateraKlass(s: Struktur, id: string, patch: Partial<Klass>): Struktur {
+  return { ...s, klasser: s.klasser.map((k) => (k.id === id ? { ...k, ...patch, id: k.id, tjanstId: k.tjanstId } : k)) };
+}
 export function taBortKlass(s: Struktur, id: string): Struktur {
   const amnen = s.amnen.filter((a) => a.klassId === id).map((a) => a.id);
   let ut: Struktur = { ...s, klasser: s.klasser.filter((k) => k.id !== id) };

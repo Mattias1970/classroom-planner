@@ -66,6 +66,9 @@ function lasLektion(raw: RawLektion, kap: number, idx: number): Lektion {
     begrepp: txt(raw['begrepp']),
     genomgang: txt(raw['genomgang']),
     laxa: txt(raw['laxa'] ?? raw['läxa']),
+    ex: txt(raw['ex'] ?? raw['bam_ex']),
+    socStart: txt(raw['soc_start'] ?? raw['socStart']),
+    exit: txt(raw['exit']),
   };
 }
 
