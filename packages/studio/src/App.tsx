@@ -9,7 +9,8 @@ import { Fragment, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
   NO_TK, NO_TK_AMNEN, STANDARD_AMNEN, amneBakgrund, antalSlots, arbetsNivaer, arHalvklass,
-  begreppsRum, delkapitelUrAvsnitt, foreslagnaRum, hamtaLektionsplan,
+  begreppsRum, delaHalvklassPass, delkapitelUrAvsnitt, foreslagnaRum, hamtaLektionsplan,
+  kombineraHalvklassPass, skapaTjanstFranSchema, tolkaSchemaPdf,
   handelserPerDatum, kalenderHandelser, klassFarg, noBudget, noOverBudget, sattLektionsplan,
   kapitelKort, manadsRutor, skolarManader, veckaRutor, viktigaDatum, bamTidslinje, begreppForLektion, bokBegrepp,
   bokFromImport, bokSidregister, bokSidregisterCsv, elevSchema, exitStart, giltigtPass,
@@ -21,7 +22,7 @@ import {
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   type Amne, type Bok, type Grupp, type KalenderDagRuta, type KalenderHandelse,
-  type LektionsPlan, type SchemaRad,
+  type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
 } from '@planner/kernel';
 import { exportJson, importJson, lasStruktur, sparaStruktur } from './store.js';
@@ -35,7 +36,21 @@ type Vald =
   | { typ: 'skolar'; id: string } | { typ: 'tjanst'; id: string }
   | { typ: 'klass'; id: string } | { typ: 'amne'; id: string }
   | { typ: 'bok'; id: string } | { typ: 'larare' }
-  | { typ: 'nyttSkolar' } | { typ: 'nyBok' } | { typ: 'github' } | null;
+  | { typ: 'nyttSkolar' } | { typ: 'nyBok' } | { typ: 'github' }
+  | { typ: 'schemaPdf'; tolkat: TolkatSchema } | null;
+
+/** Finns det vald pekar på kvar? (Skydd mot blank panel efter borttagning.) */
+function valdFinns(s: Struktur, v: Vald): boolean {
+  if (v === null) return false;
+  switch (v.typ) {
+    case 'skolar': return s.skolar.some((x) => x.id === v.id);
+    case 'tjanst': return s.tjanster.some((x) => x.id === v.id);
+    case 'klass': return s.klasser.some((x) => x.id === v.id);
+    case 'amne': return s.amnen.some((x) => x.id === v.id);
+    case 'bok': return s.bocker.some((x) => x.id === v.id);
+    default: return true; // larare/github/nytt-paneler har inga id-krav
+  }
+}
 
 export function App() {
   const [s, setS] = useState<Struktur>(() => lasStruktur());
@@ -83,16 +98,17 @@ export function App() {
           </nav>
           <main className="panel">
             {msg && <p className="status">{msg}</p>}
-            {vald === null && <Start s={s} />}
+            {(vald === null || !valdFinns(s, vald)) && <Start s={s} />}
             {vald?.typ === 'skolar' && <SkolarPanel s={s} id={vald.id} kor={kor} />}
             {vald?.typ === 'tjanst' && <TjanstPanel s={s} id={vald.id} kor={kor} setVald={setVald} />}
             {vald?.typ === 'klass' && <KlassPanel s={s} id={vald.id} kor={kor} setVald={setVald} />}
-            {vald?.typ === 'amne' && <AmnePanel s={s} id={vald.id} kor={kor} />}
+              {vald?.typ === 'amne' && <AmnePanel s={s} id={vald.id} kor={kor} setVald={setVald} />}
             {vald?.typ === 'bok' && <BokPanel s={s} id={vald.id} kor={kor} />}
             {vald?.typ === 'larare' && <LararePanel s={s} kor={kor} />}
             {vald?.typ === 'nyttSkolar' && <NyttSkolarPanel kor={kor} setVald={setVald} />}
             {vald?.typ === 'nyBok' && <NyBokPanel kor={kor} setVald={setVald} />}
             {vald?.typ === 'github' && <GitHubPanel s={s} spara={spara} setMsg={setMsg} />}
+            {vald?.typ === 'schemaPdf' && <SchemaPdfPanel s={s} tolkat={vald.tolkat} kor={kor} setVald={setVald} />}
           </main>
         </div>
       )}
@@ -117,7 +133,7 @@ function Start({ s }: { s: Struktur }) {
 
 // ── Trädet ───────────────────────────────────────────────────
 function Trad(props: { s: Struktur; vald: Vald; setVald: (v: Vald) => void; kor: (fn: () => Struktur, m: string) => void }) {
-  const { s, vald, setVald } = props;
+  const { s, vald, setVald, kor } = props;
   const ar = (v: Vald) => JSON.stringify(v) === JSON.stringify(vald);
   return (
     <>
@@ -130,18 +146,34 @@ function Trad(props: { s: Struktur; vald: Vald; setVald: (v: Vald) => void; kor:
               <button className={`node ${ar({ typ: 'tjanst', id: t.id }) ? 'act' : ''}`} onClick={() => setVald({ typ: 'tjanst', id: t.id })}>
                 💼 {t.namn}{t.larareId ? ` · ${s.larare.find((l) => l.id === t.larareId)?.signatur ?? ''}` : ''}
               </button>
-              {s.klasser.filter((k) => k.tjanstId === t.id).map((k) => (
-                <div key={k.id} className="ind">
-                  <button className={`node ${ar({ typ: 'klass', id: k.id }) ? 'act' : ''}`} onClick={() => setVald({ typ: 'klass', id: k.id })}>👥 {k.namn}</button>
-                  {s.amnen.filter((a) => a.klassId === k.id).map((a) => (
-                    <div key={a.id} className="ind">
-                      <button className={`node ${ar({ typ: 'amne', id: a.id }) ? 'act' : ''}`} onClick={() => setVald({ typ: 'amne', id: a.id })}>
-                        📖 {a.namn}{a.bokId ? '' : ' · (ingen bok)'}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ))}
+              {s.klasser.filter((k) => k.tjanstId === t.id).map((k) => {
+                const klassAmnen = s.amnen.filter((a) => a.klassId === k.id);
+                const vanliga = klassAmnen.filter((a) => a.noGrupp === undefined);
+                const noGrupper = [...new Set(klassAmnen.filter((a) => a.noGrupp !== undefined).map((a) => a.noGrupp!))];
+                const amnesNod = (a: Amne) => (
+                  <div key={a.id} className="ind">
+                    <button className={`node ${ar({ typ: 'amne', id: a.id }) ? 'act' : ''}`} onClick={() => setVald({ typ: 'amne', id: a.id })}>
+                      📖 {a.namn}{a.bokId ? '' : ' · (ingen bok)'}
+                    </button>
+                  </div>
+                );
+                return (
+                  <div key={k.id} className="ind">
+                    <button className={`node ${ar({ typ: 'klass', id: k.id }) ? 'act' : ''}`} onClick={() => setVald({ typ: 'klass', id: k.id })}>👥 {k.namn}</button>
+                    {vanliga.map(amnesNod)}
+                    {noGrupper.map((g) => {
+                      const delamnen = klassAmnen.filter((a) => a.noGrupp === g)
+                        .sort((x, y) => (x.noOrder ?? 0) - (y.noOrder ?? 0));
+                      return (
+                        <div key={g} className="ind">
+                          <button className="node no-nod" onClick={() => { if (delamnen[0]) setVald({ typ: 'amne', id: delamnen[0].id }); }}>🧪 NO+Tk</button>
+                          {delamnen.map(amnesNod)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
             </div>
           ))}
         </div>
@@ -172,6 +204,16 @@ function Trad(props: { s: Struktur; vald: Vald; setVald: (v: Vald) => void; kor:
         <button key={l.id} className={`node ${ar({ typ: 'larare' }) ? 'act' : ''}`} onClick={() => setVald({ typ: 'larare' })}>🧑‍🏫 {l.namn} <small className="muted">{l.signatur}</small></button>
       ))}
       <button className="node add" onClick={() => setVald({ typ: 'larare' })}>➕ Lägg till lärare</button>
+      <label className="node add file-btn">⬆ Läs in schema (PDF)
+        <input type="file" accept="application/pdf,.pdf" hidden onChange={(e) => {
+          const f = e.target.files?.[0];
+          // Lazy import: pdf.js laddas först vid användning (kräver webbläsar-API:er).
+          if (f) void import('./pdfLasare.js')
+            .then(async ({ lasPdfItems }) => { setVald({ typ: 'schemaPdf', tolkat: tolkaSchemaPdf(await lasPdfItems(f)) }); })
+            .catch((fel: unknown) => kor(() => { throw new Error(`Kunde inte läsa PDF:en: ${(fel as Error).message}`); }, ''));
+          e.currentTarget.value = '';
+        }} />
+      </label>
     </>
   );
 }
@@ -401,6 +443,42 @@ type PassRad = { dag: number; start: string; slut: string };
 /** Nästa veckodag mån–fre med omslag: mån→tis … fre→mån. */
 function nastaDag(dag: number): number { return (dag % 5) + 1; }
 
+/**
+ * Passredigerare för NO/halvklassämnen: varje pass märks Helklass (elever
+ * från Grupp A och B tillsammans), Grupp A eller Grupp B (halvklass).
+ */
+function OmfPassRedigerare({ rader, onChange }: {
+  rader: OmfattningsPass[]; onChange: (r: OmfattningsPass[]) => void;
+}) {
+  const andra = (i: number, delta: Partial<OmfattningsPass>) =>
+    onChange(rader.map((r, ri) => (ri === i ? { ...r, ...delta } : r)));
+  return (
+    <div className="pass-red">
+      {rader.map((r, i) => (
+        <div key={i} className="rad pass-rad">
+          <select aria-label={`Veckodag pass ${i + 1}`} value={r.dag} onChange={(e) => andra(i, { dag: Number(e.target.value) })}>
+            {[1, 2, 3, 4, 5].map((d) => <option key={d} value={d}>{DAGNAMN[d]}</option>)}
+          </select>
+          <input aria-label={`Start pass ${i + 1}`} type="time" value={r.start} onChange={(e) => andra(i, { start: e.target.value })} />
+          –
+          <input aria-label={`Slut pass ${i + 1}`} type="time" value={r.slut} onChange={(e) => andra(i, { slut: e.target.value })} />
+          <select aria-label={`Omfattning pass ${i + 1}`} value={r.omfattning}
+            onChange={(e) => andra(i, { omfattning: e.target.value as OmfattningsPass['omfattning'] })}>
+            <option value="hel">Helklass (A+B)</option>
+            <option value="A">Halvklass · Grupp A</option>
+            <option value="B">Halvklass · Grupp B</option>
+          </select>
+          <button className="icon-btn" title="Ta bort pass" onClick={() => onChange(rader.filter((_x, ri) => ri !== i))}>🗑</button>
+        </div>
+      ))}
+      <button className="btn sec sm" onClick={() => {
+        const sista = rader[rader.length - 1] ?? { dag: 1, start: '08:10', slut: '09:10', omfattning: 'hel' as const };
+        onChange([...rader, { ...sista, dag: nastaDag(sista.dag) }]);
+      }}>➕ Pass</button>
+    </div>
+  );
+}
+
 function PassRedigerare(props: { pass: PassRad[]; onChange: (p: PassRad[]) => void }) {
   const { pass, onChange } = props;
   return (
@@ -454,7 +532,9 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
   const [bokId, setBokId] = useState('');
   const forvalA = useMemo(() => ledigtStandardpass(s, id), [s, id]);
   const [pass, setPass] = useState<PassRad[]>([forvalA]);
-  const [passB, setPassB] = useState<PassRad[]>([{ ...forvalA, dag: nastaDag(forvalA.dag) }]);
+  const [omfRader, setOmfRader] = useState<OmfattningsPass[]>([
+    { ...forvalA, omfattning: 'A' }, { ...forvalA, dag: nastaDag(forvalA.dag), omfattning: 'B' },
+  ]);
   const [konfliktSteg, setKonfliktSteg] = useState(0);
   const [konfliktMsg, setKonfliktMsg] = useState('');
   const [noOrdning, setNoOrdning] = useState<string[]>([...NO_TK_AMNEN]);
@@ -469,7 +549,8 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
   const arNoTk = namn === NO_TK;
   const halv = arNoTk || arHalvklass(namn); // NO+Tk läses i halvklass
   const giltiga = pass.filter((p) => giltigtPass(p as Pass));
-  const giltigaB = passB.filter((p) => giltigtPass(p as Pass));
+  const delade = delaHalvklassPass(omfRader.filter((r) => giltigtPass(r)));
+  const giltigaHalv = delade.schema.length > 0 && delade.schemaB.length > 0;
   const bocker = s.bocker.filter((b) => b.amne === namn);
   return (
     <div className="card">
@@ -509,17 +590,17 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
           </div>
         </div>
       )}
-      {halv && <h4 className="grupp-h">Grupp A <small className="muted">· rum {socrativeRum(namn, k.namn)}</small></h4>}
-      <PassRedigerare pass={pass} onChange={setPass} />
-      {halv && (<>
-        <h4 className="grupp-h">Grupp B <small className="muted">· rum {socrativeRum(namn, k.namn)}</small></h4>
-        <PassRedigerareB pass={passB} onChange={setPassB} />
-      </>)}
+      {halv
+        ? (<>
+            <p className="note">NO läses i hel- och halvklass: märk varje pass <b>Helklass</b> (elever från Grupp A och B tillsammans) eller <b>Halvklass Grupp A/B</b> (bara den gruppens elever). Socrative-rum: {socrativeRum(namn, k.namn)}.</p>
+            <OmfPassRedigerare rader={omfRader} onChange={setOmfRader} />
+          </>)
+        : <PassRedigerare pass={pass} onChange={setPass} />}
       <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
-        <button className="btn" disabled={giltiga.length === 0 || (halv && giltigaB.length === 0)}
-          title={halv && giltigaB.length === 0 ? 'Halvklassämnen behöver schema för både Grupp A och Grupp B' : ''}
+        <button className="btn" disabled={halv ? !giltigaHalv : giltiga.length === 0}
+          title={halv && !giltigaHalv ? 'Båda grupperna behöver minst ett pass (helklasspass räknas för båda)' : ''}
           onClick={() => {
-            const allaPass = [...giltiga, ...(halv ? giltigaB : [])] as Pass[];
+            const allaPass = (halv ? [...delade.schema, ...delade.schemaB] : giltiga) as Pass[];
             const krock = passKonflikter(s, id, allaPass);
             if (krock.length > 0 && konfliktSteg < 2) {
               const steg = konfliktSteg + 1; setKonfliktSteg(steg); setKonfliktMsg(konfliktText(krock, steg)); return;
@@ -533,27 +614,29 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
                   const aid = nyttId('am');
                   if (order === 0) forsta = aid;
                   st = laggTillAmne(st, {
-                    id: aid, klassId: id, namn: amn, schema: giltiga as Pass[],
-                    halvklass: true, schemaB: giltigaB as Pass[], noGrupp: grupp, noOrder: order,
+                    id: aid, klassId: id, namn: amn, schema: delade.schema,
+                    halvklass: true, schemaB: delade.schemaB, noGrupp: grupp, noOrder: order,
                   });
                 });
                 return st;
               }, `NO+Tk skapat: ${noOrdning.join(' → ')} i fyra lika block.`);
               setKonfliktSteg(0); setKonfliktMsg('');
               const nyttForval = ledigtStandardpass(lasStruktur(), id);
-              setPass([nyttForval]); setPassB([{ ...nyttForval, dag: nastaDag(nyttForval.dag) }]);
+              setPass([nyttForval]);
+              setOmfRader([{ ...nyttForval, omfattning: 'A' }, { ...nyttForval, dag: nastaDag(nyttForval.dag), omfattning: 'B' }]);
               if (forsta !== '') setVald({ typ: 'amne', id: forsta });
               return;
             }
             const amne: Amne = {
               id: nyttId('am'), klassId: id, namn, bokId: bokId === '' ? undefined : bokId,
-              schema: giltiga as Pass[],
-              ...(halv ? { halvklass: true as const, schemaB: giltigaB as Pass[] } : {}),
+              schema: halv ? delade.schema : giltiga as Pass[],
+              ...(halv ? { halvklass: true as const, schemaB: delade.schemaB } : {}),
             };
             kor(() => laggTillAmne(lasStruktur(), amne), `Ämne ${namn} skapat${halv ? ' (halvklass, Grupp A/B)' : ''}${krock.length > 0 ? ' — trots schemakrock' : ''}.`);
             setKonfliktSteg(0); setKonfliktMsg('');
             const nyttForval = ledigtStandardpass(lasStruktur(), id);
-            setPass([nyttForval]); setPassB([{ ...nyttForval, dag: nastaDag(nyttForval.dag) }]);
+            setPass([nyttForval]);
+            setOmfRader([{ ...nyttForval, omfattning: 'A' }, { ...nyttForval, dag: nastaDag(nyttForval.dag), omfattning: 'B' }]);
             setVald({ typ: 'amne', id: amne.id });
           }}>{konfliktSteg > 0 ? `⚠ Lägg till ändå (${konfliktSteg}/2)` : arNoTk ? '➕ Skapa NO+Tk (fyra block)' : '➕ Lägg till ämne'}</button>
       </div>
@@ -628,7 +711,7 @@ function Elevlista({ s, klassId, klassNamn, kor }: {
 }
 
 // ── Ämne + planering ─────────────────────────────────────────
-function AmnePanel({ s, id, kor }: { s: Struktur; id: string; kor: (fn: () => Struktur, m: string) => void }) {
+function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn: () => Struktur, m: string) => void; setVald: (v: Vald) => void }) {
   const a = s.amnen.find((x) => x.id === id);
   const klass = s.klasser.find((k) => k.id === a?.klassId);
   const tjanst = s.tjanster.find((t) => t.id === klass?.tjanstId);
@@ -639,12 +722,12 @@ function AmnePanel({ s, id, kor }: { s: Struktur; id: string; kor: (fn: () => St
   const plan = useMemo(() => (a && la && bok ? skapaPlanering(la, a.schema, bok, offset) : []), [a, la, bok, offset]);
   const planB = useMemo(() => (a && la && bok && a.halvklass === true ? skapaPlanering(la, a.schemaB ?? [], bok, offset) : []), [a, la, bok, offset]);
   const harPlanering = s.planeringar.some((p) => p.amneId === id);
+  const [flik, setFlik] = useState<'planering' | 'detalj' | 'oversikt' | 'uppgifter' | 'begrepp' | 'filmer' | 'magma' | 'anteckningar' | 'arsoversikt'>('planering');
   if (!a || !klass || !la) return null;
   const halv = a.halvklass === true;
   const overBudget = a.noGrupp !== undefined && bok !== undefined && noOverBudget(bok, budget);
   const noSyskon = a.noGrupp !== undefined ? s.amnen.filter((x) => x.noGrupp === a.noGrupp).sort((x, y) => (x.noOrder ?? 0) - (y.noOrder ?? 0)) : [];
   const rum = socrativeRum(a.namn, klass.namn);
-  const [flik, setFlik] = useState<'planering' | 'oversikt' | 'uppgifter' | 'begrepp' | 'filmer' | 'magma' | 'anteckningar' | 'arsoversikt'>('planering');
   return (
     <div className="card">
       <h2>📖 {klass.namn} · {a.namn}{halv ? <span className="pillm">halvklass A/B</span> : null}{a.noGrupp !== undefined ? <span className="pillm">NO+Tk block {(a.noOrder ?? 0) + 1}/4</span> : null}</h2>
@@ -658,7 +741,7 @@ function AmnePanel({ s, id, kor }: { s: Struktur; id: string; kor: (fn: () => St
       )}
       <div className="flikar no-print">
         <button className={`flik ${flik === 'planering' ? 'act' : ''}`} onClick={() => setFlik('planering')}>📝 Lektionsplan</button>
-        {([['oversikt', 'ℹ Översikt'], ['uppgifter', '✏ Uppgifter'], ['begrepp', '💡 Begrepp'], ['filmer', '🎬 Filmer'], ['magma', '🟫 Magma'], ['anteckningar', '👥 Anteckningar']] as const).map(([id, txt]) => (
+        {([['detalj', '🧭 Detaljplanering'], ['oversikt', 'ℹ Översikt'], ['uppgifter', '✏ Uppgifter'], ['begrepp', '💡 Begrepp'], ['filmer', '🎬 Filmer'], ['magma', '🟫 Magma'], ['anteckningar', '👥 Anteckningar']] as const).map(([id, txt]) => (
           <button key={id} className={`flik ${flik === id ? 'act' : ''}`} onClick={() => setFlik(id)} disabled={!bok}
             title={!bok ? 'Koppla en bok först' : ''}>{txt}</button>
         ))}
@@ -666,6 +749,7 @@ function AmnePanel({ s, id, kor }: { s: Struktur; id: string; kor: (fn: () => St
       </div>
       {flik === 'arsoversikt' && bok && <Arsoversikt bok={bok} plan={plan} nivaText={`${bok.nivaer.niva1} = introduktion · ${bok.nivaer.niva2} = E-nivå · ${bok.nivaer.niva3} = C/A-nivå`} />}
       {flik === 'arsoversikt' && !bok && <p className="muted">Koppla en bok för att se årsöversikten.</p>}
+      {bok && flik === 'detalj' && <DetaljFlik s={s} amneId={a.id} plan={plan} bok={bok} amnesNamn={a.namn} kor={kor} />}
       {bok && flik === 'oversikt' && <OversiktFlik plan={plan} bok={bok} />}
       {bok && flik === 'uppgifter' && <UppgifterFlik plan={plan} bok={bok} />}
       {bok && flik === 'begrepp' && <BegreppFlik plan={plan} bok={bok} />}
@@ -673,10 +757,9 @@ function AmnePanel({ s, id, kor }: { s: Struktur; id: string; kor: (fn: () => St
       {bok && flik === 'magma' && <MagmaFlik s={s} amneId={a.id} plan={plan} kor={kor} />}
       {bok && flik === 'anteckningar' && <AnteckningarFlik s={s} amneId={a.id} klassNamn={klass.namn} plan={plan} kor={kor} />}
       {flik === 'planering' && (<>
-      <AmneSchemaRedigerare key={a.id} s={s} amne={a} kor={kor} falt="schema"
-        rubrik={halv ? 'Schema Grupp A' : 'Schema'} />
-      {halv && <AmneSchemaRedigerare key={`${a.id}-B`} s={s} amne={a} kor={kor} falt="schemaB"
-        rubrik="Schema Grupp B" />}
+      {halv
+        ? <HalvklassSchemaRedigerare key={a.id} s={s} amne={a} kor={kor} />
+        : <AmneSchemaRedigerare key={a.id} s={s} amne={a} kor={kor} falt="schema" rubrik="Schema" />}
       <label>Bok:{' '}
         <select aria-label="Bok för ämnet" value={a.bokId ?? ''}
           onChange={(e) => kor(() => uppdateraAmne(lasStruktur(), id, { bokId: e.target.value }),
@@ -702,7 +785,11 @@ function AmnePanel({ s, id, kor }: { s: Struktur; id: string; kor: (fn: () => St
       </>)}
       </>)}
       <div className="modal-actions">
-        <button className="btn warn" onClick={() => kor(() => taBortAmne(lasStruktur(), id), 'Ämne borttaget.')}>🗑 Ta bort ämne</button>
+        <button className="btn warn" onClick={() => {
+          const klassId = klass.id;
+          kor(() => taBortAmne(lasStruktur(), id), 'Ämne borttaget.');
+          setVald({ typ: 'klass', id: klassId });
+        }}>🗑 Ta bort ämne</button>
       </div>
     </div>
   );
@@ -719,11 +806,88 @@ function TypChip({ typ }: { typ: string }) {
   return <span className="typ-chip" style={{ background: bg }}>{txt}</span>;
 }
 
+/** Prio m.fl. använder färgnivåer (Grön/Blå/Röd) — då visas färgmarkörer.
+ * Matematik Y använder ETT/TVÅ/TRE (versaler) — då visas namnen ordagrant. */
+function arFargnivaer(bok: Bok): boolean { return bok.nivaer.niva1 === 'Grön'; }
+
+/**
+ * 🧭 Detaljplanering: egen flik med lektionsmeny (◀ ▶ + lista), begrepp och
+ * filmlänkar för lektionen, och hela den detaljerade planeringen öppen —
+ * presentation, sammanfattning/mål, läxa/läxförhör, exit, laboration, flippat.
+ */
+function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor }: {
+  s: Struktur; amneId: string; plan: PlaneradLektion[]; bok: Bok; amnesNamn: string;
+  kor: (fn: () => Struktur, m: string) => void;
+}) {
+  const [idx, setIdx] = useState(0);
+  const [nyFilm, setNyFilm] = useState('');
+  if (plan.length === 0) return <p className="muted">Skapa en planering först.</p>;
+  const i = Math.min(idx, plan.length - 1);
+  const rad = plan[i];
+  const begrepp = begreppForLektion(bok, rad.kapitel, rad.lektion);
+  const lp = hamtaLektionsplan(s, amneId, i);
+  const filmer = lp?.filmer ?? [];
+  return (
+    <div className="detaljflik">
+      <div className="rad" style={{ gap: 8 }}>
+        <span>Välj lektion:</span>
+        <select aria-label="Välj lektion" value={i} onChange={(e) => setIdx(Number(e.target.value))} style={{ flex: 1 }}>
+          {plan.map((r, ri) => <option key={ri} value={ri}>Lektion {ri + 1} — {r.lektion.avsnitt} · Del {r.lektion.del}</option>)}
+        </select>
+        <button className="btn sec sm" disabled={i === 0} onClick={() => setIdx(i - 1)}>◀</button>
+        <button className="btn sec sm" disabled={i === plan.length - 1} onClick={() => setIdx(i + 1)}>▶</button>
+        <span className="pillm">Lektion {i + 1} / {plan.length}</span>
+      </div>
+      <p className="muted small">{rad.datum !== null ? `v.${rad.vecka} · ${rad.datum} · ${rad.start}–${rad.slutTid}` : 'ryms ej i skolåret'}</p>
+
+      <div className="detalj-menyer">
+        <div className="uppg-kort">
+          <b>💡 Begrepp</b> <small className="muted">(läxa till delkapitlet)</small>
+          <div className="rad" style={{ flexWrap: 'wrap', gap: 5, marginTop: 4 }}>
+            {begrepp.length === 0 ? <span className="muted small">Inga begrepp för lektionen.</span>
+              : begrepp.map((b) => <span key={b} className="chip">{b}</span>)}
+          </div>
+        </div>
+        <div className="uppg-kort">
+          <b>🎬 Filmer</b> <small className="muted">(länkar för lektionen)</small>
+          {filmer.map((f, fi) => {
+            const [titel, url] = f.includes('|') ? [f.split('|')[0], f.split('|').slice(1).join('|')] : [f, f];
+            return (
+              <div key={fi} className="rad film-rad">
+                <a href={url} target="_blank" rel="noreferrer">▶ {titel}</a>
+                <button className="icon-btn" title="Ta bort film" onClick={() => kor(() => sattLektionsplan(lasStruktur(), {
+                  ...(hamtaLektionsplan(lasStruktur(), amneId, i) ?? { id: `lp-${amneId}-${i}`, amneId, lektionsIndex: i }),
+                  filmer: filmer.filter((_x, xi) => xi !== fi),
+                }), 'Film borttagen.')}>✕</button>
+              </div>
+            );
+          })}
+          <div className="rad" style={{ marginTop: 4 }}>
+            <input aria-label="Ny film" placeholder="Titel|https://binogi.se/…" value={nyFilm}
+              onChange={(e) => setNyFilm(e.target.value)} style={{ flex: 1 }} />
+            <button className="btn sec sm" disabled={nyFilm.trim() === ''} onClick={() => {
+              kor(() => sattLektionsplan(lasStruktur(), {
+                ...(hamtaLektionsplan(lasStruktur(), amneId, i) ?? { id: `lp-${amneId}-${i}`, amneId, lektionsIndex: i }),
+                filmer: [...filmer, nyFilm.trim()],
+              }), `Film tillagd på lektion ${i + 1}.`);
+              setNyFilm('');
+            }}>+ Film</button>
+          </div>
+        </div>
+      </div>
+
+      <NoPlanering key={`${amneId}-${i}`} s={s} amneId={amneId} lektionsIndex={i} kor={kor}
+        amnesNamn={amnesNamn} rad={rad} bok={bok} alltidOppen />
+    </div>
+  );
+}
+
 function OversiktFlik({ plan, bok }: { plan: PlaneradLektion[]; bok: Bok }) {
+  const farg = arFargnivaer(bok);
   return (
     <table className="tbl plan">
       <thead><tr><th>Lek.</th><th>Vecka</th><th>Datum</th><th>Tid</th><th>Avsnitt</th><th>Typ</th>
-        <th>🟢 {bok.nivaer.niva1}</th><th>🔵 {bok.nivaer.niva2}</th><th>🔴 {bok.nivaer.niva3}</th></tr></thead>
+        <th>{farg ? '🟢 ' : ''}{bok.nivaer.niva1}</th><th>{farg ? '🔵 ' : ''}{bok.nivaer.niva2}</th><th>{farg ? '🔴 ' : ''}{bok.nivaer.niva3}</th></tr></thead>
       <tbody>{plan.map((r, i) => (
         <tr key={i} className={r.datum === null ? 'saknas' : ''}>
           <td>{i + 1}</td><td>{r.vecka !== null ? `v.${r.vecka}` : ''}</td><td>{r.datum ?? 'ryms ej'}</td>
@@ -747,10 +911,11 @@ function UppgifterFlik({ plan, bok }: { plan: PlaneradLektion[]; bok: Bok }) {
       </div>
       {plan.map((r, i) => {
         const { minimum } = arbetsNivaer(r.lektion);
+        const farg = arFargnivaer(bok);
         const kort: Array<[string, string, string, string]> = [];
-        if (har(r.lektion.niva1)) kort.push([`${N.niva1} – introduktion`, r.lektion.niva1, 'niva-gron', 'Obligatorisk']);
-        if (har(r.lektion.niva2)) kort.push([`${N.niva2} – E-nivå`, r.lektion.niva2, 'niva-bla', 'Obligatorisk']);
-        if (har(r.lektion.niva3)) kort.push([`${N.niva3} – C/A-nivå`, r.lektion.niva3, 'niva-rod', 'Frivillig / vid lektionstid']);
+        if (har(r.lektion.niva1)) kort.push([`${N.niva1} – introduktion`, r.lektion.niva1, farg ? 'niva-gron' : 'niva-neutral', 'Obligatorisk']);
+        if (har(r.lektion.niva2)) kort.push([`${N.niva2} – E-nivå`, r.lektion.niva2, farg ? 'niva-bla' : 'niva-neutral', 'Obligatorisk']);
+        if (har(r.lektion.niva3)) kort.push([`${N.niva3} – C/A-nivå`, r.lektion.niva3, farg ? 'niva-rod' : 'niva-neutral2', 'Frivillig / vid lektionstid']);
         return (
           <div key={i} className="uppg-kort">
             <div className="rad"><b>Lektion {i + 1} — {r.lektion.avsnitt}</b><span className="spacer" />
@@ -1133,6 +1298,43 @@ function AmneSchemaRedigerare({ s, amne, kor, falt, rubrik }: {
   );
 }
 
+/** Halvklass-/NO-schemat redigeras som EN lista där varje pass är Helklass/Grupp A/Grupp B. */
+function HalvklassSchemaRedigerare({ s, amne, kor }: {
+  s: Struktur; amne: Amne; kor: (fn: () => Struktur, m: string) => void;
+}) {
+  const nuvarande = kombineraHalvklassPass(amne.schema, amne.schemaB ?? []);
+  const [rader, setRader] = useState<OmfattningsPass[]>(nuvarande.map((r) => ({ ...r })));
+  const [sparat, setSparat] = useState(false);
+  const [konfliktSteg, setKonfliktSteg] = useState(0);
+  const [konfliktMsg, setKonfliktMsg] = useState('');
+  const giltiga = rader.every((r) => giltigtPass(r));
+  const delade = delaHalvklassPass(rader.filter((r) => giltigtPass(r)));
+  const komplett = delade.schema.length > 0 && delade.schemaB.length > 0;
+  const andrad = JSON.stringify(rader) !== JSON.stringify(nuvarande);
+  const beskrivning = (r: OmfattningsPass) =>
+    `${DAGNAMN[r.dag]} ${r.start}–${r.slut} ${r.omfattning === 'hel' ? 'Helklass' : `Grupp ${r.omfattning}`}`;
+  return (
+    <div className="schema-red">
+      <h3>Schema <small className="muted">{nuvarande.map(beskrivning).join(' · ')}</small></h3>
+      <p className="note">Helklass = elever från Grupp A och B tillsammans · Halvklass Grupp A/B = bara den gruppens elever. Helklasspass räknas in i båda gruppernas planering.</p>
+      <OmfPassRedigerare rader={rader} onChange={(r) => { setRader(r); setSparat(false); setKonfliktSteg(0); setKonfliktMsg(''); }} />
+      <button className="btn" disabled={!andrad || !giltiga || !komplett}
+        title={!komplett ? 'Båda grupperna behöver minst ett pass (helklasspass räknas för båda)' : !andrad ? 'Inga osparade ändringar' : ''}
+        onClick={() => {
+          const krock = passKonflikter(s, amne.klassId, [...delade.schema, ...delade.schemaB], amne.id);
+          if (krock.length > 0 && konfliktSteg < 2) {
+            const steg = konfliktSteg + 1; setKonfliktSteg(steg); setKonfliktMsg(konfliktText(krock, steg)); return;
+          }
+          kor(() => uppdateraAmne(lasStruktur(), amne.id, { schema: delade.schema, schemaB: delade.schemaB }),
+            `Schema sparat (${rader.length} pass/vecka)${krock.length > 0 ? ' — trots schemakrock' : ''} — planeringen har räknats om.`);
+          setSparat(true); setKonfliktSteg(0); setKonfliktMsg(''); setTimeout(() => setSparat(false), 2500);
+        }}>{sparat ? '✓ Sparat!' : konfliktSteg > 0 ? `⚠ Spara ändå (${konfliktSteg}/2)` : '💾 Spara schema'}</button>
+      {andrad && !sparat && konfliktSteg === 0 && <span className="osparat">● osparade ändringar</span>}
+      {konfliktMsg && <p className="status warn">{konfliktMsg}</p>}
+    </div>
+  );
+}
+
 // ── Lektionskort (BAM: Läxförhör → Genomgång → Arbete → Exit ticket) ──
 function Lektionskort(props: {
   rad: PlaneradLektion; bok: Bok; amnesNamn: string; klassNamn: string;
@@ -1183,7 +1385,7 @@ function Lektionskort(props: {
         <div className="nivaer">
           {[0, 1, 2].map((i) => har(nivaUppg[i]) && (
             <div key={i} className={`niva n${i + 1}`}>
-              <h6>{nivaNamn[i].toUpperCase()} {i === 0 ? '– INTRODUKTION' : i === 1 ? '– E-NIVÅ' : '– C/A-NIVÅ'}</h6>
+              <h6>{nivaNamn[i]} {i === 0 ? '– introduktion' : i === 1 ? '– E-nivå' : '– C/A-nivå'}</h6>
               <p>Uppg. {nivaUppg[i]}</p>
               <small>{i + 1 < 3 ? (i + 1 <= minimum ? 'Obligatorisk' : i === 1 ? 'Obligatorisk' : '') : 'Frivillig / vid lektionstid'}</small>
             </div>
@@ -1227,9 +1429,9 @@ function Lektionskort(props: {
  * flippat underlag (teoritext, film, quiz + elevlayout) och laboration
  * (länk eller frågeställning för systematisk undersökning).
  */
-function NoPlanering({ s, amneId, lektionsIndex, kor, amnesNamn, rad, bok }: {
+function NoPlanering({ s, amneId, lektionsIndex, kor, amnesNamn, rad, bok, alltidOppen = false }: {
   s: Struktur; amneId: string; lektionsIndex: number; kor: (fn: () => Struktur, m: string) => void;
-  amnesNamn: string; rad: PlaneradLektion; bok: Bok;
+  amnesNamn: string; rad: PlaneradLektion; bok: Bok; alltidOppen?: boolean;
 }) {
   const arNo = (NO_TK_AMNEN as readonly string[]).includes(amnesNamn);
   const sparad = hamtaLektionsplan(s, amneId, lektionsIndex);
@@ -1244,7 +1446,7 @@ function NoPlanering({ s, amneId, lektionsIndex, kor, amnesNamn, rad, bok }: {
     flippTeori: '', flippFilm: '', flippQuiz: '', labLank: '', labFraga: '', genomgang: '',
   };
   const [plan, setPlan] = useState<LektionsPlan>({ ...tomPlan, ...(sparad ?? {}) });
-  const [oppen, setOppen] = useState(false);
+  const [oppen, setOppen] = useState(alltidOppen);
   const andra = (delta: Partial<LektionsPlan>) => setPlan((f) => ({ ...f, ...delta }));
   const falt = (label: string, nyckel: keyof LektionsPlan, placeholder = '', rad3 = false) => (
     <label className="np-falt">{label}
@@ -1257,9 +1459,9 @@ function NoPlanering({ s, amneId, lektionsIndex, kor, amnesNamn, rad, bok }: {
   );
   return (
     <div className="no-planering no-print-safe">
-      <button className="btn sec sm" onClick={() => setOppen(!oppen)}>
+      {!alltidOppen && <button className="btn sec sm" onClick={() => setOppen(!oppen)}>
         {oppen ? '▲ Dölj detaljerad planering' : `▼ Detaljerad planering${arNo ? ' (NO)' : ''}${sparad !== null ? ' ·  ifylld' : ''}`}
-      </button>
+      </button>}
       {oppen && (
         <div className="np-grid">
           {falt('Presentation', 'presentation', 'T.ex. Fotosyntes.pptx')}
@@ -1538,6 +1740,54 @@ function isoVeckaLbl(datum: string): number {
   d.setUTCDate(d.getUTCDate() + 4 - day);
   const y0 = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
   return Math.ceil(((d.getTime() - y0.getTime()) / 86400000 + 1) / 7);
+}
+
+// ── Schema-PDF: förhandsvisning + skapa tjänst ───────────────
+const DAGKORT5 = ['Mån', 'Tis', 'Ons', 'Tor', 'Fre'];
+function SchemaPdfPanel({ s, tolkat, kor, setVald }: {
+  s: Struktur; tolkat: TolkatSchema; kor: (fn: () => Struktur, m: string) => void; setVald: (v: Vald) => void;
+}) {
+  const [skolarId, setSkolarId] = useState(s.skolar[0]?.id ?? '');
+  const klasser = [...new Set(tolkat.lektioner.map((l) => l.klass))].sort();
+  const omf = (o: 'hel' | 'A' | 'B') => (o === 'hel' ? 'Helklass' : `Grupp ${o}`);
+  return (
+    <div className="card">
+      <h2>📄 Inläst schema{tolkat.lasar !== null ? ` · ${tolkat.lasar}` : ''}</h2>
+      <p className="muted">Lärare: <b>{tolkat.larareNamn}</b> ({tolkat.signatur})</p>
+      {tolkat.lektioner.length === 0 && <p className="status warn">⚠ Inga lektioner kunde tolkas ur PDF:en — kontrollera att det är ett utskrivet veckoschema (Skola24-stil).</p>}
+      {klasser.map((k) => (
+        <div key={k} className="uppg-kort">
+          <b>👥 {k}</b>
+          <table className="tbl">
+            <thead><tr><th>Dag</th><th>Tid</th><th>Ämne</th><th>Omfattning</th><th>Sal</th></tr></thead>
+            <tbody>{tolkat.lektioner.filter((l) => l.klass === k).map((l, i) => (
+              <tr key={i}>
+                <td>{DAGKORT5[l.dag - 1]}</td><td>{l.start}–{l.slut}</td><td>{l.amne}</td>
+                <td>{l.amne === 'Matematik' ? '—' : omf(l.omfattning)}</td><td>{l.sal}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      ))}
+      {tolkat.ovrigt.length > 0 && (
+        <p className="note">Hoppas över (ej klasslektioner): {tolkat.ovrigt.join(' · ')}</p>
+      )}
+      <div className="rad" style={{ gap: 8 }}>
+        <label>Koppla till skolår:{' '}
+          <select aria-label="Skolår för schemat" value={skolarId} onChange={(e) => setSkolarId(e.target.value)}>
+            {s.skolar.length === 0 && <option value="">— skapa ett skolår först —</option>}
+            {s.skolar.map((la) => <option key={la.id} value={la.id}>{la.namn}</option>)}
+          </select>
+        </label>
+        <button className="btn" disabled={skolarId === '' || tolkat.lektioner.length === 0} onClick={() => {
+          kor(() => skapaTjanstFranSchema(lasStruktur(), tolkat, skolarId),
+            `Tjänst skapad ur schemat: ${tolkat.larareNamn}, ${klasser.join(' & ')} med Matematik och NO+Tk. Koppla böcker och skapa planeringar.`);
+          setVald(null);
+        }}>▶ Skapa tjänst ur schemat</button>
+      </div>
+      <p className="muted small">NO+Tk skapas som fyra blockdelämnen (Biologi → Fysik → Kemi → Teknik — ordningen kan ändras efteråt) med hel-/halvklasspassen ur schemat (:a = Grupp A, :b = Grupp B).</p>
+    </div>
+  );
 }
 
 // ── GitHub-synk ──────────────────────────────────────────────

@@ -194,3 +194,9 @@ body { margin: 0; font: 14px/1.45 system-ui, 'Segoe UI', sans-serif; background:
 .film-rad { border-bottom: 1px dashed var(--ram); padding: 2px 0; }
 .ant-rad { display: flex; flex-direction: column; gap: 3px; margin: 8px 0; }
 .ant-rad textarea { border: 1px solid var(--ram); border-radius: 6px; padding: 6px 8px; font: inherit; }
+.niva-neutral { background: #f2f4f7; }
+.niva-neutral2 { background: #e9ebef; }
+.niva-neutral2 .un-obl, .niva-neutral .un-obl { color: #444; }
+.node.no-nod { font-weight: 600; color: #5a3d7a; }
+.detalj-menyer { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 8px 0; }
+@media (max-width: 900px) { .detalj-menyer { grid-template-columns: 1fr; } }

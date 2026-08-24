@@ -12,9 +12,13 @@ import type {
 } from './typer.js';
 
 let seq = 0;
-/** Deterministiskt unikt id (testbart via reset). */
-export function nyttId(prefix: string): string { seq += 1; return `${prefix}-${seq.toString(36)}`; }
-export function resetIdRaknare(): void { seq = 0; }
+// Sessionsunik bas: förhindrar att id:n återanvänds mellan sidladdningar
+// (annars kunde ett nytt ämne ärva ett borttaget ämnes innehåll om räknaren
+// startar om). Testerna får deterministiska id:n via resetIdRaknare.
+let bas = Date.now().toString(36);
+/** Unikt id: sessionsbas + räknare (deterministiskt i test via reset). */
+export function nyttId(prefix: string): string { seq += 1; return `${prefix}-${bas}-${seq.toString(36)}`; }
+export function resetIdRaknare(): void { seq = 0; bas = 'test'; }
 
 export function giltigtPass(p: Pass): boolean {
   return p.dag >= 1 && p.dag <= 5 && /^\d{2}:\d{2}$/.test(p.start) && /^\d{2}:\d{2}$/.test(p.slut) && p.start < p.slut;
@@ -149,6 +153,10 @@ export function taBortAmne(s: Struktur, id: string): Struktur {
     ...s,
     amnen: s.amnen.filter((a) => a.id !== id),
     planeringar: s.planeringar.filter((p) => p.amneId !== id),
+    // Lektionsplaner (detaljerad planering, filmer, Magma, anteckningar) hör
+    // till ämnet och får aldrig leva kvar — annars ärver ett återlagt ämne
+    // det gamla innehållet.
+    lektionsplaner: s.lektionsplaner.filter((p) => p.amneId !== id),
   };
 }
 
@@ -195,6 +203,66 @@ export function larareSchema(s: Struktur, larareId: string): SchemaRad[] {
   const klasser = s.klasser.filter((k) => tjanster.has(k.tjanstId));
   return klasser.flatMap((k) => klassSchema(s, k.id))
     .sort((x, y) => x.dag - y.dag || x.start.localeCompare(y.start));
+}
+
+/**
+ * Sanerar dubblett-id:n (skapade av äldre versioner där id-räknaren startade
+ * om per session): första förekomsten behåller sitt id, senare dubbletter får
+ * nya unika id:n. Referenser (planeringar, lektionsplaner, klasser, ämnen …)
+ * pekar kvar på första förekomsten. Utan detta kan två ämnen dela id — då
+ * markeras och öppnas fel ämne i trädet.
+ */
+export function saneraIdn(s: Struktur): Struktur {
+  const ny = { ...s };
+  const gorUnika = <T extends { id: string }>(lista: T[], prefix: string): T[] => {
+    const sedda = new Set<string>();
+    return lista.map((x) => {
+      if (!sedda.has(x.id)) { sedda.add(x.id); return x; }
+      const nyId = nyttId(prefix);
+      sedda.add(nyId);
+      return { ...x, id: nyId };
+    });
+  };
+  ny.skolar = gorUnika(ny.skolar, 'la');
+  ny.larare = gorUnika(ny.larare, 'lr');
+  ny.tjanster = gorUnika(ny.tjanster, 'tj');
+  ny.klasser = gorUnika(ny.klasser, 'k');
+  ny.elever = gorUnika(ny.elever, 'el');
+  ny.amnen = gorUnika(ny.amnen, 'am');
+  ny.planeringar = gorUnika(ny.planeringar, 'pl');
+  ny.lektionsplaner = gorUnika(ny.lektionsplaner, 'lp');
+  return ny;
+}
+
+/**
+ * Halvklasspass med omfattning: Helklass = elever från Grupp A och B
+ * tillsammans; Grupp A/B = halvklass med bara den gruppens elever.
+ * Lagringen är oförändrad (schema = Grupp A:s pass, schemaB = Grupp B:s):
+ * ett helklasspass ligger i båda listorna.
+ */
+export interface OmfattningsPass extends Pass { omfattning: 'hel' | 'A' | 'B'; }
+
+const passNyckel = (p: Pass): string => `${p.dag}|${p.start}|${p.slut}`;
+
+/** schema+schemaB → radlista med omfattning (för redigering). */
+export function kombineraHalvklassPass(schema: Pass[], schemaB: Pass[]): OmfattningsPass[] {
+  const bNycklar = new Set(schemaB.map(passNyckel));
+  const anvandaB = new Set<string>();
+  const ut: OmfattningsPass[] = schema.map((p) => {
+    if (bNycklar.has(passNyckel(p))) { anvandaB.add(passNyckel(p)); return { ...p, omfattning: 'hel' as const }; }
+    return { ...p, omfattning: 'A' as const };
+  });
+  for (const p of schemaB) if (!anvandaB.has(passNyckel(p))) ut.push({ ...p, omfattning: 'B' });
+  return ut.sort((a, b) => a.dag - b.dag || a.start.localeCompare(b.start));
+}
+
+/** Radlista → {schema, schemaB}: hel hamnar i båda, A/B i sin lista. */
+export function delaHalvklassPass(rader: OmfattningsPass[]): { schema: Pass[]; schemaB: Pass[] } {
+  const ren = ({ dag, start, slut }: OmfattningsPass): Pass => ({ dag, start, slut });
+  return {
+    schema: rader.filter((r) => r.omfattning !== 'B').map(ren),
+    schemaB: rader.filter((r) => r.omfattning !== 'A').map(ren),
+  };
 }
 
 /** Upsert av en detaljerad lektionsplan (nyckel: ämne + lektionsposition). */

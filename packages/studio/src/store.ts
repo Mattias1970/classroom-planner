@@ -4,7 +4,7 @@
  * minnesfallback och export/import för backup. All logik bor i kärnan —
  * här finns bara läs/skriv.
  */
-import { tomStruktur, type Struktur } from '@planner/kernel';
+import { saneraIdn, tomStruktur, type Struktur } from '@planner/kernel';
 
 const KEY = 'classroom-planner.studio.v2';
 const mem = new Map<string, string>();
@@ -23,8 +23,16 @@ function lsSet(k: string, v: string): void {
 export function lasStruktur(): Struktur {
   const raw = lsGet(KEY);
   if (raw === null) return tomStruktur();
-  try { return { ...tomStruktur(), ...(JSON.parse(raw) as Struktur) }; }
-  catch { return tomStruktur(); }
+  try {
+    const inlast = { ...tomStruktur(), ...(JSON.parse(raw) as Struktur) };
+    // saneraIdn: äldre sessioner kunde ge dubblett-id:n (t.ex. två ämnen med
+    // samma id) — då markeras/öppnas fel ämne i trädet. Dubbletter döps om,
+    // och resultatet SPARAS direkt: annars får dubbletterna nya id:n vid varje
+    // läsning, vald-id:t pekar fel och panelen blir blank.
+    const ren = saneraIdn(inlast);
+    if (JSON.stringify(ren) !== JSON.stringify(inlast)) lsSet(KEY, JSON.stringify(ren));
+    return ren;
+  } catch { return tomStruktur(); }
 }
 
 export function sparaStruktur(s: Struktur): void {

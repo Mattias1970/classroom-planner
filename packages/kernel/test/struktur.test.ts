@@ -73,10 +73,10 @@ describe('trädet: referensintegritet och kaskad', () => {
   });
 
   it('nyttId är unikt och resetbart', () => {
-    expect(nyttId('k')).toBe('k-1');
-    expect(nyttId('k')).toBe('k-2');
+    expect(nyttId('k')).toBe('k-test-1');
+    expect(nyttId('k')).toBe('k-test-2');
     resetIdRaknare();
-    expect(nyttId('k')).toBe('k-1');
+    expect(nyttId('k')).toBe('k-test-1');
   });
 });
 
@@ -294,7 +294,7 @@ describe('kalenderfärger', () => {
 
 // ── NO-planering: begreppsrum + lektionsplaner ──
 import { begreppsRum, delkapitelUrAvsnitt, foreslagnaRum } from '../src/domain/amnen.js';
-import { hamtaLektionsplan, sattLektionsplan } from '../src/domain/struktur.js';
+import { hamtaLektionsplan, sattLektionsplan, taBortAmne } from '../src/domain/struktur.js';
 
 describe('begreppsrum (NO)', () => {
   it('följer mönstret Biologi41 / Biologi412 / Biologi4123 / Biologi42', () => {
@@ -325,5 +325,79 @@ describe('lektionsplaner (detaljerad NO-planering)', () => {
     expect(hamtaLektionsplan(s, 'am', 0)?.presentation).toBe('Cellen.pptx');
     expect(hamtaLektionsplan(s, 'am', 5)).toBeNull();
     expect(() => sattLektionsplan(s, { id: 'x', amneId: 'saknas', lektionsIndex: 0 })).toThrow('Ämnet finns inte');
+  });
+});
+
+describe('borttaget ämne lämnar inget innehåll efter sig', () => {
+  it('taBortAmne städar lektionsplaner och planeringar; klass/tjänst kaskadstädar', () => {
+    let { s } = bygg();
+    s = sattLektionsplan(s, { id: 'lp', amneId: 'am', lektionsIndex: 0, anteckning: 'Gammalt innehåll' });
+    s = taBortAmne(s, 'am');
+    expect(s.lektionsplaner).toHaveLength(0);
+    expect(s.planeringar.filter((p) => p.amneId === 'am')).toHaveLength(0);
+    // kaskad via klass
+    let { s: s2 } = bygg();
+    s2 = sattLektionsplan(s2, { id: 'lp', amneId: 'am', lektionsIndex: 0, anteckning: 'x' });
+    s2 = taBortKlass(s2, 'k8b');
+    expect(s2.lektionsplaner).toHaveLength(0);
+  });
+
+  it('nya ämnen ärver inte borttagna ämnens innehåll även om räknaren startar om', () => {
+    resetIdRaknare();
+    let { s } = bygg();
+    const id1 = nyttId('am');
+    s = laggTillAmne(s, { id: id1, klassId: 'k8b', namn: 'Biologi', schema: [{ dag: 1, start: '10:00', slut: '11:00' }] });
+    s = sattLektionsplan(s, { id: 'lp', amneId: id1, lektionsIndex: 0, anteckning: 'Biologianteckning' });
+    s = taBortAmne(s, id1);
+    resetIdRaknare();                       // simulerar omladdad sida (räknaren om från 0)
+    const id2 = nyttId('am');
+    s = laggTillAmne(s, { id: id2, klassId: 'k8b', namn: 'Fysik', schema: [{ dag: 2, start: '10:00', slut: '11:00' }] });
+    // Även om id2 skulle råka bli lika med id1 finns inget gammalt innehåll kvar:
+    expect(hamtaLektionsplan(s, id2, 0)).toBeNull();
+  });
+});
+
+// ── saneraIdn + hel-/halvklasspass ──
+import { delaHalvklassPass, kombineraHalvklassPass, saneraIdn } from '../src/domain/struktur.js';
+
+describe('saneraIdn — dubblett-id:n från äldre sessioner', () => {
+  it('ger senare dubbletter nya id:n så trädet blir entydigt', () => {
+    resetIdRaknare();
+    let { s } = bygg(); // ämne 'am' i 8B
+    // Simulera gammal data: ett ANNAT ämne råkar ha SAMMA id 'am' (annan klass)
+    s = { ...s, klasser: [...s.klasser, { id: 'k8a', tjanstId: 'tj', namn: '8A' }] };
+    s = { ...s, amnen: [...s.amnen, { id: 'am', klassId: 'k8a', namn: 'Biologi', schema: [{ dag: 1, start: '10:00', slut: '11:00' }] }] };
+    const ren = saneraIdn(s);
+    const idn = ren.amnen.map((a) => a.id);
+    expect(new Set(idn).size).toBe(idn.length);            // alla unika
+    expect(ren.amnen[0].id).toBe('am');                    // första behåller sitt id
+    expect(ren.amnen[1].id).not.toBe('am');                // dubbletten döps om
+    expect(ren.amnen[1].namn).toBe('Biologi');
+  });
+});
+
+describe('hel-/halvklasspass för NO', () => {
+  const hel: Pass = { dag: 1, start: '09:00', slut: '10:00' };
+  const a: Pass = { dag: 2, start: '09:00', slut: '10:00' };
+  const b: Pass = { dag: 4, start: '09:00', slut: '10:00' };
+  it('delaHalvklassPass: helklass hamnar i båda grupperna, A/B i sin', () => {
+    const { schema, schemaB } = delaHalvklassPass([
+      { ...hel, omfattning: 'hel' }, { ...a, omfattning: 'A' }, { ...b, omfattning: 'B' },
+    ]);
+    expect(schema).toEqual([hel, a]);       // Grupp A: helklass + A-pass
+    expect(schemaB).toEqual([hel, b]);      // Grupp B: helklass + B-pass
+  });
+  it('kombineraHalvklassPass återskapar omfattningen ur schema/schemaB', () => {
+    const rader = kombineraHalvklassPass([hel, a], [hel, b]);
+    expect(rader).toEqual([
+      { ...hel, omfattning: 'hel' },
+      { ...a, omfattning: 'A' },
+      { ...b, omfattning: 'B' },
+    ]);
+  });
+  it('tur och retur är stabil', () => {
+    const rader = kombineraHalvklassPass([hel, a], [hel, b]);
+    const { schema, schemaB } = delaHalvklassPass(rader);
+    expect(kombineraHalvklassPass(schema, schemaB)).toEqual(rader);
   });
 });
