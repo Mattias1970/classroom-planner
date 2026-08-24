@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { skapaTjanstFranSchema, tolkaSchemaPdf, type PdfTextItem } from '../src/domain/schemapdf.js';
-import { laggTillSkolar, resetIdRaknare } from '../src/domain/struktur.js';
+import { laggTillSkolar, larareSchema, resetIdRaknare, saneraIdn, schemaKonflikter } from '../src/domain/struktur.js';
 import { tomStruktur } from '../src/domain/typer.js';
 
 const items = JSON.parse(readFileSync(join(__dirname, 'fixtures/mittschema.json'), 'utf-8')) as PdfTextItem[];
@@ -65,5 +65,36 @@ describe('skapaTjanstFranSchema', () => {
       { dag: 5, start: '08:25', slut: '09:35' },
     ]);
     expect(s.amnen.filter((a) => a.klassId === s.klasser[0].id)).toHaveLength(5); // Ma + 4 NO-delämnen
+  });
+});
+
+describe('lärarvyn efter PDF-import', () => {
+  it('NO+Tk-blocket visas som EN rad per pass och ger inga falska konflikter', () => {
+    let s = tomStruktur();
+    s = laggTillSkolar(s, { id: 'la', namn: 'Läsåret 2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = skapaTjanstFranSchema(s, tolkaSchemaPdf(items), 'la');
+    const schema = larareSchema(s, s.larare[0].id);
+    // Mån 09:15 8B: fyra delämnen × två grupper → EN rad 'NO+Tk'
+    const man915 = schema.filter((r) => r.dag === 1 && r.start === '09:15');
+    expect(man915).toHaveLength(1);
+    expect(man915[0].amnesNamn).toBe('NO+Tk');
+    // Hela schemat: 8 Ma + 8 NO-block = 16 rader, inga dubbletter
+    expect(schema).toHaveLength(16);
+    expect(schemaKonflikter(schema)).toHaveLength(0);        // 136 → 0
+  });
+
+  it('dubbel import ger EN lärare (saneraIdn slår ihop på signatur, tjänster pekas om)', () => {
+    let s = tomStruktur();
+    s = laggTillSkolar(s, { id: 'la', namn: 'Läsåret 2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    const t = tolkaSchemaPdf(items);
+    s = skapaTjanstFranSchema(s, t, 'la');
+    s = skapaTjanstFranSchema(s, t, 'la');   // andra importen återanvänder läraren
+    expect(s.larare).toHaveLength(1);
+    // Gammal data med två lärare (före dedup-fixen): sanering slår ihop
+    const gammal = { ...s, larare: [...s.larare, { id: 'lr-dubblett', namn: 'Mattias Terfelt', signatur: 'MatTe' }],
+      tjanster: s.tjanster.map((tj, i) => (i === 1 ? { ...tj, larareId: 'lr-dubblett' } : tj)) };
+    const ren = saneraIdn(gammal);
+    expect(ren.larare).toHaveLength(1);
+    expect(ren.tjanster.every((tj) => tj.larareId === ren.larare[0].id)).toBe(true);
   });
 });

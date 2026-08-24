@@ -197,12 +197,33 @@ export function elevSchema(s: Struktur, elevId: string): SchemaRad[] {
   return klassSchema(s, elev.klassId).filter((r) => r.grupp === undefined || r.grupp === elev.grupp);
 }
 
-/** Lärarens schema HÄRLEDS: alla pass i lärarens tjänsters klassers ämnen. */
+/**
+ * Lärarens schema HÄRLEDS: alla pass i lärarens tjänsters klassers ämnen.
+ * Samma fysiska pass visas EN gång: NO+Tk-blockets fyra delämnen (och ett
+ * helklasspass som ligger i både Grupp A:s och B:s listor) delar tid och sal
+ * — de slås ihop till en rad, som får namnet 'NO+Tk' när alla ihopslagna
+ * ämnen är blockdelämnen.
+ */
 export function larareSchema(s: Struktur, larareId: string): SchemaRad[] {
   const tjanster = new Set(s.tjanster.filter((t) => t.larareId === larareId).map((t) => t.id));
   const klasser = s.klasser.filter((k) => tjanster.has(k.tjanstId));
-  return klasser.flatMap((k) => klassSchema(s, k.id))
-    .sort((x, y) => x.dag - y.dag || x.start.localeCompare(y.start));
+  const alla = klasser.flatMap((k) => klassSchema(s, k.id));
+  const grupper = new Map<string, SchemaRad[]>();
+  for (const r of alla) {
+    const nyckel = `${r.dag}|${r.start}|${r.slut}|${r.klassNamn}`;
+    grupper.set(nyckel, [...(grupper.get(nyckel) ?? []), r]);
+  }
+  const noNamn = new Set<string>(NO_TK_AMNEN);
+  const ut: SchemaRad[] = [];
+  for (const rader of grupper.values()) {
+    const namn = [...new Set(rader.map((r) => r.amnesNamn))];
+    const alltNo = namn.every((n) => noNamn.has(n));
+    ut.push({
+      ...rader[0],
+      amnesNamn: namn.length > 1 ? (alltNo ? 'NO+Tk' : namn.join(' / ')) : namn[0],
+    });
+  }
+  return ut.sort((x, y) => x.dag - y.dag || x.start.localeCompare(y.start));
 }
 
 /**
@@ -225,6 +246,24 @@ export function saneraIdn(s: Struktur): Struktur {
   };
   ny.skolar = gorUnika(ny.skolar, 'la');
   ny.larare = gorUnika(ny.larare, 'lr');
+  // Lärardubbletter (samma signatur, t.ex. efter dubbel PDF-import): behåll
+  // första, peka om tjänsternas larareId och släng resten.
+  {
+    const forsta = new Map<string, string>();       // signatur → id
+    const ersatt = new Map<string, string>();       // dubblett-id → första id
+    ny.larare = ny.larare.filter((l) => {
+      const bef = forsta.get(l.signatur);
+      if (bef === undefined) { forsta.set(l.signatur, l.id); return true; }
+      ersatt.set(l.id, bef);
+      return false;
+    });
+    if (ersatt.size > 0) {
+      ny.tjanster = ny.tjanster.map((t) =>
+        t.larareId !== undefined && ersatt.has(t.larareId)
+          ? { ...t, larareId: ersatt.get(t.larareId) }
+          : t);
+    }
+  }
   ny.tjanster = gorUnika(ny.tjanster, 'tj');
   ny.klasser = gorUnika(ny.klasser, 'k');
   ny.elever = gorUnika(ny.elever, 'el');
