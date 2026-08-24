@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  fromBase64, konfigKomplett, laddaFranGitHub, sparaTillGitHub, toBase64, type GitHubConfig,
+  fromBase64, hamtaBockerFranGitHub, konfigKomplett, laddaFranGitHub, sparaTillGitHub, toBase64, type GitHubConfig,
 } from '../src/github.js';
 
 const CFG: GitHubConfig = { owner: 'Mattias1970', repo: 'classroom-planner-data', branch: 'main', path: 'studio/struktur.json', token: 'tok' };
@@ -53,5 +53,36 @@ describe('github-synk', () => {
 
   it('kastar tydligt fel när konfigurationen är ofullständig', async () => {
     await expect(sparaTillGitHub({ ...CFG, token: '' }, '{}')).rejects.toThrow('ofullständig');
+  });
+});
+
+describe('hamtaBockerFranGitHub — bokdata ur books/', () => {
+  beforeEach(() => { vi.stubGlobal('fetch', vi.fn()); });
+  afterEach(() => { vi.unstubAllGlobals(); });
+  const cfg = { owner: 'Mattias1970', repo: 'classroom-planner-data', branch: 'main', path: 'studio/planering.json', token: 'x' };
+  const b64 = (t: string) => btoa(String.fromCharCode(...new TextEncoder().encode(t)));
+
+  it('listar books/, hämtar varje book.json och hoppar över filer', async () => {
+    const svar: Record<string, unknown> = {
+      'books?ref=main': [
+        { name: 'liber-matematik-y', type: 'dir' },
+        { name: 'README.md', type: 'file' },
+        { name: 'sanoma-prio-8', type: 'dir' },
+      ],
+      'books/liber-matematik-y/book.json?ref=main': { content: b64('{"id":"y"}') },
+      'books/sanoma-prio-8/book.json?ref=main': { content: b64('{"id":"p"}') },
+    };
+    (fetch as ReturnType<typeof vi.fn>).mockImplementation((url: string) => {
+      const nyckel = Object.keys(svar).find((k) => url.endsWith(k));
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(svar[nyckel ?? '']) });
+    });
+    const ut = await hamtaBockerFranGitHub(cfg);
+    expect(ut.map((b) => b.id)).toEqual(['liber-matematik-y', 'sanoma-prio-8']);
+    expect(ut[0].json).toBe('{"id":"y"}');
+  });
+
+  it('tydligt fel när books/ saknas', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: false, status: 404 });
+    await expect(hamtaBockerFranGitHub(cfg)).rejects.toThrow("books/");
   });
 });

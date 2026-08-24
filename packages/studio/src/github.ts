@@ -92,3 +92,34 @@ export async function laddaFranGitHub(cfg: GitHubConfig): Promise<string> {
 }
 
 export { toBase64, fromBase64 };
+
+/** Generisk fil-läsning på valfri sökväg i samma repo/gren. */
+async function hamtaFilInnehall(cfg: GitHubConfig, sokvag: string): Promise<string | null> {
+  const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${sokvag}?ref=${encodeURIComponent(cfg.branch)}`;
+  const r = await fetch(url, { headers: headers(cfg) });
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error(`GitHub ${r.status}: kunde inte hämta ${sokvag}`);
+  const data = (await r.json()) as { content?: string };
+  return data.content !== undefined ? fromBase64(data.content) : null;
+}
+
+/**
+ * Listar och hämtar alla böcker ur datarepots books/-katalog
+ * (books/<bok-id>/book.json). Returnerar [bok-id → JSON-text].
+ */
+export async function hamtaBockerFranGitHub(cfg: GitHubConfig): Promise<Array<{ id: string; json: string }>> {
+  if (!konfigKomplett(cfg)) throw new Error('GitHub-konfigurationen är ofullständig — fyll i ☁ GitHub först.');
+  const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/books?ref=${encodeURIComponent(cfg.branch)}`;
+  const r = await fetch(url, { headers: headers(cfg) });
+  if (r.status === 404) throw new Error("Katalogen 'books/' finns inte i repot.");
+  if (!r.ok) throw new Error(`GitHub ${r.status}: kunde inte lista books/`);
+  const poster = (await r.json()) as Array<{ name: string; type: string }>;
+  const ut: Array<{ id: string; json: string }> = [];
+  for (const p of poster) {
+    if (p.type !== 'dir') continue;
+    const json = await hamtaFilInnehall(cfg, `books/${p.name}/book.json`);
+    if (json !== null) ut.push({ id: p.name, json });
+  }
+  if (ut.length === 0) throw new Error("Inga book.json hittades under books/<bok-id>/.");
+  return ut;
+}
