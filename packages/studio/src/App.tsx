@@ -5,12 +5,12 @@
  * eller .ics), tjänst (lärare valfri), klass, ämne med eget schema, bok på
  * ämnet → "Skapa planering" ger datumsatt planering. Sidregister → Excel.
  */
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
   NO_TK, NO_TK_AMNEN, STANDARD_AMNEN, amneBakgrund, antalSlots, arbetsNivaer, arHalvklass,
   begreppsRum, delaHalvklassPass, delkapitelUrAvsnitt, foreslagnaRum, hamtaLektionsplan,
-  kombineraHalvklassPass, skapaTjanstFranSchema, tolkaSchemaPdf,
+  effektivaNivaer, kombineraHalvklassPass, skapaTjanstFranSchema, tolkaSchemaPdf,
   handelserPerDatum, kalenderHandelser, klassFarg, noBudget, noOverBudget, sattLektionsplan,
   kapitelKort, manadsRutor, skolarManader, veckaRutor, viktigaDatum, bamTidslinje, begreppForLektion, bokBegrepp,
   bokFromImport, bokSidregister, bokSidregisterCsv, elevSchema, exitStart, giltigtPass,
@@ -58,8 +58,19 @@ export function App() {
   const [huvudvy, setHuvudvy] = useState<'struktur' | 'kalender'>('struktur');
   const [msg, setMsg] = useState('');
   const spara = (ny: Struktur, m = '') => { sparaStruktur(ny); setS(ny); if (m) setMsg(m); };
+  const angraStack = useRef<string[]>([]);
   const kor = (fn: () => Struktur, m: string) => {
-    try { spara(fn(), `✓ ${m}`); } catch (e) { setMsg(`✗ ${(e as Error).message}`); }
+    try {
+      const fore = JSON.stringify(lasStruktur());
+      const ny = fn();
+      angraStack.current = [...angraStack.current.slice(-19), fore];   // max 20 steg
+      spara(ny, `✓ ${m}`);
+    } catch (e) { setMsg(`✗ ${(e as Error).message}`); }
+  };
+  const angra = () => {
+    const fore = angraStack.current.pop();
+    if (fore === undefined) { setMsg('Inget att ångra.'); return; }
+    spara(JSON.parse(fore) as Struktur, '↩ Ångrat.');
   };
 
   return (
@@ -71,6 +82,7 @@ export function App() {
           <button className={`tflik ${huvudvy === 'kalender' ? 'act' : ''}`} onClick={() => setHuvudvy('kalender')}>📆 Kalender</button>
         </nav>
         <span className="spacer" />
+        <button className="btn sec" onClick={angra} title="Ångra senaste ändring (upp till 20 steg)">↩ Ångra</button>
         <button className="btn sec" onClick={() => { setHuvudvy('struktur'); setVald({ typ: 'github' }); }}>☁ GitHub</button>
         <button className="btn sec" onClick={() => {
           const a = document.createElement('a');
@@ -741,17 +753,39 @@ function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn:
       )}
       <div className="flikar no-print">
         <button className={`flik ${flik === 'planering' ? 'act' : ''}`} onClick={() => setFlik('planering')}>📝 Lektionsplan</button>
-        {([['detalj', '🧭 Detaljplanering'], ['oversikt', 'ℹ Översikt'], ['uppgifter', '✏ Uppgifter'], ['begrepp', '💡 Begrepp'], ['filmer', '🎬 Filmer'], ['magma', '🟫 Magma'], ['anteckningar', '👥 Anteckningar']] as const).map(([id, txt]) => (
+        <button className={`flik ${flik === 'detalj' ? 'act' : ''}`} onClick={() => setFlik('detalj')}>🧭 Detaljplanering</button>
+        {([['oversikt', 'ℹ Översikt'], ['uppgifter', '✏ Uppgifter'], ['begrepp', '💡 Begrepp'], ['filmer', '🎬 Filmer'], ['magma', '🟫 Magma'], ['anteckningar', '👥 Anteckningar']] as const).map(([id, txt]) => (
           <button key={id} className={`flik ${flik === id ? 'act' : ''}`} onClick={() => setFlik(id)} disabled={!bok}
             title={!bok ? 'Koppla en bok först' : ''}>{txt}</button>
         ))}
         <button className={`flik ${flik === 'arsoversikt' ? 'act' : ''}`} onClick={() => setFlik('arsoversikt')}>📊 Årsöversikt</button>
+        <span className="spacer" />
+        <button className="flik" onClick={() => window.print()} title="Skriv ut aktiv flik">🖨 Skriv ut</button>
+        <button className="flik" disabled={!bok || plan.length === 0} title={!bok ? 'Koppla en bok först' : 'Veckans lektioner som Word-dokument'}
+          onClick={() => {
+            if (!bok) return;
+            const nu = plan.find((r) => r.datum !== null && r.vecka !== null);
+            const vecka = plan.filter((r) => r.vecka !== null && r.vecka === nu?.vecka);
+            void import('./wordExport.js').then(({ exporteraLektioner }) =>
+              exporteraLektioner(s, a.id, bok, `${a.namn} ${klass.namn} — vecka ${nu?.vecka ?? ''}`,
+                `${a.namn}-${klass.namn}-v${nu?.vecka ?? ''}`,
+                vecka.map((rad) => ({ rad, index: plan.indexOf(rad) }))));
+          }}>📄 Vecka → Word</button>
+        <button className="flik" disabled={!bok || plan.length === 0} title={!bok ? 'Koppla en bok först' : 'Hela planeringen som Word-dokument'}
+          onClick={() => {
+            if (!bok) return;
+            void import('./wordExport.js').then(({ exporteraLektioner }) =>
+              exporteraLektioner(s, a.id, bok, `${a.namn} ${klass.namn} — planering`,
+                `${a.namn}-${klass.namn}-planering`,
+                plan.map((rad, index) => ({ rad, index }))));
+          }}>📄 Kapitel → Word</button>
       </div>
       {flik === 'arsoversikt' && bok && <Arsoversikt bok={bok} plan={plan} nivaText={`${bok.nivaer.niva1} = introduktion · ${bok.nivaer.niva2} = E-nivå · ${bok.nivaer.niva3} = C/A-nivå`} />}
       {flik === 'arsoversikt' && !bok && <p className="muted">Koppla en bok för att se årsöversikten.</p>}
-      {bok && flik === 'detalj' && <DetaljFlik s={s} amneId={a.id} plan={plan} bok={bok} amnesNamn={a.namn} kor={kor} />}
+      {flik === 'detalj' && bok && <DetaljFlik s={s} amneId={a.id} plan={plan} bok={bok} amnesNamn={a.namn} kor={kor} />}
+      {flik === 'detalj' && !bok && <p className="muted">Koppla en bok till ämnet för att använda detaljplaneringen.</p>}
       {bok && flik === 'oversikt' && <OversiktFlik plan={plan} bok={bok} />}
-      {bok && flik === 'uppgifter' && <UppgifterFlik plan={plan} bok={bok} />}
+      {bok && flik === 'uppgifter' && <UppgifterFlik plan={plan} bok={bok} s={s} amneId={a.id} />}
       {bok && flik === 'begrepp' && <BegreppFlik plan={plan} bok={bok} />}
       {bok && flik === 'filmer' && <FilmerFlik s={s} amneId={a.id} plan={plan} bok={bok} kor={kor} />}
       {bok && flik === 'magma' && <MagmaFlik s={s} amneId={a.id} plan={plan} kor={kor} />}
@@ -876,6 +910,22 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor }: {
         </div>
       </div>
 
+      <div className="uppg-kort">
+        <b>✏ Uppgiftsintervall</b> <small className="muted">(tomt = bokens värden: {bok.nivaer.niva1} {rad.lektion.niva1} · {bok.nivaer.niva2} {rad.lektion.niva2} · {bok.nivaer.niva3} {rad.lektion.niva3})</small>
+        <div className="rad" style={{ gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+          {([['uppgNiva1', bok.nivaer.niva1], ['uppgNiva2', bok.nivaer.niva2], ['uppgNiva3', bok.nivaer.niva3]] as const).map(([falt, namn]) => (
+            <label key={falt} className="small">{namn}{' '}
+              <input aria-label={`Uppgifter ${namn}`} style={{ width: 90 }}
+                value={lp?.[falt] ?? ''} placeholder={rad.lektion[falt === 'uppgNiva1' ? 'niva1' : falt === 'uppgNiva2' ? 'niva2' : 'niva3']}
+                onChange={(e) => kor(() => sattLektionsplan(lasStruktur(), {
+                  ...(hamtaLektionsplan(lasStruktur(), amneId, i) ?? { id: `lp-${amneId}-${i}`, amneId, lektionsIndex: i }),
+                  [falt]: e.target.value,
+                }), '')} />
+            </label>
+          ))}
+        </div>
+      </div>
+
       <NoPlanering key={`${amneId}-${i}`} s={s} amneId={amneId} lektionsIndex={i} kor={kor}
         amnesNamn={amnesNamn} rad={rad} bok={bok} alltidOppen />
     </div>
@@ -900,7 +950,7 @@ function OversiktFlik({ plan, bok }: { plan: PlaneradLektion[]; bok: Bok }) {
   );
 }
 
-function UppgifterFlik({ plan, bok }: { plan: PlaneradLektion[]; bok: Bok }) {
+function UppgifterFlik({ plan, bok, s, amneId }: { plan: PlaneradLektion[]; bok: Bok; s: Struktur; amneId: string }) {
   const N = bok.nivaer;
   const har = (v: string) => v !== '—' && v !== '';
   return (
@@ -912,10 +962,11 @@ function UppgifterFlik({ plan, bok }: { plan: PlaneradLektion[]; bok: Bok }) {
       {plan.map((r, i) => {
         const { minimum } = arbetsNivaer(r.lektion);
         const farg = arFargnivaer(bok);
+        const eff = effektivaNivaer(r.lektion, hamtaLektionsplan(s, amneId, i));
         const kort: Array<[string, string, string, string]> = [];
-        if (har(r.lektion.niva1)) kort.push([`${N.niva1} – introduktion`, r.lektion.niva1, farg ? 'niva-gron' : 'niva-neutral', 'Obligatorisk']);
-        if (har(r.lektion.niva2)) kort.push([`${N.niva2} – E-nivå`, r.lektion.niva2, farg ? 'niva-bla' : 'niva-neutral', 'Obligatorisk']);
-        if (har(r.lektion.niva3)) kort.push([`${N.niva3} – C/A-nivå`, r.lektion.niva3, farg ? 'niva-rod' : 'niva-neutral2', 'Frivillig / vid lektionstid']);
+        if (har(eff.niva1)) kort.push([`${N.niva1} – introduktion`, eff.niva1, farg ? 'niva-gron' : 'niva-neutral', 'Obligatorisk']);
+        if (har(eff.niva2)) kort.push([`${N.niva2} – E-nivå`, eff.niva2, farg ? 'niva-bla' : 'niva-neutral', 'Obligatorisk']);
+        if (har(eff.niva3)) kort.push([`${N.niva3} – C/A-nivå`, eff.niva3, farg ? 'niva-rod' : 'niva-neutral2', 'Frivillig / vid lektionstid']);
         return (
           <div key={i} className="uppg-kort">
             <div className="rad"><b>Lektion {i + 1} — {r.lektion.avsnitt}</b><span className="spacer" />

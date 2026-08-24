@@ -200,6 +200,10 @@ export interface LektionsPlan {
   magma?: string;
   /** Anteckningar om klassen för lektionen. */
   anteckning?: string;
+  /** Överstyr bokens uppgiftsintervall (nivå 1/2/3), t.ex. 'Uppg. 1–8'. */
+  uppgNiva1?: string;
+  uppgNiva2?: string;
+  uppgNiva3?: string;
 }
 
 export interface Struktur {

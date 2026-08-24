@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { bokFromImport } from '../src/domain/bok.js';
 import {
-  arbetsNivaer, bamTidslinje, begreppForLektion, exitStart, tavelrubrik, tillKlockslag, tillMin,
+  arbetsNivaer, bamTidslinje, begreppForLektion, effektivaNivaer, exitStart, tavelrubrik, tillKlockslag, tillMin,
 } from '../src/domain/lektionskort.js';
 import { uppdateraKlass, laggTillKlass, laggTillSkolar, laggTillTjanst } from '../src/domain/struktur.js';
 import { tomStruktur } from '../src/domain/typer.js';
@@ -72,5 +72,17 @@ describe('begreppForLektion + socrative', () => {
     s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
     const ny = uppdateraKlass(s, 'k', { namn: '8C', id: 'hack', tjanstId: 'hack' } as never);
     expect(ny.klasser[0]).toEqual({ id: 'k', tjanstId: 'tj', namn: '8C' });
+  });
+});
+
+describe('effektivaNivaer — lärarens överstyrning av uppgiftsintervall', () => {
+  const lekt = { niva1: '1–6', niva2: '7–12', niva3: '—' };
+  it('utan överstyrning gäller bokens värden', () => {
+    expect(effektivaNivaer(lekt, null)).toEqual({ niva1: '1–6', niva2: '7–12', niva3: '—' });
+  });
+  it('överstyrning per nivå; tom sträng faller tillbaka på boken', () => {
+    expect(effektivaNivaer(lekt, { uppgNiva1: '1–8', uppgNiva3: '13–18' }))
+      .toEqual({ niva1: '1–8', niva2: '7–12', niva3: '13–18' });
+    expect(effektivaNivaer(lekt, { uppgNiva1: '  ' }).niva1).toBe('1–6');
   });
 });

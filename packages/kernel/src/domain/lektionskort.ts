@@ -83,6 +83,22 @@ export function begreppForLektion(bok: Bok, kapitelNr: number, lektion: Lektion)
 }
 
 /** Arbetsblockets nivåer: del 1 ⇒ [nivå1, nivå2] (minimum nivå1), del 2 ⇒ [nivå2, nivå3] (minimum nivå2). */
+/**
+ * Lektionens uppgiftsintervall: bokens värden, med lärarens eventuella
+ * överstyrningar (LektionsPlan.uppgNiva1–3) applicerade.
+ */
+export function effektivaNivaer(
+  lektion: Pick<Lektion, 'niva1' | 'niva2' | 'niva3'>,
+  lp?: { uppgNiva1?: string; uppgNiva2?: string; uppgNiva3?: string } | null,
+): { niva1: string; niva2: string; niva3: string } {
+  const v = (o: string | undefined, bok: string): string => (o !== undefined && o.trim() !== '' ? o : bok);
+  return {
+    niva1: v(lp?.uppgNiva1, lektion.niva1),
+    niva2: v(lp?.uppgNiva2, lektion.niva2),
+    niva3: v(lp?.uppgNiva3, lektion.niva3),
+  };
+}
+
 export function arbetsNivaer(lektion: Pick<Lektion, 'del'>): { arbetar: [1, 2] | [2, 3]; minimum: 1 | 2 } {
   return lektion.del === 2 ? { arbetar: [2, 3], minimum: 2 } : { arbetar: [1, 2], minimum: 1 };
 }

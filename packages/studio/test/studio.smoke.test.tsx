@@ -1075,3 +1075,36 @@ describe('Detaljplanering som egen flik', () => {
     expect(lasStruktur().lektionsplaner.find((p) => p.lektionsIndex === 1)?.filmer).toEqual(['Fotosyntes|https://binogi.se/f']);
   });
 })
+
+describe('Funktionsparitet med v1: Ångra + uppgiftsintervall', () => {
+  it('↩ Ångra återställer senaste ändringen', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    expect(lasStruktur().skolar).toHaveLength(1);
+    act(() => { knapp(host, '↩ Ångra').click(); });
+    expect(lasStruktur().skolar).toHaveLength(0);           // skolåret borta
+  });
+
+  it('uppgiftsintervall kan överstyras i Detaljplanering och slår igenom i Uppgifter-fliken', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
+    valj(select(host, 'Veckodag pass 1'), '2');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '🧭 Detaljplanering').click(); });
+    skriv(input(host, 'Uppgifter ETT'), '1–8');
+    expect(lasStruktur().lektionsplaner[0]?.uppgNiva1).toBe('1–8');
+    act(() => { knapp(host, '✏ Uppgifter').click(); });
+    expect(host.querySelector('.panel')!.textContent).toContain('1–8');   // överstyrningen syns
+  });
+})
