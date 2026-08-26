@@ -295,3 +295,44 @@ body { background: var(--bg); color: var(--text-varm); font-size: 15px; line-hei
 .kal-utskrift-sida h3 { font-weight: 800; }
 /* Detaljplaneringen: kortkänsla */
 .detaljflik select, .detaljflik input, .ny input, .ny select { background: #fff; }
+
+/* ═══ Del 35: Temaväljare, kapitelheader, avklarat-kryss ═══ */
+/* Klassisk blå (ursprungspaletten) */
+body[data-tema="klassisk"] { --bla: #2f5aa8; --ram: #d7dde6; --bg: #f6f8fb;
+  --warm: #eef2f8; --text-varm: #1c2430; --muted-varm: #66738a; }
+body[data-tema="klassisk"] .topbar { background: #fff; color: #1c2430;
+  border-bottom: 1px solid var(--ram); box-shadow: none; }
+body[data-tema="klassisk"] .topbar .logo, body[data-tema="klassisk"] .topbar b { color: #1c2430; }
+body[data-tema="klassisk"] .tflik { color: #66738a; }
+body[data-tema="klassisk"] .tflik:hover { background: #eef2f8; color: #1c2430; }
+body[data-tema="klassisk"] .tflik.act { background: #e3ebf8; color: var(--bla); border-bottom-color: var(--bla); }
+body[data-tema="klassisk"] .topbar .btn.sec { background: #fff; color: var(--bla); border-color: var(--bla); }
+body[data-tema="klassisk"] .node.act { background: #e3ebf8; color: var(--bla); }
+body[data-tema="klassisk"] .pillm { background: #e3ebf8; color: var(--bla); }
+body[data-tema="klassisk"] .chipbtn.act { background: var(--bla); border-color: var(--bla); }
+body[data-tema="klassisk"] .mcell.idag { box-shadow: inset 0 0 0 2px var(--bla); }
+/* Skog */
+body[data-tema="skog"] { --bla: #1D7A6B; --ram: #C3D4CC; --bg: #F4FAF7;
+  --warm: #E5F0EA; --text-varm: #0D2018; --muted-varm: #5A7568; }
+body[data-tema="skog"] .topbar { background: linear-gradient(135deg, #0D2018 0%, #143D32 60%, #0D2018 100%); }
+body[data-tema="skog"] .tflik.act { border-bottom-color: #7FD1B9; }
+body[data-tema="skog"] .node.act { background: #E5F0EA; color: var(--bla); }
+/* Temaväljaren i topbaren */
+.tema-valj { border: 1px solid rgba(255,255,255,.35); background: rgba(255,255,255,.12);
+  color: inherit; border-radius: 8px; padding: 5px 8px; font: inherit; cursor: pointer; }
+.tema-valj option { color: #1c2430; }
+body[data-tema="klassisk"] .tema-valj { border-color: var(--ram); background: #fff; }
+/* Kapitelheader (förlagans kap-header) */
+.kap-header { color: #fff; border-radius: 12px; padding: 14px 18px; margin: 6px 0 12px;
+  text-shadow: 0 1px 2px rgba(0,0,0,.25); }
+.kap-eyebrow { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; opacity: .85; }
+.kap-h1 { font-size: 1.35rem; font-weight: 800; line-height: 1.2; margin-top: 2px; }
+.kap-badges { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,.3); }
+.kap-badge { background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.3);
+  border-radius: 8px; padding: 4px 10px; font-size: 12px; }
+.kap-badge strong { display: block; font-size: 16px; line-height: 1.2; font-weight: 800; }
+/* Avklarade lektioner */
+.tbl.plan tr.klar td { opacity: .55; }
+.tbl.plan tr.klar td:nth-child(6) { text-decoration: line-through; }
+.tbl.plan input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--bla); cursor: pointer; }

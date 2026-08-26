@@ -548,6 +548,47 @@ describe('Stödämnen (fri planering)', () => {
   });
 });
 
+describe('Tema, kapitelheader och avklarat-kryss', () => {
+  it('temat sparas i localStorage och sätts på body', async () => {
+    const host = render();
+    expect(document.body.dataset.tema).toBe('varm');
+    valj(select(host, 'Färgtema'), 'klassisk');
+    expect(document.body.dataset.tema).toBe('klassisk');
+    expect(window.localStorage.getItem('classroom-planner.studio.tema')).toBe('klassisk');
+    valj(select(host, 'Färgtema'), 'varm');
+  });
+
+  it('kapitelheadern visar aktuellt kapitel och kryssen räknas som avklarade', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+
+    const header = host.querySelector('.kap-header')!;
+    expect(header.textContent).toContain('Kapitel 1');            // testbokens kapitel
+    expect(header.textContent).toContain('avklarade totalt');
+
+    // Kryssa första lektionen som klar → overlay sätts och headern räknar upp
+    const kryss = host.querySelector('input[aria-label="Lektion 1 avklarad"]') as HTMLInputElement;
+    act(() => { kryss.click(); });
+    expect(lasStruktur().lektionsplaner.some((lp) => lp.klar === true)).toBe(true);
+    expect(host.querySelector('.kap-header')!.textContent).toContain('1/');
+    expect(host.querySelector('table.plan tbody tr')!.className).toContain('klar');
+  });
+});
+
 describe('Vänstermeny, tjänstöversikt och årsöversikt', () => {
   async function byggUpp(host: HTMLElement) {
     skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');

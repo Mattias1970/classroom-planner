@@ -224,6 +224,8 @@ export interface LektionsPlan {
   uppgNiva1?: string;
   uppgNiva2?: string;
   uppgNiva3?: string;
+  /** Lektionen är genomförd (avklarat-kryss i lektionsplanen). */
+  klar?: boolean;
 }
 
 export interface Struktur {

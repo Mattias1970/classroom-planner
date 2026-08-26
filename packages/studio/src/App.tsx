@@ -5,7 +5,7 @@
  * eller .ics), tjänst (lärare valfri), klass, ämne med eget schema, bok på
  * ämnet → "Skapa planering" ger datumsatt planering. Sidregister → Excel.
  */
-import { Fragment, useMemo, useRef, useState } from 'react';
+import { Fragment, useMemo, useRef, useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import {
   NO_TK, NO_TK_AMNEN, STANDARD_AMNEN, amneBakgrund, antalSlots, arbetsNivaer, arHalvklass,
@@ -56,6 +56,13 @@ export function App() {
   const [s, setS] = useState<Struktur>(() => lasStruktur());
   const [vald, setVald] = useState<Vald>(null);
   const [huvudvy, setHuvudvy] = useState<'struktur' | 'planering' | 'kalender'>('struktur');
+  const [tema, setTema] = useState<string>(() => {
+    try { return window.localStorage.getItem('classroom-planner.studio.tema') ?? 'varm'; } catch { return 'varm'; }
+  });
+  useEffect(() => {
+    document.body.dataset.tema = tema;
+    try { window.localStorage.setItem('classroom-planner.studio.tema', tema); } catch { /* ignoreras */ }
+  }, [tema]);
   const [msg, setMsg] = useState('');
   const spara = (ny: Struktur, m = '') => { sparaStruktur(ny); setS(ny); if (m) setMsg(m); };
   const angraStack = useRef<string[]>([]);
@@ -84,6 +91,11 @@ export function App() {
         </nav>
         <span className="spacer" />
         <button className="btn sec" onClick={angra} title="Ångra senaste ändring (upp till 20 steg)">↩ Ångra</button>
+        <select aria-label="Färgtema" className="tema-valj" value={tema} onChange={(e) => setTema(e.target.value)} title="Färgtema">
+          <option value="varm">🎨 Varm</option>
+          <option value="klassisk">🎨 Klassisk blå</option>
+          <option value="skog">🎨 Skog</option>
+        </select>
         <button className="btn sec" onClick={() => { setHuvudvy('struktur'); setVald({ typ: 'github' }); }}>☁ GitHub</button>
         <button className="btn sec" onClick={() => {
           const a = document.createElement('a');
@@ -793,6 +805,29 @@ function Elevlista({ s, klassId, klassNamn, kor }: {
 }
 
 // ── Ämne + planering ─────────────────────────────────────────
+/** Kapitelheader som i HTML-förlagan: gradient i aktuella kapitlets färg + badges. */
+function KapitelHeader({ bok, plan, s, amneId }: { bok: Bok; plan: PlaneradLektion[]; s: Struktur; amneId: string }) {
+  const idag = new Date().toISOString().slice(0, 10);
+  const nasta = plan.find((r) => r.datum !== null && r.datum >= idag) ?? plan[plan.length - 1];
+  const kap = bok.kapitel.find((k) => k.nr === nasta.kapitel) ?? bok.kapitel[0];
+  const kapPlan = plan.filter((r) => r.kapitel === kap.nr);
+  const klara = plan.filter((_r, i) => hamtaLektionsplan(s, amneId, i)?.klar === true).length;
+  const veckor = [...new Set(kapPlan.map((r) => r.vecka).filter((v): v is number => v !== null))];
+  const prov = kapPlan.find((r) => r.lektion.typ === 'exam');
+  return (
+    <div className="kap-header" style={{ background: `linear-gradient(135deg, ${kap.farg} 0%, ${kap.farg}cc 100%)` }}>
+      <div className="kap-eyebrow">Aktuellt kapitel</div>
+      <div className="kap-h1">Kapitel {kap.nr} · {kap.namn}</div>
+      <div className="kap-badges">
+        <span className="kap-badge"><strong>{kapPlan.length}</strong> lektioner i kapitlet</span>
+        <span className="kap-badge"><strong>{veckor.length > 0 ? `v.${Math.min(...veckor)}–${Math.max(...veckor)}` : '—'}</strong> veckospann</span>
+        <span className="kap-badge"><strong>{klara}/{plan.length}</strong> avklarade totalt</span>
+        {prov?.datum != null && <span className="kap-badge"><strong>{prov.datum}</strong> {prov.lektion.avsnitt}</span>}
+      </div>
+    </div>
+  );
+}
+
 function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn: () => Struktur, m: string) => void; setVald: (v: Vald) => void }) {
   const a = s.amnen.find((x) => x.id === id);
   const klass = s.klasser.find((k) => k.id === a?.klassId);
@@ -813,6 +848,7 @@ function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn:
   return (
     <div className="card">
       <h2>📖 {klass.namn} · {a.namn}{halv ? <span className="pillm">halvklass A/B</span> : null}{a.noGrupp !== undefined ? <span className="pillm">NO+Tk block {(a.noOrder ?? 0) + 1}/4</span> : null}</h2>
+      {bok && harPlanering && plan.length > 0 && <KapitelHeader bok={bok} plan={plan} s={s} amneId={a.id} />}
       <p className="muted">Socrative-rum: <b>{rum}</b>{halv ? ' (delas av Grupp A och B)' : ''} — läxförhör och exit tickets.</p>
       {a.noGrupp !== undefined && (<>
         <p className="note">Detta delämne har budget <b>{budget}</b> lektioner (block {(a.noOrder ?? 0) + 1}) och startar efter föregående block.</p>
@@ -1458,16 +1494,28 @@ function GruppPlanering(props: {
     <>
       {rubrik !== undefined && <h3 className="grupp-h">{rubrik}</h3>}
       <table className="tbl plan clickable">
-        <thead><tr><th>Datum</th><th>V.</th><th>Tid</th><th>Kap</th><th>Avsnitt</th><th>{bok.nivaer.niva1}</th><th>{bok.nivaer.niva2}</th><th>{bok.nivaer.niva3}</th></tr></thead>
-        <tbody>{plan.map((r, i) => (
-          <tr key={i} className={`${r.datum === null ? 'saknas' : ''} ${valdRad === i ? 'vald' : ''}`}
+        <thead><tr><th title="Avklarad">✓</th><th>Datum</th><th>V.</th><th>Tid</th><th>Kap</th><th>Avsnitt</th><th>{bok.nivaer.niva1}</th><th>{bok.nivaer.niva2}</th><th>{bok.nivaer.niva3}</th></tr></thead>
+        <tbody>{plan.map((r, i) => {
+          const klar = s !== undefined && amneId !== undefined && hamtaLektionsplan(s, amneId, i)?.klar === true;
+          return (
+          <tr key={i} className={`${r.datum === null ? 'saknas' : ''} ${valdRad === i ? 'vald' : ''} ${klar ? 'klar' : ''}`}
             onClick={() => setValdRad(valdRad === i ? null : i)} title="Öppna lektionskort">
+            <td onClick={(e) => e.stopPropagation()}>
+              {s !== undefined && amneId !== undefined && kor !== undefined && (
+                <input type="checkbox" aria-label={`Lektion ${i + 1} avklarad`} checked={klar}
+                  onChange={(e) => kor(() => sattLektionsplan(lasStruktur(), {
+                    ...(hamtaLektionsplan(lasStruktur(), amneId, i) ?? { id: `lp-${amneId}-${i}`, amneId, lektionsIndex: i }),
+                    klar: e.target.checked,
+                  }), e.target.checked ? `Lektion ${i + 1} avklarad ✓` : `Lektion ${i + 1} markerad som ej klar.`)} />
+              )}
+            </td>
             <td>{r.datum ?? 'ryms ej'}</td><td>{r.vecka ?? ''}</td>
             <td>{r.start !== null ? `${r.start}–${r.slutTid}` : ''}</td>
             <td>{r.kapitel}</td><td>{r.lektion.avsnitt} · Del {r.lektion.del}</td>
             <td>{r.lektion.niva1}</td><td>{r.lektion.niva2}</td><td>{r.lektion.niva3}</td>
           </tr>
-        ))}</tbody>
+          );
+        })}</tbody>
       </table>
       {valdRad !== null && plan[valdRad] && (
         <Lektionskort rad={plan[valdRad]} bok={bok} amnesNamn={amnesNamn} klassNamn={klassNamn}
