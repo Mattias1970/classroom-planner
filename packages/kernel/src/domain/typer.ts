@@ -130,6 +130,8 @@ export interface Delkapitel {
 /** Kapitelresurser — öppna listor som läraren fyller på. */
 export interface KapitelResurser {
   filmer: Array<{ titel: string; url: string }>;
+  /** Begreppsförklaringar ur boken: begrepp → kort beskrivning. */
+  forklaringar?: Record<string, string>;
   /** Word-fil med teorisammanfattning för flippat klassrum. */
   flippSammanfattningUrl?: string;
   flippFilmUrl?: string;
@@ -226,6 +228,12 @@ export interface LektionsPlan {
   uppgNiva3?: string;
   /** Lektionen är genomförd (avklarat-kryss i lektionsplanen). */
   klar?: boolean;
+  /** Tavlan: Vad ska vi göra (kort instruktion till eleverna). */
+  vadGora?: string;
+  /** Tavlan: Vad ska vi lära oss (lärandemål/begrepp i klartext). */
+  laraOss?: string;
+  /** Tavlan: Exempel vi räknar tillsammans (överstyra bokens ex). */
+  exempelRakna?: string;
 }
 
 export interface Struktur {

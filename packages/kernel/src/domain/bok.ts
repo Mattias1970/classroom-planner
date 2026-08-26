@@ -135,7 +135,7 @@ export function bokFromImport(json: string): Bok {
   const id = txt(b['id']); const titel = txt(b['titel']);
   if (!har(id)) throw new Error('bok.id saknas.');
   if (!har(titel)) throw new Error('bok.titel saknas.');
-  const kapMeta = (b['kapitelMeta'] ?? {}) as Record<string, { name?: unknown; col?: unknown; filmer?: unknown }>;
+  const kapMeta = (b['kapitelMeta'] ?? {}) as Record<string, { name?: unknown; col?: unknown; filmer?: unknown; forklaringar?: unknown }>;
   const lekRaw = raw.lektioner ?? {};
   const kapNrs = Object.keys(kapMeta).map(Number).filter((n) => Number.isInteger(n) && n > 0).sort((a, c) => a - c);
   if (kapNrs.length === 0) throw new Error('bok.kapitelMeta är tom — minst ett kapitel krävs.');
@@ -154,6 +154,7 @@ export function bokFromImport(json: string): Bok {
     const farg = typeof m.col === 'string' && /^#[0-9a-fA-F]{6}$/.test(m.col) ? m.col : '#5c6b7a';
     const kap = byggKapitel(nr, namn, farg, lektioner);
     kap.resurser.filmer = lasKapitelFilmer(m.filmer);
+    kap.resurser.forklaringar = lasForklaringar(m.forklaringar);
     return kap;
   });
   if (kapitel.every((k) => k.delkapitel.length === 0 && k.extraLektioner.length === 0)) {
@@ -184,6 +185,16 @@ function lasKapitelFilmer(raw: unknown): Array<{ titel: string; url: string }> {
         ut.push({ titel: o.titel.trim(), url: o.url });
       }
     }
+  }
+  return ut;
+}
+
+/** Begreppsförklaringar ur bokfilen: objekt begrepp → beskrivning (strängar). */
+function lasForklaringar(raw: unknown): Record<string, string> {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const ut: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === 'string' && k.trim() !== '' && v.trim() !== '') ut[k.trim()] = v.trim();
   }
   return ut;
 }

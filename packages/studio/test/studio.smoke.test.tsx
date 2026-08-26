@@ -20,7 +20,11 @@ function render(): HTMLElement {
 const inSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
 const taSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
 const seSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!;
-function skriv(el: HTMLInputElement, v: string) { act(() => { inSetter.call(el, v); el.dispatchEvent(new Event('input', { bubbles: true })); }); }
+function skriv(el: HTMLInputElement | HTMLTextAreaElement, v: string) {
+  if (el === null) throw new Error('skriv: elementet finns inte');
+  const setter = el instanceof HTMLTextAreaElement ? taSetter : inSetter;
+  act(() => { setter.call(el, v); el.dispatchEvent(new Event('input', { bubbles: true })); });
+}
 function skrivArea(el: HTMLTextAreaElement, v: string) { act(() => { taSetter.call(el, v); el.dispatchEvent(new Event('input', { bubbles: true })); }); }
 function valj(el: HTMLSelectElement, v: string) { act(() => { seSetter.call(el, v); el.dispatchEvent(new Event('change', { bubbles: true })); }); }
 function knapp(host: HTMLElement, text: string): HTMLButtonElement {
@@ -1276,20 +1280,56 @@ describe('Detaljplanering som egen flik', () => {
     const panel = host.querySelector('.panel')!;
     // Lektionsmeny + formulär öppet direkt (utan fällknapp)
     expect(select(host, 'Välj lektion')).not.toBeNull();
-    expect(panel.textContent).toContain('Lektion 1 / 2');
-    expect(panel.querySelector('.np-grid')).not.toBeNull();        // formuläret öppet
-    expect(panel.textContent).toContain('💡 Begrepp');
+    expect(panel.textContent).toContain('Lektion 1 av 2');
+    // Lektionssidans sektioner (förlagan) + NO-formuläret öppet för halvklassämnen
+    expect(panel.textContent).toContain('TAVLAN');
+    expect(panel.textContent).toContain('VAD SKA VI GÖRA');
+    expect(panel.textContent).toContain('EXIT TICKET');
+    expect(panel.querySelector('.np-grid')).not.toBeNull();        // NO-formuläret öppet
+    expect(panel.textContent).toContain('BEGREPP');
     expect(panel.textContent).toContain('cell');                   // 4.1-begrepp
     // Bläddra till lektion 2 → begrepp och rumsförslag följer med
     act(() => { knapp(host, '▶').click(); });
     expect(panel.textContent).toContain('fotosyntes');
     expect(panel.textContent).toContain('Biologi412');             // aggregerat läxförhörsrum
-    // Film läggs till från fliken
+    // Film läggs till från lektionssidan
     skriv(input(host, 'Ny film'), 'Fotosyntes|https://binogi.se/f');
-    act(() => { knapp(host, '+ Film').click(); });
+    act(() => { knapp(host, '+ Lägg till film').click(); });
     expect(lasStruktur().lektionsplaner.find((p) => p.lektionsIndex === 1)?.filmer).toEqual(['Fotosyntes|https://binogi.se/f']);
   });
 })
+
+describe('Lektionssidans redigerbara ytor', () => {
+  it('Vad ska vi göra/lära oss/Exempel sparas i lektionsplanen', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '🧭 Detaljplanering').click(); });
+
+    const area = (t: string) => host.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${t}"]`)!;
+    skriv(area('Vad ska vi göra'), 'Placera tal på tallinjen');
+    skriv(area('Vad ska vi lära oss'), 'Talmängder');
+    skriv(area('Exempel vi räknar'), 'Ex 1 s. 11');
+    skriv(input(host, 'Magma-länk'), 'https://magma.se/x');
+    const lp = lasStruktur().lektionsplaner.find((x) => x.lektionsIndex === 0)!;
+    expect(lp).toMatchObject({ vadGora: 'Placera tal på tallinjen', laraOss: 'Talmängder', exempelRakna: 'Ex 1 s. 11', magma: 'https://magma.se/x' });
+    // Matematik (helklass): NO-formuläret visas inte
+    expect(host.querySelector('.np-grid')).toBeNull();
+  });
+});
 
 describe('Funktionsparitet med v1: Ångra + uppgiftsintervall', () => {
   it('↩ Ångra återställer senaste ändringen', async () => {

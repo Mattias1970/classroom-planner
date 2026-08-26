@@ -1008,9 +1008,10 @@ function TypChip({ typ }: { typ: string }) {
 function arFargnivaer(bok: Bok): boolean { return bok.nivaer.niva1 === 'Grön'; }
 
 /**
- * 🧭 Detaljplanering: egen flik med lektionsmeny (◀ ▶ + lista), begrepp och
- * filmlänkar för lektionen, och hela den detaljerade planeringen öppen —
- * presentation, sammanfattning/mål, läxa/läxförhör, exit, laboration, flippat.
+ * 🧭 Detaljplanering — lektionssida i HTML-förlagans stil: Tavlan (tider +
+ * Vad ska vi göra / lära oss / Exempel vi räknar), Genomgång (text + länk +
+ * Bokens exempel), Begrepp med förklaringar, Arbete, Magma, Filmer, Läxa och
+ * Exit ticket. Alla ytor redigerbara — sparas i lektionsplanen (overlay).
  */
 function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor }: {
   s: Struktur; amneId: string; plan: PlaneradLektion[]; bok: Bok; amnesNamn: string;
@@ -1021,9 +1022,32 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor }: {
   if (plan.length === 0) return <p className="muted">Skapa en planering först.</p>;
   const i = Math.min(idx, plan.length - 1);
   const rad = plan[i];
+  const kap = bok.kapitel.find((k) => k.nr === rad.kapitel);
   const begrepp = begreppForLektion(bok, rad.kapitel, rad.lektion);
+  const forklaringar = kap?.resurser.forklaringar ?? {};
   const lp = hamtaLektionsplan(s, amneId, i);
   const filmer = lp?.filmer ?? [];
+  const klass = s.klasser.find((k) => k.id === s.amnen.find((a) => a.id === amneId)?.klassId);
+  const rum = socrativeRum(amnesNamn, klass?.namn ?? '');
+  const N = bok.nivaer;
+  const farg = arFargnivaer(bok);
+  const eff = effektivaNivaer(rad.lektion, lp);
+  const { minimum } = arbetsNivaer(rad.lektion);
+  const har = (v: string) => v !== '—' && v !== '';
+  const bas = () => hamtaLektionsplan(lasStruktur(), amneId, i) ?? { id: `lp-${amneId}-${i}`, amneId, lektionsIndex: i };
+  const satt = (falt: keyof LektionsPlan, v: string) =>
+    kor(() => sattLektionsplan(lasStruktur(), { ...bas(), [falt]: v }), '');
+  const oka = (t: string | null, min: number): string => {
+    if (t === null) return '';
+    const [h, m] = t.split(':').map(Number);
+    const tot = h * 60 + m + min;
+    return `${String(Math.floor(tot / 60)).padStart(2, '0')}:${String(tot % 60).padStart(2, '0')}`;
+  };
+  const exitTid = rad.start !== null && rad.slutTid !== null ? exitStart(rad.lektion, rad.start, rad.slutTid) : null;
+  const genomSlut = oka(rad.start, 10);
+  const dagN = rad.datum !== null ? DAGNAMN[new Date(`${rad.datum}T00:00:00Z`).getUTCDay()] ?? '' : '';
+  const kapFarg = kap?.farg ?? '#5c6b7a';
+
   return (
     <div className="detaljflik">
       <div className="rad" style={{ gap: 8 }}>
@@ -1033,64 +1057,140 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor }: {
         </select>
         <button className="btn sec sm" disabled={i === 0} onClick={() => setIdx(i - 1)}>◀</button>
         <button className="btn sec sm" disabled={i === plan.length - 1} onClick={() => setIdx(i + 1)}>▶</button>
-        <span className="pillm">Lektion {i + 1} / {plan.length}</span>
       </div>
-      <p className="muted small">{rad.datum !== null ? `v.${rad.vecka} · ${rad.datum} · ${rad.start}–${rad.slutTid}` : 'ryms ej i skolåret'}</p>
 
-      <div className="detalj-menyer">
-        <div className="uppg-kort">
-          <b>💡 Begrepp</b> <small className="muted">(läxa till delkapitlet)</small>
-          <div className="rad" style={{ flexWrap: 'wrap', gap: 5, marginTop: 4 }}>
-            {begrepp.length === 0 ? <span className="muted small">Inga begrepp för lektionen.</span>
-              : begrepp.map((b) => <span key={b} className="chip">{b}</span>)}
+      {/* ── Lektionshuvud ── */}
+      <div className="ls-huvud" style={{ borderTopColor: kapFarg }}>
+        <div className="rad">
+          <h3 className="ls-titel">Lektion {i + 1} – {rad.lektion.avsnitt}</h3>
+          <span className="spacer" />
+          <span className="ls-nr">Lektion {i + 1} av {plan.length}</span>
+        </div>
+        <p className="muted small">📖 Teorisidor: {rad.lektion.sidorTeori}{rad.datum !== null ? ` · ${dagN} ${rad.datum} · v.${rad.vecka}` : ' · ryms ej i skolåret'}</p>
+        {begrepp.length > 0 && <span className="ls-begrepp-badge">💡 {begrepp.length} begrepp introduceras</span>}
+      </div>
+
+      {/* ── TAVLAN ── */}
+      <section className="ls-sektion ls-tavlan">
+        <div className="ls-sek-rubrik">📋 TAVLAN</div>
+        <div className="ls-tavla-bar"><b>{amnesNamn}</b><span className="spacer" />
+          <b>{rad.start !== null ? `${rad.start} – ${rad.slutTid}` : '—'}</b>&nbsp;<span className="muted-ljus">{dagN}{rad.vecka !== null ? ` · v.${rad.vecka}` : ''}</span></div>
+        {rad.start !== null && (
+          <div className="ls-tider">
+            <div className="ls-tid"><span className="ls-tid-t">{rad.start}–{genomSlut}</span><b>□ Genomgång</b><span className="muted small">10 min</span></div>
+            <div className="ls-tid"><span className="ls-tid-t">{genomSlut}–{exitTid ?? rad.slutTid}</span><b>✏ Arbete</b><span className="muted small">{har(eff.niva1) ? `${N.niva1} → ${N.niva2}` : `${N.niva2} → ${N.niva3}`}</span></div>
+            {exitTid !== null && <div className="ls-tid"><span className="ls-tid-t">{exitTid}–{rad.slutTid}</span><b>📱 Exit ticket</b><span className="muted small">{rum}</span></div>}
           </div>
+        )}
+        <div className="ls-trekort">
+          <div className="ls-kort ls-gora"><b>VAD SKA VI GÖRA</b>
+            <textarea aria-label="Vad ska vi göra" rows={3} value={lp?.vadGora ?? ''}
+              placeholder={`Arbeta med uppg. ${har(eff.niva1) ? eff.niva1 : eff.niva2} (${har(eff.niva1) ? N.niva1 : N.niva2})`}
+              onChange={(e) => satt('vadGora', e.target.value)} /></div>
+          <div className="ls-kort ls-lara"><b>VAD SKA VI LÄRA OSS</b>
+            <textarea aria-label="Vad ska vi lära oss" rows={3} value={lp?.laraOss ?? ''}
+              placeholder={begrepp.length > 0 ? begrepp.join(', ') : 'Lärandemål för lektionen'}
+              onChange={(e) => satt('laraOss', e.target.value)} /></div>
+          <div className="ls-kort ls-ex"><b>EXEMPEL VI RÄKNAR</b>
+            <textarea aria-label="Exempel vi räknar" rows={3} value={lp?.exempelRakna ?? ''}
+              placeholder={har(rad.lektion.ex) ? rad.lektion.ex : 'Exempel ur boken'}
+              onChange={(e) => satt('exempelRakna', e.target.value)} /></div>
         </div>
-        <div className="uppg-kort">
-          <b>🎬 Filmer</b> <small className="muted">(länkar för lektionen)</small>
-          {filmer.map((f, fi) => {
-            const [titel, url] = f.includes('|') ? [f.split('|')[0], f.split('|').slice(1).join('|')] : [f, f];
-            return (
-              <div key={fi} className="rad film-rad">
-                <a href={url} target="_blank" rel="noreferrer">▶ {titel}</a>
-                <button className="icon-btn" title="Ta bort film" onClick={() => kor(() => sattLektionsplan(lasStruktur(), {
-                  ...(hamtaLektionsplan(lasStruktur(), amneId, i) ?? { id: `lp-${amneId}-${i}`, amneId, lektionsIndex: i }),
-                  filmer: filmer.filter((_x, xi) => xi !== fi),
-                }), 'Film borttagen.')}>✕</button>
-              </div>
-            );
-          })}
-          <div className="rad" style={{ marginTop: 4 }}>
-            <input aria-label="Ny film" placeholder="Titel|https://binogi.se/…" value={nyFilm}
-              onChange={(e) => setNyFilm(e.target.value)} style={{ flex: 1 }} />
-            <button className="btn sec sm" disabled={nyFilm.trim() === ''} onClick={() => {
-              kor(() => sattLektionsplan(lasStruktur(), {
-                ...(hamtaLektionsplan(lasStruktur(), amneId, i) ?? { id: `lp-${amneId}-${i}`, amneId, lektionsIndex: i }),
-                filmer: [...filmer, nyFilm.trim()],
-              }), `Film tillagd på lektion ${i + 1}.`);
-              setNyFilm('');
-            }}>+ Film</button>
+      </section>
+
+      {/* ── GENOMGÅNG ── */}
+      <section className="ls-sektion ls-genomgang">
+        <div className="ls-sek-rubrik">□ {rad.start !== null ? `${rad.start}–${genomSlut} · ` : ''}GENOMGÅNG</div>
+        <textarea aria-label="Genomgång" rows={5} value={lp?.genomgang ?? ''}
+          placeholder={har(rad.lektion.genomgang) ? rad.lektion.genomgang : 'Det du berättar under genomgången …'}
+          onChange={(e) => satt('genomgang', e.target.value)} />
+        <label className="small">🔗 Genomgångslänk (film — används i NO/flippat):{' '}
+          <input aria-label="Genomgångslänk" value={lp?.flippFilm ?? ''} placeholder="https://…"
+            onChange={(e) => satt('flippFilm', e.target.value)} style={{ width: '60%' }} /></label>
+        {har(rad.lektion.ex) && (
+          <div className="ls-bokex"><b>BOKENS EXEMPEL – RÄKNA TILLSAMMANS</b><p>{rad.lektion.ex}</p></div>
+        )}
+      </section>
+
+      {/* ── BEGREPP ── */}
+      {begrepp.length > 0 && (
+        <section className="ls-sektion ls-begrepp">
+          <div className="ls-sek-rubrik">💡 BEGREPP – KAP {rad.kapitel}</div>
+          <div className="ls-begrepp-grid">
+            {begrepp.map((b) => (
+              <div key={b} className="ls-begrepp-kort"><b>{b}</b>
+                {forklaringar[b] !== undefined && <p>{forklaringar[b]}</p>}</div>
+            ))}
           </div>
-        </div>
-      </div>
+        </section>
+      )}
 
-      <div className="uppg-kort">
-        <b>✏ Uppgiftsintervall</b> <small className="muted">(tomt = bokens värden: {bok.nivaer.niva1} {rad.lektion.niva1} · {bok.nivaer.niva2} {rad.lektion.niva2} · {bok.nivaer.niva3} {rad.lektion.niva3})</small>
-        <div className="rad" style={{ gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
-          {([['uppgNiva1', bok.nivaer.niva1], ['uppgNiva2', bok.nivaer.niva2], ['uppgNiva3', bok.nivaer.niva3]] as const).map(([falt, namn]) => (
-            <label key={falt} className="small">{namn}{' '}
-              <input aria-label={`Uppgifter ${namn}`} style={{ width: 90 }}
-                value={lp?.[falt] ?? ''} placeholder={rad.lektion[falt === 'uppgNiva1' ? 'niva1' : falt === 'uppgNiva2' ? 'niva2' : 'niva3']}
-                onChange={(e) => kor(() => sattLektionsplan(lasStruktur(), {
-                  ...(hamtaLektionsplan(lasStruktur(), amneId, i) ?? { id: `lp-${amneId}-${i}`, amneId, lektionsIndex: i }),
-                  [falt]: e.target.value,
-                }), '')} />
-            </label>
-          ))}
+      {/* ── ARBETE ── */}
+      <section className="ls-sektion ls-arbete">
+        <div className="ls-sek-rubrik">✏ {rad.start !== null ? `${genomSlut}–${exitTid ?? rad.slutTid} · ` : ''}ARBETE</div>
+        <p className="small"><b>Lektion {rad.lektion.del} av 2 – {rad.lektion.avsnitt}</b> · minimum: <b>{minimum === 1 ? N.niva1 : N.niva2}</b> klar och inlämnad.</p>
+        <div className="uppg-rad">
+          {har(eff.niva1) && <div className={`uppg-niva ${farg ? 'niva-gron' : 'niva-neutral'}`}><div className="un-rubrik">{N.niva1} – introduktion</div><div className="un-uppg">Uppg. <b><input aria-label={`Uppgifter ${N.niva1}`} value={lp?.uppgNiva1 ?? ''} placeholder={rad.lektion.niva1} onChange={(e) => satt('uppgNiva1', e.target.value)} style={{ width: 80 }} /></b></div><div className="un-obl">Obligatorisk</div></div>}
+          {har(eff.niva2) && <div className={`uppg-niva ${farg ? 'niva-bla' : 'niva-neutral'}`}><div className="un-rubrik">{N.niva2} – E-nivå</div><div className="un-uppg">Uppg. <b><input aria-label={`Uppgifter ${N.niva2}`} value={lp?.uppgNiva2 ?? ''} placeholder={rad.lektion.niva2} onChange={(e) => satt('uppgNiva2', e.target.value)} style={{ width: 80 }} /></b></div><div className="un-obl">Obligatorisk</div></div>}
+          {har(eff.niva3) && <div className={`uppg-niva ${farg ? 'niva-rod' : 'niva-neutral2'}`}><div className="un-rubrik">{N.niva3} – C/A-nivå</div><div className="un-uppg">Uppg. <b><input aria-label={`Uppgifter ${N.niva3}`} value={lp?.uppgNiva3 ?? ''} placeholder={rad.lektion.niva3} onChange={(e) => satt('uppgNiva3', e.target.value)} style={{ width: 80 }} /></b></div><div className="un-obl">Frivillig / vid lektionstid</div></div>}
         </div>
-      </div>
+        <div className="ls-inlamning">📷 <b>Inlämning via Google Classroom</b> — foto på beräkningarna, minst <b>{N.niva1} + {N.niva2}</b> (obligatoriskt). {N.niva3} är frivillig. Görs klart hemma eller på stödtid om de ej hunnits med.</div>
+      </section>
 
-      <NoPlanering key={`${amneId}-${i}`} s={s} amneId={amneId} lektionsIndex={i} kor={kor}
-        amnesNamn={amnesNamn} rad={rad} bok={bok} alltidOppen />
+      {/* ── MAGMA ── */}
+      <section className="ls-sektion ls-magma">
+        <div className="ls-sek-rubrik">🟫 MAGMA – VÄLJ ÖVNING/TEST FÖR ELEVERNA</div>
+        <input aria-label="Magma-länk" value={lp?.magma ?? ''} placeholder="Ingen Magma-länk tillagd — klistra in länk"
+          onChange={(e) => satt('magma', e.target.value)} style={{ width: '80%' }} />
+      </section>
+
+      {/* ── FILMER ── */}
+      <section className="ls-sektion ls-filmer">
+        <div className="ls-sek-rubrik">🎬 FILMER – BINOGI OCH ANNAT STÖDMATERIAL</div>
+        {filmer.map((f, fi) => {
+          const [titel, url] = f.includes('|') ? [f.split('|')[0], f.split('|').slice(1).join('|')] : [f, f];
+          return (
+            <div key={fi} className="rad film-rad">
+              <a href={url} target="_blank" rel="noreferrer">▶ {titel}</a>
+              <button className="icon-btn" title="Ta bort film" onClick={() => kor(() => sattLektionsplan(lasStruktur(), {
+                ...bas(), filmer: (hamtaLektionsplan(lasStruktur(), amneId, i)?.filmer ?? []).filter((_x, xi) => xi !== fi),
+              }), 'Film borttagen.')}>✕</button>
+            </div>
+          );
+        })}
+        <div className="rad" style={{ marginTop: 4 }}>
+          <input aria-label="Ny film" placeholder="Titel|https://app.binogi.se/…" value={nyFilm}
+            onChange={(e) => setNyFilm(e.target.value)} style={{ flex: 1 }} />
+          <button className="btn sec sm" disabled={nyFilm.trim() === ''} onClick={() => {
+            kor(() => sattLektionsplan(lasStruktur(), { ...bas(), filmer: [...filmer, nyFilm.trim()] }), `Film tillagd på lektion ${i + 1}.`);
+            setNyFilm('');
+          }}>+ Lägg till film</button>
+        </div>
+      </section>
+
+      {/* ── LÄXA ── */}
+      <section className="ls-sektion ls-laxa">
+        <div className="ls-sek-rubrik">📚 LÄXA</div>
+        {begrepp.length > 0 && (<>
+          <p className="small"><b>Begrepp att kunna inför nästa lektions läxförhör:</b></p>
+          <div className="rad" style={{ flexWrap: 'wrap', gap: 5 }}>{begrepp.map((b) => <span key={b} className="chip">{b}</span>)}</div>
+        </>)}
+        <textarea aria-label="Läxa" rows={2} value={lp?.laxa ?? ''}
+          placeholder={har(rad.lektion.laxa) ? rad.lektion.laxa : `${N.niva1} och ${N.niva2} uppgifter klara och inlämnade via Google Classroom innan nästa lektion.`}
+          onChange={(e) => satt('laxa', e.target.value)} />
+      </section>
+
+      {/* ── EXIT TICKET ── */}
+      <section className="ls-sektion ls-exit">
+        <div className="ls-sek-rubrik">📱 {exitTid !== null ? `${exitTid}–${rad.slutTid} · ` : ''}EXIT TICKET</div>
+        <div className="ls-soc-bar"><span className="ls-soc">Socrative.com</span><span className="ls-soc-rum">Roomname: {rum}</span>{har(rad.lektion.exit) && <span className="ls-soc-quiz">{rad.lektion.exit}</span>}</div>
+        <p className="muted small">5 minuter. Visa att du förstår grundläggande uppgifter från lektionen — logga in på Socrative och välj rummet <b>{rum}</b>. Exit ticket från denna lektion används som läxförhör nästa lektion.</p>
+      </section>
+
+      {arHalvklass(amnesNamn) && (
+        <NoPlanering key={`${amneId}-${i}`} s={s} amneId={amneId} lektionsIndex={i} kor={kor}
+          amnesNamn={amnesNamn} rad={rad} bok={bok} alltidOppen />
+      )}
     </div>
   );
 }

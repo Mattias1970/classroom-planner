@@ -38,7 +38,7 @@ describe('bokFromImport (v1-filer, t.ex. Matematik Y)', () => {
     expect(d46.lektioner.map((l) => l.niva1)).toEqual(['133–137', '133–137']);
     expect(kap.extraLektioner.map((l) => l.avsnitt)).toEqual(['Blandade uppgifter', '4 Prov']);
     expect(kap.begreppslista).toEqual(['ekvation', 'obekant', 'balansmetoden', 'vänster led', 'distribuera']);
-    expect(kap.resurser).toEqual({ filmer: [] }); // öppet för filmer + flippat klassrum
+    expect(kap.resurser).toEqual({ filmer: [], forklaringar: {} }); // öppet för filmer + flippat klassrum
   });
 
   it('läser grön/blå/röd-böcker med rätt etiketter', () => {

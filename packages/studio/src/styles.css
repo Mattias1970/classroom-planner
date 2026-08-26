@@ -336,3 +336,51 @@ body[data-tema="klassisk"] .tema-valj { border-color: var(--ram); background: #f
 .tbl.plan tr.klar td { opacity: .55; }
 .tbl.plan tr.klar td:nth-child(6) { text-decoration: line-through; }
 .tbl.plan input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--bla); cursor: pointer; }
+
+/* ═══ Del 36: Lektionssidan (förlagans sektioner) ═══ */
+.ls-huvud { border-top: 3px solid var(--bla); padding-top: 8px; margin-top: 12px; }
+.ls-titel { margin: 0; font-weight: 800; }
+.ls-nr { background: var(--text-varm); color: #fff; border-radius: 8px; padding: 3px 10px; font-size: 12px; font-weight: 800; }
+.ls-begrepp-badge { display: inline-block; background: #2E7D46; color: #fff; border-radius: 14px; padding: 2px 10px; font-size: 12px; font-weight: 700; }
+.ls-sektion { border: 1px solid var(--ram); border-left: 4px solid var(--ram); border-radius: 10px;
+  padding: 10px 14px; margin: 12px 0; background: #fff; }
+.ls-sek-rubrik { font-size: 12px; font-weight: 800; letter-spacing: .08em; margin-bottom: 8px; }
+.ls-tavlan { background: #F0FAF5; border-left-color: #1D7A6B; }
+.ls-tavla-bar { display: flex; align-items: center; background: #1A1008; color: #fff;
+  border-radius: 8px; padding: 8px 12px; }
+.ls-tavla-bar .muted-ljus { opacity: .7; font-size: 12px; }
+.ls-tider { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.ls-tid { flex: 1; min-width: 140px; background: #fff; border: 1px solid var(--ram); border-left: 3px solid #1D7A6B;
+  border-radius: 8px; padding: 6px 10px; display: flex; flex-direction: column; }
+.ls-tid-t { font-size: 11px; font-weight: 700; color: var(--muted-varm); }
+.ls-trekort { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 10px; }
+.ls-kort { border-radius: 10px; border: 1px solid var(--ram); padding: 8px 10px; }
+.ls-kort b { font-size: 11px; letter-spacing: .06em; }
+.ls-kort textarea { width: 100%; border: 1px solid transparent; background: transparent; font: inherit;
+  resize: vertical; margin-top: 4px; border-radius: 6px; padding: 4px; }
+.ls-kort textarea:hover, .ls-kort textarea:focus { border-color: var(--ram); background: #fff; outline: none; }
+.ls-gora { background: #E8FAF7; } .ls-gora b { color: #0D4F44; }
+.ls-lara { background: #E3F2FD; } .ls-lara b { color: #0A3D7A; }
+.ls-ex { background: #FFF8E1; } .ls-ex b { color: #7A5A00; }
+.ls-genomgang { background: #FDF3F0; border-left-color: #A0522D; }
+.ls-genomgang textarea { width: 100%; border: 1px solid var(--ram); border-radius: 8px; padding: 8px; font: inherit; resize: vertical; }
+.ls-bokex { background: #fff; border: 1px solid var(--ram); border-radius: 10px; padding: 8px 12px; margin-top: 8px; }
+.ls-bokex b { font-size: 11px; letter-spacing: .06em; color: var(--muted-varm); }
+.ls-begrepp { background: #F7F0FA; border-left-color: #8B1A8B; }
+.ls-begrepp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.ls-begrepp-kort { background: #fff; border: 1px solid #D8C4DE; border-radius: 8px; padding: 7px 10px; }
+.ls-begrepp-kort b { color: #5A0A5A; }
+.ls-begrepp-kort p { margin: 3px 0 0; font-size: 12px; color: var(--muted-varm); }
+.ls-arbete { background: #F0F5FC; border-left-color: #1565C0; }
+.ls-inlamning { background: #F0EBE3; border-radius: 8px; padding: 7px 10px; margin-top: 8px; font-size: 12px; }
+.ls-magma { background: #FFF3E8; border-left-color: #B8600B; }
+.ls-magma input { border: 1px solid var(--ram); border-radius: 8px; padding: 6px 10px; font: inherit; }
+.ls-filmer { background: #FDF0F0; border-left-color: #B71C1C; }
+.ls-laxa { background: #F0FAF2; border-left-color: #2E7D32; }
+.ls-laxa textarea { width: 100%; border: 1px solid var(--ram); border-radius: 8px; padding: 8px; font: inherit; margin-top: 6px; resize: vertical; }
+.ls-exit { background: #FDF6F0; border-left-color: #B8600B; }
+.ls-soc-bar { display: inline-flex; align-items: center; gap: 10px; background: #1A2A6B; color: #fff;
+  border-radius: 8px; padding: 7px 12px; }
+.ls-soc { font-weight: 800; }
+.ls-soc-rum { font-family: ui-monospace, monospace; background: rgba(255,255,255,.15); border-radius: 6px; padding: 2px 8px; }
+.ls-soc-quiz { background: #D4A017; color: #1A1008; border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: 800; }
