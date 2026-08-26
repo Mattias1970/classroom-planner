@@ -85,6 +85,22 @@ describe('sidregister', () => {
   });
 });
 
+describe('genomgangslänk i matematikformatet', () => {
+  it("raw 'genomgang_lank' med http-länk hamnar på lektionen; annat ignoreras", () => {
+    const bok = bokFromImport(JSON.stringify({
+      schema: 'classroom-planner-bok', version: 1,
+      bok: { id: 'b', titel: 'B', kapitelMeta: { '1': { name: 'K' } } },
+      lektioner: { '1': [
+        { id: 1, type: 'regular', avsnitt: '1.1 X', ett: '1–5', genomgang_lank: 'https://app.binogi.se/l/x' },
+        { id: 2, type: 'regular', avsnitt: '1.1 X', del: 2, ett: '6–9', genomgang_lank: 'inte en länk' },
+      ] },
+    }));
+    const [l1, l2] = bok.kapitel[0].delkapitel[0].lektioner;
+    expect(l1.genomgangLank).toBe('https://app.binogi.se/l/x');
+    expect(l2.genomgangLank).toBeUndefined();
+  });
+});
+
 describe('kapitelfilmer i bokfilen', () => {
   it('läser kapitelMeta.filmer (Titel|url och objektform) till resurser.filmer, hoppar ogiltiga', () => {
     const bok = bokFromImport(JSON.stringify({

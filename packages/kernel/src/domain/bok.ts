@@ -65,6 +65,8 @@ function lasLektion(raw: RawLektion, kap: number, idx: number): Lektion {
     sidorTeori: txt(raw['sidor_teori'] ?? raw['sidorTeori']),
     begrepp: txt(raw['begrepp']),
     genomgang: txt(raw['genomgang']),
+    ...(typeof raw['genomgang_lank'] === 'string' && (raw['genomgang_lank'] as string).startsWith('http')
+      ? { genomgangLank: raw['genomgang_lank'] as string } : {}),
     laxa: txt(raw['laxa'] ?? raw['läxa']),
     ex: txt(raw['ex'] ?? raw['bam_ex']),
     socStart: txt(raw['soc_start'] ?? raw['socStart']),

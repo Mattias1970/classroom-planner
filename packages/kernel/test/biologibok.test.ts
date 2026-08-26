@@ -10,7 +10,7 @@ const NOBOK = JSON.stringify({
     nummer: 6, titel: 'Vår fantastiska kropp', sidor: 's. 150–199',
     mal: ['Beskriva cellen'],
     delkapitel: [
-      { nummer: '6.1', titel: 'Cellen', sidor: 's. 152–155', begrepp: ['cell', 'cellmembran'], extraBegrepp: ['organell'], testaDigSjalv: { sida: 155, fragor: ['Vad är en cell?', 'Vad gör membranet?'] } },
+      { nummer: '6.1', titel: 'Cellen', sidor: 's. 152–155', begrepp: ['cell', 'cellmembran'], extraBegrepp: ['organell'], testaDigSjalv: { sida: 155, fragor: ['Vad är en cell?', 'Vad gör membranet?'] }, genomgangLank: 'https://app.binogi.se/l/cellen', forklaringar: { cell: 'Kroppens minsta byggsten.', cellmembran: 'Cellens skal som styr vad som släpps in och ut.' } },
       { nummer: '6.2', titel: 'Organsystem', sidor: 's. 156–160', begrepp: ['organ', 'vävnad'], extraBegrepp: [] },
       { nummer: '6.3', titel: 'Huden', sidor: 's. 161–164', begrepp: ['överhud'], extraBegrepp: [] },
     ],
@@ -58,6 +58,19 @@ describe('bokFromBiologiImport', () => {
     expect(() => bokFromBiologiImport('inte json')).toThrow('Filen är inte giltig JSON.');
     expect(() => bokFromBiologiImport('{"id":"x","titel":"T"}')).toThrow('"kapitel" saknas');
     expect(() => bokFromBiologiImport(JSON.stringify({ id: 'x', titel: 'T', kapitel: [{ nummer: 1, titel: 'K', delkapitel: [{ titel: 'D' }] }] }))).toThrow('nummer');
+  });
+});
+
+describe('genomgångslänk och förklaringar ur NO-boken', () => {
+  it('länken hamnar på lektionen och som kapitelfilm; förklaringarna i resurserna', () => {
+    const kap = bokFromBiologiImport(NOBOK).kapitel[0];
+    expect(kap.delkapitel[0].lektioner[0].genomgangLank).toBe('https://app.binogi.se/l/cellen');
+    expect(kap.delkapitel[1].lektioner[0].genomgangLank).toBeUndefined();
+    expect(kap.resurser.filmer).toEqual([{ titel: '6.1 Cellen — genomgång', url: 'https://app.binogi.se/l/cellen' }]);
+    expect(kap.resurser.forklaringar).toEqual({
+      cell: 'Kroppens minsta byggsten.',
+      cellmembran: 'Cellens skal som styr vad som släpps in och ut.',
+    });
   });
 });
 

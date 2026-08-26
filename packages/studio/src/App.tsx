@@ -1104,8 +1104,12 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor }: {
         <textarea aria-label="Genomgång" rows={5} value={lp?.genomgang ?? ''}
           placeholder={har(rad.lektion.genomgang) ? rad.lektion.genomgang : 'Det du berättar under genomgången …'}
           onChange={(e) => satt('genomgang', e.target.value)} />
+        {rad.lektion.genomgangLank !== undefined && (
+          <p className="small">🎬 Bokens genomgångsfilm:{' '}
+            <a href={rad.lektion.genomgangLank} target="_blank" rel="noreferrer">▶ {rad.lektion.genomgangLank}</a></p>
+        )}
         <label className="small">🔗 Genomgångslänk (film — används i NO/flippat):{' '}
-          <input aria-label="Genomgångslänk" value={lp?.flippFilm ?? ''} placeholder="https://…"
+          <input aria-label="Genomgångslänk" value={lp?.flippFilm ?? ''} placeholder={rad.lektion.genomgangLank ?? 'https://…'}
             onChange={(e) => satt('flippFilm', e.target.value)} style={{ width: '60%' }} /></label>
         {har(rad.lektion.ex) && (
           <div className="ls-bokex"><b>BOKENS EXEMPEL – RÄKNA TILLSAMMANS</b><p>{rad.lektion.ex}</p></div>

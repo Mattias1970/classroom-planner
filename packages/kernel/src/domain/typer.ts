@@ -109,6 +109,8 @@ export interface Lektion {
   sidorTeori: string;
   begrepp: string;
   genomgang: string;
+  /** Lank till genomgangsfilm ur boken (NO/flippat) - visas i Genomgang-ytan. */
+  genomgangLank?: string;
   laxa: string;
   /** Exempel att räkna tillsammans under genomgången. */
   ex: string;

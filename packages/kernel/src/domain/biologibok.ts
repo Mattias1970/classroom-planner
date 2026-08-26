@@ -49,6 +49,7 @@ function strangLista(v: unknown): string[] {
 interface RawDelkapitel {
   nummer: string; titel: string; sidor: string;
   begrepp: string[]; extraBegrepp: string[]; testaFragor: number;
+  genomgangLank?: string; forklaringar: Record<string, string>;
 }
 
 function lasDelkapitel(raw: unknown, kapNr: number, index: number): RawDelkapitel {
@@ -56,10 +57,18 @@ function lasDelkapitel(raw: unknown, kapNr: number, index: number): RawDelkapite
   const r = raw as Record<string, unknown>;
   const nummer = kravStrang(r.nummer, `kapitel ${kapNr}, delkapitel ${index + 1}: nummer`);
   const tds = r.testaDigSjalv as Record<string, unknown> | undefined;
+  const forklaringar: Record<string, string> = {};
+  if (r.forklaringar !== null && typeof r.forklaringar === 'object' && !Array.isArray(r.forklaringar)) {
+    for (const [k, v] of Object.entries(r.forklaringar as Record<string, unknown>)) {
+      if (typeof v === 'string' && k.trim() !== '' && v.trim() !== '') forklaringar[k.trim()] = v.trim();
+    }
+  }
   return {
     nummer, titel: kravStrang(r.titel, `delkapitel ${nummer}: titel`), sidor: txt(r.sidor),
     begrepp: strangLista(r.begrepp), extraBegrepp: strangLista(r.extraBegrepp),
     testaFragor: tds && typeof tds === 'object' ? strangLista(tds.fragor).length : 0,
+    ...(typeof r.genomgangLank === 'string' && r.genomgangLank.startsWith('http') ? { genomgangLank: r.genomgangLank } : {}),
+    forklaringar,
   };
 }
 
@@ -73,6 +82,7 @@ function delkapitelLektion(d: RawDelkapitel, index1: number, prefix: string, kap
     sidorTeori: d.sidor,
     begrepp: d.begrepp.length > 0 ? d.begrepp.join(', ') : '—',
     genomgang: d.titel,
+    ...(d.genomgangLank !== undefined ? { genomgangLank: d.genomgangLank } : {}),
     laxa: `Alla begrepp t.o.m. ${d.nummer} – ${socrativeLaxforhorRum(prefix, kapNr, index1)} ≥ ${NO_KRAV_LAXFORHOR} %`,
     ex: d.testaFragor > 0 ? `Testa dig själv ${d.nummer} (${d.testaFragor} frågor)` : '—',
     socStart: laxforhor,
@@ -127,7 +137,12 @@ function lasKapitel(raw: unknown, index: number, prefix: string): Kapitel {
     ex: '—', socStart: alla, exit: '—',
   });
 
-  return byggKapitel(nummer, titel, NO_KAPITELFARGER[index % NO_KAPITELFARGER.length], lektioner);
+  const kap = byggKapitel(nummer, titel, NO_KAPITELFARGER[index % NO_KAPITELFARGER.length], lektioner);
+  kap.resurser.forklaringar = Object.assign({}, ...delkapitel.map((d) => d.forklaringar)) as Record<string, string>;
+  kap.resurser.filmer = delkapitel
+    .filter((d) => d.genomgangLank !== undefined)
+    .map((d) => ({ titel: `${d.nummer} ${d.titel} — genomgång`, url: d.genomgangLank ?? '' }));
+  return kap;
 }
 
 /** Läser en NO-bok (biologibok-formatet, utan schema-fält) till en v2-Bok. */
