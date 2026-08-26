@@ -35,7 +35,14 @@ export interface Skolar {
 export interface Larare { id: string; namn: string; signatur: string; }
 
 /** En tjänst hör till ett skolår och kan (men måste inte) ha en lärare. */
-export interface Tjanst { id: string; skolarId: string; namn: string; larareId?: string; }
+export interface Tjanst {
+  id: string; skolarId: string; namn: string; larareId?: string;
+  /** Återkommande stödpass (t.ex. Ma/NO-stöd) — öppen tid där elever gör klart obligatoriska uppgifter. */
+  stodPass?: StodPass[];
+}
+
+/** Ett stödpass: ett namngivet veckopass utanför den ordinarie lektionsplaneringen. */
+export interface StodPass { id: string; namn: string; dag: number; start: string; slut: string; }
 
 export interface Klass { id: string; tjanstId: string; namn: string; }
 

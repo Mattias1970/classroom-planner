@@ -5,7 +5,7 @@ import {
 } from '../src/domain/kalender.js';
 import {
   laggTillAmne, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering,
-  resetIdRaknare, sparaBok,
+  resetIdRaknare, sattStodPass, sparaBok,
 } from '../src/domain/struktur.js';
 import { tomStruktur, type Skolar, type Struktur } from '../src/domain/typer.js';
 
@@ -89,5 +89,24 @@ describe('rutnät', () => {
     expect(m[0]).toEqual([2026, 7]);
     expect(m[m.length - 1]).toEqual([2027, 5]);
     expect(m).toHaveLength(11);
+  });
+});
+
+describe('stödpass i kalendern (Ma/NO-stöd)', () => {
+  it('tjänstens stödpass blir veckohändelser utan klass, med namn och öppen stödtid', () => {
+    let s = bygg();
+    s = sattStodPass(s, 'tj', [{ id: 'sp1', namn: 'Ma/NO-stöd', dag: 4, start: '15:00', slut: '16:00' }]);
+    const stod = kalenderHandelser(s, 'la').filter((h) => h.amnesNamn === 'Ma/NO-stöd');
+    expect(stod.length).toBeGreaterThan(30);                       // varje torsdag under läsåret
+    expect(stod[0]).toMatchObject({ klassId: '', start: '15:00', slut: '16:00', avsnitt: 'Ma/NO-stöd — öppen stödtid', kapitel: 0 });
+    expect(new Set(stod.map((h) => new Date(`${h.datum}T00:00:00Z`).getUTCDay()))).toEqual(new Set([4]));
+  });
+
+  it('stödpass hoppar över lov och röda dagar, och sattStodPass kräver känd tjänst', () => {
+    let s = bygg();
+    s = sattStodPass(s, 'tj', [{ id: 'sp1', namn: 'Ma/NO-stöd', dag: 4, start: '15:00', slut: '16:00' }]);
+    const datum = kalenderHandelser(s, 'la').filter((h) => h.amnesNamn === 'Ma/NO-stöd').map((h) => h.datum);
+    for (const d of LA.dagar.flatMap((x) => 'datum' in x ? [x.datum] : [])) expect(datum).not.toContain(d);
+    expect(() => sattStodPass(bygg(), 'fel', [])).toThrow('Okänd tjänst.');
   });
 });

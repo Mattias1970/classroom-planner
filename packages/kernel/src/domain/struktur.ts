@@ -8,7 +8,7 @@ import { NO_TK_AMNEN } from './amnen.js';
 import { isoVecka, passSparr } from './skolar.js';
 import type {
   Amne, Bok, EgenRad, Elev, Klass, Larare, Lektion, LektionsPlan, Pass, PlaneradLektion,
-  Planering, Skolar, Struktur, Tjanst } from './typer.js';
+  Planering, Skolar, StodPass, Struktur, Tjanst } from './typer.js';
 
 let seq = 0;
 // Sessionsunik bas: förhindrar att id:n återanvänds mellan sidladdningar
@@ -382,7 +382,7 @@ export function passKonflikter(s: Struktur, klassId: string, nyaPass: Pass[], ig
 interface Slot { datum: string; vecka: number; start: string; slut: string; }
 
 /** Alla lediga lektionsslots i skolåret (helger/röda dagar/lov/temadagar/halvdagar hoppas över). */
-function samlaSlots(skolar: Skolar, schema: Pass[]): Slot[] {
+export function samlaSlots(skolar: Skolar, schema: Pass[]): Slot[] {
   const perDag = new Map<number, Pass[]>();
   for (const p of schema.filter(giltigtPass)) {
     if (!perDag.has(p.dag)) perDag.set(p.dag, []);
@@ -463,6 +463,12 @@ export function skapaPlanering(skolar: Skolar, schema: Pass[], bok: Bok, offset 
       ? { kapitel, lektion, datum: s.datum, vecka: s.vecka, start: s.start, slutTid: s.slut }
       : { kapitel, lektion, datum: null, vecka: null, start: null, slutTid: null };
   });
+}
+
+/** Sätter tjänstens stödpass (t.ex. Ma/NO-stöd). */
+export function sattStodPass(s: Struktur, tjanstId: string, stodPass: StodPass[]): Struktur {
+  if (!s.tjanster.some((t) => t.id === tjanstId)) throw new Error('Okänd tjänst.');
+  return { ...s, tjanster: s.tjanster.map((t) => (t.id === tjanstId ? { ...t, stodPass } : t)) };
 }
 
 /** Registrerar en planering (ersätter tidigare för samma ämne). */

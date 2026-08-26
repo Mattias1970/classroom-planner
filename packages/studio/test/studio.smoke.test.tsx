@@ -475,6 +475,44 @@ describe('Kalenderutskrift och Planering-huvudfliken', () => {
   });
 });
 
+describe('Stödpass (Ma/NO-stöd)', () => {
+  it('läggs till på tjänsten, hänvisas i uppgiftsreglerna och syns i kalendern', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host);
+    skriv(input(host, 'Tjänstens namn'), 'MatTe');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 MatTe').click(); });
+
+    // Lägg till stödpasset på tjänsten (torsdag 15:00–16:00 är förvalt)
+    act(() => { knapp(host, '+ Lägg till stödpass').click(); });
+    expect(lasStruktur().tjanster[0].stodPass).toEqual([
+      { id: expect.any(String) as unknown as string, namn: 'Ma/NO-stöd', dag: 4, start: '15:00', slut: '16:00' },
+    ]);
+    expect(host.textContent).toContain('Ma/NO-stöd — Torsdag 15:00–16:00');
+
+    // Klass + ämne + planering → uppgiftsreglerna hänvisar till stödpasset
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✏ Uppgifter').click(); });
+    expect(host.querySelector('.regel')!.textContent).toContain('Ma/NO-stöd');
+    expect(host.querySelector('.regel')!.textContent).toContain('torsdag 15:00–16:00');
+
+    // Kalendern visar stödtiden
+    act(() => { knapp(host, '📆 Kalender').click(); });
+    act(() => { knapp(host, 'Månad').click(); });
+    expect(host.querySelector('.panel')!.textContent).toContain('Ma/NO-stöd');
+  });
+});
+
 describe('Vänstermeny, tjänstöversikt och årsöversikt', () => {
   async function byggUpp(host: HTMLElement) {
     skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');

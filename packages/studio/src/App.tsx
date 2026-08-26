@@ -21,7 +21,7 @@ import {
   socrativeRum, sparaBok,
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
-  type Amne, type Bok, type EgenRad, type Grupp, type KalenderDagRuta, type KalenderHandelse,
+  sattStodPass, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type KalenderDagRuta, type KalenderHandelse,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
 } from '@planner/kernel';
@@ -408,6 +408,42 @@ function NyTjanst({ s, skolarId, kor }: { s: Struktur; skolarId: string; kor: (f
 }
 
 // ── Tjänst ───────────────────────────────────────────────────
+/** 🧩 Stödpass (t.ex. Ma/NO-stöd): öppna veckotider där elever gör klart obligatoriska uppgifter. */
+function StodPassRedigerare({ t, kor }: { t: Tjanst; kor: (fn: () => Struktur, m: string) => void }) {
+  const [namn, setNamn] = useState('Ma/NO-stöd');
+  const [dag, setDag] = useState(4);
+  const [start, setStart] = useState('15:00');
+  const [slut, setSlut] = useState('16:00');
+  const pass = t.stodPass ?? [];
+  return (
+    <div className="uppg-kort">
+      <b>🧩 Stödpass</b> <small className="muted">Öppen tid (t.ex. Ma/NO-stöd) där elever gör klart Gröna/Blå uppgifter — syns i kalendern och i uppgiftsreglerna.</small>
+      {pass.map((sp) => (
+        <div key={sp.id} className="rad film-rad">
+          <span>🧩 <b>{sp.namn}</b> — {DAGNAMN[sp.dag] ?? `dag ${sp.dag}`} {sp.start}–{sp.slut}</span>
+          <button className="icon-btn" title="Ta bort stödpass" onClick={() => kor(
+            () => sattStodPass(lasStruktur(), t.id, (lasStruktur().tjanster.find((x) => x.id === t.id)?.stodPass ?? []).filter((x) => x.id !== sp.id)),
+            `Stödpasset "${sp.namn}" borttaget.`)}>✕</button>
+        </div>
+      ))}
+      <div className="rad" style={{ flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+        <input aria-label="Stödpassets namn" value={namn} onChange={(e) => setNamn(e.target.value)} style={{ width: 130 }} />
+        <select aria-label="Stödpassets dag" value={dag} onChange={(e) => setDag(Number(e.target.value))}>
+          {DAGNAMN.slice(1).map((d, i) => <option key={d} value={i + 1}>{d}</option>)}
+        </select>
+        <input aria-label="Stödpassets start" type="time" value={start} onChange={(e) => setStart(e.target.value)} />
+        <span>–</span>
+        <input aria-label="Stödpassets slut" type="time" value={slut} onChange={(e) => setSlut(e.target.value)} />
+        <button className="btn sec sm" disabled={namn.trim() === '' || !giltigtPass({ dag, start, slut })} onClick={() => {
+          const ny = { id: nyttId('sp'), namn: namn.trim(), dag, start, slut };
+          kor(() => sattStodPass(lasStruktur(), t.id, [...(lasStruktur().tjanster.find((x) => x.id === t.id)?.stodPass ?? []), ny]),
+            `Stödpasset "${ny.namn}" tillagt (${DAGNAMN[dag]} ${start}–${slut}).`);
+        }}>+ Lägg till stödpass</button>
+      </div>
+    </div>
+  );
+}
+
 function TjanstPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn: () => Struktur, m: string) => void; setVald: (v: Vald) => void }) {
   const t = s.tjanster.find((x) => x.id === id);
   const [namn, setNamn] = useState('');
@@ -425,6 +461,8 @@ function TjanstPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (f
           {s.larare.map((l) => <option key={l.id} value={l.id}>{l.namn} ({l.signatur})</option>)}
         </select>
       </label>
+
+      <StodPassRedigerare t={t} kor={kor} />
 
       <h3>Klasser och ämnen</h3>
       {klasser.length === 0 && <p className="muted">Inga klasser ännu — lägg till en nedan.</p>}
@@ -1036,11 +1074,19 @@ function OversiktFlik({ plan, bok }: { plan: PlaneradLektion[]; bok: Bok }) {
 function UppgifterFlik({ plan, bok, s, amneId }: { plan: PlaneradLektion[]; bok: Bok; s: Struktur; amneId: string }) {
   const N = bok.nivaer;
   const har = (v: string) => v !== '—' && v !== '';
+  const amne = s.amnen.find((a) => a.id === amneId);
+  const tjanst = s.tjanster.find((t) => t.id === s.klasser.find((k) => k.id === amne?.klassId)?.tjanstId);
+  const stod = tjanst?.stodPass ?? [];
   return (
     <div>
       <div className="regel" style={{ marginBottom: 10 }}>
         <h4>📌 Inlämning</h4>
         <p>Foto på beräkningar laddas upp i klassens inlämningsyta (Teams, Classroom m.fl.). <b>{N.niva1} + {N.niva2} är obligatoriska.</b> {N.niva3} görs och lämnas in om lektionstid finns, annars frivillig fördjupning.</p>
+        {stod.length > 0 && (
+          <p>🧩 Inte klar på lektionen? Gör klart hemma eller på {stod.map((sp, i) => (
+            <span key={sp.id}>{i > 0 ? ' eller ' : ''}<b>{sp.namn}</b> ({DAGNAMN[sp.dag]?.toLowerCase()} {sp.start}–{sp.slut})</span>
+          ))} — sedan lämnas uppgifterna in.</p>
+        )}
       </div>
       {plan.map((r, i) => {
         const { minimum } = arbetsNivaer(r.lektion);

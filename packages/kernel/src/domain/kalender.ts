@@ -6,7 +6,7 @@
  */
 import { amneBakgrund } from './amnen.js';
 import { isoVecka } from './skolar.js';
-import { noBudget, skapaPlanering } from './struktur.js';
+import { noBudget, samlaSlots, skapaPlanering } from './struktur.js';
 import type { IsoDatum, Skolar, Struktur } from './typer.js';
 
 export interface KalenderHandelse {
@@ -76,6 +76,19 @@ export function kalenderHandelser(s: Struktur, skolarId: string): KalenderHandel
           datum: p.datum, start: p.start, slut: p.slutTid,
           klassId: klass.id, klassNamn: klass.namn, amnesNamn: amne.namn, grupp: g.grupp,
           kapitel: p.kapitel, kapitelFarg: farg(p.kapitel), amnesFarg, avsnitt: p.lektion.avsnitt, vecka: p.vecka,
+        });
+      }
+    }
+  }
+  // Stödpass (t.ex. Ma/NO-stöd): tjänstens öppna veckotider, utan klass och kapitel.
+  for (const tjanst of s.tjanster.filter((t) => t.skolarId === skolarId)) {
+    for (const sp of tjanst.stodPass ?? []) {
+      for (const slot of samlaSlots(skolar, [sp])) {
+        ut.push({
+          datum: slot.datum, start: slot.start, slut: slot.slut,
+          klassId: '', klassNamn: '', amnesNamn: sp.namn,
+          kapitel: 0, kapitelFarg: '#5c6b7a', amnesFarg: '#eef1f5',
+          avsnitt: `${sp.namn} — öppen stödtid`, vecka: slot.vecka,
         });
       }
     }
