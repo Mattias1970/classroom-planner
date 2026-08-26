@@ -171,6 +171,10 @@ export interface Planering {
   amneId: string;
   bokId: string;
   skapad: string;
+  /** Versionsnummer per ämne (1, 2, 3 …) — sätts av registreraPlanering. */
+  version?: number;
+  /** Unikt namn, t.ex. 'Matematik 8B · Prio Matematik 8 · v2 (2026-08-27)'. */
+  namn?: string;
 }
 
 export interface PlaneradLektion {
@@ -239,6 +243,8 @@ export interface LektionsPlan {
 }
 
 export interface Struktur {
+  /** Arkiverade planeringsversioner — skrivs aldrig över, kan återställas. */
+  planeringsarkiv?: Planering[];
   skolar: Skolar[];
   larare: Larare[];
   tjanster: Tjanst[];

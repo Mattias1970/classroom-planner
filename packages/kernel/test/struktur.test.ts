@@ -5,7 +5,7 @@ import {
   laggTillTjanst, larareSchema, nyttId, registreraPlanering, resetIdRaknare, sattLarare,
   schemaKonflikter, skapaPlanering, sparaBok, taBortBok, taBortKlass, taBortLarare,
   taBortSkolar, taBortTjanst, uppdateraAmne,
-  egenRadTillLektion, friBok, medEgnaRader, skapaFriPlanering,
+  aterstallPlanering, egenRadTillLektion, friBok, medEgnaRader, skapaFriPlanering,
 } from '../src/domain/struktur.js';
 import { tomStruktur, type Lektion, type Skolar, type Struktur } from '../src/domain/typer.js';
 
@@ -491,5 +491,38 @@ describe('stödämnen: fri planering utan bok', () => {
 
   it('kräver känt ämne och skolår', () => {
     expect(() => skapaFriPlanering(bygg(), 'fel', 'nu')).toThrow('Okänt ämne.');
+  });
+});
+
+describe('versionerade planeringar', () => {
+  const bygg2 = () => {
+    let s = tomStruktur();
+    s = laggTillSkolar(s, LA);
+    s = sparaBok(s, BOK);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'am', klassId: 'k', namn: 'Matematik', bokId: BOK.id, schema: [{ dag: 3, start: '09:00', slut: '10:00' }] });
+    return s;
+  };
+
+  it('ny planering skriver aldrig över — tidigare arkiveras med version och namn', () => {
+    let s = bygg2();
+    s = registreraPlanering(s, { id: 'p1', amneId: 'am', bokId: BOK.id, skapad: '2026-08-20T08:00:00Z' });
+    s = registreraPlanering(s, { id: 'p2', amneId: 'am', bokId: BOK.id, skapad: '2026-08-27T08:00:00Z' });
+    expect(s.planeringar).toHaveLength(1);
+    expect(s.planeringar[0]).toMatchObject({ id: 'p2', version: 2 });
+    expect(s.planeringar[0].namn).toContain('v2 (2026-08-27)');
+    expect(s.planeringsarkiv).toHaveLength(1);
+    expect(s.planeringsarkiv![0]).toMatchObject({ id: 'p1', version: 1 });
+  });
+
+  it('arkiverad version kan återställas — aktiv och arkivpost byter plats', () => {
+    let s = bygg2();
+    s = registreraPlanering(s, { id: 'p1', amneId: 'am', bokId: BOK.id, skapad: '2026-08-20T08:00:00Z' });
+    s = registreraPlanering(s, { id: 'p2', amneId: 'am', bokId: BOK.id, skapad: '2026-08-27T08:00:00Z' });
+    s = aterstallPlanering(s, 'p1');
+    expect(s.planeringar[0].id).toBe('p1');
+    expect(s.planeringsarkiv!.map((x) => x.id)).toEqual(['p2']);
+    expect(() => aterstallPlanering(s, 'finns-ej')).toThrow('Okänd arkiverad planering.');
   });
 });

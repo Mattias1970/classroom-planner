@@ -21,7 +21,7 @@ import {
   socrativeRum, sparaBok,
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
-  arStodAmne, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type KalenderDagRuta, type KalenderHandelse,
+  arStodAmne, aterstallPlanering, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type KalenderDagRuta, type KalenderHandelse,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
 } from '@planner/kernel';
@@ -922,6 +922,18 @@ function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn:
         {harPlanering ? '↻ Uppdatera planering' : '▶ Skapa planering'}
       </button>
       {bok && harPlanering && <EgnaRaderRedigerare amne={a} plan={plan} kor={kor} />}
+      {(s.planeringsarkiv ?? []).some((x) => x.amneId === a.id) && (
+        <div className="uppg-kort no-print">
+          <b>🗂 Tidigare planeringsversioner</b> <small className="muted">Sparade planeringar skrivs aldrig över — återställ vid behov.</small>
+          {(s.planeringsarkiv ?? []).filter((x) => x.amneId === a.id).map((x) => (
+            <div key={x.id} className="rad film-rad">
+              <span>📋 <b>{x.namn ?? x.id}</b></span>
+              <button className="btn sec sm" onClick={() => kor(() => aterstallPlanering(lasStruktur(), x.id),
+                `Planeringen \"${x.namn ?? x.id}\" återställd — den tidigare aktiva ligger i arkivet.`)}>↩ Återställ</button>
+            </div>
+          ))}
+        </div>
+      )}
       {bok && !halv && <GruppPlanering plan={plan} bok={bok} amnesNamn={a.namn} klassNamn={klass.namn} rum={rum}
         s={s} amneId={a.id} kor={kor} />}
       {bok && halv && (<>
@@ -1198,6 +1210,14 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor }: {
           : <p className="muted small">5 minuter. Visa att du förstår grundläggande uppgifter från lektionen — logga in på Socrative och välj rummet <b>{rum}</b>. Exit ticket från denna lektion används som läxförhör nästa lektion.</p>}
       </section>
 
+      <button className="btn sec ls-nyrad no-print" onClick={() => {
+        const rubrik = window.prompt('Rubrik för den nya lektionen (t.ex. Repetition, Diagnos, Prov):', 'Extra övning');
+        if (rubrik === null || rubrik.trim() === '') return;
+        const amne = lasStruktur().amnen.find((x) => x.id === amneId);
+        kor(() => uppdateraAmne(lasStruktur(), amneId, {
+          egnaRader: [...(amne?.egnaRader ?? []), { id: nyttId('er'), position: i + 1, rubrik: rubrik.trim(), typ: 'ovning' as const }],
+        }), `\"${rubrik.trim()}\" infogad efter lektion ${i + 1} — bokens lektioner skjuts framåt.`);
+      }}>➕ Lägg till lektion efter denna</button>
       {arHalvklass(amnesNamn) && (
         <NoPlanering key={`${amneId}-${i}`} s={s} amneId={amneId} lektionsIndex={i} kor={kor}
           amnesNamn={amnesNamn} rad={rad} bok={bok} alltidOppen />
@@ -1927,6 +1947,7 @@ function KalenderVy({ s }: { s: Struktur }) {
   const [termin, setTermin] = useState<'HT' | 'VT'>('HT');
   const skolar = s.skolar.find((x) => x.id === skolarId) ?? s.skolar[0];
   const [utskrift, setUtskrift] = useState(false);
+  const [utskriftLage, setUtskriftLage] = useState<'manader' | 'veckor'>('manader');
   const [ankare, setAnkare] = useState<string>(startAnkare(skolar));
 
   const handelser = useMemo(() => (skolar ? kalenderHandelser(s, skolar.id) : []), [s, skolar]);
@@ -1958,17 +1979,32 @@ function KalenderVy({ s }: { s: Struktur }) {
     const d = new Date(`${skolar.start.slice(0, 7)}-01T00:00:00Z`);
     const slutD = new Date(`${skolar.slut}T00:00:00Z`);
     while (d <= slutD) { manader.push({ ar: d.getUTCFullYear(), m0: d.getUTCMonth() }); d.setUTCMonth(d.getUTCMonth() + 1); }
+    const veckoStarter: string[] = [];
+    { const v = new Date(`${skolar.start}T00:00:00Z`);
+      const vd = v.getUTCDay() === 0 ? 7 : v.getUTCDay();
+      v.setUTCDate(v.getUTCDate() - (vd - 1));                       // måndagen i startveckan
+      while (v <= slutD) { veckoStarter.push(v.toISOString().slice(0, 10)); v.setUTCDate(v.getUTCDate() + 7); } }
     return (
       <div className="kal-utskrift">
         <div className="rad no-print" style={{ gap: 8, margin: '8px 0' }}>
           <button className="btn" onClick={() => window.print()}>🖨 Skriv ut</button>
+          <div className="kal-lagen">
+            <button className={`btn sec sm ${utskriftLage === 'manader' ? 'active' : ''}`} onClick={() => setUtskriftLage('manader')}>Månader</button>
+            <button className={`btn sec sm ${utskriftLage === 'veckor' ? 'active' : ''}`} onClick={() => setUtskriftLage('veckor')}>Veckor</button>
+          </div>
           <button className="btn sec" onClick={() => setUtskrift(false)}>Stäng</button>
-          <span className="muted small">En månad per sida ({manader.length} sidor) — skriv ut och häfta ihop läsåret.</span>
+          <span className="muted small">{utskriftLage === 'manader' ? `En månad per sida (${manader.length} sidor)` : `En vecka per sida (${veckoStarter.length} sidor)`} — skriv ut och häfta ihop.</span>
         </div>
-        {manader.map(({ ar, m0 }) => (
+        {utskriftLage === 'manader' && manader.map(({ ar, m0 }) => (
           <section key={`${ar}-${m0}`} className="kal-utskrift-sida">
             <h3>{skolar.namn} — {MANADSNAMN[m0]} {ar}</h3>
             <MonadsGrid ar={ar} manad0={m0} skolar={skolar} perDatum={perDatum} onPrev={() => undefined} onNext={() => undefined} />
+          </section>
+        ))}
+        {utskriftLage === 'veckor' && veckoStarter.map((vs) => (
+          <section key={vs} className="kal-utskrift-sida">
+            <h3>{skolar.namn} — vecka {isoVeckaLbl(vs)} <small className="muted">({vs})</small></h3>
+            <VeckoSchema rutor={veckaRutor(vs, skolar, perDatum)} onPrev={() => undefined} onNext={() => undefined} onIdag={() => undefined} />
           </section>
         ))}
       </div>

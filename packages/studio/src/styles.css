@@ -384,3 +384,25 @@ body[data-tema="klassisk"] .tema-valj { border-color: var(--ram); background: #f
 .ls-soc { font-weight: 800; }
 .ls-soc-rum { font-family: ui-monospace, monospace; background: rgba(255,255,255,.15); border-radius: 6px; padding: 2px 8px; }
 .ls-soc-quiz { background: #D4A017; color: #1A1008; border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: 800; }
+
+/* ═══ Del 39: kompakt lektionsnav, ny-lektion-knapp, mobilanpassning ═══ */
+.detaljflik > .rad:first-child { position: sticky; top: 0; z-index: 5; background: var(--bg);
+  padding: 6px 0; border-bottom: 1px solid var(--ram); }
+.detaljflik > .rad:first-child select { max-width: 60%; }
+.ls-nyrad { display: block; width: 100%; margin: 14px 0; border-style: dashed; text-align: center; }
+/* Mobil (förlagans brytpunkter): en kolumn, flikar och tabeller rullbara */
+@media (max-width: 760px) {
+  .cols { grid-template-columns: 1fr; }
+  .tree { border-right: 0; border-bottom: 1px solid var(--ram); max-height: 40vh; }
+  .panel { padding: 10px; }
+  .card { padding: 12px; }
+  .flikar { overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; }
+  .flik { white-space: nowrap; }
+  .tbl.plan { display: block; overflow-x: auto; }
+  .ls-trekort { grid-template-columns: 1fr; }
+  .ls-tider { flex-direction: column; }
+  .uppg-rad { flex-direction: column; }
+  .kap-badges { gap: 6px; }
+  .topbar { flex-wrap: wrap; }
+  .detaljflik > .rad:first-child select { max-width: 100%; }
+}

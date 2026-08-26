@@ -593,6 +593,48 @@ describe('Tema, kapitelheader och avklarat-kryss', () => {
   });
 });
 
+describe('Veckoutskrift och versionerade planeringar', () => {
+  it('utskriftsläget kan växla till en vecka per sida', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    act(() => { knapp(host, '📆 Kalender').click(); });
+    act(() => { knapp(host, '🖨 Skriv ut månader').click(); });
+    act(() => { knapp(host, 'Veckor').click(); });
+    const sidor = [...host.querySelectorAll('.kal-utskrift-sida')];
+    expect(sidor.length).toBeGreaterThan(40);                 // en vecka per sida
+    expect(sidor[0].textContent).toContain('vecka');
+    expect(sidor[0].querySelector('.schema')).not.toBeNull(); // veckorutnätet
+  });
+
+  it('↻ Uppdatera planering arkiverar den gamla; ↩ Återställ tar tillbaka den', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '↻ Uppdatera planering').click(); });
+
+    expect(lasStruktur().planeringar[0].version).toBe(2);
+    expect(lasStruktur().planeringsarkiv).toHaveLength(1);
+    expect(host.textContent).toContain('🗂 Tidigare planeringsversioner');
+    expect(host.textContent).toContain('v1 (');
+    act(() => { knapp(host, '↩ Återställ').click(); });
+    expect(lasStruktur().planeringar[0].version).toBe(1);
+    expect(lasStruktur().planeringsarkiv![0].version).toBe(2);
+  });
+});
+
 describe('Vänstermeny, tjänstöversikt och årsöversikt', () => {
   async function byggUpp(host: HTMLElement) {
     skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');

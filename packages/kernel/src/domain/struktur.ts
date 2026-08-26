@@ -471,12 +471,44 @@ export function sattStodPass(s: Struktur, tjanstId: string, stodPass: StodPass[]
   return { ...s, tjanster: s.tjanster.map((t) => (t.id === tjanstId ? { ...t, stodPass } : t)) };
 }
 
-/** Registrerar en planering (ersätter tidigare för samma ämne). */
+/**
+ * Registrerar en planering. Tidigare version för samma ämne skrivs ALDRIG
+ * över — den arkiveras i planeringsarkivet. Den nya får nästa versionsnummer
+ * och ett unikt namn (klass · bok · vN · datum) och kan återställas vid behov.
+ */
 export function registreraPlanering(s: Struktur, p: Planering): Struktur {
   const amne = s.amnen.find((a) => a.id === p.amneId);
   if (!amne) throw new Error('Okänt ämne.');
-  if (!s.bocker.some((b) => b.id === p.bokId)) throw new Error('Okänd bok.');
-  return { ...s, planeringar: [...s.planeringar.filter((x) => x.amneId !== p.amneId), p] };
+  const bok = s.bocker.find((b) => b.id === p.bokId);
+  if (!bok) throw new Error('Okänd bok.');
+  const klass = s.klasser.find((k) => k.id === amne.klassId);
+  const tidigare = s.planeringar.find((x) => x.amneId === p.amneId);
+  const arkiv = s.planeringsarkiv ?? [];
+  const version = Math.max(0, ...[...arkiv, ...(tidigare ? [tidigare] : [])]
+    .filter((x) => x.amneId === p.amneId).map((x) => x.version ?? 1)) + 1;
+  const ny: Planering = {
+    ...p, version,
+    namn: p.namn ?? `${amne.namn} ${klass?.namn ?? ''} · ${bok.titel} · v${version} (${p.skapad.slice(0, 10)})`.trim(),
+  };
+  return {
+    ...s,
+    planeringar: [...s.planeringar.filter((x) => x.amneId !== p.amneId), ny],
+    planeringsarkiv: tidigare ? [...arkiv, tidigare] : arkiv,
+  };
+}
+
+/** Återställer en arkiverad planeringsversion: den aktiva arkiveras, arkivposten blir aktiv. */
+export function aterstallPlanering(s: Struktur, planeringsId: string): Struktur {
+  const arkiv = s.planeringsarkiv ?? [];
+  const post = arkiv.find((x) => x.id === planeringsId);
+  if (!post) throw new Error('Okänd arkiverad planering.');
+  if (!s.bocker.some((b) => b.id === post.bokId)) throw new Error(`Boken för "${post.namn ?? post.id}" finns inte längre i biblioteket.`);
+  const aktiv = s.planeringar.find((x) => x.amneId === post.amneId);
+  return {
+    ...s,
+    planeringar: [...s.planeringar.filter((x) => x.amneId !== post.amneId), post],
+    planeringsarkiv: [...arkiv.filter((x) => x.id !== planeringsId), ...(aktiv ? [aktiv] : [])],
+  };
 }
 
 /** Fri bok för ett stödämne: ett kapitel med `antal` öppna tillfällen som detaljplaneras fritt. */
