@@ -334,7 +334,7 @@ describe('Halvklassämne i planeringen', () => {
     const host = render();
     skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
     act(() => { knapp(host, '2026/2027').click(); });
-    await importeraBok(host);
+    await importeraBok(host, BIOJSON);
     skriv(input(host, 'Tjänstens namn'), 'NO');
     act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
     act(() => { knapp(host, 'NO').click(); });
@@ -356,9 +356,8 @@ describe('Halvklassämne i planeringen', () => {
     const amne = lasStruktur().amnen[0];
     expect(amne).toMatchObject({ namn: 'Biologi', halvklass: true });
     expect(amne.schemaB).toEqual([{ dag: 4, start: '13:00', slut: '14:00' }]);
-    // Bok saknas för Biologi (Matematik Y filtreras bort) — koppla ändå via ämnespanelens bokval? Nej:
-    // bokväljaren i ämnespanelen visar alla böcker; välj Matematik Y för planeringstestet.
-    valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
+    // Ämnespanelens bokval visar endast ämnets böcker — Biologi 8, inte Matematik Y.
+    valj(select(host, 'Bok för ämnet'), 'gleerups-biologi-8');
     expect(host.textContent).toContain('Grupp A');
     expect(host.textContent).toContain('2026-08-18');       // tisdag (Grupp A)
     expect(host.textContent).toContain('2026-08-20');       // torsdag (Grupp B)
@@ -371,6 +370,44 @@ describe('Halvklassämne i planeringen', () => {
     expect(kort.textContent).toContain('Grupp B');
     expect(kort.textContent).toContain('Biologi8BB');
     expect(kort.textContent).toContain('13:50–14:00');
+  });
+});
+
+describe('Bokväljaren filtreras per ämne', () => {
+  it('Matematik-ämnet ser bara matteböcker och Biologi-ämnet bara biologiböcker', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    act(() => { knapp(host, '2026/2027').click(); });
+    await importeraBok(host);                 // Matematik Y (Matematik)
+    await importeraBok(host, BIOJSON);        // Biologi 8 (Biologi)
+    skriv(input(host, 'Tjänstens namn'), 'Ma/NO');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma/NO').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+
+    // Ämnespanelen för Matematik: endast matteboken bland alternativen
+    const val = () => [...select(host, 'Bok för ämnet').querySelectorAll('option')].map((o) => o.getAttribute('value'));
+    expect(val()).toEqual(['', 'liber-matematik-y']);
+
+    // Biologi (halvklass): endast biologiboken
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Biologi');
+    valj(select(host, 'Veckodag pass 1'), '2');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    valj(select(host, 'Veckodag pass 2'), '4');
+    skriv(input(host, 'Start pass 2'), '13:00');
+    skriv(input(host, 'Slut pass 2'), '14:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    expect(val()).toEqual(['', 'gleerups-biologi-8']);
   });
 });
 

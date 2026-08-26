@@ -823,7 +823,9 @@ function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn:
           onChange={(e) => kor(() => uppdateraAmne(lasStruktur(), id, { bokId: e.target.value }),
             e.target.value === '' ? 'Boken bortkopplad.' : 'Bok vald — skapa planeringen nedan.')}>
           <option value="">— ingen bok —</option>
-          {s.bocker.map((b) => <option key={b.id} value={b.id}>{b.titel} ({b.forlag})</option>)}
+          {s.bocker
+            .filter((b) => b.amne === a.namn || b.id === a.bokId) // endast ämnets böcker; redan kopplad bok visas alltid
+            .map((b) => <option key={b.id} value={b.id}>{b.titel} ({b.forlag})</option>)}
         </select>
       </label>{' '}
       <button className="btn" disabled={!bok}
