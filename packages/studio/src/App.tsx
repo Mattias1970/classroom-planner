@@ -919,7 +919,7 @@ function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn:
           halv
             ? `Planering skapad: ${bok!.titel} utlagd på Grupp A (${plan.filter((p) => p.datum !== null).length} lektioner) och Grupp B (${planB.filter((p) => p.datum !== null).length} lektioner).`
             : `Planering skapad: ${bok!.titel} utlagd på ${klass.namn}s schema — ${plan.filter((p) => p.datum !== null).length} lektioner får datum.`)}>
-        {harPlanering ? '↻ Uppdatera planering' : '▶ Skapa planering'}
+        {harPlanering ? '➕ Spara ny planeringsversion' : '▶ Skapa planering'}
       </button>
       {bok && harPlanering && <EgnaRaderRedigerare amne={a} plan={plan} kor={kor} />}
       {(s.planeringsarkiv ?? []).some((x) => x.amneId === a.id) && (
@@ -2025,7 +2025,7 @@ function KalenderVy({ s }: { s: Struktur }) {
               {l === 'lasar' ? 'Läsår' : l === 'termin' ? 'Termin' : l === 'manad' ? 'Månad' : 'Vecka'}
             </button>
           ))}
-          <button className="btn sec sm" onClick={() => setUtskrift(true)}>🖨 Skriv ut månader</button>
+          <button className="btn sec sm" onClick={() => setUtskrift(true)}>🖨 Skriv ut (månader/veckor)</button>
         </div>
       </div>
       <div className="kal-filter">

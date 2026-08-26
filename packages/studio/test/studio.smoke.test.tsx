@@ -438,7 +438,7 @@ describe('Kalenderutskrift och Planering-huvudfliken', () => {
     const host = render();
     await medPlanering2(host);
     act(() => { knapp(host, '📆 Kalender').click(); });
-    act(() => { knapp(host, '🖨 Skriv ut månader').click(); });
+    act(() => { knapp(host, '🖨 Skriv ut (månader/veckor)').click(); });
     const sidor = [...host.querySelectorAll('.kal-utskrift-sida')];
     expect(sidor).toHaveLength(11);                        // aug 2026 – jun 2027
     expect(sidor[0].textContent).toContain('augusti 2026');
@@ -598,7 +598,7 @@ describe('Veckoutskrift och versionerade planeringar', () => {
     const host = render();
     skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
     act(() => { knapp(host, '📆 Kalender').click(); });
-    act(() => { knapp(host, '🖨 Skriv ut månader').click(); });
+    act(() => { knapp(host, '🖨 Skriv ut (månader/veckor)').click(); });
     act(() => { knapp(host, 'Veckor').click(); });
     const sidor = [...host.querySelectorAll('.kal-utskrift-sida')];
     expect(sidor.length).toBeGreaterThan(40);                 // en vecka per sida
@@ -623,7 +623,7 @@ describe('Veckoutskrift och versionerade planeringar', () => {
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
-    act(() => { knapp(host, '↻ Uppdatera planering').click(); });
+    act(() => { knapp(host, '➕ Spara ny planeringsversion').click(); });
 
     expect(lasStruktur().planeringar[0].version).toBe(2);
     expect(lasStruktur().planeringsarkiv).toHaveLength(1);

@@ -406,3 +406,10 @@ body[data-tema="klassisk"] .tema-valj { border-color: var(--ram); background: #f
   .topbar { flex-wrap: wrap; }
   .detaljflik > .rad:first-child select { max-width: 100%; }
 }
+
+/* ═══ Del 39: flikmenyn svämmar inte över + Pages-deploy ═══ */
+.flikar { flex-wrap: wrap; row-gap: 2px; }
+.flikar .flik { padding: 6px 9px; font-size: 13px; }
+@media (max-width: 900px) {
+  .flikar { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+}

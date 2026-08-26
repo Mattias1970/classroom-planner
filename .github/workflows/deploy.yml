@@ -1,8 +1,10 @@
-# Sprint 20-om: bygg webbappen och publicera till GitHub Pages
+# Del 39: bygg web- OCH studioappen och publicera till GitHub Pages
+# Webbappen på /, studio (v2) på /studio/ — nås från valfri dator via
+# https://mattias1970.github.io/classroom-planner/
 name: Deploy till GitHub Pages
 on:
   push:
-    branches: [classroom-planner, main]
+    branches: [classroom-planner, main, utveckling]
   workflow_dispatch:
 permissions:
   contents: read
@@ -23,10 +25,17 @@ jobs:
         with: { node-version: 20 }
       - run: npm ci
       - run: npx vitest run
-      - run: npm install && npx vite build
+      - run: npx vite build
         working-directory: packages/web
+      - run: npx vite build
+        working-directory: packages/studio
+      - name: Sätt ihop siten (web på /, studio på /studio/)
+        run: |
+          mkdir -p site/studio
+          cp -r packages/web/dist/* site/
+          cp -r packages/studio/dist/* site/studio/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
-        with: { path: packages/web/dist }
+        with: { path: site }
       - id: deployment
         uses: actions/deploy-pages@v4
