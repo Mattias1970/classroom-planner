@@ -135,7 +135,7 @@ export function bokFromImport(json: string): Bok {
   const id = txt(b['id']); const titel = txt(b['titel']);
   if (!har(id)) throw new Error('bok.id saknas.');
   if (!har(titel)) throw new Error('bok.titel saknas.');
-  const kapMeta = (b['kapitelMeta'] ?? {}) as Record<string, { name?: unknown; col?: unknown }>;
+  const kapMeta = (b['kapitelMeta'] ?? {}) as Record<string, { name?: unknown; col?: unknown; filmer?: unknown }>;
   const lekRaw = raw.lektioner ?? {};
   const kapNrs = Object.keys(kapMeta).map(Number).filter((n) => Number.isInteger(n) && n > 0).sort((a, c) => a - c);
   if (kapNrs.length === 0) throw new Error('bok.kapitelMeta är tom — minst ett kapitel krävs.');
@@ -152,7 +152,9 @@ export function bokFromImport(json: string): Bok {
     const m = kapMeta[String(nr)] ?? {};
     const namn = typeof m.name === 'string' && m.name.trim() !== '' ? m.name : `Kapitel ${nr}`;
     const farg = typeof m.col === 'string' && /^#[0-9a-fA-F]{6}$/.test(m.col) ? m.col : '#5c6b7a';
-    return byggKapitel(nr, namn, farg, lektioner);
+    const kap = byggKapitel(nr, namn, farg, lektioner);
+    kap.resurser.filmer = lasKapitelFilmer(m.filmer);
+    return kap;
   });
   if (kapitel.every((k) => k.delkapitel.length === 0 && k.extraLektioner.length === 0)) {
     throw new Error('Boken innehåller inga lektioner.');
@@ -165,6 +167,25 @@ export function bokFromImport(json: string): Bok {
     nivaer: detectNivaer(allaRader),
     kapitel,
   };
+}
+
+/** Kapitelfilmer ur bokfilen: 'Titel|https://…' eller { titel, url }. Ogiltiga poster hoppas över. */
+function lasKapitelFilmer(raw: unknown): Array<{ titel: string; url: string }> {
+  if (!Array.isArray(raw)) return [];
+  const ut: Array<{ titel: string; url: string }> = [];
+  for (const f of raw) {
+    if (typeof f === 'string' && f.includes('|')) {
+      const [titel, ...rest] = f.split('|');
+      const url = rest.join('|').trim();
+      if (titel.trim() !== '' && url.startsWith('http')) ut.push({ titel: titel.trim(), url });
+    } else if (f !== null && typeof f === 'object') {
+      const o = f as { titel?: unknown; url?: unknown };
+      if (typeof o.titel === 'string' && o.titel.trim() !== '' && typeof o.url === 'string' && o.url.startsWith('http')) {
+        ut.push({ titel: o.titel.trim(), url: o.url });
+      }
+    }
+  }
+  return ut;
 }
 
 /** Bokens alla lektioner i planeringsordning (kapitel stigande, bokordning inom). */

@@ -84,3 +84,30 @@ describe('sidregister', () => {
     expect(csv).toContain('Delkapitel;4.6;Ekvationer;s. 187–190;"ekvation, obekant, balansmetoden"');
   });
 });
+
+describe('kapitelfilmer i bokfilen', () => {
+  it('läser kapitelMeta.filmer (Titel|url och objektform) till resurser.filmer, hoppar ogiltiga', () => {
+    const bok = bokFromImport(JSON.stringify({
+      schema: 'classroom-planner-bok', version: 1,
+      bok: { id: 'b', titel: 'B', kapitelMeta: { '1': { name: 'Tal', filmer: [
+        'Negativa tal|https://app.binogi.se/l/introduktion-till-negativa-tal',
+        { titel: 'Potenser', url: 'https://app.binogi.se/l/introduktion-till-potenser' },
+        'utan länk', 'Trasig|ingen-url', { titel: '', url: 'https://x' }, 42,
+      ] } } },
+      lektioner: { '1': [{ id: 1, type: 'regular', avsnitt: '1.1 X', ett: '1–5' }] },
+    }));
+    expect(bok.kapitel[0].resurser.filmer).toEqual([
+      { titel: 'Negativa tal', url: 'https://app.binogi.se/l/introduktion-till-negativa-tal' },
+      { titel: 'Potenser', url: 'https://app.binogi.se/l/introduktion-till-potenser' },
+    ]);
+  });
+
+  it('utan filmer-fält blir resurslistan tom', () => {
+    const bok = bokFromImport(JSON.stringify({
+      schema: 'classroom-planner-bok', version: 1,
+      bok: { id: 'b', titel: 'B', kapitelMeta: { '1': { name: 'K' } } },
+      lektioner: { '1': [{ id: 1, type: 'regular', avsnitt: '1.1 X', ett: '1–5' }] },
+    }));
+    expect(bok.kapitel[0].resurser.filmer).toEqual([]);
+  });
+});

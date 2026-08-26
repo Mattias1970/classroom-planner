@@ -1097,10 +1097,37 @@ function FilmerFlik({ s, amneId, plan, bok, kor }: {
   const [ny, setNy] = useState<Record<number, string>>({});
   const totalt = plan.reduce((n, _r, i) => n + (hamtaLektionsplan(s, amneId, i)?.filmer?.length ?? 0), 0);
   const kapFilmer = bok.kapitel.flatMap((k) => k.resurser.filmer);
+  const laggPa = (lektionsIndex: number, titel: string, url: string) => {
+    kor(() => {
+      const bef = hamtaLektionsplan(lasStruktur(), amneId, lektionsIndex);
+      return sattLektionsplan(lasStruktur(), {
+        ...(bef ?? { id: `lp-${amneId}-${lektionsIndex}`, amneId, lektionsIndex }),
+        filmer: [...(bef?.filmer ?? []), `${titel}|${url}`],
+      });
+    }, `"${titel}" tillagd på lektion ${lektionsIndex + 1}.`);
+  };
   return (
     <div>
-      <p className="note">🎬 Filmlänkar per lektion — skriv <i>Titel|https://…</i> och lägg till. {kapFilmer.length > 0 ? `Bokens kapitel har ${kapFilmer.length} filmer i resurslistan.` : ''}</p>
+      <p className="note">🎬 Filmlänkar per lektion — skriv <i>Titel|https://…</i> och lägg till.</p>
       <p className="muted small">{totalt} filmer totalt i planeringen</p>
+      {bok.kapitel.filter((k) => k.resurser.filmer.length > 0).map((k) => (
+        <div key={k.nr} className="uppg-kort" style={{ borderLeft: `4px solid ${k.farg}` }}>
+          <b>📚 Kapitel {k.nr} {k.namn}</b> <small className="muted">— bokens filmresurser ({k.resurser.filmer.length}); välj lektion för att lägga till</small>
+          {k.resurser.filmer.map((f, fi) => (
+            <div key={fi} className="rad film-rad">
+              <a href={f.url} target="_blank" rel="noreferrer">▶ {f.titel}</a>
+              <select aria-label={`Lägg ${f.titel} på lektion`} value="" onChange={(e) => {
+                if (e.target.value !== '') laggPa(Number(e.target.value), f.titel, f.url);
+                e.target.value = '';
+              }}>
+                <option value="">+ på lektion …</option>
+                {plan.map((r, ri) => r.kapitel === k.nr
+                  ? <option key={ri} value={ri}>Lektion {ri + 1} — {r.lektion.avsnitt}</option> : null)}
+              </select>
+            </div>
+          ))}
+        </div>
+      ))}
       {plan.map((r, i) => {
         const lp = hamtaLektionsplan(s, amneId, i);
         const filmer = lp?.filmer ?? [];
