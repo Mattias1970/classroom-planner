@@ -211,3 +211,87 @@ body { margin: 0; font: 14px/1.45 system-ui, 'Segoe UI', sans-serif; background:
   .kal-utskrift .no-print { display: none !important; }
   .kal-utskrift .mcell { min-height: 84px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Del 34: Varma temat från planering_matematik8 (HTML-förlagan)
+   Läggs sist i filen — senare regler vinner över basstilen ovan.
+   ═══════════════════════════════════════════════════════════════ */
+:root {
+  --bla: #A0522D;                 /* aktiv accent = förlagans kapitel 1-brun */
+  --ram: #D4C4B8;
+  --bg: #FDF8F3;                  /* cream */
+  --warm: #F0EBE3;
+  --text-varm: #1A1008;
+  --muted-varm: #7A6558;
+  --gron: #2E7D32; --gron-bg: #E8F5E9;
+  --blaa: #1565C0; --blaa-bg: #E3F2FD;
+  --rod: #B71C1C;  --rod-bg: #FFEBEE;
+}
+body { background: var(--bg); color: var(--text-varm); font-size: 15px; line-height: 1.55; }
+.topbar { background: linear-gradient(135deg, #1A1008 0%, #3A2010 60%, #1A1008 100%); color: #fff;
+  border-bottom: 0; padding: 10px 16px; box-shadow: 0 2px 12px rgba(0,0,0,.15); }
+.topbar .logo, .topbar b { color: #fff; }
+.tflik { color: rgba(255,255,255,.75); border-radius: 8px 8px 0 0; }
+.tflik:hover { background: rgba(255,255,255,.12); color: #fff; }
+.tflik.act { background: rgba(255,255,255,.18); color: #fff; border-bottom-color: #D4A017; font-weight: 800; }
+.topbar .btn.sec { background: rgba(255,255,255,.12); color: #fff; border-color: rgba(255,255,255,.35); }
+.topbar .btn.sec:hover { background: rgba(255,255,255,.22); }
+.tree { background: #fff; border-right: 1px solid var(--ram); }
+.tree-h { color: var(--muted-varm); letter-spacing: .1em; font-weight: 700; }
+.node:hover { background: var(--warm); }
+.node.act { background: #FBF0E8; color: var(--bla); }
+.card { border-radius: 12px; box-shadow: 0 1px 6px rgba(26,16,8,.05); }
+.card h2 { font-weight: 800; letter-spacing: -.01em; }
+.btn { border-radius: 8px; font-weight: 700; }
+.btn.sec { color: var(--bla); }
+.btn.sec:hover:not(:disabled) { background: var(--warm); }
+.flik { font-weight: 600; color: var(--muted-varm); }
+.flik:hover { color: var(--bla); background: var(--warm); }
+.flik.act { color: var(--bla); border-bottom-color: var(--bla); font-weight: 800; }
+.chip { background: var(--warm); border: 1px solid var(--ram); border-radius: 20px; padding: 2px 10px; }
+.pillm { background: #FBF0E8; color: var(--bla); }
+.status { background: #FFF8E1; border: 1px solid #E8D8A0; border-radius: 8px; padding: 6px 10px; }
+.regel { background: #fff; border: 1px solid var(--ram); border-left: 4px solid var(--bla);
+  border-radius: 10px; padding: 10px 14px; }
+.uppg-kort { background: #fff; border: 1px solid var(--ram); border-radius: 12px;
+  padding: 10px 14px; margin: 10px 0; box-shadow: 0 1px 4px rgba(26,16,8,.04); }
+/* Nivåkorten: förlagans Grön/Blå/Röd-paneler */
+.uppg-niva { border-radius: 10px; padding: 8px 10px; border: 1px solid var(--ram); }
+.niva-gron { background: var(--gron-bg); border-color: var(--gron); }
+.niva-gron .un-rubrik { color: var(--gron); font-weight: 800; }
+.niva-bla { background: var(--blaa-bg); border-color: var(--blaa); }
+.niva-bla .un-rubrik { color: var(--blaa); font-weight: 800; }
+.niva-rod { background: var(--rod-bg); border-color: var(--rod); }
+.niva-rod .un-rubrik { color: var(--rod); font-weight: 800; }
+/* Plantabellen: veckopiller och luftigare rader */
+.tbl.plan th { background: var(--warm); color: var(--text-varm); font-weight: 800;
+  text-transform: uppercase; font-size: 11px; letter-spacing: .06em; }
+.tbl.plan td { border-bottom: 1px solid var(--ram); }
+.tbl.plan tbody tr:hover { background: #FBF6EF; cursor: pointer; }
+.typ-chip { border-radius: 5px; font-weight: 800; font-size: 10px; letter-spacing: .04em;
+  padding: 2px 7px; }
+/* ── Kalender i förlagans stil ── */
+.kalender { max-width: 1200px; }
+.kal-lagen { border: 1.5px solid var(--ram); border-radius: 8px; overflow: hidden; display: flex; }
+.kal-lagen .btn.sec.sm { border: 0; border-right: 1px solid var(--ram); border-radius: 0;
+  background: #fff; color: var(--muted-varm); font-weight: 700; }
+.kal-lagen .btn.sec.sm:last-child { border-right: 0; }
+.kal-lagen .btn.sec.sm.active { background: var(--text-varm); color: #fff; }
+.chipbtn { border: 1.5px solid var(--ram); border-radius: 20px; background: var(--warm);
+  color: var(--muted-varm); font-weight: 800; padding: 5px 14px; cursor: pointer; font: inherit; }
+.chipbtn.act { background: var(--bla); color: #fff; border-color: var(--bla); }
+.mgrid { border: 1px solid var(--ram); border-radius: 10px; overflow: hidden; }
+.mgrid-h { background: var(--warm); color: var(--muted-varm); font-weight: 700;
+  text-transform: uppercase; font-size: 10px; letter-spacing: .06em; }
+.mcell { background: #fff; border-color: var(--ram); }
+.mcell.dim { background: #FAFAFA; }
+.mcell.helg { background: #F7F2EB; }
+.mcell.ledig { background: repeating-linear-gradient(45deg, #F5F0EA, #F5F0EA 4px, #EDE7DD 4px, #EDE7DD 8px); }
+.mcell.idag { background: #FFF8F0; box-shadow: inset 0 0 0 2px var(--bla); }
+.mcell.idag .mcell-d { color: var(--bla); font-weight: 900; }
+.kh { border-radius: 4px; font-size: 10px; font-weight: 700; padding: 1px 5px; }
+.kh:hover { filter: brightness(.92); }
+.kal-nav b { font-size: 1.05rem; font-weight: 800; }
+.kal-utskrift-sida h3 { font-weight: 800; }
+/* Detaljplaneringen: kortkänsla */
+.detaljflik select, .detaljflik input, .ny input, .ny select { background: #fff; }
