@@ -27,7 +27,7 @@ import {
 } from '@planner/kernel';
 import { exportJson, importJson, lasStruktur, sparaStruktur } from './store.js';
 import {
-  konfigKomplett, laddaFranGitHub, lasGitHubConfig, sparaGitHubConfig, sparaTillGitHub,
+  hamtaBockerFranGitHub, konfigKomplett, laddaFranGitHub, lasGitHubConfig, sparaGitHubConfig, sparaTillGitHub,
   type GitHubConfig,
 } from './github.js';
 
@@ -255,6 +255,25 @@ function NyttSkolarPanel({ kor, setVald }: { kor: (fn: () => Struktur, m: string
 }
 
 function NyBokPanel({ kor, setVald }: { kor: (fn: () => Struktur, m: string) => void; setVald: (v: Vald) => void }) {
+  const [rapport, setRapport] = useState<string[]>([]);
+  const [hamtar, setHamtar] = useState(false);
+  const hamtaFranRepo = () => {
+    setHamtar(true); setRapport([]);
+    void hamtaBockerFranGitHub(lasGitHubConfig())
+      .then((bocker) => {
+        const rader: string[] = [];
+        for (const { id, json } of bocker) {
+          try {
+            const bok = bokFromImport(json);
+            kor(() => sparaBok(lasStruktur(), bok), `Bok "${bok.titel}" hämtad från datarepot.`);
+            rader.push(`✅ ${id}: ${bok.titel} (${bok.amne}, åk ${bok.arskurs})`);
+          } catch (fel) { rader.push(`⚠ ${id}: ${(fel as Error).message}`); }
+        }
+        setRapport(rader);   // stannar i panelen så rapporten syns; böckerna dyker upp i trädet
+      })
+      .catch((fel: unknown) => setRapport([`❌ ${(fel as Error).message}`]))
+      .finally(() => setHamtar(false));
+  };
   return (
     <div className="card">
       <h2>➕ Lägg till bok</h2>
@@ -271,6 +290,11 @@ function NyBokPanel({ kor, setVald }: { kor: (fn: () => Struktur, m: string) => 
           e.currentTarget.value = '';
         }} />
       </label>
+      <p className="note">…eller hämta alla böcker ur datarepots <code>books/</code>-katalog (kräver ifylld ☁ GitHub-konfiguration). Befintliga böcker med samma id uppdateras.</p>
+      <button className="btn" disabled={hamtar} onClick={hamtaFranRepo}>
+        {hamtar ? '⏳ Hämtar…' : '☁ Hämta böcker från datarepot'}
+      </button>
+      {rapport.map((r, i) => <p key={i} className="note">{r}</p>)}
     </div>
   );
 }

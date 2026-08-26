@@ -1108,3 +1108,29 @@ describe('Funktionsparitet med v1: Ångra + uppgiftsintervall', () => {
     expect(host.querySelector('.panel')!.textContent).toContain('1–8');   // överstyrningen syns
   });
 })
+
+describe('Biblioteket hämtar böcker från datarepot', () => {
+  it('☁-knappen listar books/, importerar giltiga och rapporterar ogiltiga', async () => {
+    const { sparaGitHubConfig } = await import('../src/github');
+    sparaGitHubConfig({ owner: 'Mattias1970', repo: 'classroom-planner-data', branch: 'main', path: 'studio/struktur.json', token: 'tok' });
+    const b64 = (t: string) => btoa(String.fromCharCode(...new TextEncoder().encode(t)));
+    const f = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ([
+        { name: 'liber-matematik-y', type: 'dir' }, { name: 'spektrum-biologi', type: 'dir' },
+      ]) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ content: b64(BOKJSON) }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ content: b64('{"inte":"en bokfil"}') }) });
+    vi.stubGlobal('fetch', f);
+    try {
+      const host = render();
+      act(() => { treeKnapp(host, '➕ Lägg till bok').click(); });
+      await act(async () => { knapp(host, '☁ Hämta böcker från datarepot').click(); await Promise.resolve(); });
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      // Giltig bok sparad och rapporterad; ogiltig rapporterad med fel, inte sparad.
+      expect(lasStruktur().bocker.map((b) => b.id)).toEqual(['liber-matematik-y']);
+      const panel = host.querySelector('.panel')!.textContent ?? '';
+      expect(panel).toContain('✅ liber-matematik-y');
+      expect(panel).toContain('⚠ spektrum-biologi');
+    } finally { vi.unstubAllGlobals(); }
+  });
+})
