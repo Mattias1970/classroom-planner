@@ -70,6 +70,19 @@ export interface Amne {
   noGrupp?: string;
   /** Position 0–3 i NO+Tk-blockens läsordning. */
   noOrder?: number;
+  /** Egna rader (prov, diagnoser, övningar …) infogade i planeringen. */
+  egnaRader?: EgenRad[];
+}
+
+/** Egen rad som läraren infogar i ämnets planering utöver bokens lektioner. */
+export interface EgenRad {
+  id: string;
+  /** Infogas på denna position i planeringen (0-baserad). Efterföljande lektioner skjuts framåt. */
+  position: number;
+  rubrik: string;
+  typ: 'prov' | 'diagnos' | 'ovning' | 'annat';
+  /** Kort beskrivning — visas som genomgångstext på lektionskortet. */
+  beskrivning?: string;
 }
 
 // ── Bok (fristående bibliotek) ───────────────────────────────

@@ -7,9 +7,8 @@ import { bokLektioner } from './bok.js';
 import { NO_TK_AMNEN } from './amnen.js';
 import { isoVecka, passSparr } from './skolar.js';
 import type {
-  Amne, Bok, Elev, Klass, Larare, LektionsPlan, Pass, PlaneradLektion, Planering, Skolar,
-  Struktur, Tjanst,
-} from './typer.js';
+  Amne, Bok, EgenRad, Elev, Klass, Larare, Lektion, LektionsPlan, Pass, PlaneradLektion,
+  Planering, Skolar, Struktur, Tjanst } from './typer.js';
 
 let seq = 0;
 // Sessionsunik bas: förhindrar att id:n återanvänds mellan sidladdningar
@@ -429,8 +428,34 @@ export function noOverBudget(bok: Bok, budget: number): boolean {
  * hoppar över de första N slotsen (används av NO+Tk så delämne 2 börjar efter
  * delämne 1 osv.). Lektioner som inte ryms före skolårets slut får datum null.
  */
-export function skapaPlanering(skolar: Skolar, schema: Pass[], bok: Bok, offset = 0): PlaneradLektion[] {
-  const lektioner = bokLektioner(bok);
+const EGEN_TYP = { prov: 'exam', diagnos: 'test', ovning: 'repetition', annat: 'regular' } as const;
+
+/** Bygger en Lektion av en egen rad (prov/diagnos/övning) för planeringen. */
+export function egenRadTillLektion(r: EgenRad): Lektion {
+  return {
+    id: 0, typ: EGEN_TYP[r.typ], avsnitt: r.rubrik, del: 1,
+    niva1: '—', niva2: '—', niva3: '—', sidorTeori: '—', begrepp: '—',
+    genomgang: r.beskrivning ?? '—', laxa: '—', ex: '—', socStart: '—', exit: '—',
+  };
+}
+
+/** Infogar egna rader i tilläggsordning — varje rads position avser planen som den
+ * såg ut när raden lades till (inklusive tidigare egna rader). Grannens kapitel ärvs. */
+export function medEgnaRader(
+  lektioner: Array<{ kapitel: number; lektion: Lektion }>,
+  rader: EgenRad[],
+): Array<{ kapitel: number; lektion: Lektion }> {
+  const ut = [...lektioner];
+  for (const r of rader) {
+    const pos = Math.max(0, Math.min(r.position, ut.length));
+    const granne = ut[pos - 1] ?? ut[pos];
+    ut.splice(pos, 0, { kapitel: granne?.kapitel ?? 1, lektion: egenRadTillLektion(r) });
+  }
+  return ut;
+}
+
+export function skapaPlanering(skolar: Skolar, schema: Pass[], bok: Bok, offset = 0, egnaRader: EgenRad[] = []): PlaneradLektion[] {
+  const lektioner = medEgnaRader(bokLektioner(bok), egnaRader);
   const slots = samlaSlots(skolar, schema).slice(offset);
   return lektioner.map(({ kapitel, lektion }, i) => {
     const s = slots[i];

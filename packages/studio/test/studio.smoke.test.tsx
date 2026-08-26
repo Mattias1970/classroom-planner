@@ -411,6 +411,70 @@ describe('Bokväljaren filtreras per ämne', () => {
   });
 });
 
+describe('Kalenderutskrift och Planering-huvudfliken', () => {
+  async function medPlanering2(host: HTMLElement) {
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+  }
+
+  it('🖨 Skriv ut månader visar en sida per månad i skolåret', async () => {
+    const host = render();
+    await medPlanering2(host);
+    act(() => { knapp(host, '📆 Kalender').click(); });
+    act(() => { knapp(host, '🖨 Skriv ut månader').click(); });
+    const sidor = [...host.querySelectorAll('.kal-utskrift-sida')];
+    expect(sidor).toHaveLength(11);                        // aug 2026 – jun 2027
+    expect(sidor[0].textContent).toContain('augusti 2026');
+    expect(sidor[10].textContent).toContain('juni 2027');
+    expect(sidor[0].querySelector('.mgrid')).not.toBeNull();
+    act(() => { knapp(host, 'Stäng').click(); });
+    expect(host.querySelector('.kal-utskrift')).toBeNull();
+  });
+
+  it('📋 Planering-fliken väljer klass · ämne och visar hela planeringsvyn', async () => {
+    const host = render();
+    await medPlanering2(host);
+    act(() => { knapp(host, '📋 Planering').click(); });
+    const val = select(host, 'Planera ämne');
+    expect([...val.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['8B · Matematik']);
+    expect(host.textContent).toContain('🧭 Detaljplanering');
+    expect(host.querySelector('table.plan')).not.toBeNull();
+  });
+
+  it('egna rader: ett prov infogas i planeringen och bokens lektioner skjuts framåt', async () => {
+    const host = render();
+    await medPlanering2(host);
+    act(() => { knapp(host, '📋 Planering').click(); });
+    const fore = [...host.querySelectorAll('table.plan tbody tr')].length;
+    valj(select(host, 'Radtyp'), 'prov');
+    skriv(input(host, 'Radrubrik'), 'Prov i Tal');
+    valj(select(host, 'Radposition'), '1');                // före lektion 2
+    skriv(input(host, 'Radbeskrivning'), 'Kapitel 1');
+    act(() => { knapp(host, '+ Infoga rad').click(); });
+    const rader = [...host.querySelectorAll('table.plan tbody tr')];
+    expect(rader).toHaveLength(fore + 1);
+    expect(rader[1].textContent).toContain('Prov i Tal');
+    // Raden ligger kvar i strukturen och kan tas bort
+    expect(lasStruktur().amnen[0].egnaRader).toHaveLength(1);
+    act(() => { knapp(host, '✕').click(); });
+    expect(lasStruktur().amnen[0].egnaRader).toHaveLength(0);
+    expect([...host.querySelectorAll('table.plan tbody tr')]).toHaveLength(fore);
+  });
+});
+
 describe('Vänstermeny, tjänstöversikt och årsöversikt', () => {
   async function byggUpp(host: HTMLElement) {
     skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');

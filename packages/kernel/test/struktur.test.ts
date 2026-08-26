@@ -5,8 +5,9 @@ import {
   laggTillTjanst, larareSchema, nyttId, registreraPlanering, resetIdRaknare, sattLarare,
   schemaKonflikter, skapaPlanering, sparaBok, taBortBok, taBortKlass, taBortLarare,
   taBortSkolar, taBortTjanst, uppdateraAmne,
+  egenRadTillLektion, medEgnaRader,
 } from '../src/domain/struktur.js';
-import { tomStruktur, type Skolar, type Struktur } from '../src/domain/typer.js';
+import { tomStruktur, type Lektion, type Skolar, type Struktur } from '../src/domain/typer.js';
 
 const LA: Skolar = { id: 'la', namn: '2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] };
 
@@ -399,5 +400,57 @@ describe('hel-/halvklasspass för NO', () => {
     const rader = kombineraHalvklassPass([hel, a], [hel, b]);
     const { schema, schemaB } = delaHalvklassPass(rader);
     expect(kombineraHalvklassPass(schema, schemaB)).toEqual(rader);
+  });
+});
+
+describe('egna rader i planeringen (prov/diagnos/övning)', () => {
+  const L = (id: number, avsnitt: string): Lektion => ({
+    id, typ: 'regular', avsnitt, del: 1, niva1: '1–5', niva2: '6–9', niva3: '10–12',
+    sidorTeori: '', begrepp: '', genomgang: '', laxa: '', ex: '', socStart: '', exit: '',
+  });
+  const bas = [
+    { kapitel: 1, lektion: L(1, '1.1 Tal') },
+    { kapitel: 1, lektion: L(2, '1.2 Potenser') },
+    { kapitel: 2, lektion: L(1, '2.1 Uttryck') },
+  ];
+
+  it('infogar på position, ärver grannens kapitel och mappar typ', () => {
+    const ut = medEgnaRader(bas, [
+      { id: 'er1', position: 2, rubrik: 'Prov i Tal', typ: 'prov' },
+      { id: 'er2', position: 0, rubrik: 'Diagnos start', typ: 'diagnos', beskrivning: 'Förkunskaper' },
+    ]);
+    expect(ut.map((x) => x.lektion.avsnitt)).toEqual(
+      ['Diagnos start', '1.1 Tal', '1.2 Potenser', 'Prov i Tal', '2.1 Uttryck']);
+    // Diagnosen först: ärver nästa rads kapitel (1); provet ärver föregående (1)
+    expect(ut[0].kapitel).toBe(1);
+    expect(ut[0].lektion.typ).toBe('test');
+    expect(ut[0].lektion.genomgang).toBe('Förkunskaper');
+    expect(ut[3].kapitel).toBe(1);
+    expect(ut[3].lektion.typ).toBe('exam');
+    expect(ut[3].lektion.niva1).toBe('—');
+  });
+
+  it('position utanför listan klampas till sist; övning → repetition, annat → regular', () => {
+    const ut = medEgnaRader(bas, [{ id: 'er3', position: 99, rubrik: 'Extra övning', typ: 'ovning' }]);
+    expect(ut[3].lektion.avsnitt).toBe('Extra övning');
+    expect(ut[3].lektion.typ).toBe('repetition');
+    expect(ut[3].kapitel).toBe(2);
+    expect(egenRadTillLektion({ id: 'x', position: 0, rubrik: 'Nationella', typ: 'annat' }).typ).toBe('regular');
+  });
+
+  it('skapaPlanering lägger egna rader på schemats slots och skjuter bokens lektioner framåt', () => {
+    const skolar: Skolar = { id: 'la', namn: '26/27', start: '2026-08-17', slut: '2026-09-30', dagar: [] };
+    const bok = bokFromImport(JSON.stringify({
+      schema: 'classroom-planner-bok', version: 1,
+      bok: { id: 'b', titel: 'B', kapitelMeta: { '1': { name: 'K' } } },
+      lektioner: { '1': [{ id: 1, type: 'regular', avsnitt: '1.1 X', ett: '1–5' }, { id: 2, type: 'regular', avsnitt: '1.2 Y', ett: '6–9' }] },
+    }));
+    const schema = [{ dag: 3, start: '09:00', slut: '10:00' }];
+    const utan = skapaPlanering(skolar, schema, bok);
+    const med = skapaPlanering(skolar, schema, bok, 0, [{ id: 'er', position: 1, rubrik: 'Prov', typ: 'prov' }]);
+    expect(med.map((r) => r.lektion.avsnitt)).toEqual(['1.1 X', 'Prov', '1.2 Y']);
+    expect(med[0].datum).toBe(utan[0].datum);
+    expect(med[1].datum).toBe(utan[1].datum);     // provet tar 1.2:s gamla slot
+    expect(med[2].datum).not.toBe(utan[1].datum); // 1.2 skjuts en vecka framåt
   });
 });

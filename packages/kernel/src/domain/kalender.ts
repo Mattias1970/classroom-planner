@@ -70,7 +70,7 @@ export function kalenderHandelser(s: Struktur, skolarId: string): KalenderHandel
       ? [{ grupp: 'A', schema: amne.schema }, { grupp: 'B', schema: amne.schemaB ?? [] }]
       : [{ grupp: undefined, schema: amne.schema }];
     for (const g of grupper) {
-      for (const p of skapaPlanering(skolar, g.schema, bok, offset)) {
+      for (const p of skapaPlanering(skolar, g.schema, bok, offset, amne.egnaRader ?? [])) {
         if (p.datum === null || p.start === null || p.slutTid === null || p.vecka === null) continue;
         ut.push({
           datum: p.datum, start: p.start, slut: p.slutTid,

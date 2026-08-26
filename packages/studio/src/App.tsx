@@ -21,7 +21,7 @@ import {
   socrativeRum, sparaBok,
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
-  type Amne, type Bok, type Grupp, type KalenderDagRuta, type KalenderHandelse,
+  type Amne, type Bok, type EgenRad, type Grupp, type KalenderDagRuta, type KalenderHandelse,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
 } from '@planner/kernel';
@@ -55,7 +55,7 @@ function valdFinns(s: Struktur, v: Vald): boolean {
 export function App() {
   const [s, setS] = useState<Struktur>(() => lasStruktur());
   const [vald, setVald] = useState<Vald>(null);
-  const [huvudvy, setHuvudvy] = useState<'struktur' | 'kalender'>('struktur');
+  const [huvudvy, setHuvudvy] = useState<'struktur' | 'planering' | 'kalender'>('struktur');
   const [msg, setMsg] = useState('');
   const spara = (ny: Struktur, m = '') => { sparaStruktur(ny); setS(ny); if (m) setMsg(m); };
   const angraStack = useRef<string[]>([]);
@@ -79,6 +79,7 @@ export function App() {
         <span className="logo">📘 Classroom Planner <b>Studio</b> <small>v2</small></span>
         <nav className="toppflik" aria-label="Huvudvy">
           <button className={`tflik ${huvudvy === 'struktur' ? 'act' : ''}`} onClick={() => setHuvudvy('struktur')}>🗂 Struktur</button>
+          <button className={`tflik ${huvudvy === 'planering' ? 'act' : ''}`} onClick={() => setHuvudvy('planering')}>📋 Planering</button>
           <button className={`tflik ${huvudvy === 'kalender' ? 'act' : ''}`} onClick={() => setHuvudvy('kalender')}>📆 Kalender</button>
         </nav>
         <span className="spacer" />
@@ -102,6 +103,11 @@ export function App() {
         <main className="panel full">
           {msg && <p className="status">{msg}</p>}
           <KalenderVy s={s} />
+        </main>
+      ) : huvudvy === 'planering' ? (
+        <main className="panel full">
+          {msg && <p className="status">{msg}</p>}
+          <PlaneringVy s={s} kor={kor} setVald={setVald} />
         </main>
       ) : (
         <div className="cols">
@@ -755,8 +761,8 @@ function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn:
   const bok = s.bocker.find((b) => b.id === a?.bokId);
   const budget = useMemo(() => (a && la && a.noGrupp !== undefined ? noBudget(la, a.schema) : 0), [a, la]);
   const offset = a?.noGrupp !== undefined && a.noOrder !== undefined ? a.noOrder * budget : 0;
-  const plan = useMemo(() => (a && la && bok ? skapaPlanering(la, a.schema, bok, offset) : []), [a, la, bok, offset]);
-  const planB = useMemo(() => (a && la && bok && a.halvklass === true ? skapaPlanering(la, a.schemaB ?? [], bok, offset) : []), [a, la, bok, offset]);
+  const plan = useMemo(() => (a && la && bok ? skapaPlanering(la, a.schema, bok, offset, a.egnaRader ?? []) : []), [a, la, bok, offset]);
+  const planB = useMemo(() => (a && la && bok && a.halvklass === true ? skapaPlanering(la, a.schemaB ?? [], bok, offset, a.egnaRader ?? []) : []), [a, la, bok, offset]);
   const harPlanering = s.planeringar.some((p) => p.amneId === id);
   const [flik, setFlik] = useState<'planering' | 'detalj' | 'oversikt' | 'uppgifter' | 'begrepp' | 'filmer' | 'magma' | 'anteckningar' | 'arsoversikt'>('planering');
   if (!a || !klass || !la) return null;
@@ -835,6 +841,7 @@ function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn:
             : `Planering skapad: ${bok!.titel} utlagd på ${klass.namn}s schema — ${plan.filter((p) => p.datum !== null).length} lektioner får datum.`)}>
         {harPlanering ? '↻ Uppdatera planering' : '▶ Skapa planering'}
       </button>
+      {bok && harPlanering && <EgnaRaderRedigerare amne={a} plan={plan} kor={kor} />}
       {bok && !halv && <GruppPlanering plan={plan} bok={bok} amnesNamn={a.namn} klassNamn={klass.namn} rum={rum}
         s={s} amneId={a.id} kor={kor} />}
       {bok && halv && (<>
@@ -850,6 +857,56 @@ function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn:
           kor(() => taBortAmne(lasStruktur(), id), 'Ämne borttaget.');
           setVald({ typ: 'klass', id: klassId });
         }}>🗑 Ta bort ämne</button>
+      </div>
+    </div>
+  );
+}
+
+/** ➕ Egna rader: prov, diagnoser och övningar som infogas i planeringen (bokens lektioner skjuts framåt). */
+function EgnaRaderRedigerare({ amne, plan, kor }: {
+  amne: Amne; plan: PlaneradLektion[]; kor: (fn: () => Struktur, m: string) => void;
+}) {
+  const [rubrik, setRubrik] = useState('');
+  const [typ, setTyp] = useState<EgenRad['typ']>('prov');
+  const [pos, setPos] = useState(plan.length);
+  const [beskrivning, setBeskrivning] = useState('');
+  const rader = amne.egnaRader ?? [];
+  const TYPNAMN: Record<EgenRad['typ'], string> = { prov: 'Prov', diagnos: 'Diagnos', ovning: 'Övning', annat: 'Annat' };
+  return (
+    <div className="uppg-kort no-print">
+      <b>➕ Egna rader</b> <small className="muted">Prov, diagnoser och övningar infogas i planeringen — bokens lektioner skjuts framåt.</small>
+      {rader.length > 0 && (
+        <div style={{ margin: '6px 0' }}>
+          {[...rader].sort((x, y) => x.position - y.position).map((r) => (
+            <div key={r.id} className="rad film-rad">
+              <span><TypChip typ={r.typ === 'prov' ? 'exam' : r.typ === 'diagnos' ? 'test' : r.typ === 'ovning' ? 'repetition' : 'regular'} /> <b>{r.rubrik}</b> <span className="muted small">— lektion {r.position + 1}{r.beskrivning !== undefined && r.beskrivning !== '' ? ` · ${r.beskrivning}` : ''}</span></span>
+              <button className="icon-btn" title="Ta bort raden" onClick={() => kor(() => uppdateraAmne(lasStruktur(), amne.id, {
+                egnaRader: (lasStruktur().amnen.find((x) => x.id === amne.id)?.egnaRader ?? []).filter((x) => x.id !== r.id),
+              }), `Raden "${r.rubrik}" borttagen.`)}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="rad" style={{ flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+        <select aria-label="Radtyp" value={typ} onChange={(e) => setTyp(e.target.value as EgenRad['typ'])}>
+          {(Object.keys(TYPNAMN) as Array<EgenRad['typ']>).map((t) => <option key={t} value={t}>{TYPNAMN[t]}</option>)}
+        </select>
+        <input aria-label="Radrubrik" placeholder="T.ex. Prov i Tal / Diagnos kap 2" value={rubrik}
+          onChange={(e) => setRubrik(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
+        <select aria-label="Radposition" value={pos} onChange={(e) => setPos(Number(e.target.value))}>
+          {plan.map((r, i) => <option key={i} value={i}>Före lektion {i + 1} — {r.lektion.avsnitt}</option>)}
+          <option value={plan.length}>Sist i planeringen</option>
+        </select>
+        <input aria-label="Radbeskrivning" placeholder="Beskrivning (valfri)" value={beskrivning}
+          onChange={(e) => setBeskrivning(e.target.value)} style={{ flex: 1, minWidth: 140 }} />
+        <button className="btn sec sm" disabled={rubrik.trim() === ''} onClick={() => {
+          const ny: EgenRad = { id: nyttId('er'), position: pos, rubrik: rubrik.trim(), typ,
+            ...(beskrivning.trim() !== '' ? { beskrivning: beskrivning.trim() } : {}) };
+          kor(() => uppdateraAmne(lasStruktur(), amne.id, {
+            egnaRader: [...(lasStruktur().amnen.find((x) => x.id === amne.id)?.egnaRader ?? []), ny],
+          }), `${TYPNAMN[typ]} "${ny.rubrik}" infogad som lektion ${pos + 1}.`);
+          setRubrik(''); setBeskrivning('');
+        }}>+ Infoga rad</button>
       </div>
     </div>
   );
@@ -1586,6 +1643,44 @@ function NoPlanering({ s, amneId, lektionsIndex, kor, amnesNamn, rad, bok, allti
 // ── Kalender (läsår / termin / månad / vecka) ────────────────
 const MANADSNAMN = ['januari','februari','mars','april','maj','juni','juli','augusti','september','oktober','november','december'];
 
+/** 📋 Planering: egen huvudflik — välj klass · ämne och arbeta direkt med lektionsplan,
+ * detaljplanering (alla texter redigerbara), egna rader (prov/diagnoser/övningar) och filmer. */
+function PlaneringVy({ s, kor, setVald }: {
+  s: Struktur; kor: (fn: () => Struktur, m: string) => void; setVald: (v: Vald) => void;
+}) {
+  const alternativ = s.amnen
+    .map((a) => ({ a, klass: s.klasser.find((k) => k.id === a.klassId) }))
+    .filter((x): x is { a: Amne; klass: Klass } => x.klass !== undefined)
+    .sort((x, y) => x.klass.namn.localeCompare(y.klass.namn, 'sv') || x.a.namn.localeCompare(y.a.namn, 'sv'));
+  const [amneId, setAmneId] = useState<string>(() => s.planeringar[0]?.amneId ?? alternativ[0]?.a.id ?? '');
+  const valt = alternativ.some((x) => x.a.id === amneId) ? amneId : alternativ[0]?.a.id ?? '';
+  if (alternativ.length === 0) {
+    return <div className="card"><h2>📋 Planering</h2><p className="muted">Skapa skolår, tjänst, klass och ämne under 🗂 Struktur först.</p></div>;
+  }
+  const harPlan = new Set(s.planeringar.map((pl) => pl.amneId));
+  return (
+    <>
+      <div className="card" style={{ marginBottom: 10 }}>
+        <div className="rad" style={{ gap: 8 }}>
+          <b>📋 Planera:</b>
+          <select aria-label="Planera ämne" value={valt} onChange={(e) => setAmneId(e.target.value)} style={{ flex: 1, maxWidth: 420 }}>
+            {alternativ.map(({ a, klass }) => (
+              <option key={a.id} value={a.id}>{klass.namn} · {a.namn}{harPlan.has(a.id) ? '' : ' — (ingen planering ännu)'}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      {valt !== '' && <AmnePanel key={valt} s={s} id={valt} kor={kor} setVald={setVald} />}
+    </>
+  );
+}
+
+/** Dagens datum om det ligger inom skolåret (kalendern öppnar på aktuell vecka), annars skolårets start. */
+function startAnkare(la?: Skolar): string {
+  const idag = new Date().toISOString().slice(0, 10);
+  return la && idag >= la.start && idag <= la.slut ? idag : la?.start ?? '2026-08-17';
+}
+
 function KalenderVy({ s }: { s: Struktur }) {
   const [skolarId, setSkolarId] = useState(s.skolar[0]?.id ?? '');
   const [lage, setLage] = useState<'lasar' | 'termin' | 'manad' | 'vecka'>('vecka');
@@ -1593,7 +1688,8 @@ function KalenderVy({ s }: { s: Struktur }) {
   const [amnesFilter, setAmnesFilter] = useState<string>('__alla__');
   const [termin, setTermin] = useState<'HT' | 'VT'>('HT');
   const skolar = s.skolar.find((x) => x.id === skolarId) ?? s.skolar[0];
-  const [ankare, setAnkare] = useState<string>(skolar?.start ?? '2026-08-17');
+  const [utskrift, setUtskrift] = useState(false);
+  const [ankare, setAnkare] = useState<string>(startAnkare(skolar));
 
   const handelser = useMemo(() => (skolar ? kalenderHandelser(s, skolar.id) : []), [s, skolar]);
   const filtrerade = useMemo(() => handelser.filter((h) =>
@@ -1619,12 +1715,34 @@ function KalenderVy({ s }: { s: Struktur }) {
   const ankAr = Number(ankare.slice(0, 4));
   const ankManad = Number(ankare.slice(5, 7)) - 1;
 
+  if (utskrift) {
+    const manader: Array<{ ar: number; m0: number }> = [];
+    const d = new Date(`${skolar.start.slice(0, 7)}-01T00:00:00Z`);
+    const slutD = new Date(`${skolar.slut}T00:00:00Z`);
+    while (d <= slutD) { manader.push({ ar: d.getUTCFullYear(), m0: d.getUTCMonth() }); d.setUTCMonth(d.getUTCMonth() + 1); }
+    return (
+      <div className="kal-utskrift">
+        <div className="rad no-print" style={{ gap: 8, margin: '8px 0' }}>
+          <button className="btn" onClick={() => window.print()}>🖨 Skriv ut</button>
+          <button className="btn sec" onClick={() => setUtskrift(false)}>Stäng</button>
+          <span className="muted small">En månad per sida ({manader.length} sidor) — skriv ut och häfta ihop läsåret.</span>
+        </div>
+        {manader.map(({ ar, m0 }) => (
+          <section key={`${ar}-${m0}`} className="kal-utskrift-sida">
+            <h3>{skolar.namn} — {MANADSNAMN[m0]} {ar}</h3>
+            <MonadsGrid ar={ar} manad0={m0} skolar={skolar} perDatum={perDatum} onPrev={() => undefined} onNext={() => undefined} />
+          </section>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="card kalender">
       <div className="rad kal-topp">
         <h2>📆 Kalender <small className="muted">{skolar.namn}</small></h2>
         <span className="spacer" />
-        <select aria-label="Skolår" value={skolar.id} onChange={(e) => { setSkolarId(e.target.value); const ny = s.skolar.find((x) => x.id === e.target.value); if (ny) setAnkare(ny.start); }}>
+        <select aria-label="Skolår" value={skolar.id} onChange={(e) => { setSkolarId(e.target.value); const ny = s.skolar.find((x) => x.id === e.target.value); if (ny) setAnkare(startAnkare(ny)); }}>
           {s.skolar.map((la) => <option key={la.id} value={la.id}>{la.namn}</option>)}
         </select>
         <div className="kal-lagen">
@@ -1633,6 +1751,7 @@ function KalenderVy({ s }: { s: Struktur }) {
               {l === 'lasar' ? 'Läsår' : l === 'termin' ? 'Termin' : l === 'manad' ? 'Månad' : 'Vecka'}
             </button>
           ))}
+          <button className="btn sec sm" onClick={() => setUtskrift(true)}>🖨 Skriv ut månader</button>
         </div>
       </div>
       <div className="kal-filter">

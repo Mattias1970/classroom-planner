@@ -200,3 +200,14 @@ body { margin: 0; font: 14px/1.45 system-ui, 'Segoe UI', sans-serif; background:
 .node.no-nod { font-weight: 600; color: #5a3d7a; }
 .detalj-menyer { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 8px 0; }
 @media (max-width: 900px) { .detalj-menyer { grid-template-columns: 1fr; } }
+
+/* Kalenderutskrift: en månad per sida, häfta ihop läsåret */
+.kal-utskrift-sida { margin-bottom: 24px; }
+.kal-utskrift-sida h3 { margin: 4px 0 6px; }
+.kal-utskrift .kal-nav { display: none; }
+@media print {
+  .kal-utskrift-sida { page-break-after: always; break-after: page; margin: 0; }
+  .kal-utskrift-sida:last-child { page-break-after: auto; break-after: auto; }
+  .kal-utskrift .no-print { display: none !important; }
+  .kal-utskrift .mcell { min-height: 84px; }
+}
