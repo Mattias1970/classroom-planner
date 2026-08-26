@@ -13,7 +13,7 @@ import {
   effektivaNivaer, kombineraHalvklassPass, skapaTjanstFranSchema, tolkaSchemaPdf,
   handelserPerDatum, kalenderHandelser, klassFarg, noBudget, noOverBudget, sattLektionsplan,
   kapitelKort, manadsRutor, skolarManader, veckaRutor, viktigaDatum, bamTidslinje, begreppForLektion, bokBegrepp,
-  bokFromImport, bokSidregister, bokSidregisterCsv, elevSchema, exitStart, giltigtPass,
+  bokFromValfriImport, bokSidregister, bokSidregisterCsv, elevSchema, exitStart, giltigtPass,
   kalendariumFromIcs, laggTillAmne, laggTillElev, laggTillKlass, laggTillLarare,
   laggTillSkolar, laggTillTjanst, larareSchema, normaliseraDagar, nyttId, parseKalendarium,
   ledigtStandardpass, passKonflikter, registreraPlanering, sattLarare, schemaKonflikter,
@@ -264,7 +264,7 @@ function NyBokPanel({ kor, setVald }: { kor: (fn: () => Struktur, m: string) => 
         const rader: string[] = [];
         for (const { id, json } of bocker) {
           try {
-            const bok = bokFromImport(json);
+            const bok = bokFromValfriImport(json);
             kor(() => sparaBok(lasStruktur(), bok), `Bok "${bok.titel}" hämtad från datarepot.`);
             rader.push(`✅ ${id}: ${bok.titel} (${bok.amne}, åk ${bok.arskurs})`);
           } catch (fel) { rader.push(`⚠ ${id}: ${(fel as Error).message}`); }
@@ -283,7 +283,7 @@ function NyBokPanel({ kor, setVald }: { kor: (fn: () => Struktur, m: string) => 
           const f = e.target.files?.[0];
           if (f) void f.text().then((t) => {
             let nyId = '';
-            kor(() => { const bok = bokFromImport(t); nyId = bok.id; return sparaBok(lasStruktur(), bok); },
+            kor(() => { const bok = bokFromValfriImport(t); nyId = bok.id; return sparaBok(lasStruktur(), bok); },
               'Bok importerad — koppla den till ett ämne för att skapa en planering.');
             if (nyId !== '' && lasStruktur().bocker.some((b) => b.id === nyId)) setVald({ typ: 'bok', id: nyId });
           });

@@ -1116,9 +1116,15 @@ describe('Biblioteket hämtar böcker från datarepot', () => {
     const b64 = (t: string) => btoa(String.fromCharCode(...new TextEncoder().encode(t)));
     const f = vi.fn()
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ([
-        { name: 'liber-matematik-y', type: 'dir' }, { name: 'spektrum-biologi', type: 'dir' },
+        { name: 'liber-matematik-y', type: 'dir' }, { name: 'spektrum-biologi', type: 'dir' }, { name: 'trasig', type: 'dir' },
       ]) })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ content: b64(BOKJSON) }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ content: b64(JSON.stringify({
+        id: 'spektrum-biologi', titel: 'Spektrum Biologi', amne: 'Biologi', arskurs: 8,
+        kapitel: [{ nummer: 6, titel: 'Vår fantastiska kropp', delkapitel: [
+          { nummer: '6.1', titel: 'Cellen', begrepp: ['cell'] },
+        ] }],
+      })) }) })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ content: b64('{"inte":"en bokfil"}') }) });
     vi.stubGlobal('fetch', f);
     try {
@@ -1126,11 +1132,12 @@ describe('Biblioteket hämtar böcker från datarepot', () => {
       act(() => { treeKnapp(host, '➕ Lägg till bok').click(); });
       await act(async () => { knapp(host, '☁ Hämta böcker från datarepot').click(); await Promise.resolve(); });
       await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-      // Giltig bok sparad och rapporterad; ogiltig rapporterad med fel, inte sparad.
-      expect(lasStruktur().bocker.map((b) => b.id)).toEqual(['liber-matematik-y']);
+      // Bokfil och NO-bok sparas; trasig fil rapporteras med fel, sparas inte.
+      expect(lasStruktur().bocker.map((b) => b.id)).toEqual(['liber-matematik-y', 'spektrum-biologi']);
       const panel = host.querySelector('.panel')!.textContent ?? '';
       expect(panel).toContain('✅ liber-matematik-y');
-      expect(panel).toContain('⚠ spektrum-biologi');
+      expect(panel).toContain('✅ spektrum-biologi: Spektrum Biologi (Biologi, åk 8)');
+      expect(panel).toContain('⚠ trasig');
     } finally { vi.unstubAllGlobals(); }
   });
 })
