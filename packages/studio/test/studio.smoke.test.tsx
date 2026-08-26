@@ -513,6 +513,41 @@ describe('Stödpass (Ma/NO-stöd)', () => {
   });
 });
 
+describe('Stödämnen (fri planering)', () => {
+  it('Ma/NO-stöd läggs till som ämne, planeras utan bok och detaljplaneras', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    skriv(input(host, 'Tjänstens namn'), 'MatTe');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 MatTe').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+
+    valj(select(host, 'Ämne'), 'Ma/NO-stöd');
+    valj(select(host, 'Veckodag pass 1'), '4');
+    skriv(input(host, 'Start pass 1'), '15:00');
+    skriv(input(host, 'Slut pass 1'), '16:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    expect(lasStruktur().amnen[0].namn).toBe('Ma/NO-stöd');
+    expect(lasStruktur().amnen[0].halvklass).not.toBe(true);  // helklass — öppet för alla
+
+    act(() => { treeKnapp(host, '📖 Ma/NO-stöd').click(); });
+    expect(host.textContent).toContain('Fri planering');
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+    // Fri bok skapad och kopplad; ett tillfälle per torsdag
+    expect(lasStruktur().bocker.some((b) => b.id.startsWith('fri-'))).toBe(true);
+    const rader = [...host.querySelectorAll('table.plan tbody tr')];
+    expect(rader.length).toBeGreaterThan(30);
+    expect(rader[0].textContent).toContain('Tillfälle 1');
+    expect(rader[0].textContent).toContain('2026-08-20');     // första torsdagen
+
+    // Detaljplanering: genomgångstexten kan redigeras fritt
+    act(() => { knapp(host, '🧭 Detaljplanering').click(); });
+    expect(host.textContent).toContain('Tillfälle 1');
+  });
+});
+
 describe('Vänstermeny, tjänstöversikt och årsöversikt', () => {
   async function byggUpp(host: HTMLElement) {
     skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');

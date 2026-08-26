@@ -5,7 +5,7 @@ import {
   laggTillTjanst, larareSchema, nyttId, registreraPlanering, resetIdRaknare, sattLarare,
   schemaKonflikter, skapaPlanering, sparaBok, taBortBok, taBortKlass, taBortLarare,
   taBortSkolar, taBortTjanst, uppdateraAmne,
-  egenRadTillLektion, medEgnaRader,
+  egenRadTillLektion, friBok, medEgnaRader, skapaFriPlanering,
 } from '../src/domain/struktur.js';
 import { tomStruktur, type Lektion, type Skolar, type Struktur } from '../src/domain/typer.js';
 
@@ -452,5 +452,44 @@ describe('egna rader i planeringen (prov/diagnos/övning)', () => {
     expect(med[0].datum).toBe(utan[0].datum);
     expect(med[1].datum).toBe(utan[1].datum);     // provet tar 1.2:s gamla slot
     expect(med[2].datum).not.toBe(utan[1].datum); // 1.2 skjuts en vecka framåt
+  });
+});
+
+describe('stödämnen: fri planering utan bok', () => {
+  const bygg = (schema = [{ dag: 4, start: '15:00', slut: '16:00' }]) => {
+    let s = tomStruktur();
+    s = laggTillSkolar(s, LA);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'MatTe' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'am', klassId: 'k', namn: 'Ma/NO-stöd', schema });
+    return s;
+  };
+
+  it('friBok bygger ett kapitel med öppna tillfällen', () => {
+    const b = friBok('fri-am', 'Ma/NO-stöd', 3);
+    expect(b.titel).toBe('Ma/NO-stöd (fri planering)');
+    expect(b.amne).toBe('Ma/NO-stöd');
+    expect(b.kapitel[0].extraLektioner.map((l) => l.avsnitt)).toEqual(['Tillfälle 1', 'Tillfälle 2', 'Tillfälle 3']);
+  });
+
+  it('skapaFriPlanering ger ett tillfälle per slot och uppdateras vid schemaändring', () => {
+    let s = skapaFriPlanering(bygg(), 'am', 'nu');
+    const bok1 = s.bocker.find((b) => b.id === 'fri-am')!;
+    const antal1 = bok1.kapitel[0].extraLektioner.length;
+    expect(antal1).toBeGreaterThan(30);                       // en torsdag per skolvecka
+    expect(s.amnen[0].bokId).toBe('fri-am');
+    expect(s.planeringar).toHaveLength(1);
+    const plan = skapaPlanering(LA, s.amnen[0].schema, bok1);
+    expect(plan.every((r) => r.datum !== null)).toBe(true);   // exakt så många som ryms
+    // Två pass i veckan → dubbelt så många tillfällen; planeringen ersätts (fortfarande en)
+    s = uppdateraAmne(s, 'am', { schema: [{ dag: 2, start: '08:00', slut: '09:00' }, { dag: 4, start: '15:00', slut: '16:00' }] });
+    s = skapaFriPlanering(s, 'am', 'nu2');
+    expect(s.bocker.find((b) => b.id === 'fri-am')!.kapitel[0].extraLektioner.length).toBeGreaterThan(antal1 * 1.8);
+    expect(s.planeringar).toHaveLength(1);
+    expect(s.bocker.filter((b) => b.id === 'fri-am')).toHaveLength(1);
+  });
+
+  it('kräver känt ämne och skolår', () => {
+    expect(() => skapaFriPlanering(bygg(), 'fel', 'nu')).toThrow('Okänt ämne.');
   });
 });

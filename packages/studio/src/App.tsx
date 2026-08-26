@@ -21,7 +21,7 @@ import {
   socrativeRum, sparaBok,
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
-  sattStodPass, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type KalenderDagRuta, type KalenderHandelse,
+  arStodAmne, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type KalenderDagRuta, type KalenderHandelse,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
 } from '@planner/kernel';
@@ -622,7 +622,8 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
   const redan = new Set(klassAmnen.map((x) => x.namn));
   const tillgangliga = STANDARD_AMNEN.filter((a) => !redan.has(a));
   const noMojligt = NO_TK_AMNEN.every((a) => !redan.has(a)); // inget NO-ämne får finnas
-  const alternativ = [...tillgangliga, ...(noMojligt ? [NO_TK] : [])];
+  const stodTillgangliga = STOD_AMNEN.filter((a) => !redan.has(a));
+  const alternativ = [...tillgangliga, ...(noMojligt ? [NO_TK] : []), ...stodTillgangliga];
   // Håll valt ämne giltigt när listan ändras
   if (k && alternativ.length > 0 && !alternativ.includes(namn)) { setNamn(alternativ[0]); }
   if (!k) return null;
@@ -646,10 +647,11 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
         <select aria-label="Ämne" value={namn} onChange={(e) => { setNamn(e.target.value); setBokId(''); }}>
           {tillgangliga.map((a) => <option key={a} value={a}>{a}{arHalvklass(a) ? ' (halvklass)' : ''}</option>)}
           {noMojligt && <option value={NO_TK}>NO+Tk (Biologi, Fysik, Kemi, Teknik i följd)</option>}
+          {stodTillgangliga.map((a) => <option key={a} value={a}>{a} (fri planering)</option>)}
         </select>
         {!arNoTk && (
-          <select aria-label="Bok för ämnet" value={bokId} onChange={(e) => setBokId(e.target.value)}>
-            <option value="">— bok senare —</option>
+          <select aria-label="Bok för ämnet" value={bokId} onChange={(e) => setBokId(e.target.value)} hidden={arStodAmne(namn)}>
+            <option value="">{arStodAmne(namn) ? '— fri planering (utan bok) —' : '— bok senare —'}</option>
             {bocker.map((b) => <option key={b.id} value={b.id}>{b.titel} ({b.amne})</option>)}
           </select>
         )}
@@ -862,7 +864,7 @@ function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn:
       {halv
         ? <HalvklassSchemaRedigerare key={a.id} s={s} amne={a} kor={kor} />
         : <AmneSchemaRedigerare key={a.id} s={s} amne={a} kor={kor} falt="schema" rubrik="Schema" />}
-      <label>Bok:{' '}
+      {!arStodAmne(a.namn) && <label>Bok:{' '}
         <select aria-label="Bok för ämnet" value={a.bokId ?? ''}
           onChange={(e) => kor(() => uppdateraAmne(lasStruktur(), id, { bokId: e.target.value }),
             e.target.value === '' ? 'Boken bortkopplad.' : 'Bok vald — skapa planeringen nedan.')}>
@@ -871,9 +873,13 @@ function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn:
             .filter((b) => b.amne === a.namn || b.id === a.bokId) // endast ämnets böcker; redan kopplad bok visas alltid
             .map((b) => <option key={b.id} value={b.id}>{b.titel} ({b.forlag})</option>)}
         </select>
-      </label>{' '}
-      <button className="btn" disabled={!bok}
-        onClick={() => kor(() => registreraPlanering(lasStruktur(), { id: nyttId('pl'), amneId: id, bokId: bok!.id, skapad: new Date().toISOString() }),
+      </label>}{' '}
+      {arStodAmne(a.namn) && <span className="muted small">Fri planering — varje schemapass blir ett tillfälle som detaljplaneras fritt. </span>}
+      <button className="btn" disabled={!arStodAmne(a.namn) && !bok}
+        onClick={() => arStodAmne(a.namn)
+          ? kor(() => skapaFriPlanering(lasStruktur(), id, new Date().toISOString()),
+              `Fri planering skapad: ett tillfälle per ${a.namn}-pass i skolåret. Detaljplanera texterna under 🧭 Detaljplanering.`)
+          : kor(() => registreraPlanering(lasStruktur(), { id: nyttId('pl'), amneId: id, bokId: bok!.id, skapad: new Date().toISOString() }),
           halv
             ? `Planering skapad: ${bok!.titel} utlagd på Grupp A (${plan.filter((p) => p.datum !== null).length} lektioner) och Grupp B (${planB.filter((p) => p.datum !== null).length} lektioner).`
             : `Planering skapad: ${bok!.titel} utlagd på ${klass.namn}s schema — ${plan.filter((p) => p.datum !== null).length} lektioner får datum.`)}>

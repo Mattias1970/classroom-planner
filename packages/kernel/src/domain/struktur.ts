@@ -3,7 +3,7 @@
  * Skolår ─ Tjänst ─ Klass ─ Ämne, plus lärare, böcker och planeringar.
  * Borttag kaskaderar nedåt; böcker är fristående och kopplas via bokId.
  */
-import { bokLektioner } from './bok.js';
+import { bokLektioner, NIVA_GRON_BLA_ROD, byggKapitel } from './bok.js';
 import { NO_TK_AMNEN } from './amnen.js';
 import { isoVecka, passSparr } from './skolar.js';
 import type {
@@ -477,4 +477,40 @@ export function registreraPlanering(s: Struktur, p: Planering): Struktur {
   if (!amne) throw new Error('Okänt ämne.');
   if (!s.bocker.some((b) => b.id === p.bokId)) throw new Error('Okänd bok.');
   return { ...s, planeringar: [...s.planeringar.filter((x) => x.amneId !== p.amneId), p] };
+}
+
+/** Fri bok för ett stödämne: ett kapitel med `antal` öppna tillfällen som detaljplaneras fritt. */
+export function friBok(id: string, namn: string, antal: number): Bok {
+  const lektioner: Lektion[] = [];
+  for (let i = 1; i <= Math.max(1, antal); i++) {
+    lektioner.push({
+      id: i, typ: 'regular', avsnitt: `Tillfälle ${i}`, del: 1,
+      niva1: '—', niva2: '—', niva3: '—', sidorTeori: '—', begrepp: '—',
+      genomgang: '—', laxa: '—', ex: '—', socStart: '—', exit: '—',
+    });
+  }
+  return {
+    id, titel: `${namn} (fri planering)`, forlag: '', amne: namn, arskurs: 0,
+    nivaer: NIVA_GRON_BLA_ROD,
+    kapitel: [byggKapitel(1, 'Planering', '#5c6b7a', lektioner)],
+  };
+}
+
+/**
+ * Skapar (eller uppdaterar) planeringen för ett stödämne utan bok: en fri bok
+ * med ett tillfälle per ledig slot i ämnets schema genereras och kopplas.
+ * Körs om efter schemaändringar — lektionsplanerna (overlayerna) ligger kvar.
+ */
+export function skapaFriPlanering(s: Struktur, amneId: string, skapad: string): Struktur {
+  const amne = s.amnen.find((a) => a.id === amneId);
+  if (!amne) throw new Error('Okänt ämne.');
+  const klass = s.klasser.find((k) => k.id === amne.klassId);
+  const tjanst = s.tjanster.find((t) => t.id === klass?.tjanstId);
+  const skolar = s.skolar.find((x) => x.id === tjanst?.skolarId);
+  if (!skolar) throw new Error('Ämnet saknar skolår.');
+  const bokId = `fri-${amneId}`;
+  const bok = friBok(bokId, amne.namn, samlaSlots(skolar, amne.schema).length);
+  let ut = sparaBok(s, bok);
+  ut = uppdateraAmne(ut, amneId, { bokId });
+  return registreraPlanering(ut, { id: `pl-${amneId}`, amneId, bokId, skapad });
 }

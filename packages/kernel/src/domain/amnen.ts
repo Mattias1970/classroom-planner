@@ -10,6 +10,14 @@
  */
 export const STANDARD_AMNEN = ['Matematik', 'Biologi', 'Fysik', 'Kemi', 'Teknik'] as const;
 
+/** Stödämnen: fritt planerade ämnen utan bok — varje schemapass blir en planerbar lektion. */
+export const STOD_AMNEN = ['Matematik stöd', 'Matematik spec', 'Ma/NO-stöd'] as const;
+
+/** Är ämnet ett stödämne (planeras fritt, utan bok)? */
+export function arStodAmne(amnesNamn: string): boolean {
+  return (STOD_AMNEN as readonly string[]).includes(amnesNamn);
+}
+
 const HALVKLASS = new Set<string>(['Biologi', 'Fysik', 'Kemi', 'Teknik']);
 
 /** Läses ämnet i halvklass (Grupp A/B med olika tider)? */
