@@ -103,8 +103,10 @@ export function tolkaSchemaPdf(items: PdfTextItem[]): TolkatSchema {
  */
 export function skapaTjanstFranSchema(s: Struktur, t: TolkatSchema, skolarId: string): Struktur {
   let ut = s;
-  const larareId = nyttId('lr');
-  ut = laggTillLarare(ut, { id: larareId, namn: t.larareNamn, signatur: t.signatur });
+  // Återanvänd befintlig lärare med samma signatur (dubbel import ger EN lärare).
+  const befintlig = s.larare.find((l) => l.signatur === t.signatur && t.signatur !== '');
+  const larareId = befintlig ? befintlig.id : nyttId('lr');
+  if (!befintlig) ut = laggTillLarare(ut, { id: larareId, namn: t.larareNamn, signatur: t.signatur });
   const tjanstId = nyttId('tj');
   ut = laggTillTjanst(ut, { id: tjanstId, skolarId, namn: `${t.signatur} Ma/NO+Tk`.trim() });
   ut = sattLarare(ut, tjanstId, larareId);
