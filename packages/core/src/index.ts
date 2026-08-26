@@ -55,3 +55,4 @@ export * from './domain/bocker.js';
 export * from './domain/lokal-planering.js';
 export * from './domain/amnesregler.js';
 export * from './domain/utskriftslayout.js';
+export * from './domain/biologibok.js';

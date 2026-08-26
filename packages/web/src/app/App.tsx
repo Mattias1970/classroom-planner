@@ -27,6 +27,7 @@ import { LayoutDesigner } from '../views/LayoutDesigner.js';
 import { BottomNav, ScreenSizeModal, useMobile, useScreenSize, useScrollToNextChapter } from '../views/Mobil.js';
 import Kalender from '../views/Kalender.js';
 import Arsoversikt, { type InnerTab } from '../views/Arsoversikt.js';
+import { NoPlanering } from '../views/NoPlanering.js';
 import {
   addCustomLesson, clearField, composeChapter, demoLibrary, effectiveField, exportBackup,
   getOverrides, getSchemaEdits, getSettings, importBackup, isEdited, loadFromGithub,
@@ -53,10 +54,10 @@ const FLAG = 'classroom-planner.superteach.enabled';
 const NivaCtx = createContext<NivaEtiketter>(NIVA_GRON_BLA_ROD);
 function useNiva(): NivaEtiketter { return useContext(NivaCtx); }
 
-type Tab = 'arsoversikt' | 'planering' | 'kalender' | 'klasser' | 'bibliotek' | 'superteach';
+type Tab = 'arsoversikt' | 'planering' | 'kalender' | 'klasser' | 'bibliotek' | 'no' | 'superteach';
 const TABS: Array<[Tab, string]> = [
   ['arsoversikt', 'Årsöversikt'], ['planering', 'Planering'], ['kalender', 'Kalender'],
-  ['klasser', 'Klasser'], ['bibliotek', 'Bibliotek'], ['superteach', 'SuperTeach'],
+  ['klasser', 'Klasser'], ['bibliotek', 'Bibliotek'], ['no', 'NO'], ['superteach', 'SuperTeach'],
 ];
 
 export default function App() {
@@ -244,6 +245,7 @@ export default function App() {
       </SetupGate>
       {tab === 'klasser' && <KlasserView subject={libEff.subject} onOpenClassMgr={() => setClassMgr(true)} />}
       {tab === 'bibliotek' && <BibliotekView lib={libEff} onLoaded={(l) => { setLib(l); refresh(); }} onChange={refresh} />}
+      {tab === 'no' && <NoPlanering />}{/* Del 26 */}
       {tab === 'superteach' && stOn && (
         <Suspense fallback={<main className="main"><p>Laddar SuperTeach…</p></main>}>
           <SuperTeachPanel
@@ -299,7 +301,7 @@ export default function App() {
       {mobile && (
         <BottomNav tab={tab} kapitel={kapitel} chapters={chapters}
           onTab={(t) => setTab(t)} onKapitel={(k) => { setKapitel(k); setInner('lektionsplan'); setTab('planering'); }}
-          extra={[['planering', '📋 Planering'], ['klasser', '🏫 Klasser'], ['bibliotek', '📚 Bibliotek'], ['installningar', '⚙ Inställningar']]}
+          extra={[['planering', '📋 Planering'], ['klasser', '🏫 Klasser'], ['bibliotek', '📚 Bibliotek'], ['no', '🧬 NO'], ['installningar', '⚙ Inställningar']]}
           onExtra={(t) => { if (t === 'installningar') { setSettingsOpen(true); } else { setTab(t as Tab); } }} />
       )}{/* FR-MOB-003/004 */}
       {mobile && (
