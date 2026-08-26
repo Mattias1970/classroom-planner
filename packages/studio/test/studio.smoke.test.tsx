@@ -1285,6 +1285,11 @@ describe('Detaljplanering som egen flik', () => {
     expect(panel.textContent).toContain('TAVLAN');
     expect(panel.textContent).toContain('VAD SKA VI GÖRA');
     expect(panel.textContent).toContain('EXIT TICKET');
+    // NO-ramen: Testa dig själv + kumulativa läxförhör — inga matematiktermer
+    expect(panel.textContent).toContain('TESTA DIG SJÄLV');
+    expect(panel.textContent).toContain('kumulativ');
+    expect(panel.textContent).not.toContain('EXEMPEL VI RÄKNAR');
+    expect(panel.textContent).not.toContain('foto på beräkningarna');
     expect(panel.querySelector('.np-grid')).not.toBeNull();        // NO-formuläret öppet
     expect(panel.textContent).toContain('BEGREPP');
     expect(panel.textContent).toContain('cell');                   // 4.1-begrepp
@@ -1326,7 +1331,10 @@ describe('Lektionssidans redigerbara ytor', () => {
     skriv(input(host, 'Magma-länk'), 'https://magma.se/x');
     const lp = lasStruktur().lektionsplaner.find((x) => x.lektionsIndex === 0)!;
     expect(lp).toMatchObject({ vadGora: 'Placera tal på tallinjen', laraOss: 'Talmängder', exempelRakna: 'Ex 1 s. 11', magma: 'https://magma.se/x' });
-    // Matematik (helklass): NO-formuläret visas inte
+    // Matematik (helklass): matteramen — nivåer + foto på beräkningarna; NO-formuläret visas inte
+    expect(host.querySelector('.panel')!.textContent).toContain('EXEMPEL VI RÄKNAR');
+    expect(host.querySelector('.panel')!.textContent).toContain('foto på beräkningarna');
+    expect(host.querySelector('.panel')!.textContent).not.toContain('TESTA DIG SJÄLV');
     expect(host.querySelector('.np-grid')).toBeNull();
   });
 });

@@ -1033,6 +1033,7 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor }: {
   const farg = arFargnivaer(bok);
   const eff = effektivaNivaer(rad.lektion, lp);
   const { minimum } = arbetsNivaer(rad.lektion);
+  const arNo = arHalvklass(amnesNamn); // NO-ram: läsning + Testa dig själv, kumulativa läxförhör
   const har = (v: string) => v !== '—' && v !== '';
   const bas = () => hamtaLektionsplan(lasStruktur(), amneId, i) ?? { id: `lp-${amneId}-${i}`, amneId, lektionsIndex: i };
   const satt = (falt: keyof LektionsPlan, v: string) =>
@@ -1078,7 +1079,7 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor }: {
         {rad.start !== null && (
           <div className="ls-tider">
             <div className="ls-tid"><span className="ls-tid-t">{rad.start}–{genomSlut}</span><b>□ Genomgång</b><span className="muted small">10 min</span></div>
-            <div className="ls-tid"><span className="ls-tid-t">{genomSlut}–{exitTid ?? rad.slutTid}</span><b>✏ Arbete</b><span className="muted small">{har(eff.niva1) ? `${N.niva1} → ${N.niva2}` : `${N.niva2} → ${N.niva3}`}</span></div>
+            <div className="ls-tid"><span className="ls-tid-t">{genomSlut}–{exitTid ?? rad.slutTid}</span><b>✏ Arbete</b><span className="muted small">{arNo ? 'Läs + Testa dig själv' : har(eff.niva1) ? `${N.niva1} → ${N.niva2}` : `${N.niva2} → ${N.niva3}`}</span></div>
             {exitTid !== null && <div className="ls-tid"><span className="ls-tid-t">{exitTid}–{rad.slutTid}</span><b>📱 Exit ticket</b><span className="muted small">{rum}</span></div>}
           </div>
         )}
@@ -1091,9 +1092,9 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor }: {
             <textarea aria-label="Vad ska vi lära oss" rows={3} value={lp?.laraOss ?? ''}
               placeholder={begrepp.length > 0 ? begrepp.join(', ') : 'Lärandemål för lektionen'}
               onChange={(e) => satt('laraOss', e.target.value)} /></div>
-          <div className="ls-kort ls-ex"><b>EXEMPEL VI RÄKNAR</b>
+          <div className="ls-kort ls-ex"><b>{arNo ? 'TESTA DIG SJÄLV' : 'EXEMPEL VI RÄKNAR'}</b>
             <textarea aria-label="Exempel vi räknar" rows={3} value={lp?.exempelRakna ?? ''}
-              placeholder={har(rad.lektion.ex) ? rad.lektion.ex : 'Exempel ur boken'}
+              placeholder={har(rad.lektion.ex) ? rad.lektion.ex : arNo ? 'Testa dig själv-frågor' : 'Exempel ur boken'}
               onChange={(e) => satt('exempelRakna', e.target.value)} /></div>
         </div>
       </section>
@@ -1112,7 +1113,7 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor }: {
           <input aria-label="Genomgångslänk" value={lp?.flippFilm ?? ''} placeholder={rad.lektion.genomgangLank ?? 'https://…'}
             onChange={(e) => satt('flippFilm', e.target.value)} style={{ width: '60%' }} /></label>
         {har(rad.lektion.ex) && (
-          <div className="ls-bokex"><b>BOKENS EXEMPEL – RÄKNA TILLSAMMANS</b><p>{rad.lektion.ex}</p></div>
+          <div className="ls-bokex"><b>{arNo ? 'TESTA DIG SJÄLV – GÅS IGENOM GEMENSAMT' : 'BOKENS EXEMPEL – RÄKNA TILLSAMMANS'}</b><p>{rad.lektion.ex}</p></div>
         )}
       </section>
 
@@ -1132,13 +1133,17 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor }: {
       {/* ── ARBETE ── */}
       <section className="ls-sektion ls-arbete">
         <div className="ls-sek-rubrik">✏ {rad.start !== null ? `${genomSlut}–${exitTid ?? rad.slutTid} · ` : ''}ARBETE</div>
-        <p className="small"><b>Lektion {rad.lektion.del} av 2 – {rad.lektion.avsnitt}</b> · minimum: <b>{minimum === 1 ? N.niva1 : N.niva2}</b> klar och inlämnad.</p>
+        {arNo
+          ? <p className="small"><b>{rad.lektion.avsnitt}</b> · läs teorisidorna och besvara Testa dig själv skriftligt.</p>
+          : <p className="small"><b>Lektion {rad.lektion.del} av 2 – {rad.lektion.avsnitt}</b> · minimum: <b>{minimum === 1 ? N.niva1 : N.niva2}</b> klar och inlämnad.</p>}
         <div className="uppg-rad">
           {har(eff.niva1) && <div className={`uppg-niva ${farg ? 'niva-gron' : 'niva-neutral'}`}><div className="un-rubrik">{N.niva1} – introduktion</div><div className="un-uppg">Uppg. <b><input aria-label={`Uppgifter ${N.niva1}`} value={lp?.uppgNiva1 ?? ''} placeholder={rad.lektion.niva1} onChange={(e) => satt('uppgNiva1', e.target.value)} style={{ width: 80 }} /></b></div><div className="un-obl">Obligatorisk</div></div>}
           {har(eff.niva2) && <div className={`uppg-niva ${farg ? 'niva-bla' : 'niva-neutral'}`}><div className="un-rubrik">{N.niva2} – E-nivå</div><div className="un-uppg">Uppg. <b><input aria-label={`Uppgifter ${N.niva2}`} value={lp?.uppgNiva2 ?? ''} placeholder={rad.lektion.niva2} onChange={(e) => satt('uppgNiva2', e.target.value)} style={{ width: 80 }} /></b></div><div className="un-obl">Obligatorisk</div></div>}
           {har(eff.niva3) && <div className={`uppg-niva ${farg ? 'niva-rod' : 'niva-neutral2'}`}><div className="un-rubrik">{N.niva3} – C/A-nivå</div><div className="un-uppg">Uppg. <b><input aria-label={`Uppgifter ${N.niva3}`} value={lp?.uppgNiva3 ?? ''} placeholder={rad.lektion.niva3} onChange={(e) => satt('uppgNiva3', e.target.value)} style={{ width: 80 }} /></b></div><div className="un-obl">Frivillig / vid lektionstid</div></div>}
         </div>
-        <div className="ls-inlamning">📷 <b>Inlämning via Google Classroom</b> — foto på beräkningarna, minst <b>{N.niva1} + {N.niva2}</b> (obligatoriskt). {N.niva3} är frivillig. Görs klart hemma eller på stödtid om de ej hunnits med.</div>
+        {arNo
+          ? <div className="ls-inlamning">📷 <b>Inlämning via Google Classroom</b> — skriftliga svar på Testa dig själv (obligatoriskt). Görs klart hemma om de ej hunnits med. Läxförhören är kumulativa: alla begrepp hittills, krav ≥ 90 %.</div>
+          : <div className="ls-inlamning">📷 <b>Inlämning via Google Classroom</b> — foto på beräkningarna, minst <b>{N.niva1} + {N.niva2}</b> (obligatoriskt). {N.niva3} är frivillig. Görs klart hemma eller på stödtid om de ej hunnits med.</div>}
       </section>
 
       {/* ── MAGMA ── */}
@@ -1188,7 +1193,9 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor }: {
       <section className="ls-sektion ls-exit">
         <div className="ls-sek-rubrik">📱 {exitTid !== null ? `${exitTid}–${rad.slutTid} · ` : ''}EXIT TICKET</div>
         <div className="ls-soc-bar"><span className="ls-soc">Socrative.com</span><span className="ls-soc-rum">Roomname: {rum}</span>{har(rad.lektion.exit) && <span className="ls-soc-quiz">{rad.lektion.exit}</span>}</div>
-        <p className="muted small">5 minuter. Visa att du förstår grundläggande uppgifter från lektionen — logga in på Socrative och välj rummet <b>{rum}</b>. Exit ticket från denna lektion används som läxförhör nästa lektion.</p>
+        {arNo
+          ? <p className="muted small">5 minuter. Delkapitlets begrepp — krav ≥ 70 %. Logga in på Socrative och välj rummet <b>{rum}</b>. Nästa lektions läxförhör är kumulativt (alla begrepp hittills, krav ≥ 90 %).</p>
+          : <p className="muted small">5 minuter. Visa att du förstår grundläggande uppgifter från lektionen — logga in på Socrative och välj rummet <b>{rum}</b>. Exit ticket från denna lektion används som läxförhör nästa lektion.</p>}
       </section>
 
       {arHalvklass(amnesNamn) && (
