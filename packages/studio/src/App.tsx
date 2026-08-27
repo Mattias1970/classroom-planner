@@ -763,8 +763,8 @@ function Elevlista({ s, klassId, klassNamn, kor }: {
       {elever.length > 0 && (
         <table className="tbl">
           <thead><tr><th>Namn</th><th>Grupp</th><th></th><th></th></tr></thead>
-          <tbody>{elever.map((e) => (<>
-            <tr key={e.id}>
+          <tbody>{elever.map((e) => (<Fragment key={e.id}>
+            <tr>
               <td>{e.namn}</td>
               <td>
                 <select aria-label={`Grupp för ${e.namn}`} value={e.grupp}
@@ -788,7 +788,7 @@ function Elevlista({ s, klassId, klassNamn, kor }: {
                 </td>
               </tr>
             )}
-          </>))}</tbody>
+          </Fragment>))}</tbody>
         </table>
       )}
       <div className="ny rad">
