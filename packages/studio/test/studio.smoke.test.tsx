@@ -1106,12 +1106,28 @@ describe('Planeringsflikar (portade från v1)', () => {
     const host = render();
     await amneMedPlan(host);
     act(() => { knapp(host, '🎬 Filmer').click(); });
-    skriv(input(host, 'Ny film lektion 1'), 'Bråk – Binogi|https://binogi.se/brak');
+    skriv(input(host, 'Filmtitel lektion 1'), 'Bråk – Binogi');
+    skriv(input(host, 'Filmlänk lektion 1'), 'https://binogi.se/brak');
     act(() => { knapp(host, '+ Lägg till film').click(); });
     expect(host.textContent).toContain('▶ Bråk – Binogi');
     expect(lasStruktur().lektionsplaner.find((p) => p.lektionsIndex === 0)?.filmer).toEqual(['Bråk – Binogi|https://binogi.se/brak']);
     act(() => { knapp(host, '✕').click(); });   // ta bort filmen
     expect(lasStruktur().lektionsplaner.find((p) => p.lektionsIndex === 0)?.filmer).toEqual([]);
+  });
+
+  it('rad i Översikt och Öppna lektion i Filmer hoppar till rätt lektionssida', async () => {
+    const host = render();
+    await amneMedPlan(host);
+    act(() => { knapp(host, 'ℹ Översikt').click(); });
+    const rad2 = host.querySelectorAll('table.plan tbody tr')[1] as HTMLTableRowElement;
+    act(() => { rad2.click(); });
+    // Detaljfliken öppen på lektion 2
+    expect(host.textContent).toContain('TAVLAN');
+    expect((select(host, 'Välj lektion') as HTMLSelectElement).value).toBe('1');
+    // Filmer → Öppna lektion → på första lektionen
+    act(() => { knapp(host, '🎬 Filmer').click(); });
+    act(() => { (host.querySelectorAll('.film-lekt button.btn.sec.sm')[0] as HTMLButtonElement).click(); });
+    expect((select(host, 'Välj lektion') as HTMLSelectElement).value).toBe('0');
   });
 })
 

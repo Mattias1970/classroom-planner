@@ -840,6 +840,9 @@ function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn:
   const planB = useMemo(() => (a && la && bok && a.halvklass === true ? skapaPlanering(la, a.schemaB ?? [], bok, offset, a.egnaRader ?? []) : []), [a, la, bok, offset]);
   const harPlanering = s.planeringar.some((p) => p.amneId === id);
   const [flik, setFlik] = useState<'planering' | 'detalj' | 'oversikt' | 'uppgifter' | 'begrepp' | 'filmer' | 'magma' | 'anteckningar' | 'arsoversikt'>('planering');
+  const [detaljIdx, setDetaljIdx] = useState(0);
+  /** Öppnar en lektion i detaljplaneringen — används av alla flikars klickbara lektioner. */
+  const oppnaLektion = (i: number) => { setDetaljIdx(i); setFlik('detalj'); };
   if (!a || !klass || !la) return null;
   const halv = a.halvklass === true;
   const overBudget = a.noGrupp !== undefined && bok !== undefined && noOverBudget(bok, budget);
@@ -888,12 +891,12 @@ function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn:
       </div>
       {flik === 'arsoversikt' && bok && <Arsoversikt bok={bok} plan={plan} nivaText={`${bok.nivaer.niva1} = introduktion · ${bok.nivaer.niva2} = E-nivå · ${bok.nivaer.niva3} = C/A-nivå`} />}
       {flik === 'arsoversikt' && !bok && <p className="muted">Koppla en bok för att se årsöversikten.</p>}
-      {flik === 'detalj' && bok && <DetaljFlik s={s} amneId={a.id} plan={plan} bok={bok} amnesNamn={a.namn} kor={kor} />}
+      {flik === 'detalj' && bok && <DetaljFlik s={s} amneId={a.id} plan={plan} bok={bok} amnesNamn={a.namn} kor={kor} idx={detaljIdx} setIdx={setDetaljIdx} />}
       {flik === 'detalj' && !bok && <p className="muted">Koppla en bok till ämnet för att använda detaljplaneringen.</p>}
-      {bok && flik === 'oversikt' && <OversiktFlik plan={plan} bok={bok} />}
-      {bok && flik === 'uppgifter' && <UppgifterFlik plan={plan} bok={bok} s={s} amneId={a.id} />}
-      {bok && flik === 'begrepp' && <BegreppFlik plan={plan} bok={bok} />}
-      {bok && flik === 'filmer' && <FilmerFlik s={s} amneId={a.id} plan={plan} bok={bok} kor={kor} />}
+      {bok && flik === 'oversikt' && <OversiktFlik plan={plan} bok={bok} oppnaLektion={oppnaLektion} />}
+      {bok && flik === 'uppgifter' && <UppgifterFlik plan={plan} bok={bok} s={s} amneId={a.id} oppnaLektion={oppnaLektion} />}
+      {bok && flik === 'begrepp' && <BegreppFlik plan={plan} bok={bok} oppnaLektion={oppnaLektion} />}
+      {bok && flik === 'filmer' && <FilmerFlik s={s} amneId={a.id} plan={plan} bok={bok} kor={kor} oppnaLektion={oppnaLektion} />}
       {bok && flik === 'magma' && <MagmaFlik s={s} amneId={a.id} plan={plan} kor={kor} />}
       {bok && flik === 'anteckningar' && <AnteckningarFlik s={s} amneId={a.id} klassNamn={klass.namn} plan={plan} kor={kor} />}
       {flik === 'planering' && (<>
@@ -1025,11 +1028,10 @@ function arFargnivaer(bok: Bok): boolean { return bok.nivaer.niva1 === 'Grön'; 
  * Bokens exempel), Begrepp med förklaringar, Arbete, Magma, Filmer, Läxa och
  * Exit ticket. Alla ytor redigerbara — sparas i lektionsplanen (overlay).
  */
-function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor }: {
+function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
   s: Struktur; amneId: string; plan: PlaneradLektion[]; bok: Bok; amnesNamn: string;
-  kor: (fn: () => Struktur, m: string) => void;
+  kor: (fn: () => Struktur, m: string) => void; idx: number; setIdx: (i: number) => void;
 }) {
-  const [idx, setIdx] = useState(0);
   const [nyFilm, setNyFilm] = useState('');
   if (plan.length === 0) return <p className="muted">Skapa en planering först.</p>;
   const i = Math.min(idx, plan.length - 1);
@@ -1226,25 +1228,27 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor }: {
   );
 }
 
-function OversiktFlik({ plan, bok }: { plan: PlaneradLektion[]; bok: Bok }) {
+function OversiktFlik({ plan, bok, oppnaLektion }: { plan: PlaneradLektion[]; bok: Bok; oppnaLektion: (i: number) => void }) {
   const farg = arFargnivaer(bok);
   return (
-    <table className="tbl plan">
-      <thead><tr><th>Lek.</th><th>Vecka</th><th>Datum</th><th>Tid</th><th>Avsnitt</th><th>Typ</th>
-        <th>{farg ? '🟢 ' : ''}{bok.nivaer.niva1}</th><th>{farg ? '🔵 ' : ''}{bok.nivaer.niva2}</th><th>{farg ? '🔴 ' : ''}{bok.nivaer.niva3}</th></tr></thead>
-      <tbody>{plan.map((r, i) => (
-        <tr key={i} className={r.datum === null ? 'saknas' : ''}>
-          <td>{i + 1}</td><td>{r.vecka !== null ? `v.${r.vecka}` : ''}</td><td>{r.datum ?? 'ryms ej'}</td>
-          <td>{r.start !== null ? `${r.start}–${r.slutTid}` : ''}</td>
-          <td>{r.lektion.avsnitt}</td><td><TypChip typ={r.lektion.typ} /></td>
-          <td>{r.lektion.niva1}</td><td>{r.lektion.niva2}</td><td className="rod">{r.lektion.niva3}</td>
-        </tr>
-      ))}</tbody>
-    </table>
+    <div>
+      <h3 style={{ marginTop: 0 }}>Översikt – alla {plan.length} lektioner <small className="muted">klicka på en rad för att redigera lektionen i detalj</small></h3>
+      <table className="tbl plan clickable">
+        <thead><tr><th>Lek.</th><th>Vecka</th><th>Datum</th><th>Tid</th><th>Avsnitt</th><th>Typ</th>
+          <th>{farg ? '🟢 ' : ''}{bok.nivaer.niva1}</th><th>{farg ? '🔵 ' : ''}{bok.nivaer.niva2}</th><th>{farg ? '🔴 ' : ''}{bok.nivaer.niva3}</th></tr></thead>
+        <tbody>{plan.map((r, i) => (
+          <tr key={i} className={r.datum === null ? 'saknas' : ''} onClick={() => oppnaLektion(i)} title="Öppna lektionen i detaljplaneringen">
+            <td>{i + 1}</td><td>{r.vecka !== null ? `v.${r.vecka}` : ''}</td><td>{r.datum ?? 'ryms ej'}</td>
+            <td>{r.start !== null ? `${r.start}–${r.slutTid}` : ''}</td>
+            <td>{r.lektion.avsnitt}</td><td><TypChip typ={r.lektion.typ} /></td>
+            <td>{r.lektion.niva1}</td><td>{r.lektion.niva2}</td><td className="rod">{r.lektion.niva3}</td>
+          </tr>
+        ))}</tbody>
+      </table>
+    </div>
   );
 }
-
-function UppgifterFlik({ plan, bok, s, amneId }: { plan: PlaneradLektion[]; bok: Bok; s: Struktur; amneId: string }) {
+function UppgifterFlik({ plan, bok, s, amneId, oppnaLektion }: { plan: PlaneradLektion[]; bok: Bok; s: Struktur; amneId: string; oppnaLektion: (i: number) => void }) {
   const N = bok.nivaer;
   const har = (v: string) => v !== '—' && v !== '';
   const amne = s.amnen.find((a) => a.id === amneId);
@@ -1273,7 +1277,8 @@ function UppgifterFlik({ plan, bok, s, amneId }: { plan: PlaneradLektion[]; bok:
           <div key={i} className="uppg-kort">
             <div className="rad"><b>Lektion {i + 1} — {r.lektion.avsnitt}</b><span className="spacer" />
               <span className="pillm">Lek {r.lektion.del}: min. {minimum === 1 ? N.niva1 : N.niva2}</span>
-              {r.lektion.sidorTeori !== '' && <span className="muted small">📖 {r.lektion.sidorTeori}</span>}</div>
+              {r.lektion.sidorTeori !== '' && <span className="muted small">📖 {r.lektion.sidorTeori}</span>}
+              <button className="btn sec sm" onClick={() => oppnaLektion(i)}>Öppna lektion →</button></div>
             {kort.length === 0 ? <p className="muted small">Inga uppgiftsintervall (repetition/diagnos/prov).</p> : (
               <div className="uppg-rad">{kort.map(([rubrik, uppg, cls, obl]) => (
                 <div key={rubrik} className={`uppg-niva ${cls}`}>
@@ -1290,18 +1295,22 @@ function UppgifterFlik({ plan, bok, s, amneId }: { plan: PlaneradLektion[]; bok:
   );
 }
 
-function BegreppFlik({ plan, bok }: { plan: PlaneradLektion[]; bok: Bok }) {
+function BegreppFlik({ plan, bok, oppnaLektion }: { plan: PlaneradLektion[]; bok: Bok; oppnaLektion: (i: number) => void }) {
   const rader = plan.flatMap((r, i) =>
     begreppForLektion(bok, r.kapitel, r.lektion)
       .filter((_, bi, arr) => r.lektion.del === 1 || arr.length === 0) // begrepp introduceras på del 1
-      .map((b) => ({ lektion: i + 1, begrepp: b, avsnitt: r.lektion.avsnitt })));
+      .map((b) => ({ lektion: i + 1, index: i, begrepp: b, avsnitt: r.lektion.avsnitt,
+        forklaring: bok.kapitel.find((k) => k.nr === r.kapitel)?.resurser.forklaringar?.[b] ?? '' })));
   const alla = [...new Set(bok.kapitel.flatMap((k) => k.begreppslista))];
   return (
     <div>
-      <table className="tbl">
-        <thead><tr><th>Lektion</th><th>Begrepp</th><th>Avsnitt</th></tr></thead>
+      <table className="tbl plan clickable begrepp-tbl">
+        <thead><tr><th>Lektion</th><th>Begrepp</th><th>Avsnitt</th><th>Förklaring</th></tr></thead>
         <tbody>{rader.map((r, i) => (
-          <tr key={i}><td>{r.lektion}</td><td><b>{r.begrepp}</b></td><td>{r.avsnitt}</td></tr>
+          <tr key={i} onClick={() => oppnaLektion(r.index)} title="Öppna lektionen i detaljplaneringen">
+            <td>{r.lektion}</td><td><b>{r.begrepp}</b></td><td>{r.avsnitt}</td>
+            <td className="muted">{r.forklaring !== '' ? r.forklaring : '—'}</td>
+          </tr>
         ))}</tbody>
       </table>
       <h3>Alla begrepp</h3>
@@ -1309,26 +1318,29 @@ function BegreppFlik({ plan, bok }: { plan: PlaneradLektion[]; bok: Bok }) {
     </div>
   );
 }
-
-function FilmerFlik({ s, amneId, plan, bok, kor }: {
-  s: Struktur; amneId: string; plan: PlaneradLektion[]; bok: Bok; kor: (fn: () => Struktur, m: string) => void;
+function FilmerFlik({ s, amneId, plan, bok, kor, oppnaLektion }: {
+  s: Struktur; amneId: string; plan: PlaneradLektion[]; bok: Bok;
+  kor: (fn: () => Struktur, m: string) => void; oppnaLektion: (i: number) => void;
 }) {
-  const [ny, setNy] = useState<Record<number, string>>({});
+  const [nyTitel, setNyTitel] = useState<Record<number, string>>({});
+  const [nyUrl, setNyUrl] = useState<Record<number, string>>({});
   const totalt = plan.reduce((n, _r, i) => n + (hamtaLektionsplan(s, amneId, i)?.filmer?.length ?? 0), 0);
-  const kapFilmer = bok.kapitel.flatMap((k) => k.resurser.filmer);
   const laggPa = (lektionsIndex: number, titel: string, url: string) => {
     kor(() => {
       const bef = hamtaLektionsplan(lasStruktur(), amneId, lektionsIndex);
       return sattLektionsplan(lasStruktur(), {
         ...(bef ?? { id: `lp-${amneId}-${lektionsIndex}`, amneId, lektionsIndex }),
-        filmer: [...(bef?.filmer ?? []), `${titel}|${url}`],
+        filmer: [...(bef?.filmer ?? []), titel === '' ? url : `${titel}|${url}`],
       });
-    }, `"${titel}" tillagd på lektion ${lektionsIndex + 1}.`);
+    }, `"${titel === '' ? url : titel}" tillagd på lektion ${lektionsIndex + 1}.`);
   };
   return (
     <div>
-      <p className="note">🎬 Filmlänkar per lektion — skriv <i>Titel|https://…</i> och lägg till.</p>
-      <p className="muted small">{totalt} filmer totalt i planeringen</p>
+      <div className="regel" style={{ marginBottom: 10 }}>
+        <h4>🎬 Filmlänkar per lektion</h4>
+        <p>Alla filmlänkar (t.ex. Binogi) som lagts till på enskilda lektioner samlas här. Lägg till eller ta bort en länk direkt — det uppdaterar automatiskt motsvarande lektionssida.</p>
+      </div>
+      <p className="muted small"><b>{totalt} filmer totalt i planeringen</b></p>
       {bok.kapitel.filter((k) => k.resurser.filmer.length > 0).map((k) => (
         <div key={k.nr} className="uppg-kort" style={{ borderLeft: `4px solid ${k.farg}` }}>
           <b>📚 Kapitel {k.nr} {k.namn}</b> <small className="muted">— bokens filmresurser ({k.resurser.filmer.length}); välj lektion för att lägga till</small>
@@ -1348,16 +1360,21 @@ function FilmerFlik({ s, amneId, plan, bok, kor }: {
         </div>
       ))}
       {plan.map((r, i) => {
-        const lp = hamtaLektionsplan(s, amneId, i);
-        const filmer = lp?.filmer ?? [];
+        const kapFarg = bok.kapitel.find((k) => k.nr === r.kapitel)?.farg ?? '#5c6b7a';
+        const filmer = hamtaLektionsplan(s, amneId, i)?.filmer ?? [];
         return (
-          <div key={i} className="uppg-kort">
-            <b>🎬 Lektion {i + 1} — {r.lektion.avsnitt}</b>
+          <div key={i} className="film-lekt" style={{ borderLeft: `4px solid ${kapFarg}` }}>
+            <div className="rad">
+              <b className="film-lekt-rubrik">🎬 LEKTION {i + 1} – {r.lektion.avsnitt.toUpperCase()}</b>
+              <span className="spacer" />
+              <button className="btn sec sm" onClick={() => oppnaLektion(i)}>Öppna lektion →</button>
+            </div>
+            {filmer.length === 0 && <p className="muted small" style={{ margin: '4px 0' }}><i>Inga filmer tillagda ännu.</i></p>}
             {filmer.map((f, fi) => {
               const [titel, url] = f.includes('|') ? [f.split('|')[0], f.split('|').slice(1).join('|')] : [f, f];
               return (
-                <div key={fi} className="rad film-rad">
-                  <a href={url} target="_blank" rel="noreferrer">▶ {titel}</a>
+                <div key={fi} className="rad film-rad film-lekt-rad">
+                  <span>▶ <a href={url} target="_blank" rel="noreferrer"><b>{titel}</b></a><br /><small className="muted">{url}</small></span>
                   <button className="icon-btn" title="Ta bort film" onClick={() => kor(() => sattLektionsplan(lasStruktur(), {
                     ...(hamtaLektionsplan(lasStruktur(), amneId, i) ?? { id: `lp-${amneId}-${i}`, amneId, lektionsIndex: i }),
                     filmer: filmer.filter((_x, xi) => xi !== fi),
@@ -1365,15 +1382,14 @@ function FilmerFlik({ s, amneId, plan, bok, kor }: {
                 </div>
               );
             })}
-            <div className="rad">
-              <input aria-label={`Ny film lektion ${i + 1}`} placeholder="Titel|https://binogi.se/…" value={ny[i] ?? ''}
-                onChange={(e) => setNy({ ...ny, [i]: e.target.value })} style={{ flex: 1 }} />
-              <button className="btn sec sm" disabled={(ny[i] ?? '').trim() === ''} onClick={() => {
-                kor(() => sattLektionsplan(lasStruktur(), {
-                  ...(hamtaLektionsplan(lasStruktur(), amneId, i) ?? { id: `lp-${amneId}-${i}`, amneId, lektionsIndex: i }),
-                  filmer: [...filmer, (ny[i] ?? '').trim()],
-                }), `Film tillagd på lektion ${i + 1}.`);
-                setNy({ ...ny, [i]: '' });
+            <div className="rad" style={{ gap: 6, marginTop: 4 }}>
+              <input aria-label={`Filmtitel lektion ${i + 1}`} placeholder="Titel (valfri)" value={nyTitel[i] ?? ''}
+                onChange={(e) => setNyTitel({ ...nyTitel, [i]: e.target.value })} style={{ width: 160 }} />
+              <input aria-label={`Filmlänk lektion ${i + 1}`} placeholder="https://youtube.com/…" value={nyUrl[i] ?? ''}
+                onChange={(e) => setNyUrl({ ...nyUrl, [i]: e.target.value })} style={{ flex: 1 }} />
+              <button className="btn sm" disabled={(nyUrl[i] ?? '').trim() === ''} onClick={() => {
+                laggPa(i, (nyTitel[i] ?? '').trim(), (nyUrl[i] ?? '').trim());
+                setNyTitel({ ...nyTitel, [i]: '' }); setNyUrl({ ...nyUrl, [i]: '' });
               }}>+ Lägg till film</button>
             </div>
           </div>
@@ -1382,7 +1398,6 @@ function FilmerFlik({ s, amneId, plan, bok, kor }: {
     </div>
   );
 }
-
 function MagmaFlik({ s, amneId, plan, kor }: {
   s: Struktur; amneId: string; plan: PlaneradLektion[]; kor: (fn: () => Struktur, m: string) => void;
 }) {
