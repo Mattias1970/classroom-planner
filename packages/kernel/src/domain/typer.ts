@@ -245,6 +245,8 @@ export interface LektionsPlan {
 export interface Struktur {
   /** Arkiverade planeringsversioner — skrivs aldrig över, kan återställas. */
   planeringsarkiv?: Planering[];
+  /** SuperTeach: importerade provresultat (läxförhör, exit tickets, Magma, DigiExam). */
+  resultat?: import('./resultat.js').Resultat[];
   skolar: Skolar[];
   larare: Larare[];
   tjanster: Tjanst[];
