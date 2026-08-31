@@ -839,7 +839,7 @@ function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn:
   const plan = useMemo(() => (a && la && bok ? skapaPlanering(la, a.schema, bok, offset, a.egnaRader ?? []) : []), [a, la, bok, offset]);
   const planB = useMemo(() => (a && la && bok && a.halvklass === true ? skapaPlanering(la, a.schemaB ?? [], bok, offset, a.egnaRader ?? []) : []), [a, la, bok, offset]);
   const harPlanering = s.planeringar.some((p) => p.amneId === id);
-  const [flik, setFlik] = useState<'planering' | 'detalj' | 'oversikt' | 'uppgifter' | 'begrepp' | 'filmer' | 'magma' | 'anteckningar' | 'arsoversikt'>('planering');
+  const [flik, setFlik] = useState<'planering' | 'detalj' | 'oversikt' | 'uppgifter' | 'begrepp' | 'filmer' | 'magma' | 'anteckningar' | 'arsoversikt' | 'installningar'>('planering');
   const [detaljIdx, setDetaljIdx] = useState(0);
   /** Öppnar en lektion i detaljplaneringen — används av alla flikars klickbara lektioner. */
   const oppnaLektion = (i: number) => { setDetaljIdx(i); setFlik('detalj'); };
@@ -853,10 +853,7 @@ function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn:
       <h2>📖 {klass.namn} · {a.namn}{halv ? <span className="pillm">halvklass A/B</span> : null}{a.noGrupp !== undefined ? <span className="pillm">NO+Tk block {(a.noOrder ?? 0) + 1}/4</span> : null}</h2>
       {bok && harPlanering && plan.length > 0 && <KapitelHeader bok={bok} plan={plan} s={s} amneId={a.id} />}
       <p className="muted">Socrative-rum: <b>{rum}</b>{halv ? ' (delas av Grupp A och B)' : ''} — läxförhör och exit tickets.</p>
-      {a.noGrupp !== undefined && (<>
-        <p className="note">Detta delämne har budget <b>{budget}</b> lektioner (block {(a.noOrder ?? 0) + 1}) och startar efter föregående block.</p>
-        <NoOrdningRedigerare s={s} syskon={noSyskon} kor={kor} />
-      </>)}
+
       {overBudget && (
         <p className="status warn">⚠ {bok!.titel} har {bok!.kapitel.reduce((n, k2) => n + k2.delkapitel.reduce((m, d) => m + d.lektioner.length, 0) + k2.extraLektioner.length, 0)} lektioner men blocket rymmer bara {budget}. De sista lektionerna trängs in i nästa delämnes block — korta boken eller lägg fler NO-pass.</p>
       )}
@@ -867,6 +864,7 @@ function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn:
           <button key={id} className={`flik ${flik === id ? 'act' : ''}`} onClick={() => setFlik(id)} disabled={!bok}
             title={!bok ? 'Koppla en bok först' : ''}>{txt}</button>
         ))}
+        <button className={`flik ${flik === 'installningar' ? 'act' : ''}`} onClick={() => setFlik('installningar')}>🗓 Schema</button>
         <button className={`flik ${flik === 'arsoversikt' ? 'act' : ''}`} onClick={() => setFlik('arsoversikt')}>📊 Årsöversikt</button>
         <span className="spacer" />
         <button className="flik" onClick={() => window.print()} title="Skriv ut aktiv flik">🖨 Skriv ut</button>
@@ -899,10 +897,16 @@ function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn:
       {bok && flik === 'filmer' && <FilmerFlik s={s} amneId={a.id} plan={plan} bok={bok} kor={kor} oppnaLektion={oppnaLektion} />}
       {bok && flik === 'magma' && <MagmaFlik s={s} amneId={a.id} plan={plan} kor={kor} />}
       {bok && flik === 'anteckningar' && <AnteckningarFlik s={s} amneId={a.id} klassNamn={klass.namn} plan={plan} kor={kor} />}
+      {flik === 'installningar' && (<>
+        {halv
+          ? <HalvklassSchemaRedigerare key={a.id} s={s} amne={a} kor={kor} />
+          : <AmneSchemaRedigerare key={a.id} s={s} amne={a} kor={kor} falt="schema" rubrik="Schema" />}
+        {a.noGrupp !== undefined && (<>
+          <p className="note">Detta delämne har budget <b>{budget}</b> lektioner (block {(a.noOrder ?? 0) + 1}) och startar efter föregående block.</p>
+          <NoOrdningRedigerare s={s} syskon={noSyskon} kor={kor} />
+        </>)}
+      </>)}
       {flik === 'planering' && (<>
-      {halv
-        ? <HalvklassSchemaRedigerare key={a.id} s={s} amne={a} kor={kor} />
-        : <AmneSchemaRedigerare key={a.id} s={s} amne={a} kor={kor} falt="schema" rubrik="Schema" />}
       {!arStodAmne(a.namn) && <label>Bok:{' '}
         <select aria-label="Bok för ämnet" value={a.bokId ?? ''}
           onChange={(e) => kor(() => uppdateraAmne(lasStruktur(), id, { bokId: e.target.value }),

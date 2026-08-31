@@ -303,7 +303,8 @@ describe('Spara-knappar och automatisk nästa veckodag', () => {
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     expect(host.textContent).toContain('2026-08-19');            // onsdag
-    // Ändra till torsdag — osparad markering syns, planeringen orörd
+    // Schemat redigeras i 🗓 Schema-fliken
+    act(() => { knapp(host, '🗓 Schema').click(); });
     valj(select(host, 'Veckodag pass 1'), '4');
     expect(host.textContent).toContain('osparade ändringar');
     expect(lasStruktur().amnen[0].schema[0].dag).toBe(3);
@@ -311,6 +312,7 @@ describe('Spara-knappar och automatisk nästa veckodag', () => {
     act(() => { knapp(host, '💾 Spara schema').click(); });
     expect(lasStruktur().amnen[0].schema[0].dag).toBe(4);
     expect(host.textContent).toContain('✓ Sparat!');
+    act(() => { knapp(host, '📝 Lektionsplan').click(); });
     expect(host.textContent).toContain('2026-08-20');            // torsdag
     expect(host.textContent).not.toContain('2026-08-19');
   });
@@ -918,6 +920,7 @@ describe('NO+Tk blockkurs och kalenderfärger', () => {
     const forsta = lasStruktur().amnen.filter((x) => x.noGrupp !== undefined).sort((x, y) => (x.noOrder ?? 0) - (y.noOrder ?? 0))[0];
     act(() => { treeKnapp(host, `📖 ${forsta.namn}`).click(); });
     expect(host.querySelector('.panel')!.textContent).toContain('NO+Tk block 1/4');
+    act(() => { knapp(host, '🗓 Schema').click(); });      // budget + NO-ordning bor i 🗓-fliken
     expect(host.querySelector('.panel')!.textContent).toContain('budget');
   });
 
@@ -998,6 +1001,7 @@ describe('Inga dubblettämnen, redigerbar NO-ordning, GitHub-panel', () => {
     act(() => { knapp(host, '➕ Skapa NO+Tk (fyra block)').click(); });
     const forsta = lasStruktur().amnen.filter((x) => x.noGrupp !== undefined).sort((x, y) => (x.noOrder ?? 0) - (y.noOrder ?? 0))[0];
     act(() => { treeKnapp(host, `📖 ${forsta.namn}`).click(); });
+    act(() => { knapp(host, '🗓 Schema').click(); });
     // Byt block 1 till Teknik via redigeraren
     valj(select(host, 'Ändra NO-block 1'), 'Teknik');
     act(() => { knapp(host, '💾 Spara ny ordning').click(); });
@@ -1273,7 +1277,8 @@ describe('Hel- och halvklasspass för NO', () => {
       { dag: 1, start: '09:00', slut: '10:00' },                                          // Grupp B: helklass + B-pass
       { dag: 4, start: '13:00', slut: '14:00' },
     ]);
-    // Redigeraren i ämnespanelen visar omfattningen och kan ändra den
+    // Redigeraren bor i 🗓 Schema-fliken; visar omfattningen och kan ändra den
+    act(() => { knapp(host, '🗓 Schema').click(); });
     expect(host.textContent).toContain('Helklass');
     valj(select(host, 'Omfattning pass 1'), 'A');            // gör måndagspasset till halvklass A
     act(() => { knapp(host, '💾 Spara schema').click(); });
