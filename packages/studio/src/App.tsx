@@ -1045,7 +1045,10 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
   const i = Math.min(idx, plan.length - 1);
   const rad = plan[i];
   const kap = bok.kapitel.find((k) => k.nr === rad.kapitel);
-  const begrepp = begreppForLektion(bok, rad.kapitel, rad.lektion);
+  const lpForBegrepp = hamtaLektionsplan(s, amneId, i);
+  const begrepp = lpForBegrepp?.begreppText !== undefined && lpForBegrepp.begreppText.trim() !== ''
+    ? lpForBegrepp.begreppText.split(',').map((b) => b.trim()).filter((b) => b !== '')
+    : begreppForLektion(bok, rad.kapitel, rad.lektion);
   const forklaringar = kap?.resurser.forklaringar ?? {};
   const lp = hamtaLektionsplan(s, amneId, i);
   const filmer = lp?.filmer ?? [];
@@ -1089,7 +1092,9 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
           <span className="spacer" />
           <span className="ls-nr">Lektion {i + 1} av {plan.length}</span>
         </div>
-        <p className="muted small">📖 Teorisidor: {rad.lektion.sidorTeori}{rad.datum !== null ? ` · ${dagN} ${rad.datum} · v.${rad.vecka}` : ' · ryms ej i skolåret'}</p>
+        <p className="muted small">📖 Teorisidor: <input aria-label="Teorisidor" value={lp?.sidorTeori ?? ''}
+          placeholder={rad.lektion.sidorTeori} onChange={(e) => satt('sidorTeori', e.target.value)} style={{ width: 110 }} />
+          {rad.datum !== null ? ` · ${dagN} ${rad.datum} · v.${rad.vecka}` : ' · ryms ej i skolåret'}</p>
         {begrepp.length > 0 && <span className="ls-begrepp-badge">💡 {begrepp.length} begrepp introduceras</span>}
       </div>
 
@@ -1134,15 +1139,19 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
         <label className="small">🔗 Genomgångslänk (film — används i NO/flippat):{' '}
           <input aria-label="Genomgångslänk" value={lp?.flippFilm ?? ''} placeholder={rad.lektion.genomgangLank ?? 'https://…'}
             onChange={(e) => satt('flippFilm', e.target.value)} style={{ width: '60%' }} /></label>
-        {har(rad.lektion.ex) && (
-          <div className="ls-bokex"><b>{arNo ? 'TESTA DIG SJÄLV – GÅS IGENOM GEMENSAMT' : 'BOKENS EXEMPEL – RÄKNA TILLSAMMANS'}</b><p>{rad.lektion.ex}</p></div>
-        )}
+        <div className="ls-bokex"><b>{arNo ? 'TESTA DIG SJÄLV – GÅS IGENOM GEMENSAMT' : 'BOKENS EXEMPEL – RÄKNA TILLSAMMANS'}</b>
+          <textarea aria-label="Bokens exempel" rows={2} value={lp?.bokExempel ?? ''}
+            placeholder={har(rad.lektion.ex) ? rad.lektion.ex : 'Exempel/frågor ur boken'}
+            onChange={(e) => satt('bokExempel', e.target.value)} /></div>
       </section>
 
       {/* ── BEGREPP ── */}
       {begrepp.length > 0 && (
         <section className="ls-sektion ls-begrepp">
           <div className="ls-sek-rubrik">💡 BEGREPP – KAP {rad.kapitel}</div>
+          <label className="small">✏ Begrepp (kommaseparerade):{' '}
+            <input aria-label="Lektionens begrepp" value={lp?.begreppText ?? ''} placeholder={begrepp.join(', ')}
+              onChange={(e) => satt('begreppText', e.target.value)} style={{ width: '70%' }} /></label>
           <div className="ls-begrepp-grid">
             {begrepp.map((b) => (
               <div key={b} className="ls-begrepp-kort"><b>{b}</b>
@@ -1214,7 +1223,9 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
       {/* ── EXIT TICKET ── */}
       <section className="ls-sektion ls-exit">
         <div className="ls-sek-rubrik">📱 {exitTid !== null ? `${exitTid}–${rad.slutTid} · ` : ''}EXIT TICKET</div>
-        <div className="ls-soc-bar"><span className="ls-soc">Socrative.com</span><span className="ls-soc-rum">Roomname: {rum}</span>{har(rad.lektion.exit) && <span className="ls-soc-quiz">{rad.lektion.exit}</span>}</div>
+        <div className="ls-soc-bar"><span className="ls-soc">Socrative.com</span><span className="ls-soc-rum">Roomname: {rum}</span><span className="ls-soc-quiz"><input aria-label="Exit-quiz" value={lp?.exitQuiz ?? ''}
+          placeholder={har(rad.lektion.exit) ? rad.lektion.exit : 'Quiz …'}
+          onChange={(e) => satt('exitQuiz', e.target.value)} style={{ width: 110, border: 0, background: 'transparent', font: 'inherit', color: 'inherit' }} /></span></div>
         {arNo
           ? <p className="muted small">5 minuter. Delkapitlets begrepp — krav ≥ 70 %. Logga in på Socrative och välj rummet <b>{rum}</b>. Nästa lektions läxförhör är kumulativt (alla begrepp hittills, krav ≥ 90 %).</p>
           : <p className="muted small">5 minuter. Visa att du förstår grundläggande uppgifter från lektionen — logga in på Socrative och välj rummet <b>{rum}</b>. Exit ticket från denna lektion används som läxförhör nästa lektion.</p>}
@@ -1646,12 +1657,21 @@ function GruppPlanering(props: {
 }) {
   const { plan, bok, amnesNamn, klassNamn, rum, grupp, rubrik, s, amneId, kor } = props;
   const [valdRad, setValdRad] = useState<number | null>(null);
+  const amnet = s?.amnen.find((x) => x.id === amneId);
+  const halvklassAmne = amnet?.halvklass === true;
+  /** Hel- eller halvklass för en rad: passet finns i båda gruppernas scheman → helklass. */
+  const omfattning = (r: PlaneradLektion): string => {
+    if (!halvklassAmne || r.start === null) return '';
+    const iA = (amnet?.schema ?? []).some((x) => x.start === r.start && x.slut === r.slutTid);
+    const iB = (amnet?.schemaB ?? []).some((x) => x.start === r.start && x.slut === r.slutTid);
+    return iA && iB ? 'Helklass' : grupp !== undefined ? `Grupp ${grupp}` : iA ? 'Grupp A' : 'Grupp B';
+  };
   if (plan.length === 0) return null;
   return (
     <>
       {rubrik !== undefined && <h3 className="grupp-h">{rubrik}</h3>}
       <table className="tbl plan clickable">
-        <thead><tr><th title="Avklarad">✓</th><th>Datum</th><th>V.</th><th>Tid</th><th>Kap</th><th>Avsnitt</th>{bokHarNivaer(bok) && <><th>{bok.nivaer.niva1}</th><th>{bok.nivaer.niva2}</th><th>{bok.nivaer.niva3}</th></>}</tr></thead>
+        <thead><tr><th title="Avklarad">✓</th><th>Datum</th><th>Dag</th><th>V.</th><th>Tid</th>{halvklassAmne && <th>Klass</th>}<th>Kap</th><th>Avsnitt</th>{bokHarNivaer(bok) && <><th>{bok.nivaer.niva1}</th><th>{bok.nivaer.niva2}</th><th>{bok.nivaer.niva3}</th></>}</tr></thead>
         <tbody>{plan.map((r, i) => {
           const klar = s !== undefined && amneId !== undefined && hamtaLektionsplan(s, amneId, i)?.klar === true;
           return (
@@ -1666,8 +1686,11 @@ function GruppPlanering(props: {
                   }), e.target.checked ? `Lektion ${i + 1} avklarad ✓` : `Lektion ${i + 1} markerad som ej klar.`)} />
               )}
             </td>
-            <td>{r.datum ?? 'ryms ej'}</td><td>{r.vecka ?? ''}</td>
+            <td>{r.datum ?? 'ryms ej'}</td>
+            <td>{r.datum !== null ? DAGNAMN[new Date(`${r.datum}T00:00:00Z`).getUTCDay()] ?? '' : ''}</td>
+            <td>{r.vecka ?? ''}</td>
             <td>{r.start !== null ? `${r.start}–${r.slutTid}` : ''}</td>
+            {halvklassAmne && <td><span className={`omf-chip ${omfattning(r) === 'Helklass' ? 'omf-hel' : 'omf-halv'}`}>{omfattning(r)}</span></td>}
             <td>{r.kapitel}</td><td>{r.lektion.avsnitt} · Del {r.lektion.del}</td>
             {bokHarNivaer(bok) && <><td>{r.lektion.niva1}</td><td>{r.lektion.niva2}</td><td>{r.lektion.niva3}</td></>}
           </tr>

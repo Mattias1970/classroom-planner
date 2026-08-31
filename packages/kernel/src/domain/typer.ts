@@ -240,6 +240,12 @@ export interface LektionsPlan {
   laraOss?: string;
   /** Tavlan: Exempel vi räknar tillsammans (överstyra bokens ex). */
   exempelRakna?: string;
+  /** Överstyr teorisidorna i lektionshuvudet. */
+  sidorTeori?: string;
+  /** Överstyr BOKENS EXEMPEL-rutan i Genomgång. */
+  bokExempel?: string;
+  /** Överstyr lektionens begrepp (kommaseparerade) — kort, läxchips och quiz. */
+  begreppText?: string;
 }
 
 export interface Struktur {

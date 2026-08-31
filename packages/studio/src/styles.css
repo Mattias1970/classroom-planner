@@ -422,3 +422,8 @@ body[data-tema="klassisk"] .tema-valj { border-color: var(--ram); background: #f
   padding: 6px 10px; margin: 4px 0; }
 .begrepp-tbl td:nth-child(2) { white-space: nowrap; }
 .begrepp-tbl td:nth-child(4) { font-size: 12px; }
+
+/* Del 47: hel-/halvklasschip i plantabellen */
+.omf-chip { border-radius: 10px; padding: 1px 8px; font-size: 10px; font-weight: 800; white-space: nowrap; }
+.omf-hel { background: #E8F5E9; color: #1B5E20; border: 1px solid #A5D6A7; }
+.omf-halv { background: #E3F2FD; color: #0D47A1; border: 1px solid #90CAF9; }

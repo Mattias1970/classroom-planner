@@ -1213,8 +1213,9 @@ describe('Bokens nivåkonventioner följs', () => {
     const panel = host.querySelector('.panel')!;
     expect(panel.textContent).not.toContain('Grön');
     expect(panel.textContent).not.toContain('ETT');
-    // Plantabellen saknar nivåkolumner (✓/Datum/V./Tid/Kap/Avsnitt = 6 per grupptabell)
-    expect(panel.querySelector('table.plan')!.querySelectorAll('thead th')).toHaveLength(6);
+    // Plantabellen saknar nivåkolumner (✓/Datum/Dag/V./Tid/Klass/Kap/Avsnitt = 8 för halvklassämne)
+    expect(panel.querySelector('table.plan')!.querySelectorAll('thead th')).toHaveLength(8);
+    expect(panel.textContent).toContain('Helklass');    // omfattningen syns per rad
     act(() => { knapp(host, '✏ Uppgifter').click(); });
     expect(host.querySelector('.regel')!.textContent).toContain('Testa dig själv');
     expect(host.querySelector('.regel')!.textContent).not.toContain('obligatoriska.');
