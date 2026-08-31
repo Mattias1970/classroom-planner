@@ -50,7 +50,7 @@ describe('bokFromBiologiImport', () => {
     expect(l2.socStart).toBe('Biologi61 (krav ≥ 90 %)');
     expect(l3.socStart).toBe('Biologi612 (krav ≥ 90 %)');
     expect(l1.exit).toBe('Biologi61 (krav ≥ 70 %)');
-    expect(l1.ex).toBe('Testa dig själv 6.1 (2 frågor)');
+    expect(l1.ex).toBe('Testa dig själv 6.1 · uppgift 1–2');
     expect(l1.laxa).toContain('Biologi61 ≥ 90 %');
   });
 

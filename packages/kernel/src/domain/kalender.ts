@@ -23,6 +23,9 @@ export interface KalenderHandelse {
   amnesFarg: string;
   avsnitt: string;
   vecka: number;
+  /** Koppling till planeringen — klick i kalendern öppnar lektionssidan. */
+  amneId?: string;
+  lektionsIndex?: number;
 }
 
 export interface KalenderDagRuta {
@@ -70,12 +73,13 @@ export function kalenderHandelser(s: Struktur, skolarId: string): KalenderHandel
       ? [{ grupp: 'A', schema: amne.schema }, { grupp: 'B', schema: amne.schemaB ?? [] }]
       : [{ grupp: undefined, schema: amne.schema }];
     for (const g of grupper) {
-      for (const p of skapaPlanering(skolar, g.schema, bok, offset, amne.egnaRader ?? [])) {
+      for (const [lektionsIndex, p] of skapaPlanering(skolar, g.schema, bok, offset, amne.egnaRader ?? []).entries()) {
         if (p.datum === null || p.start === null || p.slutTid === null || p.vecka === null) continue;
         ut.push({
           datum: p.datum, start: p.start, slut: p.slutTid,
           klassId: klass.id, klassNamn: klass.namn, amnesNamn: amne.namn, grupp: g.grupp,
           kapitel: p.kapitel, kapitelFarg: farg(p.kapitel), amnesFarg, avsnitt: p.lektion.avsnitt, vecka: p.vecka,
+          amneId: amne.id, lektionsIndex,
         });
       }
     }

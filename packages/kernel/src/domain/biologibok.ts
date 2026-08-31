@@ -84,7 +84,7 @@ function delkapitelLektion(d: RawDelkapitel, index1: number, prefix: string, kap
     genomgang: d.titel,
     ...(d.genomgangLank !== undefined ? { genomgangLank: d.genomgangLank } : {}),
     laxa: `Alla begrepp t.o.m. ${d.nummer} – ${socrativeLaxforhorRum(prefix, kapNr, index1)} ≥ ${NO_KRAV_LAXFORHOR} %`,
-    ex: d.testaFragor > 0 ? `Testa dig själv ${d.nummer} (${d.testaFragor} frågor)` : '—',
+    ex: d.testaFragor > 0 ? `Testa dig själv ${d.nummer} · uppgift 1–${d.testaFragor}` : '—',
     socStart: laxforhor,
     exit: `${socrativeExitRum(prefix, kapNr, index1)} (krav ≥ ${NO_KRAV_EXIT} %)`,
   };

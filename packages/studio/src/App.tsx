@@ -56,6 +56,7 @@ export function App() {
   const [s, setS] = useState<Struktur>(() => lasStruktur());
   const [vald, setVald] = useState<Vald>(null);
   const [huvudvy, setHuvudvy] = useState<'struktur' | 'planering' | 'kalender'>('struktur');
+  const [lektionsHopp, setLektionsHopp] = useState<{ amneId: string; i: number; n: number } | null>(null);
   const [tema, setTema] = useState<string>(() => {
     try { return window.localStorage.getItem('classroom-planner.studio.tema') ?? 'varm'; } catch { return 'varm'; }
   });
@@ -114,12 +115,12 @@ export function App() {
       {huvudvy === 'kalender' ? (
         <main className="panel full">
           {msg && <p className="status">{msg}</p>}
-          <KalenderVy s={s} />
+          <KalenderVy s={s} onOppnaLektion={(amneId, i) => { setLektionsHopp({ amneId, i, n: Date.now() }); setHuvudvy('planering'); }} />
         </main>
       ) : huvudvy === 'planering' ? (
         <main className="panel full">
           {msg && <p className="status">{msg}</p>}
-          <PlaneringVy s={s} kor={kor} setVald={setVald} />
+          <PlaneringVy s={s} kor={kor} setVald={setVald} hopp={lektionsHopp} />
         </main>
       ) : (
         <div className="cols">
@@ -828,7 +829,7 @@ function KapitelHeader({ bok, plan, s, amneId }: { bok: Bok; plan: PlaneradLekti
   );
 }
 
-function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn: () => Struktur, m: string) => void; setVald: (v: Vald) => void }) {
+function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor: (fn: () => Struktur, m: string) => void; setVald: (v: Vald) => void; hopp?: { amneId: string; i: number; n: number } | null }) {
   const a = s.amnen.find((x) => x.id === id);
   const klass = s.klasser.find((k) => k.id === a?.klassId);
   const tjanst = s.tjanster.find((t) => t.id === klass?.tjanstId);
@@ -843,6 +844,7 @@ function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn:
   const [detaljIdx, setDetaljIdx] = useState(0);
   /** Öppnar en lektion i detaljplaneringen — används av alla flikars klickbara lektioner. */
   const oppnaLektion = (i: number) => { setDetaljIdx(i); setFlik('detalj'); };
+  useEffect(() => { if (hopp != null && hopp.amneId === id) { setDetaljIdx(hopp.i); setFlik('detalj'); } }, [hopp?.n]);   // kalenderklick → lektionssidan
   if (!a || !klass || !la) return null;
   const halv = a.halvklass === true;
   const overBudget = a.noGrupp !== undefined && bok !== undefined && noOverBudget(bok, budget);
@@ -860,7 +862,9 @@ function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn:
       <div className="flikar no-print">
         <button className={`flik ${flik === 'planering' ? 'act' : ''}`} onClick={() => setFlik('planering')}>📝 Lektionsplan</button>
         <button className={`flik ${flik === 'detalj' ? 'act' : ''}`} onClick={() => setFlik('detalj')}>🧭 Detaljplanering</button>
-        {([['oversikt', 'ℹ Översikt'], ['uppgifter', '✏ Uppgifter'], ['begrepp', '💡 Begrepp'], ['filmer', '🎬 Filmer'], ['magma', '🟫 Magma'], ['anteckningar', '👥 Anteckningar']] as const).map(([id, txt]) => (
+        {([['oversikt', 'ℹ Översikt'], ['uppgifter', '✏ Uppgifter'], ['begrepp', '💡 Begrepp'], ['filmer', '🎬 Filmer'], ['magma', '🟫 Magma'], ['anteckningar', '👥 Anteckningar']] as const)
+          .filter(([id]) => id !== 'magma' || !arHalvklass(a.namn)) // Magma är mattemjukvara — finns inte i NO/Tk
+          .map(([id, txt]) => (
           <button key={id} className={`flik ${flik === id ? 'act' : ''}`} onClick={() => setFlik(id)} disabled={!bok}
             title={!bok ? 'Koppla en bok först' : ''}>{txt}</button>
         ))}
@@ -895,7 +899,7 @@ function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn:
       {bok && flik === 'uppgifter' && <UppgifterFlik plan={plan} bok={bok} s={s} amneId={a.id} oppnaLektion={oppnaLektion} />}
       {bok && flik === 'begrepp' && <BegreppFlik plan={plan} bok={bok} oppnaLektion={oppnaLektion} />}
       {bok && flik === 'filmer' && <FilmerFlik s={s} amneId={a.id} plan={plan} bok={bok} kor={kor} oppnaLektion={oppnaLektion} />}
-      {bok && flik === 'magma' && <MagmaFlik s={s} amneId={a.id} plan={plan} kor={kor} />}
+      {bok && flik === 'magma' && !arHalvklass(a.namn) && <MagmaFlik s={s} amneId={a.id} plan={plan} kor={kor} />}
       {bok && flik === 'anteckningar' && <AnteckningarFlik s={s} amneId={a.id} klassNamn={klass.namn} plan={plan} kor={kor} />}
       {flik === 'installningar' && (<>
         {halv
@@ -943,12 +947,10 @@ function AmnePanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn:
       )}
       {bok && !halv && <GruppPlanering plan={plan} bok={bok} amnesNamn={a.namn} klassNamn={klass.namn} rum={rum}
         s={s} amneId={a.id} kor={kor} />}
-      {bok && halv && (<>
-        <GruppPlanering plan={plan} bok={bok} amnesNamn={a.namn} klassNamn={klass.namn}
-          rum={rum} grupp="A" rubrik={`Grupp A · rum ${rum}`} s={s} amneId={a.id} kor={kor} />
-        <GruppPlanering plan={planB} bok={bok} amnesNamn={a.namn} klassNamn={klass.namn}
-          rum={rum} grupp="B" rubrik={`Grupp B · rum ${rum}`} s={s} amneId={a.id} kor={kor} />
-      </>)}
+      {bok && halv && (
+        <GruppPlanering plan={plan} planB={planB} bok={bok} amnesNamn={a.namn} klassNamn={klass.namn}
+          rum={rum} rubrik={`${klass.namn} · rum ${rum} — en klass, gemensam planering`} s={s} amneId={a.id} kor={kor} />
+      )}
       </>)}
       <div className="modal-actions">
         <button className="btn warn" onClick={() => {
@@ -1070,7 +1072,9 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
     return `${String(Math.floor(tot / 60)).padStart(2, '0')}:${String(tot % 60).padStart(2, '0')}`;
   };
   const exitTid = rad.start !== null && rad.slutTid !== null ? exitStart(rad.lektion, rad.start, rad.slutTid) : null;
-  const genomSlut = oka(rad.start, 10);
+  const harLax = har(rad.lektion.socStart);
+  const genomStart = harLax && rad.start !== null ? oka(rad.start, 10) : rad.start ?? '';
+  const genomSlut = genomStart !== '' ? oka(genomStart, 10) : '';
   const dagN = rad.datum !== null ? DAGNAMN[new Date(`${rad.datum}T00:00:00Z`).getUTCDay()] ?? '' : '';
   const kapFarg = kap?.farg ?? '#5c6b7a';
 
@@ -1105,7 +1109,8 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
           <b>{rad.start !== null ? `${rad.start} – ${rad.slutTid}` : '—'}</b>&nbsp;<span className="muted-ljus">{dagN}{rad.vecka !== null ? ` · v.${rad.vecka}` : ''}</span></div>
         {rad.start !== null && (
           <div className="ls-tider">
-            <div className="ls-tid"><span className="ls-tid-t">{rad.start}–{genomSlut}</span><b>□ Genomgång</b><span className="muted small">10 min</span></div>
+            {harLax && <div className="ls-tid"><span className="ls-tid-t">{rad.start}–{genomStart}</span><b>📱 Läxförhör</b><span className="muted small">{rum}</span></div>}
+            <div className="ls-tid"><span className="ls-tid-t">{genomStart}–{genomSlut}</span><b>□ Genomgång</b><span className="muted small">10 min</span></div>
             <div className="ls-tid"><span className="ls-tid-t">{genomSlut}–{exitTid ?? rad.slutTid}</span><b>✏ Arbete</b><span className="muted small">{arNo ? 'Läs + Testa dig själv' : har(eff.niva1) ? `${N.niva1} → ${N.niva2}` : `${N.niva2} → ${N.niva3}`}</span></div>
             {exitTid !== null && <div className="ls-tid"><span className="ls-tid-t">{exitTid}–{rad.slutTid}</span><b>📱 Exit ticket</b><span className="muted small">{rum}</span></div>}
           </div>
@@ -1126,12 +1131,24 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
         </div>
       </section>
 
+      {/* ── LÄXFÖRHÖR (BAM: lektionen inleds med förhöret) ── */}
+      {harLax && (
+        <section className="ls-sektion ls-laxforhor">
+          <div className="ls-sek-rubrik">📱 {rad.start !== null ? `${rad.start}–${genomStart} · ` : ''}LÄXFÖRHÖR</div>
+          <div className="ls-soc-bar"><span className="ls-soc">Socrative.com</span><span className="ls-soc-rum">Roomname: {rum}</span><span className="ls-soc-quiz">{rad.lektion.socStart}</span></div>
+          <p className="small">✅ <b>Klar med läxförhöret? Börja direkt med arbetet</b> — {arNo ? 'läs teorisidorna och sätt igång med Testa dig själv' : `${bok.nivaer.niva1}-uppgifterna`}. Ingen väntetid.</p>
+        </section>
+      )}
+
       {/* ── GENOMGÅNG ── */}
       <section className="ls-sektion ls-genomgang">
-        <div className="ls-sek-rubrik">□ {rad.start !== null ? `${rad.start}–${genomSlut} · ` : ''}GENOMGÅNG</div>
+        <div className="ls-sek-rubrik">□ {rad.start !== null ? `${genomStart}–${genomSlut} · ` : ''}GENOMGÅNG</div>
         <textarea aria-label="Genomgång" rows={5} value={lp?.genomgang ?? ''}
           placeholder={har(rad.lektion.genomgang) ? rad.lektion.genomgang : 'Det du berättar under genomgången …'}
           onChange={(e) => satt('genomgang', e.target.value)} />
+        {arNo && begrepp.length > 0 && (
+          <p className="small">✍ <b>Skriv ner betydelsen av begreppen:</b> {begrepp.join(', ')} — begreppen förhörs på nästa lektions läxförhör.</p>
+        )}
         {rad.lektion.genomgangLank !== undefined && (
           <p className="small">🎬 Bokens genomgångsfilm:{' '}
             <a href={rad.lektion.genomgangLank} target="_blank" rel="noreferrer">▶ {rad.lektion.genomgangLank}</a></p>
@@ -1165,7 +1182,7 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
       <section className="ls-sektion ls-arbete">
         <div className="ls-sek-rubrik">✏ {rad.start !== null ? `${genomSlut}–${exitTid ?? rad.slutTid} · ` : ''}ARBETE</div>
         {arNo
-          ? <p className="small"><b>{rad.lektion.avsnitt}</b> · läs teorisidorna och besvara Testa dig själv skriftligt.</p>
+          ? <p className="small"><b>Kap {rad.kapitel} · {rad.lektion.avsnitt}</b> — läs {lp?.sidorTeori !== undefined && lp.sidorTeori !== '' ? lp.sidorTeori : rad.lektion.sidorTeori} och besvara skriftligt: <b>{har(rad.lektion.ex) ? rad.lektion.ex : 'Testa dig själv'}</b>.</p>
           : <p className="small"><b>Lektion {rad.lektion.del} av 2 – {rad.lektion.avsnitt}</b> · minimum: <b>{minimum === 1 ? N.niva1 : N.niva2}</b> klar och inlämnad.</p>}
         <div className="uppg-rad">
           {har(eff.niva1) && <div className={`uppg-niva ${farg ? 'niva-gron' : 'niva-neutral'}`}><div className="un-rubrik">{N.niva1} – introduktion</div><div className="un-uppg">Uppg. <b><input aria-label={`Uppgifter ${N.niva1}`} value={lp?.uppgNiva1 ?? ''} placeholder={rad.lektion.niva1} onChange={(e) => satt('uppgNiva1', e.target.value)} style={{ width: 80 }} /></b></div><div className="un-obl">Obligatorisk</div></div>}
@@ -1177,12 +1194,12 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
           : <div className="ls-inlamning">📷 <b>Inlämning via Google Classroom</b> — foto på beräkningarna, minst <b>{N.niva1} + {N.niva2}</b> (obligatoriskt). {N.niva3} är frivillig. Görs klart hemma eller på stödtid om de ej hunnits med.</div>}
       </section>
 
-      {/* ── MAGMA ── */}
-      <section className="ls-sektion ls-magma">
+      {/* ── MAGMA (mattemjukvara — finns inte i NO/Tk) ── */}
+      {!arNo && <section className="ls-sektion ls-magma">
         <div className="ls-sek-rubrik">🟫 MAGMA – VÄLJ ÖVNING/TEST FÖR ELEVERNA</div>
         <input aria-label="Magma-länk" value={lp?.magma ?? ''} placeholder="Ingen Magma-länk tillagd — klistra in länk"
           onChange={(e) => satt('magma', e.target.value)} style={{ width: '80%' }} />
-      </section>
+      </section>}
 
       {/* ── FILMER ── */}
       <section className="ls-sektion ls-filmer">
@@ -1651,32 +1668,49 @@ function KapitelDetalj({ s, bok, kap, kor }: { s: Struktur; bok: Bok; kap: Kapit
 
 // ── Planeringstabell (helklass eller en grupp) + lektionskort ─
 function GruppPlanering(props: {
-  plan: PlaneradLektion[]; bok: Bok; amnesNamn: string; klassNamn: string;
-  rum: string; grupp?: Grupp; rubrik?: string;
+  plan: PlaneradLektion[]; planB?: PlaneradLektion[]; bok: Bok; amnesNamn: string; klassNamn: string;
+  rum: string; rubrik?: string;
   s?: Struktur; amneId?: string; kor?: (fn: () => Struktur, m: string) => void;
 }) {
-  const { plan, bok, amnesNamn, klassNamn, rum, grupp, rubrik, s, amneId, kor } = props;
+  const { plan, planB, bok, amnesNamn, klassNamn, rum, rubrik, s, amneId, kor } = props;
   const [valdRad, setValdRad] = useState<number | null>(null);
-  const amnet = s?.amnen.find((x) => x.id === amneId);
-  const halvklassAmne = amnet?.halvklass === true;
-  /** Hel- eller halvklass för en rad: passet finns i båda gruppernas scheman → helklass. */
-  const omfattning = (r: PlaneradLektion): string => {
-    if (!halvklassAmne || r.start === null) return '';
-    const iA = (amnet?.schema ?? []).some((x) => x.start === r.start && x.slut === r.slutTid);
-    const iB = (amnet?.schemaB ?? []).some((x) => x.start === r.start && x.slut === r.slutTid);
-    return iA && iB ? 'Helklass' : grupp !== undefined ? `Grupp ${grupp}` : iA ? 'Grupp A' : 'Grupp B';
-  };
+  const halvklassAmne = planB !== undefined;
+  /**
+   * En klass — en planering: Grupp A:s och B:s rader slås ihop per (datum, tid).
+   * Samma lektion i båda grupperna på samma slot visas EN gång som Helklass;
+   * gruppspecifika tillfällen märks Grupp A/B. Kryss och lektionskort följer
+   * lektionens index (samma lektion = samma kryss oavsett grupp).
+   */
+  const rader: Array<{ r: PlaneradLektion; index: number; klassTyp: string }> = (() => {
+    if (planB === undefined) return plan.map((r, index) => ({ r, index, klassTyp: '' }));
+    const ut: Array<{ r: PlaneradLektion; index: number; klassTyp: string }> = [];
+    const bNyckel = new Map(planB.map((r, index) => [`${r.datum}|${r.start}`, { r, index }]));
+    const tagna = new Set<string>();
+    for (const [index, r] of plan.entries()) {
+      const nyckel = `${r.datum}|${r.start}`;
+      const b = bNyckel.get(nyckel);
+      if (r.datum !== null && b !== undefined && b.r.lektion.id === r.lektion.id && b.r.kapitel === r.kapitel) {
+        ut.push({ r, index, klassTyp: 'Helklass' }); tagna.add(nyckel);
+      } else {
+        ut.push({ r, index, klassTyp: 'Grupp A' });
+      }
+    }
+    for (const [index, r] of planB.entries()) {
+      if (!tagna.has(`${r.datum}|${r.start}`)) ut.push({ r, index, klassTyp: 'Grupp B' });
+    }
+    return ut.sort((x, y) => (x.r.datum ?? '9999').localeCompare(y.r.datum ?? '9999') || (x.r.start ?? '').localeCompare(y.r.start ?? ''));
+  })();
   if (plan.length === 0) return null;
   return (
     <>
       {rubrik !== undefined && <h3 className="grupp-h">{rubrik}</h3>}
       <table className="tbl plan clickable">
         <thead><tr><th title="Avklarad">✓</th><th>Datum</th><th>Dag</th><th>V.</th><th>Tid</th>{halvklassAmne && <th>Klass</th>}<th>Kap</th><th>Avsnitt</th>{bokHarNivaer(bok) && <><th>{bok.nivaer.niva1}</th><th>{bok.nivaer.niva2}</th><th>{bok.nivaer.niva3}</th></>}</tr></thead>
-        <tbody>{plan.map((r, i) => {
+        <tbody>{rader.map(({ r, index: i, klassTyp }, radNr) => {
           const klar = s !== undefined && amneId !== undefined && hamtaLektionsplan(s, amneId, i)?.klar === true;
           return (
-          <tr key={i} className={`${r.datum === null ? 'saknas' : ''} ${valdRad === i ? 'vald' : ''} ${klar ? 'klar' : ''}`}
-            onClick={() => setValdRad(valdRad === i ? null : i)} title="Öppna lektionskort">
+          <tr key={radNr} className={`${r.datum === null ? 'saknas' : ''} ${valdRad === radNr ? 'vald' : ''} ${klar ? 'klar' : ''}`}
+            onClick={() => setValdRad(valdRad === radNr ? null : radNr)} title="Öppna lektionskort">
             <td onClick={(e) => e.stopPropagation()}>
               {s !== undefined && amneId !== undefined && kor !== undefined && (
                 <input type="checkbox" aria-label={`Lektion ${i + 1} avklarad`} checked={klar}
@@ -1690,17 +1724,18 @@ function GruppPlanering(props: {
             <td>{r.datum !== null ? DAGNAMN[new Date(`${r.datum}T00:00:00Z`).getUTCDay()] ?? '' : ''}</td>
             <td>{r.vecka ?? ''}</td>
             <td>{r.start !== null ? `${r.start}–${r.slutTid}` : ''}</td>
-            {halvklassAmne && <td><span className={`omf-chip ${omfattning(r) === 'Helklass' ? 'omf-hel' : 'omf-halv'}`}>{omfattning(r)}</span></td>}
+            {halvklassAmne && <td><span className={`omf-chip ${klassTyp === 'Helklass' ? 'omf-hel' : 'omf-halv'}`}>{klassTyp}</span></td>}
             <td>{r.kapitel}</td><td>{r.lektion.avsnitt} · Del {r.lektion.del}</td>
             {bokHarNivaer(bok) && <><td>{r.lektion.niva1}</td><td>{r.lektion.niva2}</td><td>{r.lektion.niva3}</td></>}
           </tr>
           );
         })}</tbody>
       </table>
-      {valdRad !== null && plan[valdRad] && (
-        <Lektionskort rad={plan[valdRad]} bok={bok} amnesNamn={amnesNamn} klassNamn={klassNamn}
-          rum={rum} grupp={grupp} nr={valdRad + 1} onStang={() => setValdRad(null)}
-          s={s} amneId={amneId} lektionsIndex={valdRad} kor={kor} />
+      {valdRad !== null && rader[valdRad] && (
+        <Lektionskort rad={rader[valdRad].r} bok={bok} amnesNamn={amnesNamn} klassNamn={klassNamn}
+          rum={rum} grupp={rader[valdRad].klassTyp === 'Grupp A' ? 'A' : rader[valdRad].klassTyp === 'Grupp B' ? 'B' : undefined}
+          nr={rader[valdRad].index + 1} onStang={() => setValdRad(null)}
+          s={s} amneId={amneId} lektionsIndex={rader[valdRad].index} kor={kor} />
       )}
     </>
   );
@@ -1952,14 +1987,16 @@ const MANADSNAMN = ['januari','februari','mars','april','maj','juni','juli','aug
 
 /** 📋 Planering: egen huvudflik — välj klass · ämne och arbeta direkt med lektionsplan,
  * detaljplanering (alla texter redigerbara), egna rader (prov/diagnoser/övningar) och filmer. */
-function PlaneringVy({ s, kor, setVald }: {
+function PlaneringVy({ s, kor, setVald, hopp }: {
   s: Struktur; kor: (fn: () => Struktur, m: string) => void; setVald: (v: Vald) => void;
+  hopp?: { amneId: string; i: number; n: number } | null;
 }) {
   const alternativ = s.amnen
     .map((a) => ({ a, klass: s.klasser.find((k) => k.id === a.klassId) }))
     .filter((x): x is { a: Amne; klass: Klass } => x.klass !== undefined)
     .sort((x, y) => x.klass.namn.localeCompare(y.klass.namn, 'sv') || x.a.namn.localeCompare(y.a.namn, 'sv'));
   const [amneId, setAmneId] = useState<string>(() => s.planeringar[0]?.amneId ?? alternativ[0]?.a.id ?? '');
+  useEffect(() => { if (hopp != null) setAmneId(hopp.amneId); }, [hopp?.n]);   // kalenderklick → rätt ämne
   const valt = alternativ.some((x) => x.a.id === amneId) ? amneId : alternativ[0]?.a.id ?? '';
   if (alternativ.length === 0) {
     return <div className="card"><h2>📋 Planering</h2><p className="muted">Skapa skolår, tjänst, klass och ämne under 🗂 Struktur först.</p></div>;
@@ -1977,7 +2014,7 @@ function PlaneringVy({ s, kor, setVald }: {
           </select>
         </div>
       </div>
-      {valt !== '' && <AmnePanel key={valt} s={s} id={valt} kor={kor} setVald={setVald} />}
+      {valt !== '' && <AmnePanel key={valt} s={s} id={valt} kor={kor} setVald={setVald} hopp={hopp} />}
     </>
   );
 }
@@ -1988,7 +2025,7 @@ function startAnkare(la?: Skolar): string {
   return la && idag >= la.start && idag <= la.slut ? idag : la?.start ?? '2026-08-17';
 }
 
-function KalenderVy({ s }: { s: Struktur }) {
+function KalenderVy({ s, onOppnaLektion }: { s: Struktur; onOppnaLektion?: (amneId: string, i: number) => void }) {
   const [skolarId, setSkolarId] = useState(s.skolar[0]?.id ?? '');
   const [lage, setLage] = useState<'lasar' | 'termin' | 'manad' | 'vecka'>('vecka');
   const [klassFilter, setKlassFilter] = useState<string>('__alla__');
@@ -2097,7 +2134,7 @@ function KalenderVy({ s }: { s: Struktur }) {
       {handelser.length === 0 && <p className="note">Inga planeringar i det här skolåret ännu — skapa en planering på ett ämne, så dyker lektionerna upp här.</p>}
 
       {lage === 'manad' && (
-        <MonadsGrid ar={ankAr} manad0={ankManad} skolar={skolar} perDatum={perDatum}
+        <MonadsGrid onOppna={onOppnaLektion} ar={ankAr} manad0={ankManad} skolar={skolar} perDatum={perDatum}
           onPrev={() => flyttaManad(-1)} onNext={() => flyttaManad(1)} />
       )}
       {lage === 'vecka' && (
@@ -2118,9 +2155,12 @@ function KalenderVy({ s }: { s: Struktur }) {
   );
 }
 
-function Handelsechip({ h }: { h: KalenderHandelse }) {
+function Handelsechip({ h, onOppna }: { h: KalenderHandelse; onOppna?: (amneId: string, i: number) => void }) {
+  const klickbar = onOppna !== undefined && h.amneId !== undefined && h.lektionsIndex !== undefined;
   return (
-    <span className="kh" style={{ background: h.amnesFarg }} title={`${h.start}–${h.slut} ${h.klassNamn}${h.grupp !== undefined ? ` (Grupp ${h.grupp})` : ''} · ${h.amnesNamn} · ${h.avsnitt}`}>
+    <span className="kh" style={{ background: h.amnesFarg, cursor: klickbar ? 'pointer' : undefined }}
+      onClick={klickbar ? () => onOppna(h.amneId!, h.lektionsIndex!) : undefined}
+      title={`${h.start}–${h.slut} ${h.klassNamn}${h.grupp !== undefined ? ` (Grupp ${h.grupp})` : ''} · ${h.amnesNamn} · ${h.avsnitt}${klickbar ? ' — klicka för lektionsplaneringen' : ''}`}>
       <b style={{ color: klassFarg(h.klassNamn) }}>{h.klassNamn}{h.grupp !== undefined ? h.grupp : ''}</b> {h.start} {h.avsnitt}
     </span>
   );
@@ -2128,9 +2168,9 @@ function Handelsechip({ h }: { h: KalenderHandelse }) {
 
 const DAGKORT = ['Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön'];
 
-function MonadsGrid({ ar, manad0, skolar, perDatum, onPrev, onNext }: {
+function MonadsGrid({ ar, manad0, skolar, perDatum, onPrev, onNext, onOppna }: {
   ar: number; manad0: number; skolar: Skolar; perDatum: Map<string, KalenderHandelse[]>;
-  onPrev: () => void; onNext: () => void;
+  onPrev: () => void; onNext: () => void; onOppna?: (amneId: string, i: number) => void;
 }) {
   const rutor = manadsRutor(ar, manad0, skolar, perDatum);
   const idag = new Date().toISOString().slice(0, 10);
@@ -2149,7 +2189,7 @@ function MonadsGrid({ ar, manad0, skolar, perDatum, onPrev, onNext }: {
             {i % 7 === 0 && <div className="mgrid-vk">{isoVeckaLbl(r.datum)}</div>}
             <div className={`mcell ${r.iManad ? '' : 'dim'} ${r.helg ? 'helg' : ''} ${r.ledig ? 'ledig' : ''} ${r.halvdag ? 'halvdag' : ''} ${r.datum === idag ? 'idag' : ''}`}>
               <div className="mcell-d">{Number(r.datum.slice(8))}{r.ledig ? <span className="ledig-l">{r.ledig}</span> : r.halvdag ? <span className="ledig-l">½ {r.halvdag}</span> : null}</div>
-              {r.handelser.map((h, j) => <Handelsechip key={j} h={h} />)}
+              {r.handelser.map((h, j) => <Handelsechip key={j} h={h} onOppna={onOppna} />)}
             </div>
           </Fragment>
         ))}

@@ -369,10 +369,12 @@ describe('Halvklassämne i planeringen', () => {
     expect(host.textContent).toContain('Grupp A');
     expect(host.textContent).toContain('2026-08-18');       // tisdag (Grupp A)
     expect(host.textContent).toContain('2026-08-20');       // torsdag (Grupp B)
-    // Grupp B:s första rad → kort märkt Grupp B med rum Biologi8BB och exit 13:50
+    // EN sammanslagen tabell — en klass, gemensam planering; grupprader märkta med chip
     const tabeller = [...host.querySelectorAll('table.plan')];
-    expect(tabeller).toHaveLength(2);
-    const radB = tabeller[1].querySelector('tbody tr') as HTMLTableRowElement;
+    expect(tabeller).toHaveLength(1);
+    expect(host.textContent).toContain('en klass, gemensam planering');
+    const radB = [...tabeller[0].querySelectorAll('tbody tr')]
+      .find((tr) => tr.textContent!.includes('Grupp B')) as HTMLTableRowElement;
     act(() => { radB.click(); });
     const kort = host.querySelector('[data-testid="lektionskort"]')!;
     expect(kort.textContent).toContain('Grupp B');
@@ -1146,6 +1148,38 @@ describe('Planeringsflikar (portade från v1)', () => {
   });
 })
 
+describe('Kalenderklick öppnar lektionsplaneringen', () => {
+  it('klick på en händelsechip hoppar till rätt lektion i detaljplaneringen', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-26T10:00:00Z'));
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+
+    act(() => { knapp(host, '📆 Kalender').click(); });
+    act(() => { knapp(host, 'Månad').click(); });
+    const chip = [...host.querySelectorAll('.kh')].find((c) => c.textContent!.includes('1.1')) as HTMLElement;
+    expect(chip).toBeDefined();
+    act(() => { chip.click(); });
+    // Planeringsvyn öppen på lektionssidan för den klickade lektionen
+    expect(host.textContent).toContain('TAVLAN');
+    expect((select(host, 'Välj lektion') as HTMLSelectElement).selectedOptions[0].textContent).toContain('1.1');
+  });
+});
+
 describe('Bokens nivåkonventioner följs', () => {
   const PRIOJSON = JSON.stringify({
     schema: 'classroom-planner-bok', version: 1,
@@ -1215,10 +1249,19 @@ describe('Bokens nivåkonventioner följs', () => {
     expect(panel.textContent).not.toContain('ETT');
     // Plantabellen saknar nivåkolumner (✓/Datum/Dag/V./Tid/Klass/Kap/Avsnitt = 8 för halvklassämne)
     expect(panel.querySelector('table.plan')!.querySelectorAll('thead th')).toHaveLength(8);
-    expect(panel.textContent).toContain('Helklass');    // omfattningen syns per rad
+    expect(panel.textContent).toContain('Grupp A');     // omfattningen syns per rad (inga helklasspass i schemat)
     act(() => { knapp(host, '✏ Uppgifter').click(); });
     expect(host.querySelector('.regel')!.textContent).toContain('Testa dig själv');
+    // Magma är mattemjukvara — varken flik eller lektionsyta för NO/Tk
+    expect([...host.querySelectorAll('.flik')].some((f) => f.textContent === '🟫 Magma')).toBe(false);
     expect(host.querySelector('.regel')!.textContent).not.toContain('obligatoriska.');
+    act(() => { knapp(host, '🧭 Detaljplanering').click(); });
+    expect(host.textContent).not.toContain('MAGMA');
+    expect(host.textContent).toContain('Testa dig själv 6.1 · uppgift 1–1');   // Spektrums arbete: Kap/Delkapitel + intervall
+    // Lektion 2 inleds med läxförhör (kumulativt) — klar → börja med arbetet
+    act(() => { knapp(host, '▶').click(); });
+    expect(host.textContent).toContain('LÄXFÖRHÖR');
+    expect(host.textContent).toContain('Klar med läxförhöret? Börja direkt med arbetet');
   });
 
   it('Matematik Y (ETT/TVÅ/TRE, versaler): namnen ordagrant — färgerna används ändå', async () => {
@@ -1398,6 +1441,7 @@ describe('Detaljplanering som egen flik', () => {
     expect(panel.textContent).toContain('EXIT TICKET');
     // NO-ramen: Testa dig själv + kumulativa läxförhör — inga matematiktermer
     expect(panel.textContent).toContain('TESTA DIG SJÄLV');
+    expect(panel.textContent).toContain('Skriv ner betydelsen av begreppen');
     expect(panel.textContent).toContain('kumulativ');
     expect(panel.textContent).not.toContain('EXEMPEL VI RÄKNAR');
     expect(panel.textContent).not.toContain('foto på beräkningarna');

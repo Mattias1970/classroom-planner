@@ -427,3 +427,6 @@ body[data-tema="klassisk"] .tema-valj { border-color: var(--ram); background: #f
 .omf-chip { border-radius: 10px; padding: 1px 8px; font-size: 10px; font-weight: 800; white-space: nowrap; }
 .omf-hel { background: #E8F5E9; color: #1B5E20; border: 1px solid #A5D6A7; }
 .omf-halv { background: #E3F2FD; color: #0D47A1; border: 1px solid #90CAF9; }
+
+/* Del 51: Läxförhörssektionen på lektionssidan */
+.ls-laxforhor { background: #F0F2FA; border-left-color: #1A2A6B; }
