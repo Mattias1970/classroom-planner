@@ -106,6 +106,9 @@ export function matchaElev(s: Struktur, klassId: string, namn: string): Elev | n
  */
 export function importeraResultat(s: Struktur, u: ImportUnderlag): ImportUtfall {
   if (!s.klasser.some((k) => k.id === u.klassId)) throw new Error('Okänd klass.');
+  if (u.amneId !== undefined && !s.amnen.some((a) => a.id === u.amneId && a.klassId === u.klassId)) {
+    throw new Error('Okänt ämne för klassen.');
+  }
   if (u.prov.trim() === '') throw new Error('Provet måste ha ett namn.');
   const omatchade: string[] = [];
   const nya: Resultat[] = [];
@@ -149,4 +152,90 @@ export function provLista(s: Struktur, klassId: string): Array<{ kalla: Resultat
     if (elevIds.has(r.elevId)) set.set(`${r.kalla}|${r.prov}`, { kalla: r.kalla, prov: r.prov });
   }
   return [...set.values()].sort((a, b) => a.kalla.localeCompare(b.kalla) || a.prov.localeCompare(b.prov, 'sv'));
+}
+
+// ── Aggregering: ämnesvis och över alla aktuella ämnen, med källfilter ──
+
+/** Filter för resultatvyer: ämne och/eller källor (Exit, Läxförhör, Magma, DigiExam). */
+export interface ResultatFilter { amneId?: string; kallor?: ResultatKalla[]; }
+
+function matcharFilter(r: Resultat, f: ResultatFilter | undefined): boolean {
+  if (f?.amneId !== undefined && r.amneId !== f.amneId) return false;
+  if (f?.kallor !== undefined && f.kallor.length > 0 && !f.kallor.includes(r.kalla)) return false;
+  return true;
+}
+
+/** Alla resultat som matchar filtret, senaste datum först. */
+export function filtreraResultat(s: Struktur, f?: ResultatFilter): Resultat[] {
+  return (s.resultat ?? [])
+    .filter((r) => matcharFilter(r, f))
+    .sort((a, b) => b.datum.localeCompare(a.datum) || a.prov.localeCompare(b.prov, 'sv'));
+}
+
+/** Sammandrag för en källa: antal prov, snittprocent och klarade krav. */
+export interface KallAggregat {
+  kalla: ResultatKalla;
+  antal: number;
+  /** Snitt av resultatens procent; null när inget resultat har maxpoäng. */
+  snittProcent: number | null;
+  /** Antal som klarade källans BAM-krav (endast källor med krav). */
+  klarade: number;
+  /** Antal resultat som kunde bedömas mot kravet. */
+  medKrav: number;
+}
+
+const ALLA_KALLOR: ResultatKalla[] = ['socrative-laxforhor', 'socrative-exit', 'magma', 'digiexam'];
+
+function aggregera(resultat: Resultat[]): KallAggregat[] {
+  return ALLA_KALLOR.map((kalla) => {
+    const rs = resultat.filter((r) => r.kalla === kalla);
+    const procenten = rs.map(resultatProcent).filter((p): p is number => p !== null);
+    const bedomda = rs.map(klaratKrav).filter((k): k is boolean => k !== null);
+    return {
+      kalla,
+      antal: rs.length,
+      snittProcent: procenten.length > 0 ? Math.round(procenten.reduce((a, b) => a + b, 0) / procenten.length) : null,
+      klarade: bedomda.filter(Boolean).length,
+      medKrav: bedomda.length,
+    };
+  }).filter((a) => a.antal > 0);
+}
+
+/** En elevs sammandrag per källa, valfritt begränsat till ett ämne/källor. */
+export function aggregatForElev(s: Struktur, elevId: string, f?: ResultatFilter): KallAggregat[] {
+  return aggregera((s.resultat ?? []).filter((r) => r.elevId === elevId && matcharFilter(r, f)));
+}
+
+/** En rad per elev i en översikt: sammandrag per källa + totalsnitt. */
+export interface ElevAggregatRad {
+  elev: Elev;
+  perKalla: KallAggregat[];
+  snittProcent: number | null;
+}
+
+function oversiktFor(s: Struktur, elever: Elev[], f: ResultatFilter | undefined): ElevAggregatRad[] {
+  return elever
+    .sort((a, b) => a.namn.localeCompare(b.namn, 'sv'))
+    .map((elev) => {
+      const rs = (s.resultat ?? []).filter((r) => r.elevId === elev.id && matcharFilter(r, f));
+      const procenten = rs.map(resultatProcent).filter((p): p is number => p !== null);
+      return {
+        elev,
+        perKalla: aggregera(rs),
+        snittProcent: procenten.length > 0 ? Math.round(procenten.reduce((a, b) => a + b, 0) / procenten.length) : null,
+      };
+    });
+}
+
+/** Ämnesvis översikt: klassens elever × källor för ETT ämne. */
+export function amnesOversikt(s: Struktur, amneId: string, kallor?: ResultatKalla[]): ElevAggregatRad[] {
+  const amne = s.amnen.find((a) => a.id === amneId);
+  if (!amne) throw new Error('Okänt ämne.');
+  const elever = s.elever.filter((e) => e.klassId === amne.klassId);
+  return oversiktFor(s, elever, { amneId, ...(kallor !== undefined ? { kallor } : {}) });
+}
+
+/** Aggregerad översikt över ALLA aktuella ämnen för en klass, med källfilter. */
+export function klassOversikt(s: Struktur, klassId: string, f?: ResultatFilter): ElevAggregatRad[] {
+  return oversiktFor(s, s.elever.filter((e) => e.klassId === klassId), f);
 }

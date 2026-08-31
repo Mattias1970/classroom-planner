@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  importeraResultat, klaratKrav, kravFor, matchaElev, provLista,
-  provSammanstallning, resultatForElev, resultatProcent,
+  aggregatForElev, amnesOversikt, filtreraResultat, importeraResultat, klassOversikt,
+  klaratKrav, kravFor, matchaElev, provLista, provSammanstallning, resultatForElev,
+  resultatProcent,
 } from '../src/domain/resultat.js';
+import { laggTillAmne } from '../src/domain/struktur.js';
 import {
   laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst, resetIdRaknare,
 } from '../src/domain/struktur.js';
@@ -100,5 +102,56 @@ describe('sammanställningar', () => {
     expect(rows[0].resultat?.poang).toBe(10);
     expect(rows[2].resultat).toBeNull();
     expect(provLista(s, 'k')).toEqual([{ kalla: 'socrative-laxforhor', prov: 'Biologi612' }]);
+  });
+});
+
+describe('ämnesvis insamling och aggregering med källfilter', () => {
+  function medTvaAmnen() {
+    let s = bygg();
+    s = laggTillAmne(s, { id: 'ma', klassId: 'k', namn: 'Matematik', schema: [{ dag: 3, start: '09:00', slut: '10:00' }] });
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', schema: [{ dag: 4, start: '10:00', slut: '11:00' }] });
+    let u = importeraResultat(s, { klassId: 'k', amneId: 'ma', kalla: 'socrative-exit', prov: 'Quiz 1.1a', datum: '2026-08-20',
+      rader: [{ namn: 'Anna Berg', poang: 8, maxPoang: 10 }, { namn: 'Omar Ali', poang: 6, maxPoang: 10 }] });
+    u = importeraResultat(u.s, { klassId: 'k', amneId: 'ma', kalla: 'socrative-laxforhor', prov: 'Quiz 1.1-förhör', datum: '2026-08-24',
+      rader: [{ namn: 'Anna Berg', poang: 10, maxPoang: 10 }] });
+    u = importeraResultat(u.s, { klassId: 'k', amneId: 'ma', kalla: 'magma', prov: 'Magma T1', datum: '2026-08-25',
+      rader: [{ namn: 'Anna Berg', poang: 12, maxPoang: 20 }] });
+    u = importeraResultat(u.s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-exit', prov: 'Biologi61', datum: '2026-09-01',
+      rader: [{ namn: 'Anna Berg', poang: 9, maxPoang: 10 }] });
+    return u.s;
+  }
+
+  it('resultat samlas per ämne och kan filtreras på källa', () => {
+    const s = medTvaAmnen();
+    expect(filtreraResultat(s, { amneId: 'ma' })).toHaveLength(4);
+    expect(filtreraResultat(s, { amneId: 'bi' })).toHaveLength(1);
+    expect(filtreraResultat(s, { kallor: ['socrative-exit'] })).toHaveLength(3);
+    expect(filtreraResultat(s, { amneId: 'ma', kallor: ['socrative-exit', 'magma'] })).toHaveLength(3);
+    expect(() => importeraResultat(s, { klassId: 'k', amneId: 'fel', kalla: 'magma', prov: 'X', datum: '2026-09-02', rader: [] }))
+      .toThrow('Okänt ämne för klassen.');
+  });
+
+  it('amnesOversikt aggregerar klassens elever för ett ämne; klassOversikt över alla ämnen', () => {
+    const s = medTvaAmnen();
+    const ma = amnesOversikt(s, 'ma');
+    expect(ma.map((r) => r.elev.namn)).toEqual(['Anna Berg', 'Elsa Lindqvist', 'Omar Ali']);
+    const anna = ma[0];
+    expect(anna.perKalla.map((k) => k.kalla)).toEqual(['socrative-laxforhor', 'socrative-exit', 'magma']);
+    expect(anna.perKalla.find((k) => k.kalla === 'socrative-laxforhor')).toMatchObject({ antal: 1, snittProcent: 100, klarade: 1, medKrav: 1 });
+    expect(anna.snittProcent).toBe(Math.round((100 + 80 + 60) / 3));
+    expect(ma[1].snittProcent).toBeNull();          // Elsa saknar resultat i Matematik
+
+    // Över alla ämnen: Annas Biologi-exit räknas med; filter på exit ger 80/90-snitt
+    const alla = klassOversikt(s, 'k');
+    expect(alla[0].snittProcent).toBe(Math.round((100 + 80 + 60 + 90) / 4));
+    const exit = klassOversikt(s, 'k', { kallor: ['socrative-exit'] });
+    expect(exit[0].perKalla).toEqual([{ kalla: 'socrative-exit', antal: 2, snittProcent: 85, klarade: 2, medKrav: 2 }]);
+  });
+
+  it('aggregatForElev respekterar ämnesfiltret', () => {
+    const s = medTvaAmnen();
+    expect(aggregatForElev(s, 'e1', { amneId: 'bi' })).toEqual([
+      { kalla: 'socrative-exit', antal: 1, snittProcent: 90, klarade: 1, medKrav: 1 },
+    ]);
   });
 });

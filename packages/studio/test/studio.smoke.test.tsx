@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from '../src/App';
@@ -8,6 +8,8 @@ import { lasStruktur } from '../src/store';
 import { resetIdRaknare } from '@planner/kernel';
 
 vi.mock('xlsx', () => ({ utils: { json_to_sheet: () => ({}), book_new: () => ({}), book_append_sheet: () => {} }, writeFile: () => {} }));
+
+afterEach(() => { vi.useRealTimers(); });
 
 beforeEach(() => { localStorage.clear(); resetIdRaknare(); document.body.innerHTML = ''; });
 
@@ -769,6 +771,9 @@ describe('Veckoschema och schemakonflikter', () => {
   }
 
   it('veckovyn ritar ett schema-rutnät med lektionen på rätt dagkolumn', async () => {
+    // Datumberoende: kalendern öppnar på 'aktuell' vecka/månad — frys klockan i skolåret
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-26T10:00:00Z'));
     const host = render();
     await tvaAmnenSammaTid(host);
     act(() => { knapp(host, '▶ Skapa planering').click(); });
@@ -841,6 +846,9 @@ describe('Fritt schemaförval, veckonummer och dolda helgdagar', () => {
   });
 
   it('månadskalendern visar veckonummer och döljer röda dagar', async () => {
+    // Datumberoende: kalendern öppnar på 'aktuell' vecka/månad — frys klockan i skolåret
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-26T10:00:00Z'));
     const host = render();
     skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
     // temadag så vi vet att skolans dagar ändå syns
@@ -914,6 +922,9 @@ describe('NO+Tk blockkurs och kalenderfärger', () => {
   });
 
   it('kalendern färgar bakgrund per ämne och klassnamn i egen färg', async () => {
+    // Datumberoende: kalendern öppnar på 'aktuell' vecka/månad — frys klockan i skolåret
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-26T10:00:00Z'));
     const host = render();
     skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
     await importeraBok(host);
