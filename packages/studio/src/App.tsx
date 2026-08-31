@@ -21,7 +21,7 @@ import {
   socrativeRum, sparaBok,
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
-  arStodAmne, aterstallPlanering, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type KalenderDagRuta, type KalenderHandelse,
+  arStodAmne, aterstallPlanering, bokHarNivaer, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type KalenderDagRuta, type KalenderHandelse,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
 } from '@planner/kernel';
@@ -1239,13 +1239,13 @@ function OversiktFlik({ plan, bok, oppnaLektion }: { plan: PlaneradLektion[]; bo
       <h3 style={{ marginTop: 0 }}>Översikt – alla {plan.length} lektioner <small className="muted">klicka på en rad för att redigera lektionen i detalj</small></h3>
       <table className="tbl plan clickable">
         <thead><tr><th>Lek.</th><th>Vecka</th><th>Datum</th><th>Tid</th><th>Avsnitt</th><th>Typ</th>
-          <th>{farg ? '🟢 ' : ''}{bok.nivaer.niva1}</th><th>{farg ? '🔵 ' : ''}{bok.nivaer.niva2}</th><th>{farg ? '🔴 ' : ''}{bok.nivaer.niva3}</th></tr></thead>
+          {bokHarNivaer(bok) && <><th>🟢 {bok.nivaer.niva1}</th><th>🔵 {bok.nivaer.niva2}</th><th>🔴 {bok.nivaer.niva3}</th></>}</tr></thead>
         <tbody>{plan.map((r, i) => (
           <tr key={i} className={r.datum === null ? 'saknas' : ''} onClick={() => oppnaLektion(i)} title="Öppna lektionen i detaljplaneringen">
             <td>{i + 1}</td><td>{r.vecka !== null ? `v.${r.vecka}` : ''}</td><td>{r.datum ?? 'ryms ej'}</td>
             <td>{r.start !== null ? `${r.start}–${r.slutTid}` : ''}</td>
             <td>{r.lektion.avsnitt}</td><td><TypChip typ={r.lektion.typ} /></td>
-            <td>{r.lektion.niva1}</td><td>{r.lektion.niva2}</td><td className="rod">{r.lektion.niva3}</td>
+            {bokHarNivaer(bok) && <><td>{r.lektion.niva1}</td><td>{r.lektion.niva2}</td><td className="rod">{r.lektion.niva3}</td></>}
           </tr>
         ))}</tbody>
       </table>
@@ -1258,11 +1258,14 @@ function UppgifterFlik({ plan, bok, s, amneId, oppnaLektion }: { plan: PlaneradL
   const amne = s.amnen.find((a) => a.id === amneId);
   const tjanst = s.tjanster.find((t) => t.id === s.klasser.find((k) => k.id === amne?.klassId)?.tjanstId);
   const stod = tjanst?.stodPass ?? [];
+  const nivaer = bokHarNivaer(bok);
   return (
     <div>
       <div className="regel" style={{ marginBottom: 10 }}>
         <h4>📌 Inlämning</h4>
-        <p>Foto på beräkningar laddas upp i klassens inlämningsyta (Teams, Classroom m.fl.). <b>{N.niva1} + {N.niva2} är obligatoriska.</b> {N.niva3} görs och lämnas in om lektionstid finns, annars frivillig fördjupning.</p>
+        {nivaer
+          ? <p>Foto på beräkningar laddas upp i klassens inlämningsyta (Teams, Classroom m.fl.). <b>{N.niva1} + {N.niva2} är obligatoriska.</b> {N.niva3} görs och lämnas in om lektionstid finns, annars frivillig fördjupning.</p>
+          : <p>Skriftliga <b>Testa dig själv-svar</b> laddas upp i klassens inlämningsyta (obligatoriskt). Läxförhören är kumulativa — alla begrepp hittills, krav ≥ 90 %; exit tickets kräver ≥ 70 %.</p>}
         {stod.length > 0 && (
           <p>🧩 Inte klar på lektionen? Gör klart hemma eller på {stod.map((sp, i) => (
             <span key={sp.id}>{i > 0 ? ' eller ' : ''}<b>{sp.namn}</b> ({DAGNAMN[sp.dag]?.toLowerCase()} {sp.start}–{sp.slut})</span>
@@ -1280,7 +1283,7 @@ function UppgifterFlik({ plan, bok, s, amneId, oppnaLektion }: { plan: PlaneradL
         return (
           <div key={i} className="uppg-kort">
             <div className="rad"><b>Lektion {i + 1} — {r.lektion.avsnitt}</b><span className="spacer" />
-              <span className="pillm">Lek {r.lektion.del}: min. {minimum === 1 ? N.niva1 : N.niva2}</span>
+              {nivaer && <span className="pillm">Lek {r.lektion.del}: min. {minimum === 1 ? N.niva1 : N.niva2}</span>}
               {r.lektion.sidorTeori !== '' && <span className="muted small">📖 {r.lektion.sidorTeori}</span>}
               <button className="btn sec sm" onClick={() => oppnaLektion(i)}>Öppna lektion →</button></div>
             {kort.length === 0 ? <p className="muted small">Inga uppgiftsintervall (repetition/diagnos/prov).</p> : (
@@ -1644,7 +1647,7 @@ function GruppPlanering(props: {
     <>
       {rubrik !== undefined && <h3 className="grupp-h">{rubrik}</h3>}
       <table className="tbl plan clickable">
-        <thead><tr><th title="Avklarad">✓</th><th>Datum</th><th>V.</th><th>Tid</th><th>Kap</th><th>Avsnitt</th><th>{bok.nivaer.niva1}</th><th>{bok.nivaer.niva2}</th><th>{bok.nivaer.niva3}</th></tr></thead>
+        <thead><tr><th title="Avklarad">✓</th><th>Datum</th><th>V.</th><th>Tid</th><th>Kap</th><th>Avsnitt</th>{bokHarNivaer(bok) && <><th>{bok.nivaer.niva1}</th><th>{bok.nivaer.niva2}</th><th>{bok.nivaer.niva3}</th></>}</tr></thead>
         <tbody>{plan.map((r, i) => {
           const klar = s !== undefined && amneId !== undefined && hamtaLektionsplan(s, amneId, i)?.klar === true;
           return (
@@ -1662,7 +1665,7 @@ function GruppPlanering(props: {
             <td>{r.datum ?? 'ryms ej'}</td><td>{r.vecka ?? ''}</td>
             <td>{r.start !== null ? `${r.start}–${r.slutTid}` : ''}</td>
             <td>{r.kapitel}</td><td>{r.lektion.avsnitt} · Del {r.lektion.del}</td>
-            <td>{r.lektion.niva1}</td><td>{r.lektion.niva2}</td><td>{r.lektion.niva3}</td>
+            {bokHarNivaer(bok) && <><td>{r.lektion.niva1}</td><td>{r.lektion.niva2}</td><td>{r.lektion.niva3}</td></>}
           </tr>
           );
         })}</tbody>

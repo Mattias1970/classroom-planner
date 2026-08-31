@@ -201,6 +201,13 @@ function lasForklaringar(raw: unknown): Record<string, string> {
   return ut;
 }
 
+/** Har boken nivåindelade uppgifter (Grön/Blå/Röd, ETT/TVÅ/TRE …)? NO-böcker saknar nivåer. */
+export function bokHarNivaer(bok: Bok): boolean {
+  return bok.kapitel.some((k) =>
+    [...k.delkapitel.flatMap((d) => d.lektioner), ...k.extraLektioner].some(
+      (l) => (l.niva1 !== '—' && l.niva1 !== '') || (l.niva2 !== '—' && l.niva2 !== '') || (l.niva3 !== '—' && l.niva3 !== '')));
+}
+
 /** Bokens alla lektioner i planeringsordning (kapitel stigande, bokordning inom). */
 export function bokLektioner(bok: Bok): Array<{ kapitel: number; lektion: Lektion }> {
   return bok.kapitel.flatMap((k) => {

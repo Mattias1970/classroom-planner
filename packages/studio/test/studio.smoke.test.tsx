@@ -1180,6 +1180,42 @@ describe('Bokens nivåkonventioner följs', () => {
     expect(panel.querySelector('.niva-gron')).not.toBeNull();     // färgbox för färgbok
   });
 
+  it('NO-bok utan nivåer: inga nivåkolumner eller Grön/Blå-regler', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    const SPEKTRUM = JSON.stringify({
+      id: 'spektrum-biologi', titel: 'Spektrum Biologi', forlag: 'Liber', amne: 'Biologi', arskurs: 8,
+      kapitel: [{ nummer: 6, titel: 'Vår fantastiska kropp', sidor: 's. 150–199', delkapitel: [
+        { nummer: '6.1', titel: 'Cellen', sidor: 's. 152–155', begrepp: ['cell'], extraBegrepp: [], testaDigSjalv: { sida: 155, fragor: ['Vad är en cell?'] } },
+        { nummer: '6.2', titel: 'Organsystem', sidor: 's. 156–160', begrepp: ['organ'], extraBegrepp: [] },
+      ] }],
+    });
+    await importeraBok(host, SPEKTRUM);
+    skriv(input(host, 'Tjänstens namn'), 'NO');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 NO').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Biologi');
+    valj(select(host, 'Veckodag pass 1'), '2');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    valj(select(host, 'Veckodag pass 2'), '4');
+    skriv(input(host, 'Start pass 2'), '09:00');
+    skriv(input(host, 'Slut pass 2'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    valj(select(host, 'Bok för ämnet'), 'spektrum-biologi');
+    const panel = host.querySelector('.panel')!;
+    expect(panel.textContent).not.toContain('Grön');
+    expect(panel.textContent).not.toContain('ETT');
+    // Plantabellen saknar nivåkolumner (✓/Datum/V./Tid/Kap/Avsnitt = 6 per grupptabell)
+    expect(panel.querySelector('table.plan')!.querySelectorAll('thead th')).toHaveLength(6);
+    act(() => { knapp(host, '✏ Uppgifter').click(); });
+    expect(host.querySelector('.regel')!.textContent).toContain('Testa dig själv');
+    expect(host.querySelector('.regel')!.textContent).not.toContain('obligatoriska.');
+  });
+
   it('Matematik Y (ETT/TVÅ/TRE, versaler): namnen ordagrant — färgerna används ändå', async () => {
     const host = render();
     await medBok(host, BOKJSON, 'liber-matematik-y');
