@@ -21,7 +21,9 @@ import {
   socrativeRum, sparaBok,
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
-  arStodAmne, aterstallPlanering, bokHarNivaer, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type KalenderDagRuta, type KalenderHandelse,
+  amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
+  klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
+  resultatProcent, saknadeResultat, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type KalenderDagRuta, type KalenderHandelse,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
 } from '@planner/kernel';
@@ -55,7 +57,7 @@ function valdFinns(s: Struktur, v: Vald): boolean {
 export function App() {
   const [s, setS] = useState<Struktur>(() => lasStruktur());
   const [vald, setVald] = useState<Vald>(null);
-  const [huvudvy, setHuvudvy] = useState<'struktur' | 'planering' | 'kalender'>('struktur');
+  const [huvudvy, setHuvudvy] = useState<'struktur' | 'planering' | 'kalender' | 'superteach'>('struktur');
   const [lektionsHopp, setLektionsHopp] = useState<{ amneId: string; i: number; n: number } | null>(null);
   const [tema, setTema] = useState<string>(() => {
     try { return window.localStorage.getItem('classroom-planner.studio.tema') ?? 'varm'; } catch { return 'varm'; }
@@ -89,6 +91,7 @@ export function App() {
           <button className={`tflik ${huvudvy === 'struktur' ? 'act' : ''}`} onClick={() => setHuvudvy('struktur')}>🗂 Struktur</button>
           <button className={`tflik ${huvudvy === 'planering' ? 'act' : ''}`} onClick={() => setHuvudvy('planering')}>📋 Planering</button>
           <button className={`tflik ${huvudvy === 'kalender' ? 'act' : ''}`} onClick={() => setHuvudvy('kalender')}>📆 Kalender</button>
+          <button className={`tflik ${huvudvy === 'superteach' ? 'act' : ''}`} onClick={() => setHuvudvy('superteach')}>📊 SuperTeach</button>
         </nav>
         <span className="spacer" />
         <button className="btn sec" onClick={angra} title="Ångra senaste ändring (upp till 20 steg)">↩ Ångra</button>
@@ -112,10 +115,11 @@ export function App() {
           }} />
         </label>
       </header>
-      {huvudvy === 'kalender' ? (
+      {huvudvy === 'kalender' || huvudvy === 'superteach' ? (
         <main className="panel full">
           {msg && <p className="status">{msg}</p>}
-          <KalenderVy s={s} onOppnaLektion={(amneId, i) => { setLektionsHopp({ amneId, i, n: Date.now() }); setHuvudvy('planering'); }} />
+          {huvudvy === 'superteach' && <SuperTeachVy s={s} kor={kor} />}
+          {huvudvy === 'kalender' && <KalenderVy s={s} onOppnaLektion={(amneId, i) => { setLektionsHopp({ amneId, i, n: Date.now() }); setHuvudvy('planering'); }} />}
         </main>
       ) : huvudvy === 'planering' ? (
         <main className="panel full">
@@ -1987,6 +1991,174 @@ const MANADSNAMN = ['januari','februari','mars','april','maj','juni','juli','aug
 
 /** 📋 Planering: egen huvudflik — välj klass · ämne och arbeta direkt med lektionsplan,
  * detaljplanering (alla texter redigerbara), egna rader (prov/diagnoser/övningar) och filmer. */
+const KALLNAMN: Record<ResultatKalla, string> = {
+  'socrative-laxforhor': 'Läxförhör', 'socrative-exit': 'Exit tickets', magma: 'Magma test', digiexam: 'DigiExam prov',
+};
+const ALLA_KALLOR: ResultatKalla[] = ['socrative-laxforhor', 'socrative-exit', 'magma', 'digiexam'];
+
+/**
+ * 📊 SuperTeach — resultat samlas ämnesvis och aggregeras: importera
+ * (klistra in Namn / Poäng / Max från Socrative-, Magma- eller DigiExam-
+ * export), matcha mot klassens elever, och läs översikten med källfilter
+ * och BAM-kraven (läxförhör ≥ 90 %, exit ≥ 70 %). Varningar när
+ * planeringens förhör saknar resultat.
+ */
+function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: string) => void }) {
+  const klasser = [...s.klasser].sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
+  const [klassId, setKlassId] = useState(klasser[0]?.id ?? '');
+  const klass = klasser.find((k) => k.id === klassId) ?? klasser[0];
+  const amnen = s.amnen.filter((a) => a.klassId === klass?.id);
+  const [amneId, setAmneId] = useState('');
+  const amne = amnen.find((a) => a.id === amneId);
+  const [kalla, setKalla] = useState<ResultatKalla>('socrative-exit');
+  const [prov, setProv] = useState('');
+  const [datum, setDatum] = useState(() => new Date().toISOString().slice(0, 10));
+  const [maxP, setMaxP] = useState('10');
+  const [radText, setRadText] = useState('');
+  const [filter, setFilter] = useState<ResultatKalla[]>([]);
+  const [visaProv, setVisaProv] = useState('');
+
+  if (klass === undefined) return <div className="card"><h2>📊 SuperTeach</h2><p className="muted">Skapa klasser och elever under 🗂 Struktur först.</p></div>;
+
+  /** 'Anna Berg  8  10' / 'Berg, Anna;8' → rader; poäng med decimalkomma stöds. */
+  const parse = (text: string) => {
+    const ut: Array<{ namn: string; poang: number; maxPoang: number }> = [];
+    for (const rad of text.split('\n')) {
+      const delar = rad.split(/\t|;/).map((x) => x.trim()).filter((x) => x !== '');
+      if (delar.length < 2) continue;
+      const poang = Number(delar[1].replace(',', '.').replace('%', ''));
+      if (Number.isNaN(poang)) continue;
+      const max = delar.length >= 3 ? Number(delar[2].replace(',', '.')) : Number(maxP);
+      ut.push({ namn: delar[0], poang, maxPoang: Number.isNaN(max) || max <= 0 ? Number(maxP) : max });
+    }
+    return ut;
+  };
+  const rader = parse(radText);
+  const omatchade = rader.filter((r) => matchaElev(s, klass.id, r.namn) === null).map((r) => r.namn);
+
+  const kanSpara = amne !== undefined && prov.trim() !== '' && rader.length > 0;
+  const spara = () => {
+    if (amne === undefined) return;
+    kor(() => importeraResultat(lasStruktur(), {
+      klassId: klass.id, amneId: amne.id, kalla, prov: prov.trim(), datum, rader,
+    }).s, `${rader.length - omatchade.length} resultat sparade på ${amne.namn} · ${prov.trim()}${omatchade.length > 0 ? ` — ⚠ omatchade: ${omatchade.join(', ')}` : ''}`);
+    setRadText(''); setProv('');
+  };
+
+  // Varningar: förväntade läxförhör/exits utan resultat (kräver planering + bok)
+  const varningar = (() => {
+    if (amne === undefined) return [];
+    const tjanst = s.tjanster.find((t) => t.id === klass.tjanstId);
+    const skolar = s.skolar.find((x) => x.id === tjanst?.skolarId);
+    const bok = s.bocker.find((b) => b.id === amne.bokId);
+    if (!skolar || !bok || !s.planeringar.some((pl) => pl.amneId === amne.id)) return [];
+    const offset = amne.noGrupp !== undefined && amne.noOrder !== undefined ? amne.noOrder * noBudget(skolar, amne.schema) : 0;
+    const plan = skapaPlanering(skolar, amne.schema, bok, offset, amne.egnaRader ?? []);
+    return saknadeResultat(s, amne.id, plan, new Date().toISOString().slice(0, 10));
+  })();
+
+  const kallor = filter.length > 0 ? filter : undefined;
+  const oversikt = amne !== undefined
+    ? amnesOversikt(s, amne.id, kallor)
+    : klassOversikt(s, klass.id, kallor !== undefined ? { kallor } : undefined);
+  const proven = provLista(s, klass.id);
+
+  return (
+    <div className="card superteach">
+      <h2>📊 SuperTeach — resultat</h2>
+      <div className="rad" style={{ flexWrap: 'wrap', gap: 8 }}>
+        <label>Klass:{' '}
+          <select aria-label="SuperTeach klass" value={klass.id} onChange={(e) => { setKlassId(e.target.value); setAmneId(''); }}>
+            {klasser.map((k) => <option key={k.id} value={k.id}>{k.namn}</option>)}
+          </select></label>
+        <label>Ämne:{' '}
+          <select aria-label="SuperTeach ämne" value={amneId} onChange={(e) => setAmneId(e.target.value)}>
+            <option value="">— alla ämnen (aggregerat) —</option>
+            {amnen.map((a) => <option key={a.id} value={a.id}>{a.namn}</option>)}
+          </select></label>
+        <span className="spacer" />
+        {ALLA_KALLOR.map((k) => (
+          <button key={k} className={`chipbtn ${filter.includes(k) ? 'act' : ''}`}
+            onClick={() => setFilter(filter.includes(k) ? filter.filter((x) => x !== k) : [...filter, k])}>{KALLNAMN[k]}</button>
+        ))}
+      </div>
+
+      {varningar.length > 0 && (
+        <div className="st-varning">⚠ <b>{varningar.length} förväntade prov saknar resultat:</b>{' '}
+          {varningar.map((v) => `${v.prov} (${v.datum})`).join(' · ')}</div>
+      )}
+
+      {/* ── Import ── */}
+      <div className="uppg-kort">
+        <b>📥 Importera resultat</b> <small className="muted">Klistra in rader från Socrative-/Magma-/DigiExam-exporten: <code>Namn ⇥ Poäng ⇥ Max</code> (Max kan utelämnas — fältet nedan används). Filuppladdning byggs mot dina exportfiler.</small>
+        <div className="rad" style={{ flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+          <select aria-label="Källa" value={kalla} onChange={(e) => setKalla(e.target.value as ResultatKalla)}>
+            {ALLA_KALLOR.map((k) => <option key={k} value={k}>{KALLNAMN[k]}</option>)}
+          </select>
+          <input aria-label="Provnamn" placeholder="Provnamn, t.ex. Quiz 1.1a" value={prov} onChange={(e) => setProv(e.target.value)} style={{ width: 180 }} />
+          <input aria-label="Provdatum" type="date" value={datum} onChange={(e) => setDatum(e.target.value)} />
+          <label>Max:{' '}<input aria-label="Maxpoäng" value={maxP} onChange={(e) => setMaxP(e.target.value)} style={{ width: 50 }} /></label>
+        </div>
+        <textarea aria-label="Resultatrader" rows={4} value={radText} onChange={(e) => setRadText(e.target.value)}
+          placeholder={'Anna Berg\t8\nOmar Ali\t6\t10'} style={{ width: '100%', marginTop: 6, fontFamily: 'ui-monospace, monospace' }} />
+        <div className="rad" style={{ gap: 8 }}>
+          <span className="small muted">{rader.length} rader · {rader.length - omatchade.length} matchade{omatchade.length > 0 ? ` · ⚠ omatchade: ${omatchade.join(', ')}` : ''}</span>
+          <span className="spacer" />
+          <button className="btn" disabled={!kanSpara} title={amne === undefined ? 'Välj ämne — resultat samlas ämnesvis' : ''} onClick={spara}>💾 Spara resultat</button>
+        </div>
+      </div>
+
+      {/* ── Översikt ── */}
+      <h3>{amne !== undefined ? `${klass.namn} · ${amne.namn}` : `${klass.namn} · alla ämnen`} <small className="muted">— snitt och BAM-krav per källa</small></h3>
+      <table className="tbl plan st-tabell">
+        <thead><tr><th>Elev</th><th>Snitt</th>{ALLA_KALLOR.map((k) => <th key={k}>{KALLNAMN[k]}</th>)}</tr></thead>
+        <tbody>{oversikt.map(({ elev, perKalla, snittProcent }) => (
+          <tr key={elev.id}>
+            <td>{elev.namn}</td>
+            <td><b>{snittProcent !== null ? `${snittProcent} %` : '—'}</b></td>
+            {ALLA_KALLOR.map((k) => {
+              const a = perKalla.find((x) => x.kalla === k);
+              if (a === undefined) return <td key={k} className="muted">—</td>;
+              return (
+                <td key={k}>
+                  {a.snittProcent !== null ? `${a.snittProcent} %` : '—'} <small className="muted">({a.antal} st)</small>
+                  {a.medKrav > 0 && <span className={`st-krav ${a.klarade === a.medKrav ? 'ok' : 'ej'}`}>{a.klarade}/{a.medKrav} ✓</span>}
+                </td>
+              );
+            })}
+          </tr>
+        ))}</tbody>
+      </table>
+
+      {/* ── Per prov ── */}
+      {proven.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <label>Visa enskilt prov:{' '}
+            <select aria-label="Visa prov" value={visaProv} onChange={(e) => setVisaProv(e.target.value)}>
+              <option value="">— välj —</option>
+              {proven.map((p) => <option key={`${p.kalla}|${p.prov}`} value={p.prov}>{KALLNAMN[p.kalla]} · {p.prov}</option>)}
+            </select></label>
+          {visaProv !== '' && (
+            <table className="tbl plan st-tabell">
+              <thead><tr><th>Elev</th><th>Poäng</th><th>%</th><th>Krav</th></tr></thead>
+              <tbody>{provSammanstallning(s, klass.id, visaProv).map(({ elev, resultat }) => (
+                <tr key={elev.id}>
+                  <td>{elev.namn}</td>
+                  <td>{resultat !== null ? `${resultat.poang}/${resultat.maxPoang}` : <span className="muted">saknas</span>}</td>
+                  <td>{resultat !== null ? `${resultatProcent(resultat) ?? '—'} %` : ''}</td>
+                  <td>{resultat !== null && klaratKrav(resultat) !== null
+                    ? <span className={`st-krav ${klaratKrav(resultat) === true ? 'ok' : 'ej'}`}>{klaratKrav(resultat) === true ? 'klarat ✓' : 'ej klarat'}</span>
+                    : ''}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PlaneringVy({ s, kor, setVald, hopp }: {
   s: Struktur; kor: (fn: () => Struktur, m: string) => void; setVald: (v: Vald) => void;
   hopp?: { amneId: string; i: number; n: number } | null;
@@ -2138,7 +2310,7 @@ function KalenderVy({ s, onOppnaLektion }: { s: Struktur; onOppnaLektion?: (amne
           onPrev={() => flyttaManad(-1)} onNext={() => flyttaManad(1)} />
       )}
       {lage === 'vecka' && (
-        <VeckoSchema rutor={veckaRutor(ankare, skolar, perDatum)}
+        <VeckoSchema rutor={veckaRutor(ankare, skolar, perDatum)} onOppna={onOppnaLektion}
           onPrev={() => flyttaVecka(-1)} onNext={() => flyttaVecka(1)} onIdag={() => setAnkare(new Date().toISOString().slice(0, 10))} />
       )}
       {(lage === 'lasar' || lage === 'termin') && (
@@ -2146,7 +2318,8 @@ function KalenderVy({ s, onOppnaLektion }: { s: Struktur; onOppnaLektion?: (amne
           {skolarManader(skolar)
             .filter(([, m]) => lage === 'lasar' || (termin === 'HT' ? m >= 6 : m <= 5))
             .map(([y, m]) => (
-              <MiniManad key={`${y}-${m}`} ar={y} manad0={m} skolar={skolar} perDatum={perDatum} />
+              <MiniManad key={`${y}-${m}`} ar={y} manad0={m} skolar={skolar} perDatum={perDatum}
+                onDag={(datum) => { setAnkare(datum); setLage('vecka'); }} />
             ))}
         </div>
       )}
@@ -2160,8 +2333,8 @@ function Handelsechip({ h, onOppna }: { h: KalenderHandelse; onOppna?: (amneId: 
   return (
     <span className="kh" style={{ background: h.amnesFarg, cursor: klickbar ? 'pointer' : undefined }}
       onClick={klickbar ? () => onOppna(h.amneId!, h.lektionsIndex!) : undefined}
-      title={`${h.start}–${h.slut} ${h.klassNamn}${h.grupp !== undefined ? ` (Grupp ${h.grupp})` : ''} · ${h.amnesNamn} · ${h.avsnitt}${klickbar ? ' — klicka för lektionsplaneringen' : ''}`}>
-      <b style={{ color: klassFarg(h.klassNamn) }}>{h.klassNamn}{h.grupp !== undefined ? h.grupp : ''}</b> {h.start} {h.avsnitt}
+      title={`${h.start}–${h.slut} ${h.klassNamn} ${h.amnesNamn}${h.grupp !== undefined ? ` ${h.grupp}` : ''} · ${h.avsnitt}${klickbar ? ' — klicka för lektionsplaneringen' : ''}`}>
+      <b style={{ color: klassFarg(h.klassNamn) }}>{h.klassNamn} {h.amnesNamn}{h.grupp !== undefined ? ` ${h.grupp}` : ''}</b> {h.start} {h.avsnitt}
     </span>
   );
 }
@@ -2198,8 +2371,9 @@ function MonadsGrid({ ar, manad0, skolar, perDatum, onPrev, onNext, onOppna }: {
   );
 }
 
-function VeckoSchema({ rutor, onPrev, onNext, onIdag }: {
+function VeckoSchema({ rutor, onPrev, onNext, onIdag, onOppna }: {
   rutor: KalenderDagRuta[]; onPrev: () => void; onNext: () => void; onIdag: () => void;
+  onOppna?: (amneId: string, i: number) => void;
 }) {
   const DAG_START = 7, DAG_SLUT = 17;
   const timmar = Array.from({ length: DAG_SLUT - DAG_START + 1 }, (_, i) => DAG_START + i);
@@ -2229,14 +2403,18 @@ function VeckoSchema({ rutor, onPrev, onNext, onIdag }: {
         {vardagar.map((r) => (
           <div key={r.datum} className={`sch-kol ${r.ledig ? 'ledig' : ''}`}>
             {timmar.map((h) => <div key={h} className="sch-linje" style={{ top: `${topp(`${String(h).padStart(2, '0')}:00`)}%` }} />)}
-            {r.handelser.map((h, i) => (
-              <div key={i} className="sch-lekt" style={{ top: `${topp(h.start)}%`, height: `${hojd(h.start, h.slut)}%`, background: h.amnesFarg }}
-                title={`${h.start}–${h.slut} ${h.klassNamn}${h.grupp !== undefined ? ` (Grupp ${h.grupp})` : ''} · ${h.amnesNamn} · ${h.avsnitt}`}>
-                <b style={{ color: klassFarg(h.klassNamn) }}>{h.klassNamn}{h.grupp !== undefined ? h.grupp : ''} · {h.amnesNamn}</b>
+            {r.handelser.map((h, i) => {
+              const klickbar = onOppna !== undefined && h.amneId !== undefined && h.lektionsIndex !== undefined;
+              return (
+              <div key={i} className="sch-lekt" style={{ top: `${topp(h.start)}%`, height: `${hojd(h.start, h.slut)}%`, background: h.amnesFarg, cursor: klickbar ? 'pointer' : undefined }}
+                onClick={klickbar ? () => onOppna(h.amneId!, h.lektionsIndex!) : undefined}
+                title={`${h.start}–${h.slut} ${h.klassNamn} ${h.amnesNamn}${h.grupp !== undefined ? ` ${h.grupp}` : ''} · ${h.avsnitt}${klickbar ? ' — klicka för lektionsplaneringen' : ''}`}>
+                <b style={{ color: klassFarg(h.klassNamn) }}>{h.klassNamn} {h.amnesNamn}{h.grupp !== undefined ? ` ${h.grupp}` : ''}</b>
                 <span>{h.avsnitt}</span>
                 <small>{h.start}–{h.slut}</small>
               </div>
-            ))}
+              );
+            })}
           </div>
         ))}
       </div>
@@ -2244,8 +2422,9 @@ function VeckoSchema({ rutor, onPrev, onNext, onIdag }: {
   );
 }
 
-function MiniManad({ ar, manad0, skolar, perDatum }: {
+function MiniManad({ ar, manad0, skolar, perDatum, onDag }: {
   ar: number; manad0: number; skolar: Skolar; perDatum: Map<string, KalenderHandelse[]>;
+  onDag?: (datum: string) => void;
 }) {
   const rutor = manadsRutor(ar, manad0, skolar, perDatum);
   return (
@@ -2259,7 +2438,9 @@ function MiniManad({ ar, manad0, skolar, perDatum }: {
             {i % 7 === 0 && <div className="mini-vk">{isoVeckaLbl(r.datum)}</div>}
             <div
               className={`mini-d ${r.iManad ? '' : 'dim'} ${r.ledig ? 'ledig' : ''} ${r.handelser.length > 0 ? 'har' : ''}`}
-              title={r.handelser.map((h) => `${h.klassNamn}${h.grupp ?? ''} ${h.avsnitt}`).join('\n') || r.ledig || ''}>
+              style={{ cursor: onDag !== undefined && r.handelser.length > 0 ? 'pointer' : undefined }}
+              onClick={onDag !== undefined && r.handelser.length > 0 ? () => onDag(r.datum) : undefined}
+              title={(r.handelser.map((h) => `${h.klassNamn} ${h.amnesNamn}${h.grupp !== undefined ? ` ${h.grupp}` : ''} ${h.avsnitt}`).join('\n') || r.ledig || '') + (r.handelser.length > 0 ? '\n— klicka för veckovyn' : '')}>
               {Number(r.datum.slice(8))}
             </div>
           </Fragment>

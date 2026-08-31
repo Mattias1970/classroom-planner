@@ -1178,6 +1178,92 @@ describe('Kalenderklick öppnar lektionsplaneringen', () => {
     expect(host.textContent).toContain('TAVLAN');
     expect((select(host, 'Välj lektion') as HTMLSelectElement).selectedOptions[0].textContent).toContain('1.1');
   });
+
+  it('veckovyns lektionsblock är klickbara och Läsår-dagar hoppar till veckovyn; gruppkoden sist i etiketten', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-26T10:00:00Z'));
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+
+    act(() => { knapp(host, '📆 Kalender').click(); });
+    // Läsår-vyn: dag med lektion är klickbar → veckovyn öppnas på den veckan
+    act(() => { knapp(host, 'Läsår').click(); });
+    const dag = [...host.querySelectorAll('.mini-d.har')][0] as HTMLElement;
+    expect(dag).toBeDefined();
+    act(() => { dag.click(); });
+    expect(host.querySelector('.schema')).not.toBeNull();          // veckovyn
+    // Blocket bär "8B Matematik" (gruppkod sist när grupp finns) och är klickbart
+    const block = host.querySelector('.sch-lekt') as HTMLElement;
+    expect(block.textContent).toContain('8B Matematik');
+    act(() => { block.click(); });
+    expect(host.textContent).toContain('TAVLAN');                   // lektionssidan öppen
+  });
+});
+
+describe('📊 SuperTeach', () => {
+  it('resultat klistras in, matchas, sparas ämnesvis och aggregeras med källfilter', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    skriv(input(host, 'Elevens namn'), 'Anna Berg');
+    act(() => { knapp(host, '➕ Lägg till elev').click(); });
+    skriv(input(host, 'Elevens namn'), 'Omar Ali');
+    act(() => { knapp(host, '➕ Lägg till elev').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+
+    act(() => { knapp(host, '📊 SuperTeach').click(); });
+    valj(select(host, 'SuperTeach ämne'), lasStruktur().amnen[0].id);
+    skriv(input(host, 'Provnamn'), 'Quiz 1.1a');
+    skrivArea(host.querySelector('textarea[aria-label="Resultatrader"]') as HTMLTextAreaElement,
+      'BERG, anna\t9\nomar ali\t6\nNils Okänd\t4');
+    expect(host.textContent).toContain('3 rader · 2 matchade');
+    expect(host.textContent).toContain('⚠ omatchade: Nils Okänd');
+    act(() => { knapp(host, '💾 Spara resultat').click(); });
+    expect(lasStruktur().resultat).toHaveLength(2);
+    expect(lasStruktur().resultat![0].amneId).toBe(lasStruktur().amnen[0].id);
+
+    // Översikten: Annas exit 90 % klarar 70-kravet; Omars 60 % gör det inte
+    const tabell = host.querySelector('.st-tabell')!;
+    expect(tabell.textContent).toContain('Anna Berg');
+    expect(tabell.textContent).toContain('90 %');
+    expect(tabell.textContent).toContain('60 %');
+    expect(tabell.querySelectorAll('.st-krav.ok')).toHaveLength(1);
+    expect(tabell.querySelectorAll('.st-krav.ej')).toHaveLength(1);
+
+    // Källfilter: Läxförhör tomt → snitt försvinner
+    act(() => { knapp(host, 'Läxförhör').click(); });
+    expect(host.querySelector('.st-tabell')!.textContent).not.toContain('90 %');
+    act(() => { knapp(host, 'Läxförhör').click(); });
+
+    // Enskilt prov
+    valj(select(host, 'Visa prov'), 'Quiz 1.1a');
+    const provTabell = host.querySelectorAll('.st-tabell')[1]!;
+    expect(provTabell.textContent).toContain('9/10');
+    expect(provTabell.textContent).toContain('klarat ✓');
+  });
 });
 
 describe('Bokens nivåkonventioner följs', () => {
