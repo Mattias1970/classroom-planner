@@ -1180,14 +1180,14 @@ describe('Bokens nivåkonventioner följs', () => {
     expect(panel.querySelector('.niva-gron')).not.toBeNull();     // färgbox för färgbok
   });
 
-  it('Matematik Y (ETT/TVÅ/TRE, versaler): namnen ordagrant utan färgboxar', async () => {
+  it('Matematik Y (ETT/TVÅ/TRE, versaler): namnen ordagrant — färgerna används ändå', async () => {
     const host = render();
     await medBok(host, BOKJSON, 'liber-matematik-y');
     const panel = host.querySelector('.panel')!;
     expect(panel.textContent).toContain('ETT – introduktion');
     expect(panel.textContent).toContain('TVÅ – E-nivå');
-    expect(panel.querySelector('.niva-gron')).toBeNull();         // inga färgboxar
-    expect(panel.querySelector('.niva-neutral')).not.toBeNull();
+    expect(panel.textContent).not.toContain('Grön');              // aldrig fel namn
+    expect(panel.querySelector('.niva-gron')).not.toBeNull();     // färgerna alltid
   });
 
   it('ämne som tas bort och läggs tillbaka har tomt innehåll', async () => {

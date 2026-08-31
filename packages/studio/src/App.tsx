@@ -1020,7 +1020,11 @@ function TypChip({ typ }: { typ: string }) {
 
 /** Prio m.fl. använder färgnivåer (Grön/Blå/Röd) — då visas färgmarkörer.
  * Matematik Y använder ETT/TVÅ/TRE (versaler) — då visas namnen ordagrant. */
-function arFargnivaer(bok: Bok): boolean { return bok.nivaer.niva1 === 'Grön'; }
+/**
+ * Nivåfärgerna (grön/blå/röd) används ALLTID på nivå 1/2/3 — även när boken
+ * heter ETT/TVÅ/TRE. Namnen kommer alltid ordagrant ur boken (bok.nivaer).
+ */
+function arFargnivaer(_bok: Bok): boolean { return true; }
 
 /**
  * 🧭 Detaljplanering — lektionssida i HTML-förlagans stil: Tavlan (tider +

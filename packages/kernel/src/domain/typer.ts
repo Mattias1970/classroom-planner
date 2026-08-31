@@ -247,6 +247,8 @@ export interface Struktur {
   planeringsarkiv?: Planering[];
   /** SuperTeach: importerade provresultat (läxförhör, exit tickets, Magma, DigiExam). */
   resultat?: import('./resultat.js').Resultat[];
+  /** SuperTeach: register över importerade resultatfiler per ämne. */
+  filregister?: import('./resultat.js').FilPost[];
   skolar: Skolar[];
   larare: Larare[];
   tjanster: Tjanst[];

@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  aggregatForElev, amnesOversikt, filtreraResultat, importeraResultat, klassOversikt,
-  klaratKrav, kravFor, matchaElev, provLista, provSammanstallning, resultatForElev,
-  resultatProcent,
+  aggregatForElev, amnesOversikt, arFilRegistrerad, filtreraResultat, forvantadeProv,
+  importeraResultat, klassOversikt, klaratKrav, kravFor, matchaElev, provLista,
+  provSammanstallning, registreraFil, resultatForElev, resultatProcent, saknadeResultat,
 } from '../src/domain/resultat.js';
+import type { PlaneradLektion } from '../src/domain/typer.js';
 import { laggTillAmne } from '../src/domain/struktur.js';
 import {
   laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst, resetIdRaknare,
@@ -153,5 +154,48 @@ describe('ämnesvis insamling och aggregering med källfilter', () => {
     expect(aggregatForElev(s, 'e1', { amneId: 'bi' })).toEqual([
       { kalla: 'socrative-exit', antal: 1, snittProcent: 90, klarade: 1, medKrav: 1 },
     ]);
+  });
+});
+
+describe('filregister och varningar för saknade resultat', () => {
+  const lekt = (avsnitt: string, socStart: string, exit: string): PlaneradLektion['lektion'] => ({
+    id: 1, typ: 'regular', avsnitt, del: 1, niva1: '1–5', niva2: '6–9', niva3: '—',
+    sidorTeori: '—', begrepp: '—', genomgang: '—', laxa: '—', ex: '—', socStart, exit,
+  });
+  const rad = (datum: string | null, l: PlaneradLektion['lektion']): PlaneradLektion =>
+    ({ kapitel: 1, lektion: l, datum, vecka: 34, start: '09:00', slutTid: '10:00' });
+
+  it('registreraFil ersätter samma fil och arFilRegistrerad hittar den', () => {
+    let s = bygg();
+    s = laggTillAmne(s, { id: 'ma', klassId: 'k', namn: 'Matematik', schema: [{ dag: 3, start: '09:00', slut: '10:00' }] });
+    s = registreraFil(s, { amneId: 'ma', filnamn: 'quiz11a.xlsx', importerad: '2026-08-21T10:00:00Z', kalla: 'socrative-exit', prov: 'Quiz 1.1a' });
+    s = registreraFil(s, { amneId: 'ma', filnamn: 'quiz11a.xlsx', importerad: '2026-08-22T10:00:00Z', kalla: 'socrative-exit', prov: 'Quiz 1.1a' });
+    expect(s.filregister).toHaveLength(1);
+    expect(arFilRegistrerad(s, 'ma', 'quiz11a.xlsx')).toBe(true);
+    expect(arFilRegistrerad(s, 'ma', 'okand.xlsx')).toBe(false);
+    expect(() => registreraFil(s, { amneId: 'fel', filnamn: 'x', importerad: 'nu', kalla: 'magma', prov: 'T' })).toThrow('Okänt ämne.');
+  });
+
+  it('forvantadeProv listar läxförhör och exits till och med idag; saknadeResultat varnar', () => {
+    let s = bygg();
+    s = laggTillAmne(s, { id: 'ma', klassId: 'k', namn: 'Matematik', schema: [{ dag: 3, start: '09:00', slut: '10:00' }] });
+    const plan = [
+      rad('2026-08-19', lekt('1.1 Negativa tal', '—', 'Quiz 1.1a')),
+      rad('2026-08-26', lekt('1.1 Negativa tal', 'Quiz 1.1a', 'Quiz 1.1b')),
+      rad('2026-09-02', lekt('1.2 Potenser', 'Quiz 1.1b', 'Quiz 1.2a')),   // framtid
+      rad(null, lekt('1.3', 'X', 'Y')),                                    // ryms ej
+    ];
+    expect(forvantadeProv(plan, '2026-08-27').map((p) => p.prov)).toEqual(['Quiz 1.1a', 'Quiz 1.1a', 'Quiz 1.1b']);
+
+    // Utan resultat och utan filer: alla tre unika förväntningar varnas
+    expect(saknadeResultat(s, 'ma', plan, '2026-08-27').map((p) => `${p.kalla}:${p.prov}`)).toEqual([
+      'socrative-exit:Quiz 1.1a', 'socrative-laxforhor:Quiz 1.1a', 'socrative-exit:Quiz 1.1b',
+    ]);
+
+    // Fil registrerad för exit 1.1a + resultat importerade för läxförhöret → bara 1.1b varnas
+    s = registreraFil(s, { amneId: 'ma', filnamn: 'q11a.xlsx', importerad: 'nu', kalla: 'socrative-exit', prov: 'Quiz 1.1a' });
+    s = importeraResultat(s, { klassId: 'k', amneId: 'ma', kalla: 'socrative-laxforhor', prov: 'Quiz 1.1a', datum: '2026-08-26',
+      rader: [{ namn: 'Anna Berg', poang: 9, maxPoang: 10 }] }).s;
+    expect(saknadeResultat(s, 'ma', plan, '2026-08-27').map((p) => p.prov)).toEqual(['Quiz 1.1b']);
   });
 });

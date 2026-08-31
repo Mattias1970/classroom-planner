@@ -9,7 +9,7 @@
  * BAM-kraven: läxförhör ≥ 90 %, exit ticket ≥ 70 %. Magma/DigiExam har inget
  * fast krav — de bedöms i sitt sammanhang.
  */
-import type { Elev, Struktur } from './typer.js';
+import type { Elev, PlaneradLektion, Struktur } from './typer.js';
 import { nyttId } from './struktur.js';
 
 export type ResultatKalla = 'socrative-laxforhor' | 'socrative-exit' | 'magma' | 'digiexam';
@@ -238,4 +238,68 @@ export function amnesOversikt(s: Struktur, amneId: string, kallor?: ResultatKall
 /** Aggregerad översikt över ALLA aktuella ämnen för en klass, med källfilter. */
 export function klassOversikt(s: Struktur, klassId: string, f?: ResultatFilter): ElevAggregatRad[] {
   return oversiktFor(s, s.elever.filter((e) => e.klassId === klassId), f);
+}
+
+// ── Filregister: vilka resultatfiler som importerats, per ämne ──
+
+/** En importerad resultatfil — appen minns filerna så inget importeras dubbelt eller glöms. */
+export interface FilPost {
+  id: string;
+  amneId: string;
+  /** Filnamnet som det ser ut i mappen, t.ex. 'Matte8B Quiz 1.1a.xlsx'. */
+  filnamn: string;
+  /** ISO-tidpunkt när filen importerades i appen. */
+  importerad: string;
+  kalla: ResultatKalla;
+  prov: string;
+}
+
+/** Registrerar en importerad fil; samma (ämne, filnamn) ersätts vid omimport. */
+export function registreraFil(s: Struktur, post: Omit<FilPost, 'id'>): Struktur {
+  if (!s.amnen.some((a) => a.id === post.amneId)) throw new Error('Okänt ämne.');
+  const kvar = (s.filregister ?? []).filter((f) => !(f.amneId === post.amneId && f.filnamn === post.filnamn));
+  return { ...s, filregister: [...kvar, { ...post, id: nyttId('fil') }] };
+}
+
+/** Har filen redan importerats för ämnet? Skanning av mappen hoppar då över den. */
+export function arFilRegistrerad(s: Struktur, amneId: string, filnamn: string): boolean {
+  return (s.filregister ?? []).some((f) => f.amneId === amneId && f.filnamn === filnamn);
+}
+
+// ── Förväntningar ur planeringen: vilka prov BORDE ha resultat nu? ──
+
+/** Ett prov som planeringen säger ska ha genomförts (datum har passerat). */
+export interface ForvantatProv { datum: string; kalla: ResultatKalla; prov: string; avsnitt: string; }
+
+/**
+ * Läser ämnets plan och listar alla läxförhör (soc_start) och exit tickets
+ * (exit) på lektioner med datum till och med `idag`. '—' och tomt ignoreras.
+ */
+export function forvantadeProv(plan: PlaneradLektion[], idag: string): ForvantatProv[] {
+  const ut: ForvantatProv[] = [];
+  for (const r of plan) {
+    if (r.datum === null || r.datum > idag) continue;
+    const soc = r.lektion.socStart;
+    if (soc !== '—' && soc.trim() !== '') {
+      ut.push({ datum: r.datum, kalla: 'socrative-laxforhor', prov: soc, avsnitt: r.lektion.avsnitt });
+    }
+    const exit = r.lektion.exit;
+    if (exit !== '—' && exit.trim() !== '') {
+      ut.push({ datum: r.datum, kalla: 'socrative-exit', prov: exit, avsnitt: r.lektion.avsnitt });
+    }
+  }
+  return ut;
+}
+
+/**
+ * Varningslistan: förväntade prov som varken har importerade resultat eller en
+ * registrerad fil för ämnet — 'läxförhöret 2026-08-24 (Quiz 1.1a) saknar fil'.
+ */
+export function saknadeResultat(s: Struktur, amneId: string, plan: PlaneradLektion[], idag: string): ForvantatProv[] {
+  const harResultat = new Set((s.resultat ?? []).filter((r) => r.amneId === amneId).map((r) => `${r.kalla}|${r.prov}`));
+  const harFil = new Set((s.filregister ?? []).filter((f) => f.amneId === amneId).map((f) => `${f.kalla}|${f.prov}`));
+  return forvantadeProv(plan, idag).filter((p) => {
+    const nyckel = `${p.kalla}|${p.prov}`;
+    return !harResultat.has(nyckel) && !harFil.has(nyckel);
+  });
 }
