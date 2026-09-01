@@ -23,6 +23,7 @@ import {
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   amnesOversikt, arFilRegistrerad, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   klassificeraSocrativeAktivitet, registreraFil, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
+  importeraRoster, rosterNamn, tolkaSocrativeRoster, type RosterRad,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
   resultatProcent, saknadeResultat, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type KalenderDagRuta, type KalenderHandelse,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
@@ -752,6 +753,64 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
   );
 }
 
+// ── Import av Socrative-roster (elevlista) ───────────────────
+/** Läser en Socrative-roster (xlsx/csv) och lägger till klassens elever — används både under Struktur och i SuperTeach. */
+function RosterImport({ s, klassId, klassNamn, kor }: {
+  s: Struktur; klassId: string; klassNamn: string; kor: (fn: () => Struktur, m: string) => void;
+}) {
+  const [grupp, setGrupp] = useState<Grupp>('A');
+  const [fil, setFil] = useState<{ namn: string; rader: RosterRad[]; fel: string | null }>({ namn: '', rader: [], fel: null });
+  const lasFil = async (filer: FileList | null) => {
+    const f = filer?.[0];
+    if (f === undefined) return;
+    try {
+      const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
+      const matris = XLSX.utils.sheet_to_json<Array<string | number | null>>(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: null });
+      setFil({ namn: f.name, rader: tolkaSocrativeRoster(matris), fel: null });
+    } catch (fel) {
+      setFil({ namn: f.name, rader: [], fel: fel instanceof Error ? fel.message : 'Filen kunde inte läsas.' });
+    }
+  };
+  // Förhandsgranskning: vad importen skulle göra (ren funktion, ändrar inget)
+  const forhands = fil.rader.length > 0 ? importeraRoster(s, klassId, fil.rader, grupp, () => 'preview') : null;
+  return (
+    <details className="bulk-elever roster-import">
+      <summary>📥 Importera Socrative-roster (xlsx/csv)</summary>
+      <p className="small muted">Socratives elevlista med kolumnerna <code>First Name · Last Name · Student ID</code> (valfritt <code>Email</code>). Befintliga elever hoppas över — importen kan köras om när klassen ändras.</p>
+      <div className="rad" style={{ gap: 6 }}>
+        <input type="file" accept=".xlsx,.xls,.csv" aria-label="Socrative-roster" onChange={(e) => { void lasFil(e.target.files); e.target.value = ''; }} />
+        <label>Grupp för nya elever:{' '}
+          <select aria-label="Grupp för roster" value={grupp} onChange={(e) => setGrupp(e.target.value as Grupp)}>
+            <option value="A">A</option><option value="B">B</option>
+          </select></label>
+      </div>
+      {fil.fel !== null && <p className="status warn">⚠ {fil.namn}: {fil.fel}</p>}
+      {forhands !== null && (<>
+        <p className="small"><b>{fil.namn}</b> · {fil.rader.length} elever i rostern →{' '}
+          <span className="st-krav ok">{forhands.tillagda.length} nya</span>{' '}
+          {forhands.uppdaterade.length > 0 && <span className="chip">{forhands.uppdaterade.length} kompletteras (ID/e-post)</span>}{' '}
+          {forhands.hoppade.length > 0 && <span className="muted">{forhands.hoppade.length} finns redan</span>}</p>
+        <table className="tbl">
+          <thead><tr><th>Namn</th><th>Student ID</th><th>E-post</th><th>Status</th></tr></thead>
+          <tbody>{fil.rader.map((r, i) => {
+            const n = rosterNamn(r);
+            const status = forhands.tillagda.includes(n) ? '➕ ny' : forhands.uppdaterade.includes(n) ? '✎ kompletteras' : 'finns';
+            return (<tr key={i}><td>{n}</td><td>{r.sidId}</td><td>{r.epost ?? '—'}</td><td className="muted">{status}</td></tr>);
+          })}</tbody>
+        </table>
+        <div className="rad">
+          <span className="spacer" />
+          <button className="btn sm" disabled={forhands.tillagda.length + forhands.uppdaterade.length === 0} onClick={() => {
+            kor(() => importeraRoster(lasStruktur(), klassId, fil.rader, grupp, () => nyttId('e')).struktur,
+              `${klassNamn}: ${forhands.tillagda.length} elever tillagda i Grupp ${grupp}${forhands.uppdaterade.length > 0 ? `, ${forhands.uppdaterade.length} kompletterade` : ''}${forhands.hoppade.length > 0 ? `, ${forhands.hoppade.length} fanns redan` : ''}.`);
+            setFil({ namn: '', rader: [], fel: null });
+          }}>📥 Importera till {klassNamn}</button>
+        </div>
+      </>)}
+    </details>
+  );
+}
+
 // ── Elevlista med Grupp A/B ──────────────────────────────────
 function Elevlista({ s, klassId, klassNamn, kor }: {
   s: Struktur; klassId: string; klassNamn: string; kor: (fn: () => Struktur, m: string) => void;
@@ -799,6 +858,7 @@ function Elevlista({ s, klassId, klassNamn, kor }: {
           </Fragment>))}</tbody>
         </table>
       )}
+      <RosterImport s={s} klassId={klassId} klassNamn={klassNamn} kor={kor} />
       <details className="bulk-elever">
         <summary>➕ Lägg till flera elever (klistra in lista)</summary>
         <p className="small muted">En elev per rad, t.ex. <code>Efternamn, Förnamn</code> eller <code>Förnamn Efternamn</code> — formatet i Socrative-rapporten fungerar rakt av. Dubbletter hoppas över.</p>
@@ -2098,7 +2158,7 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
     amneId: string | null; amnesNamn: string;
     kalla: ResultatKalla | null; datum: string; beskrivning: string;
     matchade: number; omatchadeNamn: string[]; deltog: number;
-    rader: Array<{ namn: string; poang: number; maxPoang: number }>;
+    rader: Array<{ namn: string; poang: number; maxPoang: number; sidId: string }>;
     redanInne: boolean;
   }
   const [filRader, setFilRader] = useState<FilRad[]>([]);
@@ -2124,10 +2184,10 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
           kalla: k?.kalla ?? null,
           datum: k?.datum ?? namninfo?.startUtc.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
           beskrivning: k !== null ? `${k.avsnitt !== null ? `${k.avsnitt} · ` : ''}${k.beskrivning}` : 'kunde inte tidsbestämmas',
-          matchade: deltagare.filter((r) => matchaElev(s, klass.id, r.namn) !== null).length,
-          omatchadeNamn: deltagare.filter((r) => matchaElev(s, klass.id, r.namn) === null).map((r) => r.namn),
+          matchade: deltagare.filter((r) => matchaElev(s, klass.id, r.namn, r.sidId) !== null).length,
+          omatchadeNamn: deltagare.filter((r) => matchaElev(s, klass.id, r.namn, r.sidId) === null).map((r) => r.namn),
           deltog: deltagare.length,
-          rader: deltagare.map((r) => ({ namn: r.namn, poang: r.poang, maxPoang: r.maxPoang })),
+          rader: deltagare.map((r) => ({ namn: r.namn, poang: r.poang, maxPoang: r.maxPoang, sidId: r.sidId })),
           redanInne: amnet !== undefined && arFilRegistrerad(s, amnet.id, fil.name),
         });
       } catch (fel) {
@@ -2183,6 +2243,12 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
         <div className="st-varning">⚠ <b>{varningar.length} förväntade prov saknar resultat:</b>{' '}
           {varningar.map((v) => `${v.prov} (${v.datum})`).join(' · ')}</div>
       )}
+
+      {/* ── Elever: Socrative-roster ── */}
+      <div className="uppg-kort">
+        <b>👥 Elever i {klass.namn}</b> <small className="muted">{s.elever.filter((e) => e.klassId === klass.id).length} elever registrerade — resultat kan bara matchas mot registrerade elever. Importera Socratives roster för klassen så matchas rapporterna på namn och Student ID.</small>
+        <RosterImport s={s} klassId={klass.id} klassNamn={klass.namn} kor={kor} />
+      </div>
 
       {/* ── Import: Socrative-filer ── */}
       <div className="uppg-kort">

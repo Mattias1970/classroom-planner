@@ -7,7 +7,18 @@ import { App } from '../src/App';
 import { lasStruktur } from '../src/store';
 import { resetIdRaknare } from '@planner/kernel';
 
-vi.mock('xlsx', () => ({ utils: { json_to_sheet: () => ({}), book_new: () => ({}), book_append_sheet: () => {} }, writeFile: () => {} }));
+// Fejkad roster som XLSX.read/sheet_to_json 'läser' — verkliga elevuppgifter hör inte hemma i kodrepot.
+const FEJK_ROSTER: Array<Array<string | null>> = [
+  ['First Name', 'Last Name', 'Student ID', 'Email'],
+  ['Anna', 'Berg', 'ANNA', 'anna@skola.se'],
+  ['Omar', 'Ali', 'OMAR', null],
+  ['Pia', 'Provlund', 'PIA', null],
+];
+vi.mock('xlsx', () => ({
+  read: () => ({ SheetNames: ['Roster'], Sheets: { Roster: {} } }),
+  utils: { json_to_sheet: () => ({}), book_new: () => ({}), book_append_sheet: () => {}, sheet_to_json: () => FEJK_ROSTER },
+  writeFile: () => {},
+}));
 
 afterEach(() => { vi.useRealTimers(); });
 
@@ -1672,3 +1683,39 @@ describe('Biblioteket hämtar böcker från datarepot', () => {
     } finally { vi.unstubAllGlobals(); }
   });
 })
+
+describe('👥 Socrative-roster', () => {
+  it('importeras under klassen: nya elever läggs till, befintliga kompletteras med Student ID', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    skriv(input(host, 'Elevens namn'), 'Berg, Anna');
+    act(() => { knapp(host, '➕ Lägg till elev').click(); });
+
+    valj(select(host, 'Grupp för roster'), 'B');
+    const filInput = input(host, 'Socrative-roster');
+    const fil = new File([new Uint8Array([1, 2, 3])], 'roster.xlsx');
+    Object.defineProperty(filInput, 'files', { value: [fil], configurable: true });
+    await act(async () => { filInput.dispatchEvent(new Event('change', { bubbles: true })); await Promise.resolve(); });
+    expect(host.textContent).toContain('3 elever i rostern');
+    expect(host.textContent).toContain('2 nya');
+    expect(host.textContent).toContain('1 kompletteras');
+
+    act(() => { knapp(host, '📥 Importera till 8B').click(); });
+    const elever = lasStruktur().elever;
+    expect(elever).toHaveLength(3);
+    expect(elever.find((e) => e.namn === 'Berg, Anna')).toMatchObject({ grupp: 'A', socrativeId: 'ANNA', epost: 'anna@skola.se' });
+    expect(elever.find((e) => e.namn === 'Omar Ali')).toMatchObject({ grupp: 'B', socrativeId: 'OMAR' });
+    expect(host.textContent).toContain('8B: 2 elever tillagda i Grupp B, 1 kompletterade.');
+
+    // Rostern finns också i SuperTeach-fliken
+    act(() => { knapp(host, '📊 SuperTeach').click(); });
+    expect(host.textContent).toContain('3 elever registrerade');
+    expect(host.querySelector('input[aria-label="Socrative-roster"]')).not.toBeNull();
+  });
+});

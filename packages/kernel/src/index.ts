@@ -8,6 +8,7 @@ export * from './domain/amnen.js';
 export * from './domain/oversikt.js';
 export * from './domain/resultat.js';
 export * from './domain/socrative.js';
+export * from './domain/roster.js';
 export * from './domain/kalender.js';
 export * from './domain/schemapdf.js';
 export * from './export/sidregister.js';

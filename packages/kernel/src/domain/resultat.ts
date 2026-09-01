@@ -30,7 +30,7 @@ export interface Resultat {
 }
 
 /** En rad ur en resultatfil, före elevmatchning. */
-export interface ImportRad { namn: string; poang: number; maxPoang: number; }
+export interface ImportRad { namn: string; poang: number; maxPoang: number; /** Student ID ur Socrative-rapporten (valfritt). */ sidId?: string; }
 
 export interface ImportUnderlag {
   klassId: string;
@@ -81,12 +81,17 @@ function namnNyckel(namn: string): string {
 }
 
 /**
- * Matchar ett namn ur en resultatfil mot klassens elever.
+ * Matchar ett namn ur en resultatfil mot klassens elever. Ett Student ID
+ * som finns i rostern (`socrativeId`) vinner alltid.
  * Exakt (normaliserad) träff vinner; annars ordningsoberoende ('Efternamn, Förnamn');
  * annars entydig förnamnsträff (Socrative låter elever skriva bara förnamn).
  */
-export function matchaElev(s: Struktur, klassId: string, namn: string): Elev | null {
+export function matchaElev(s: Struktur, klassId: string, namn: string, sidId?: string): Elev | null {
   const elever = s.elever.filter((e) => e.klassId === klassId);
+  if (sidId !== undefined && sidId.trim() !== '') {
+    const viaId = elever.filter((e) => (e.socrativeId ?? '').toLowerCase().trim() === sidId.toLowerCase().trim());
+    if (viaId.length === 1) return viaId[0];
+  }
   const mal = normalisera(namn);
   if (mal.includes('@')) {
     const viaEpost = elever.find((e) => (e.epost ?? '').toLowerCase().trim() === mal);
@@ -117,7 +122,7 @@ export function importeraResultat(s: Struktur, u: ImportUnderlag): ImportUtfall 
   const omatchade: string[] = [];
   const nya: Resultat[] = [];
   for (const rad of u.rader) {
-    const elev = matchaElev(s, u.klassId, rad.namn);
+    const elev = matchaElev(s, u.klassId, rad.namn, rad.sidId);
     if (elev === null) { omatchade.push(rad.namn); continue; }
     nya.push({
       id: nyttId('res'), elevId: elev.id, kalla: u.kalla, prov: u.prov.trim(),
