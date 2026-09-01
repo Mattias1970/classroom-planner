@@ -438,3 +438,7 @@ body[data-tema="klassisk"] .tema-valj { border-color: var(--ram); background: #f
 .st-krav { border-radius: 8px; padding: 1px 7px; font-size: 10px; font-weight: 800; margin-left: 6px; }
 .st-krav.ok { background: #E8F5E9; color: #1B5E20; border: 1px solid #A5D6A7; }
 .st-krav.ej { background: #FFEBEE; color: #B71C1C; border: 1px solid #EF9A9A; }
+
+/* Del 54: bokens mål i VAD SKA VI LÄRA OSS-kortet */
+.ls-mal { margin: 4px 0 6px; padding-left: 18px; font-size: 12px; }
+.ls-mal li { margin: 2px 0; }

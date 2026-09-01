@@ -115,6 +115,8 @@ export interface Lektion {
   /** Exempel att räkna tillsammans under genomgången. */
   ex: string;
   /** Startuppgift/läxförhörsfråga (Socrative) om boken anger en. */
+  /** Bokens mål för delkapitlet — 'Det här ska eleven lära sig' (radbrutna punkter). */
+  mal?: string;
   socStart: string;
   /** Exit ticket-uppgift om boken anger en. */
   exit: string;

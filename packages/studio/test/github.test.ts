@@ -62,14 +62,30 @@ describe('hamtaBockerFranGitHub — bokdata ur books/', () => {
   const cfg = { owner: 'Mattias1970', repo: 'classroom-planner-data', branch: 'main', path: 'studio/planering.json', token: 'x' };
   const b64 = (t: string) => btoa(String.fromCharCode(...new TextEncoder().encode(t)));
 
-  it('listar books/, hämtar varje book.json och hoppar över filer', async () => {
+  it('hittar book.json rekursivt (books/ma/…, books/no/biologi/…) och hoppar över annat', async () => {
     const svar: Record<string, unknown> = {
-      'books?ref=main': [
-        { name: 'liber-matematik-y', type: 'dir' },
-        { name: 'README.md', type: 'file' },
-        { name: 'sanoma-prio-8', type: 'dir' },
-      ],
-      'books/liber-matematik-y/book.json?ref=main': { content: b64('{"id":"y"}') },
+      '?recursive=1': { tree: [
+        { path: 'books/ma/liber-matematik-y/book.json', type: 'blob' },
+        { path: 'books/no/biologi/spektrum-biologi/book.json', type: 'blob' },
+        { path: 'books/no/biologi/spektrum-biologi/planeringar/2026-2027-8B.md', type: 'blob' },
+        { path: 'books/README.md', type: 'blob' },
+        { path: 'books/tk', type: 'tree' },
+      ] },
+      'books/ma/liber-matematik-y/book.json?ref=main': { content: b64('{"id":"y"}') },
+      'books/no/biologi/spektrum-biologi/book.json?ref=main': { content: b64('{"id":"s"}') },
+    };
+    (fetch as ReturnType<typeof vi.fn>).mockImplementation((url: string) => {
+      const nyckel = Object.keys(svar).find((k) => url.endsWith(k));
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(svar[nyckel ?? '']) });
+    });
+    const ut = await hamtaBockerFranGitHub(cfg);
+    expect(ut.map((b) => b.id)).toEqual(['liber-matematik-y', 'spektrum-biologi']);   // mappen närmast book.json
+    expect(ut[1].json).toBe('{"id":"s"}');
+  });
+
+  it('platta strukturen books/<bok-id>/book.json fungerar som förut', async () => {
+    const svar: Record<string, unknown> = {
+      '?recursive=1': { tree: [{ path: 'books/sanoma-prio-8/book.json', type: 'blob' }] },
       'books/sanoma-prio-8/book.json?ref=main': { content: b64('{"id":"p"}') },
     };
     (fetch as ReturnType<typeof vi.fn>).mockImplementation((url: string) => {
@@ -77,12 +93,11 @@ describe('hamtaBockerFranGitHub — bokdata ur books/', () => {
       return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(svar[nyckel ?? '']) });
     });
     const ut = await hamtaBockerFranGitHub(cfg);
-    expect(ut.map((b) => b.id)).toEqual(['liber-matematik-y', 'sanoma-prio-8']);
-    expect(ut[0].json).toBe('{"id":"y"}');
+    expect(ut.map((b) => b.id)).toEqual(['sanoma-prio-8']);
   });
 
-  it('tydligt fel när books/ saknas', async () => {
+  it('tydligt fel när repot/branchen inte kan läsas', async () => {
     (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: false, status: 404 });
-    await expect(hamtaBockerFranGitHub(cfg)).rejects.toThrow("books/");
+    await expect(hamtaBockerFranGitHub(cfg)).rejects.toThrow('branchen');
   });
 });

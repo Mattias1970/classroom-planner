@@ -107,19 +107,30 @@ async function hamtaFilInnehall(cfg: GitHubConfig, sokvag: string): Promise<stri
  * Listar och hämtar alla böcker ur datarepots books/-katalog
  * (books/<bok-id>/book.json). Returnerar [bok-id → JSON-text].
  */
+/**
+ * Hittar alla book.json under books/ på VALFRIT djup via git trees-API:t
+ * (ett anrop), så att repot kan organiseras t.ex. books/ma/…, books/no/biologi/….
+ * Bokens id = mappen närmast book.json (books/no/biologi/spektrum-biologi/ → spektrum-biologi).
+ */
 export async function hamtaBockerFranGitHub(cfg: GitHubConfig): Promise<Array<{ id: string; json: string }>> {
   if (!konfigKomplett(cfg)) throw new Error('GitHub-konfigurationen är ofullständig — fyll i ☁ GitHub först.');
-  const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/books?ref=${encodeURIComponent(cfg.branch)}`;
+  const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/git/trees/${encodeURIComponent(cfg.branch)}?recursive=1`;
   const r = await fetch(url, { headers: headers(cfg) });
-  if (r.status === 404) throw new Error("Katalogen 'books/' finns inte i repot.");
-  if (!r.ok) throw new Error(`GitHub ${r.status}: kunde inte lista books/`);
-  const poster = (await r.json()) as Array<{ name: string; type: string }>;
+  if (r.status === 404) throw new Error('Hittade inte repot eller branchen — kontrollera ☁ GitHub-inställningarna.');
+  if (!r.ok) throw new Error(`GitHub ${r.status}: kunde inte läsa repots filträd.`);
+  const trad = (await r.json()) as { tree?: Array<{ path: string; type: string }> };
+  const sokvagar = (trad.tree ?? [])
+    .filter((t) => t.type === 'blob' && /^books\/.+\/book\.json$/.test(t.path))
+    .map((t) => t.path)
+    .sort((a, b) => a.localeCompare(b, 'sv'));
   const ut: Array<{ id: string; json: string }> = [];
-  for (const p of poster) {
-    if (p.type !== 'dir') continue;
-    const json = await hamtaFilInnehall(cfg, `books/${p.name}/book.json`);
-    if (json !== null) ut.push({ id: p.name, json });
+  for (const sokvag of sokvagar) {
+    const json = await hamtaFilInnehall(cfg, sokvag);
+    if (json !== null) {
+      const delar = sokvag.split('/');
+      ut.push({ id: delar[delar.length - 2], json });
+    }
   }
-  if (ut.length === 0) throw new Error("Inga book.json hittades under books/<bok-id>/.");
+  if (ut.length === 0) throw new Error("Inga book.json hittades under books/ (valfritt djup: books/ma/…, books/no/biologi/… fungerar).");
   return ut;
 }

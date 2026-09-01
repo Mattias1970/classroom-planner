@@ -725,6 +725,8 @@ describe('Kalender', () => {
   }
 
   it('kalendervyn visar månadsrutnät med lektioner och kapitelfärgförklaring', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-26T10:00:00Z'));
     const host = render();
     await medPlanering(host);
     act(() => { knapp(host, '📆 Kalender').click(); });
@@ -1619,9 +1621,11 @@ describe('Biblioteket hämtar böcker från datarepot', () => {
     sparaGitHubConfig({ owner: 'Mattias1970', repo: 'classroom-planner-data', branch: 'main', path: 'studio/struktur.json', token: 'tok' });
     const b64 = (t: string) => btoa(String.fromCharCode(...new TextEncoder().encode(t)));
     const f = vi.fn()
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ([
-        { name: 'liber-matematik-y', type: 'dir' }, { name: 'spektrum-biologi', type: 'dir' }, { name: 'trasig', type: 'dir' },
-      ]) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ tree: [
+        { path: 'books/ma/liber-matematik-y/book.json', type: 'blob' },
+        { path: 'books/no/biologi/spektrum-biologi/book.json', type: 'blob' },
+        { path: 'books/trasig/book.json', type: 'blob' },
+      ] }) })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ content: b64(BOKJSON) }) })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ content: b64(JSON.stringify({
         id: 'spektrum-biologi', titel: 'Spektrum Biologi', amne: 'Biologi', arskurs: 8,

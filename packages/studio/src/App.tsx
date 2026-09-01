@@ -1125,6 +1125,9 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
               placeholder={`Arbeta med uppg. ${har(eff.niva1) ? eff.niva1 : eff.niva2} (${har(eff.niva1) ? N.niva1 : N.niva2})`}
               onChange={(e) => satt('vadGora', e.target.value)} /></div>
           <div className="ls-kort ls-lara"><b>VAD SKA VI LÄRA OSS</b>
+            {rad.lektion.mal !== undefined && (
+              <ul className="ls-mal">{rad.lektion.mal.split('\n').map((m, mi) => <li key={mi}>{m}</li>)}</ul>
+            )}
             <textarea aria-label="Vad ska vi lära oss" rows={3} value={lp?.laraOss ?? ''}
               placeholder={begrepp.length > 0 ? begrepp.join(', ') : 'Lärandemål för lektionen'}
               onChange={(e) => satt('laraOss', e.target.value)} /></div>

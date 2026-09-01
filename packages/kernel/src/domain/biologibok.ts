@@ -50,6 +50,7 @@ interface RawDelkapitel {
   nummer: string; titel: string; sidor: string;
   begrepp: string[]; extraBegrepp: string[]; testaFragor: number;
   genomgangLank?: string; forklaringar: Record<string, string>;
+  mal: string[];
 }
 
 function lasDelkapitel(raw: unknown, kapNr: number, index: number): RawDelkapitel {
@@ -69,6 +70,7 @@ function lasDelkapitel(raw: unknown, kapNr: number, index: number): RawDelkapite
     testaFragor: tds && typeof tds === 'object' ? strangLista(tds.fragor).length : 0,
     ...(typeof r.genomgangLank === 'string' && r.genomgangLank.startsWith('http') ? { genomgangLank: r.genomgangLank } : {}),
     forklaringar,
+    mal: strangLista(r.mal),
   };
 }
 
@@ -87,6 +89,7 @@ function delkapitelLektion(d: RawDelkapitel, index1: number, prefix: string, kap
     ex: d.testaFragor > 0 ? `Testa dig själv ${d.nummer} · uppgift 1–${d.testaFragor}` : '—',
     socStart: laxforhor,
     exit: `${socrativeExitRum(prefix, kapNr, index1)} (krav ≥ ${NO_KRAV_EXIT} %)`,
+    ...(d.mal.length > 0 ? { mal: d.mal.join('\n') } : {}),
   };
 }
 

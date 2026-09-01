@@ -54,6 +54,16 @@ describe('bokFromBiologiImport', () => {
     expect(l1.laxa).toContain('Biologi61 ≥ 90 %');
   });
 
+  it('delkapitlets mål följer med till lektionen som radbrutna punkter', () => {
+    const json = JSON.stringify({ id: 'b', titel: 'B', kapitel: [{ nummer: 4, titel: 'Ekologi', delkapitel: [
+      { nummer: '4.1', titel: 'Liv i samspel', sidor: 's. 156', begrepp: ['ekologi'], extraBegrepp: [],
+        mal: ['Förstå vad ett ekosystem är.', 'Kunna förklara population och nisch.'] },
+    ] }] });
+    const bok = bokFromBiologiImport(json);
+    const l = bok.kapitel[0].delkapitel[0].lektioner[0];
+    expect(l.mal).toBe('Förstå vad ett ekosystem är.\nKunna förklara population och nisch.');
+  });
+
   it('kastar svenska fel för trasiga filer', () => {
     expect(() => bokFromBiologiImport('inte json')).toThrow('Filen är inte giltig JSON.');
     expect(() => bokFromBiologiImport('{"id":"x","titel":"T"}')).toThrow('"kapitel" saknas');
