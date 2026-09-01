@@ -51,7 +51,7 @@ export interface Klass { id: string; tjanstId: string; namn: string; }
  * ämnen (Biologi/Fysik/Kemi/Teknik) läses gruppvis med olika tider, så
  * gruppen avgör vilka lektioner som gäller för eleven.
  */
-export interface Elev { id: string; klassId: string; namn: string; grupp: 'A' | 'B'; }
+export interface Elev { id: string; klassId: string; namn: string; grupp: 'A' | 'B'; /** E-post (valfri) — används vid resultatmatchning. */ epost?: string; }
 
 /** Lektionspass: veckodag 1=mån … 5=fre, tider 'HH:MM'. */
 export interface Pass { dag: number; start: string; slut: string; }

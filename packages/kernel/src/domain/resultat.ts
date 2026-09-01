@@ -88,6 +88,10 @@ function namnNyckel(namn: string): string {
 export function matchaElev(s: Struktur, klassId: string, namn: string): Elev | null {
   const elever = s.elever.filter((e) => e.klassId === klassId);
   const mal = normalisera(namn);
+  if (mal.includes('@')) {
+    const viaEpost = elever.find((e) => (e.epost ?? '').toLowerCase().trim() === mal);
+    if (viaEpost) return viaEpost;
+  }
   const exakt = elever.find((e) => normalisera(e.namn) === mal);
   if (exakt) return exakt;
   const nyckel = namnNyckel(namn);

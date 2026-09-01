@@ -442,3 +442,7 @@ body[data-tema="klassisk"] .tema-valj { border-color: var(--ram); background: #f
 /* Del 54: bokens mål i VAD SKA VI LÄRA OSS-kortet */
 .ls-mal { margin: 4px 0 6px; padding-left: 18px; font-size: 12px; }
 .ls-mal li { margin: 2px 0; }
+
+/* Del 55: filimport + bulk-elever */
+.bulk-elever { background: #FBF7F1; border: 1px dashed var(--ram); border-radius: 8px; padding: 6px 10px; margin: 8px 0; }
+.bulk-elever summary { cursor: pointer; font-weight: 700; font-size: 12px; }

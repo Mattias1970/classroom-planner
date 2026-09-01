@@ -1181,6 +1181,29 @@ describe('Kalenderklick öppnar lektionsplaneringen', () => {
     expect((select(host, 'Välj lektion') as HTMLSelectElement).selectedOptions[0].textContent).toContain('1.1');
   });
 
+  it('elevlistor kan klistras in i klump med dubblettskydd', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    skriv(input(host, 'Tjänstens namn'), 'NO');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 NO').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    skriv(input(host, 'Elevens namn'), 'Pia Provlund');
+    act(() => { knapp(host, '➕ Lägg till elev').click(); });
+
+    skrivArea(host.querySelector('textarea[aria-label="Elevlista"]') as HTMLTextAreaElement,
+      'Testsson, Ted\nProvlund, Pia\nÖvnegård, Öjvind');
+    valj(select(host, 'Grupp för elevlistan'), 'B');
+    act(() => { knapp(host, '➕ Lägg till alla').click(); });
+    // Pia fanns redan (omvänd namnordning) → 2 nya, dubbletten hoppades
+    expect(host.textContent).toContain('2 elever tillagda i Grupp B');
+    const st = lasStruktur();
+    expect(st.elever).toHaveLength(3);
+    expect(st.elever.map((e) => e.namn)).toContain('Testsson, Ted');
+  });
+
   it('veckovyns lektionsblock är klickbara och Läsår-dagar hoppar till veckovyn; gruppkoden sist i etiketten', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date('2026-08-26T10:00:00Z'));

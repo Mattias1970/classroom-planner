@@ -21,7 +21,8 @@ import {
   socrativeRum, sparaBok,
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
-  amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
+  amnesOversikt, arFilRegistrerad, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
+  klassificeraSocrativeAktivitet, registreraFil, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
   resultatProcent, saknadeResultat, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type KalenderDagRuta, type KalenderHandelse,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
@@ -756,6 +757,8 @@ function Elevlista({ s, klassId, klassNamn, kor }: {
   s: Struktur; klassId: string; klassNamn: string; kor: (fn: () => Struktur, m: string) => void;
 }) {
   const [namn, setNamn] = useState('');
+  const [bulkText, setBulkText] = useState('');
+  const [bulkGrupp, setBulkGrupp] = useState<Grupp>('A');
   const [grupp, setGrupp] = useState<Grupp>('A');
   const [visaSchema, setVisaSchema] = useState<string | null>(null);
   const elever = s.elever.filter((e) => e.klassId === klassId)
@@ -796,6 +799,28 @@ function Elevlista({ s, klassId, klassNamn, kor }: {
           </Fragment>))}</tbody>
         </table>
       )}
+      <details className="bulk-elever">
+        <summary>➕ Lägg till flera elever (klistra in lista)</summary>
+        <p className="small muted">En elev per rad, t.ex. <code>Efternamn, Förnamn</code> eller <code>Förnamn Efternamn</code> — formatet i Socrative-rapporten fungerar rakt av. Dubbletter hoppas över.</p>
+        <textarea aria-label="Elevlista" rows={4} value={bulkText} onChange={(e) => setBulkText(e.target.value)}
+          placeholder={'Testsson, Ted\nProvlund, Pia'} style={{ width: '100%' }} />
+        <div className="rad" style={{ gap: 6 }}>
+          <label>Grupp:{' '}
+            <select aria-label="Grupp för elevlistan" value={bulkGrupp} onChange={(e) => setBulkGrupp(e.target.value as Grupp)}>
+              <option value="A">A</option><option value="B">B</option>
+            </select></label>
+          <span className="spacer" />
+          <button className="btn sm" disabled={bulkText.trim() === ''} onClick={() => {
+            const befintliga = new Set(s.elever.filter((e) => e.klassId === klassId)
+              .map((e) => e.namn.toLowerCase().replace(/,/g, ' ').replace(/\s+/g, ' ').trim().split(' ').sort().join(' ')));
+            const nya = bulkText.split('\n').map((r) => r.trim()).filter((r) => r !== '')
+              .filter((r) => !befintliga.has(r.toLowerCase().replace(/,/g, ' ').replace(/\s+/g, ' ').trim().split(' ').sort().join(' ')));
+            kor(() => nya.reduce((st, n) => laggTillElev(st, { id: nyttId('e'), klassId, namn: n, grupp: bulkGrupp }), lasStruktur()),
+              `${nya.length} elever tillagda i Grupp ${bulkGrupp}${nya.length < bulkText.split('\n').filter((r) => r.trim() !== '').length ? ' (dubbletter hoppades över)' : ''}.`);
+            setBulkText('');
+          }}>➕ Lägg till alla</button>
+        </div>
+      </details>
       <div className="ny rad">
         <input aria-label="Elevens namn" placeholder="Namn" value={namn} onChange={(e) => setNamn(e.target.value)} />
         <select aria-label="Grupp för ny elev" value={grupp} onChange={(e) => setGrupp(e.target.value as Grupp)}>
@@ -2048,17 +2073,85 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
     setRadText(''); setProv('');
   };
 
-  // Varningar: förväntade läxförhör/exits utan resultat (kräver planering + bok)
-  const varningar = (() => {
-    if (amne === undefined) return [];
+  /** Ämnets plan (grupp A + ev. grupp B) — för varningar och filklassificering. */
+  const planFor = (a2: (typeof amnen)[number] | undefined): PlaneradLektion[] => {
+    if (a2 === undefined) return [];
     const tjanst = s.tjanster.find((t) => t.id === klass.tjanstId);
     const skolar = s.skolar.find((x) => x.id === tjanst?.skolarId);
-    const bok = s.bocker.find((b) => b.id === amne.bokId);
-    if (!skolar || !bok || !s.planeringar.some((pl) => pl.amneId === amne.id)) return [];
-    const offset = amne.noGrupp !== undefined && amne.noOrder !== undefined ? amne.noOrder * noBudget(skolar, amne.schema) : 0;
-    const plan = skapaPlanering(skolar, amne.schema, bok, offset, amne.egnaRader ?? []);
-    return saknadeResultat(s, amne.id, plan, new Date().toISOString().slice(0, 10));
-  })();
+    const bok = s.bocker.find((b) => b.id === a2.bokId);
+    if (!skolar || !bok || !s.planeringar.some((pl) => pl.amneId === a2.id)) return [];
+    const offset = a2.noGrupp !== undefined && a2.noOrder !== undefined ? a2.noOrder * noBudget(skolar, a2.schema) : 0;
+    const planA = skapaPlanering(skolar, a2.schema, bok, offset, a2.egnaRader ?? []);
+    const planB = a2.halvklass === true && a2.schemaB !== undefined
+      ? skapaPlanering(skolar, a2.schemaB, bok, offset, a2.egnaRader ?? []) : [];
+    return [...planA, ...planB];
+  };
+
+  // Varningar: förväntade läxförhör/exits utan resultat (kräver planering + bok)
+  const varningar = amne !== undefined
+    ? saknadeResultat(s, amne.id, planFor(amne), new Date().toISOString().slice(0, 10))
+    : [];
+
+  // ── Socrative-filer: läs, klassificera (läxförhör/exit via svensk tid) och importera ──
+  interface FilRad {
+    filnamn: string; quiz: string; rum: string;
+    amneId: string | null; amnesNamn: string;
+    kalla: ResultatKalla | null; datum: string; beskrivning: string;
+    matchade: number; omatchadeNamn: string[]; deltog: number;
+    rader: Array<{ namn: string; poang: number; maxPoang: number }>;
+    redanInne: boolean;
+  }
+  const [filRader, setFilRader] = useState<FilRad[]>([]);
+  const lasFiler = async (filer: FileList | null) => {
+    if (filer === null) return;
+    const ut: FilRad[] = [];
+    for (const fil of Array.from(filer)) {
+      try {
+        const wb = XLSX.read(await fil.arrayBuffer(), { type: 'array' });
+        const matris = XLSX.utils.sheet_to_json<Array<string | number | null>>(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: null });
+        const rapport = tolkaSocrativeRapport(matris);
+        // Rummet pekar ut ämnet: socrativeRum(ämne, klass) — skiftlägesokänsligt
+        const viaRum = amnen.find((a2) => socrativeRum(a2.namn, klass.namn).toUpperCase() === rapport.rum.toUpperCase());
+        const amnet = viaRum ?? amne;
+        const namninfo = tolkaSocrativeFilnamn(fil.name);
+        const k = namninfo !== null && amnet !== undefined
+          ? klassificeraSocrativeAktivitet(namninfo.startUtc, planFor(amnet))
+          : null;
+        const deltagare = rapport.rader.filter((r) => r.deltog);
+        ut.push({
+          filnamn: fil.name, quiz: rapport.quiz, rum: rapport.rum,
+          amneId: amnet?.id ?? null, amnesNamn: amnet?.namn ?? '—',
+          kalla: k?.kalla ?? null,
+          datum: k?.datum ?? namninfo?.startUtc.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+          beskrivning: k !== null ? `${k.avsnitt !== null ? `${k.avsnitt} · ` : ''}${k.beskrivning}` : 'kunde inte tidsbestämmas',
+          matchade: deltagare.filter((r) => matchaElev(s, klass.id, r.namn) !== null).length,
+          omatchadeNamn: deltagare.filter((r) => matchaElev(s, klass.id, r.namn) === null).map((r) => r.namn),
+          deltog: deltagare.length,
+          rader: deltagare.map((r) => ({ namn: r.namn, poang: r.poang, maxPoang: r.maxPoang })),
+          redanInne: amnet !== undefined && arFilRegistrerad(s, amnet.id, fil.name),
+        });
+      } catch (fel) {
+        ut.push({ filnamn: fil.name, quiz: '—', rum: '—', amneId: null, amnesNamn: '—', kalla: null,
+          datum: '', beskrivning: fel instanceof Error ? fel.message : 'kunde inte läsas',
+          matchade: 0, omatchadeNamn: [], deltog: 0, rader: [], redanInne: false });
+      }
+    }
+    setFilRader(ut);
+  };
+  const importerbara = filRader.filter((f) => f.amneId !== null && f.kalla !== null && !f.redanInne && f.rader.length > 0);
+  const importeraFiler = () => {
+    kor(() => {
+      let st = lasStruktur();
+      for (const f of importerbara) {
+        st = importeraResultat(st, {
+          klassId: klass.id, amneId: f.amneId!, kalla: f.kalla!, prov: f.quiz, datum: f.datum, rader: f.rader,
+        }).s;
+        st = registreraFil(st, { amneId: f.amneId!, filnamn: f.filnamn, importerad: new Date().toISOString(), kalla: f.kalla!, prov: f.quiz });
+      }
+      return st;
+    }, `${importerbara.length} filer importerade (${importerbara.reduce((n, f) => n + f.matchade, 0)} resultat).`);
+    setFilRader([]);
+  };
 
   const kallor = filter.length > 0 ? filter : undefined;
   const oversikt = amne !== undefined
@@ -2091,9 +2184,42 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
           {varningar.map((v) => `${v.prov} (${v.datum})`).join(' · ')}</div>
       )}
 
-      {/* ── Import ── */}
+      {/* ── Import: Socrative-filer ── */}
       <div className="uppg-kort">
-        <b>📥 Importera resultat</b> <small className="muted">Klistra in rader från Socrative-/Magma-/DigiExam-exporten: <code>Namn ⇥ Poäng ⇥ Max</code> (Max kan utelämnas — fältet nedan används). Filuppladdning byggs mot dina exportfiler.</small>
+        <b>📥 Importera Socrative-filer</b> <small className="muted">Välj klassrapporter (xlsx). Rummet i filen pekar ut ämnet, och starttiden i filnamnet (UTC → svensk tid) avgör lektion samt läxförhör/exit ticket enligt BAM-rytmen. Redan importerade filer hoppas över.</small>
+        <div className="rad" style={{ marginTop: 6 }}>
+          <input type="file" multiple accept=".xlsx" aria-label="Socrative-filer"
+            onChange={(e) => { void lasFiler(e.target.files); e.target.value = ''; }} />
+        </div>
+        {filRader.length > 0 && (<>
+          <table className="tbl plan st-tabell">
+            <thead><tr><th>Fil</th><th>Quiz</th><th>Ämne</th><th>Tolkning</th><th>Deltog</th><th>Matchade</th><th>Status</th></tr></thead>
+            <tbody>{filRader.map((f, i) => (
+              <tr key={i}>
+                <td title={f.filnamn}>{f.filnamn.slice(0, 22)}…</td>
+                <td>{f.quiz}</td>
+                <td>{f.amnesNamn}</td>
+                <td>{f.kalla !== null ? <b>{f.kalla === 'socrative-laxforhor' ? '📱 Läxförhör' : '🎫 Exit'}</b> : '⚠'} <small className="muted">{f.beskrivning}</small></td>
+                <td>{f.deltog}</td>
+                <td>{f.matchade}{f.omatchadeNamn.length > 0 && <small className="muted" title={f.omatchadeNamn.join(', ')}> · ⚠ {f.omatchadeNamn.length} omatchade</small>}</td>
+                <td>{f.redanInne ? <span className="muted">redan importerad</span>
+                  : f.kalla === null || f.amneId === null ? <span className="st-krav ej">importeras ej</span>
+                  : <span className="st-krav ok">klar att importera</span>}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+          {filRader.some((f) => f.omatchadeNamn.length > 0) && (
+            <p className="small muted">⚠ Omatchade namn: {[...new Set(filRader.flatMap((f) => f.omatchadeNamn))].join(' · ')} — lägg till eleverna i klassen (👥) så matchar nästa import.</p>
+          )}
+          <div className="rad"><span className="spacer" />
+            <button className="btn" disabled={importerbara.length === 0} onClick={importeraFiler}>💾 Importera {importerbara.length} filer</button>
+          </div>
+        </>)}
+      </div>
+
+      {/* ── Import: klistra in ── */}
+      <div className="uppg-kort">
+        <b>📥 Klistra in resultat</b> <small className="muted">Rader från valfri export: <code>Namn ⇥ Poäng ⇥ Max</code> (Max kan utelämnas — fältet nedan används).</small>
         <div className="rad" style={{ flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
           <select aria-label="Källa" value={kalla} onChange={(e) => setKalla(e.target.value as ResultatKalla)}>
             {ALLA_KALLOR.map((k) => <option key={k} value={k}>{KALLNAMN[k]}</option>)}
