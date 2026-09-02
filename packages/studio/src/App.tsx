@@ -24,6 +24,7 @@ import {
   amnesOversikt, arFilRegistrerad, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   klassificeraSocrativeAktivitet, registreraFil, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tolkaSocrativeRoster, type RosterRad,
+  elevKurva, elevMatris, frageKort, klassKurva, tolkaVeckor, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
   resultatProcent, saknadeResultat, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type KalenderDagRuta, type KalenderHandelse,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
@@ -2084,6 +2085,227 @@ const KALLNAMN: Record<ResultatKalla, string> = {
 };
 const ALLA_KALLOR: ResultatKalla[] = ['socrative-laxforhor', 'socrative-exit', 'magma', 'digiexam'];
 
+// ── SuperTeach-dashboard (Del 57) ─────────────────────────────
+const KORT_FARG: Record<KortKalla, string> = {
+  'socrative-laxforhor': '#1A2A6B', 'socrative-exit': '#2f5aa8', magma: '#6A1B9A', digiexam: '#BF360C', helhet: '#1B5E20',
+};
+function procentFarg(p: number | null, krav: number | null): string {
+  if (p === null) return '#F1F3F6';
+  if (krav !== null) return p >= krav ? '#C8E6C9' : p >= krav - 20 ? '#FFE0B2' : '#FFCDD2';
+  return p >= 80 ? '#C8E6C9' : p >= 50 ? '#FFF9C4' : '#FFCDD2';
+}
+
+/** Liten sparkline (SVG) för ett frågekort. */
+function Sparkline({ serie, farg, krav }: { serie: number[]; farg: string; krav: number | null }) {
+  const w = 120; const h = 34;
+  if (serie.length === 0) return <svg width={w} height={h} className="st-spark" aria-hidden="true" />;
+  const x = (i: number) => (serie.length === 1 ? w / 2 : (i / (serie.length - 1)) * (w - 6) + 3);
+  const y = (p: number) => h - 3 - (p / 100) * (h - 6);
+  const d = serie.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p).toFixed(1)}`).join(' ');
+  return (
+    <svg width={w} height={h} className="st-spark" aria-hidden="true">
+      {krav !== null && <line x1={0} x2={w} y1={y(krav)} y2={y(krav)} stroke="#E65100" strokeDasharray="3 3" strokeWidth={1} />}
+      <path d={d} fill="none" stroke={farg} strokeWidth={2} />
+      {serie.map((p, i) => <circle key={i} cx={x(i)} cy={y(p)} r={2.2} fill={farg} />)}
+    </svg>
+  );
+}
+
+/** Linjediagram 0–100 % över provtillfällen med kravlinjer; punkter klickbara. */
+function LinjeDiagram({ tillfallen, serier, kravLinjer, onKlick, hojd = 220 }: {
+  tillfallen: Array<{ etikett: string; titel: string }>;
+  serier: Array<{ namn: string; varden: Array<number | null>; farg: string; streckad?: boolean }>;
+  kravLinjer: Array<{ procent: number; namn: string }>;
+  onKlick?: (index: number) => void;
+  hojd?: number;
+}) {
+  const w = 720; const h = hojd; const ml = 36; const mr = 12; const mt = 12; const mb = 46;
+  const n = tillfallen.length;
+  const x = (i: number) => (n <= 1 ? ml + (w - ml - mr) / 2 : ml + (i / (n - 1)) * (w - ml - mr));
+  const y = (p: number) => mt + (1 - p / 100) * (h - mt - mb);
+  if (n === 0) return <p className="muted small">Inga provtillfällen i urvalet ännu.</p>;
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="st-diagram" role="img" aria-label="Utveckling över provtillfällen">
+      {[0, 25, 50, 75, 100].map((p) => (
+        <g key={p}><line x1={ml} x2={w - mr} y1={y(p)} y2={y(p)} stroke="#E4E8EF" />
+          <text x={ml - 6} y={y(p) + 4} fontSize={10} textAnchor="end" fill="#777">{p} %</text></g>
+      ))}
+      {kravLinjer.map((k) => (
+        <g key={k.namn}><line x1={ml} x2={w - mr} y1={y(k.procent)} y2={y(k.procent)} stroke="#E65100" strokeDasharray="5 4" strokeWidth={1.2} />
+          <text x={w - mr} y={y(k.procent) - 3} fontSize={10} textAnchor="end" fill="#E65100">{k.namn}</text></g>
+      ))}
+      {serier.map((se) => {
+        const pts = se.varden.map((v, i) => (v === null ? null : { x: x(i), y: y(v) }));
+        let d = ''; let pen = false;
+        pts.forEach((pt) => { if (pt === null) { pen = false; return; } d += `${pen ? 'L' : 'M'}${pt.x.toFixed(1)},${pt.y.toFixed(1)} `; pen = true; });
+        return (
+          <g key={se.namn}>
+            <path d={d} fill="none" stroke={se.farg} strokeWidth={2.2} strokeDasharray={se.streckad ? '6 4' : undefined} />
+            {pts.map((pt, i) => pt !== null && (
+              <circle key={i} cx={pt.x} cy={pt.y} r={4.5} fill={se.farg} className={onKlick ? 'st-punkt' : undefined}
+                onClick={onKlick ? () => onKlick(i) : undefined}>
+                <title>{`${tillfallen[i].titel} · ${se.namn}: ${se.varden[i]} %`}</title>
+              </circle>
+            ))}
+          </g>
+        );
+      })}
+      {tillfallen.map((t, i) => (
+        <text key={i} x={x(i)} y={h - mb + 14} fontSize={10} textAnchor="middle" fill="#555"
+          transform={n > 8 ? `rotate(-35 ${x(i)} ${h - mb + 14})` : undefined}>{t.etikett}</text>
+      ))}
+      <g transform={`translate(${ml},${h - 8})`}>
+        {serier.map((se, i) => (
+          <g key={se.namn} transform={`translate(${i * 160},0)`}>
+            <line x1={0} x2={22} y1={-4} y2={-4} stroke={se.farg} strokeWidth={2.2} strokeDasharray={se.streckad ? '6 4' : undefined} />
+            <text x={28} y={0} fontSize={11} fill="#333">{se.namn}</text>
+          </g>
+        ))}
+      </g>
+    </svg>
+  );
+}
+
+function tillfalleEtikett(t: ProvTillfalle): string {
+  return `v.${t.vecka} ${t.prov.replace(/^Quiz\s*/i, '')}`;
+}
+
+/** Dashboarden: frågekort → klassens utveckling → elev × prov-heatmap → elevvy. */
+function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv }: {
+  s: Struktur; klassId: string; klassNamn: string; amneId: string; kallor: ResultatKalla[] | undefined;
+  onVisaProv: (prov: string) => void;
+}) {
+  const [periodText, setPeriodText] = useState('');
+  const [sok, setSok] = useState('');
+  const [elevId, setElevId] = useState<string | null>(null);
+  const [visaAndel, setVisaAndel] = useState(true);
+  const period = tolkaVeckor(periodText);
+  const f: DashboardFilter = { klassId, ...(amneId !== '' ? { amneId } : {}), ...(kallor !== undefined ? { kallor } : {}), ...(period ?? {}) };
+  const kort = frageKort(s, f);
+  const kurva = klassKurva(s, f);
+  const matris = elevMatris(s, f, sok);
+  const elev = elevId === null ? null : s.elever.find((e) => e.id === elevId) ?? null;
+  const ek = elev === null ? [] : elevKurva(s, elev.id, f);
+  const kravLinjer = (() => {
+    const set = new Set<number>();
+    for (const t of kurva) if (t.krav !== null) set.add(t.krav);
+    return [...set].sort().map((p) => ({ procent: p, namn: `krav ${p} %` }));
+  })();
+  const TREND = { upp: '↗', ned: '↘', jamn: '→' } as const;
+  const kortKlass = (k: FrageKort) => `st-kort${k.antalProv === 0 ? ' tom' : ''}`;
+  return (
+    <div className="st-dash">
+      <div className="rad" style={{ flexWrap: 'wrap', gap: 8 }}>
+        <label>Period:{' '}
+          <input aria-label="Period (veckor)" placeholder="v.35–43" value={periodText} size={8}
+            onChange={(e) => setPeriodText(e.target.value)} className={periodText !== '' && period === null ? 'fel' : undefined} /></label>
+        <label>🔎 <input aria-label="Sök elev" placeholder="Sök elev, ID, e-post…" value={sok} onChange={(e) => setSok(e.target.value)} /></label>
+        <span className="spacer" />
+        <small className="muted">{klassNamn}{amneId !== '' ? ` · ${s.amnen.find((a) => a.id === amneId)?.namn ?? ''}` : ' · alla ämnen'}{period !== null ? ` · v.${period.veckaFran}–${period.veckaTill}` : ''}</small>
+      </div>
+
+      {/* Frågekort */}
+      <div className="st-kortrad">
+        {kort.map((k) => (
+          <div key={k.kalla} className={kortKlass(k)} style={{ borderTopColor: KORT_FARG[k.kalla] }}>
+            <div className="st-kort-rubrik">{k.rubrik}</div>
+            <div className="st-kort-fraga">{k.fraga}</div>
+            {k.antalProv === 0 ? <div className="muted small">Inga resultat ännu</div> : (<>
+              <div className="st-kort-tal">{k.snittProcent ?? '—'} %{k.trend !== null && <span className={`st-trend ${k.trend}`} title="Trend">{TREND[k.trend]}</span>}</div>
+              <div className="small">
+                {k.andelKlarade !== null
+                  ? <><b>{k.andelKlarade} %</b> klarar krav ≥ {k.krav} %</>
+                  : <>{k.antalProv} prov · {k.antalElever} elever</>}
+              </div>
+              <Sparkline serie={k.serie} farg={KORT_FARG[k.kalla]} krav={k.krav} />
+              {k.andelKlarade !== null && <div className="muted small">{k.antalProv} prov · {k.antalElever} elever</div>}
+            </>)}
+          </div>
+        ))}
+      </div>
+
+      {/* Klassens utveckling */}
+      <div className="uppg-kort">
+        <div className="rad">
+          <b>📈 {klassNamn} över tid</b> <small className="muted">snitt per provtillfälle · klicka på en punkt för provets elevlista</small>
+          <span className="spacer" />
+          <label className="small"><input type="checkbox" checked={visaAndel} onChange={(e) => setVisaAndel(e.target.checked)} /> andel som klarar kravet</label>
+        </div>
+        <LinjeDiagram
+          tillfallen={kurva.map((t) => ({ etikett: tillfalleEtikett(t), titel: `${t.datum} ${KALLNAMN[t.kalla]} ${t.prov}` }))}
+          serier={[
+            { namn: 'Snitt', varden: kurva.map((t) => t.snittProcent), farg: '#2f5aa8' },
+            ...(visaAndel ? [{ namn: 'Andel klarade', varden: kurva.map((t) => t.andelKlarade), farg: '#1B5E20', streckad: true }] : []),
+          ]}
+          kravLinjer={kravLinjer}
+          onKlick={(i) => onVisaProv(kurva[i].prov)}
+        />
+      </div>
+
+      {/* Elev × prov */}
+      <div className="uppg-kort">
+        <b>🧑‍🎓 Elev × provtillfälle</b> <small className="muted">färg = mot kravet (grönt klarat, orange nära, rött under) · klicka på en elev för elevvyn</small>
+        {matris.tillfallen.length === 0 ? <p className="muted small">Inga provtillfällen i urvalet.</p> : (
+          <div className="st-scroll">
+            <table className="tbl st-matris">
+              <thead><tr><th>Elev</th><th>Snitt</th><th>Krav</th>
+                {matris.tillfallen.map((t) => <th key={t.nyckel} title={`${t.datum} ${KALLNAMN[t.kalla]}`}><span className="st-kol">{tillfalleEtikett(t)}</span></th>)}
+              </tr></thead>
+              <tbody>{matris.rader.map((r) => (
+                <tr key={r.elev.id} className={elevId === r.elev.id ? 'vald' : undefined}>
+                  <td><button className="linkbtn" onClick={() => setElevId(elevId === r.elev.id ? null : r.elev.id)}>{r.elev.namn}</button></td>
+                  <td style={{ background: procentFarg(r.snitt, null) }}>{r.snitt ?? '—'}{r.snitt !== null ? ' %' : ''}</td>
+                  <td className="small">{r.bedomda > 0 ? `${r.klarade}/${r.bedomda}` : '—'}</td>
+                  {r.celler.map((c, i) => (
+                    <td key={i} className="st-cell" style={{ background: procentFarg(c?.procent ?? null, matris.tillfallen[i].krav) }}
+                      title={c === null ? 'saknas' : `${c.poang}/${c.maxPoang}`}>{c === null ? '·' : c.procent}</td>
+                  ))}
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Elevvy */}
+      {elev !== null && (
+        <div className="uppg-kort st-elev">
+          <div className="rad">
+            <b>👤 {elev.namn}</b> <small className="muted">Grupp {elev.grupp}{elev.socrativeId !== undefined ? ` · Socrative ${elev.socrativeId}` : ''}</small>
+            <span className="spacer" />
+            <button className="icon-btn" title="Stäng elevvyn" onClick={() => setElevId(null)}>✕</button>
+          </div>
+          <div className="st-kortrad">
+            {frageKort({ ...s, elever: s.elever, resultat: (s.resultat ?? []).filter((r) => r.elevId === elev.id) }, f).filter((k) => k.antalProv > 0).map((k) => (
+              <div key={k.kalla} className="st-kort" style={{ borderTopColor: KORT_FARG[k.kalla] }}>
+                <div className="st-kort-rubrik">{k.rubrik}</div>
+                <div className="st-kort-fraga">{k.fraga}</div>
+                <div className="st-kort-tal">{k.snittProcent ?? '—'} %{k.trend !== null && <span className={`st-trend ${k.trend}`}>{TREND[k.trend]}</span>}</div>
+                <div className="small">{k.andelKlarade !== null ? <><b>{k.andelKlarade} %</b> av {k.antalProv} klarade ≥ {k.krav} %</> : <>{k.antalProv} prov</>}</div>
+                <Sparkline serie={k.serie} farg={KORT_FARG[k.kalla]} krav={k.krav} />
+              </div>
+            ))}
+          </div>
+          <LinjeDiagram
+            hojd={200}
+            tillfallen={ek.map((p) => ({ etikett: `v.${p.vecka} ${p.prov.replace(/^Quiz\s*/i, '')}`, titel: `${p.datum} ${KALLNAMN[p.kalla]} ${p.prov}` }))}
+            serier={[{ namn: elev.namn, varden: ek.map((p) => p.procent), farg: '#2f5aa8' }]}
+            kravLinjer={kravLinjer}
+            onKlick={(i) => onVisaProv(ek[i].prov)}
+          />
+          <table className="tbl st-tabell">
+            <thead><tr><th>Datum</th><th>Källa</th><th>Prov</th><th>Resultat</th><th>Krav</th></tr></thead>
+            <tbody>{[...ek].reverse().map((p, i) => (
+              <tr key={i}><td>{p.datum}</td><td>{KALLNAMN[p.kalla]}</td><td>{p.prov}</td><td>{p.procent} %</td>
+                <td>{p.klarat === null ? '—' : <span className={`st-krav ${p.klarat ? 'ok' : 'ej'}`}>{p.klarat ? `≥ ${p.krav} ✓` : `< ${p.krav}`}</span>}</td></tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * 📊 SuperTeach — resultat samlas ämnesvis och aggregeras: importera
  * (klistra in Namn / Poäng / Max från Socrative-, Magma- eller DigiExam-
@@ -2243,6 +2465,9 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
         <div className="st-varning">⚠ <b>{varningar.length} förväntade prov saknar resultat:</b>{' '}
           {varningar.map((v) => `${v.prov} (${v.datum})`).join(' · ')}</div>
       )}
+
+      <SuperTeachDashboard s={s} klassId={klass.id} klassNamn={klass.namn} amneId={amne?.id ?? ''} kallor={kallor}
+        onVisaProv={(p) => setVisaProv(p)} />
 
       {/* ── Elever: Socrative-roster ── */}
       <div className="uppg-kort">

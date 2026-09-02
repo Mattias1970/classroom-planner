@@ -1296,9 +1296,84 @@ describe('📊 SuperTeach', () => {
 
     // Enskilt prov
     valj(select(host, 'Visa prov'), 'Quiz 1.1a');
-    const provTabell = host.querySelectorAll('.st-tabell')[1]!;
+    const provTabell = [...host.querySelectorAll('.st-tabell')].find((t) => t.textContent?.includes('9/10'))!;
     expect(provTabell.textContent).toContain('9/10');
     expect(provTabell.textContent).toContain('klarat ✓');
+  });
+
+  it('dashboard: frågekort, klasskurva, elev × prov-matris och elevvy med period- och elevfilter', () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    for (const n of ['Anna Berg', 'Omar Ali']) {
+      skriv(input(host, 'Elevens namn'), n);
+      act(() => { knapp(host, '➕ Lägg till elev').click(); });
+    }
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '📊 SuperTeach').click(); });
+    valj(select(host, 'SuperTeach ämne'), lasStruktur().amnen[0].id);
+
+    // Två exit tickets (v.35 och v.36) + ett läxförhör (v.36)
+    const spara = (prov: string, datum: string, rader: string) => {
+      skriv(input(host, 'Provnamn'), prov);
+      skriv(input(host, 'Provdatum'), datum);
+      skrivArea(host.querySelector('textarea[aria-label="Resultatrader"]') as HTMLTextAreaElement, rader);
+      act(() => { knapp(host, '💾 Spara resultat').click(); });
+    };
+    spara('Quiz 1.1a', '2026-08-26', 'Anna Berg\t9\nOmar Ali\t6');
+    spara('Quiz 1.1b', '2026-09-02', 'Anna Berg\t10\nOmar Ali\t8');
+    valj(select(host, 'Källa'), 'socrative-laxforhor');
+    spara('Quiz 1.1a', '2026-09-02', 'Anna Berg\t9\nOmar Ali\t10');
+
+    // Frågekorten
+    const kort = [...host.querySelectorAll('.st-kort')];
+    expect(kort.map((k) => k.querySelector('.st-kort-fraga')?.textContent)).toEqual([
+      'Gör eleven läxor?', 'Lär sig eleven på lektionen?', 'Kan eleven begreppen?', 'Klarar eleven proven?', 'Hur går det sammantaget?',
+    ]);
+    expect(kort[1].textContent).toContain('83 %');            // exit-snitt (9+6+10+8)/4
+    expect(kort[1].textContent).toContain('75 % klarar krav ≥ 70 %');
+    expect(kort[0].textContent).toContain('100 % klarar krav ≥ 90 %');
+    expect(kort[2].textContent).toContain('Inga resultat ännu');
+
+    // Klasskurvan: tre tillfällen, kravlinjer 70 och 90, punkter klickbara
+    const diagram = host.querySelector('.st-diagram')!;
+    expect(diagram.textContent).toContain('krav 70 %');
+    expect(diagram.textContent).toContain('krav 90 %');
+    expect(diagram.querySelectorAll('.st-punkt').length).toBeGreaterThanOrEqual(3);
+
+    // Matrisen: 2 elever × 3 tillfällen, färgade celler
+    const matris = host.querySelector('.st-matris')!;
+    expect(matris.querySelectorAll('tbody tr')).toHaveLength(2);
+    expect(matris.querySelectorAll('tbody tr')[1].querySelectorAll('.st-cell')).toHaveLength(3);
+    expect(matris.textContent).toContain('v.35 1.1a');
+
+    // Periodfilter v.36 → ett exit + ett läxförhör
+    skriv(input(host, 'Period (veckor)'), 'v.36');
+    expect(host.querySelector('.st-matris')!.querySelectorAll('thead th')).toHaveLength(3 + 2);
+    skriv(input(host, 'Period (veckor)'), '');
+
+    // Elevsök + elevvy
+    skriv(input(host, 'Sök elev'), 'omar');
+    expect(host.querySelector('.st-matris')!.querySelectorAll('tbody tr')).toHaveLength(1);
+    act(() => { (host.querySelector('.st-matris .linkbtn') as HTMLButtonElement).click(); });
+    const elevvy = host.querySelector('.st-elev')!;
+    expect(elevvy.textContent).toContain('👤 Omar Ali');
+    expect(elevvy.textContent).toContain('Gör eleven läxor?');
+    expect(elevvy.querySelectorAll('.st-krav.ej')).toHaveLength(1); // 60 % < 70
+    expect(elevvy.querySelectorAll('.st-krav.ok')).toHaveLength(2);
+
+    // Klick på en kurvpunkt öppnar provet i 'Visa prov'
+    act(() => { (diagram.querySelector('.st-punkt') as SVGCircleElement).dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    expect(select(host, 'Visa prov').value).toBe('Quiz 1.1a');
   });
 });
 

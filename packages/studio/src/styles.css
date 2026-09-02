@@ -446,3 +446,25 @@ body[data-tema="klassisk"] .tema-valj { border-color: var(--ram); background: #f
 /* Del 55: filimport + bulk-elever */
 .bulk-elever { background: #FBF7F1; border: 1px dashed var(--ram); border-radius: 8px; padding: 6px 10px; margin: 8px 0; }
 .bulk-elever summary { cursor: pointer; font-weight: 700; font-size: 12px; }
+
+/* Del 57: SuperTeach-dashboard */
+.st-dash { margin-top: 8px; }
+.st-kortrad { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 10px 0; }
+.st-kort { background: #fff; border: 1px solid var(--ram); border-top: 4px solid var(--bla); border-radius: 12px; padding: 10px 12px; min-height: 120px; }
+.st-kort.tom { opacity: .6; }
+.st-kort-rubrik { font-weight: 800; }
+.st-kort-fraga { color: var(--muted-varm); font-size: 12px; margin-bottom: 4px; }
+.st-kort-tal { font-size: 28px; font-weight: 800; line-height: 1.1; }
+.st-trend { font-size: 18px; margin-left: 6px; }
+.st-trend.upp { color: #1B5E20; } .st-trend.ned { color: #B71C1C; } .st-trend.jamn { color: #777; }
+.st-spark { display: block; margin-top: 4px; }
+.st-diagram { width: 100%; height: auto; display: block; margin-top: 6px; }
+.st-punkt { cursor: pointer; }
+.st-scroll { overflow-x: auto; }
+.st-matris th { font-size: 11px; vertical-align: bottom; }
+.st-matris .st-kol { display: inline-block; writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; max-height: 90px; }
+.st-matris .st-cell { text-align: center; min-width: 34px; font-size: 12px; }
+.st-matris tr.vald td { outline: 2px solid var(--bla); }
+.st-elev { border-left: 4px solid var(--bla); }
+.linkbtn { background: none; border: none; padding: 0; color: var(--bla); cursor: pointer; font: inherit; text-decoration: underline; }
+input.fel { border-color: #B71C1C; }
