@@ -529,3 +529,27 @@ input.fel { border-color: #B71C1C; }
 .st-sittsnitt { font-size: 15px; font-weight: 800; }
 .st-sittdiff { font-size: 10px; color: #666; } .st-sittdiff.upp { color: #1B5E20; } .st-sittdiff.ned { color: #B71C1C; }
 .st-flyttar td { font-size: 13px; }
+
+/* Del 65: plats för dashboarden — full bredd, skarpa diagram, luft mellan widgets */
+.card.superteach { max-width: none; }
+.superteach > .rad:first-child { flex-wrap: wrap; gap: 8px; }
+.st-dash { padding: 14px 16px; }
+.st-diagram-ram { width: 100%; overflow: hidden; }
+.st-diagram { width: 100%; height: auto; display: block; margin-top: 8px; }
+.st-kortrad { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.st-kort-tal { font-size: 30px; }
+.st-grid2 { gap: 14px; }
+.st-widget { padding: 14px 16px; }
+.st-widget > b { font-size: 15px; }
+.st-narvaro-grid { gap: 16px; }
+.st-klusterrad { gap: 10px; }
+.st-klusterkort { padding: 8px 10px; }
+.st-klusterkort .st-spark { width: 100%; }
+/* Matrisen: första kolumnerna ligger kvar vid horisontell scroll */
+.st-matris th:first-child, .st-matris td:first-child { position: sticky; left: 0; background: #fff; z-index: 1; min-width: 150px; }
+.st-matris .st-cell { min-width: 40px; padding: 4px 2px; }
+.st-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+/* Fokusvyn: hela bredden, grafen får majoriteten av höjden */
+.st-fokus .st-diagram-ram { margin: 6px 0 10px; }
+@media (min-width: 1500px) { .st-grid2 { grid-template-columns: 2fr 1fr; } }
+@media (max-width: 1200px) { .st-kortrad { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); } }

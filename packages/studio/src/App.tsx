@@ -2151,8 +2151,23 @@ function Sparkline({ serie, farg, krav }: { serie: number[]; farg: string; krav:
   );
 }
 
-/** Linjediagram 0–100 % över provtillfällen med kravlinjer; punkter klickbara. */
-function LinjeDiagram({ tillfallen, serier, kravLinjer, onKlick, hojd = 220, visaVarden = false }: {
+/** Mäter containerns bredd så att SVG-diagram ritas i riktiga pixlar (skarp text, ingen uppskalning). */
+function useBredd(fallback: number): [React.RefObject<HTMLDivElement>, number] {
+  const ref = useRef<HTMLDivElement>(null);
+  const [bredd, setBredd] = useState(fallback);
+  useEffect(() => {
+    const el = ref.current;
+    if (el === null || typeof ResizeObserver === 'undefined') return;
+    const mat = () => { const b = Math.floor(el.clientWidth); if (b > 0) setBredd(b); };
+    mat();
+    const ro = new ResizeObserver(mat); ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, bredd];
+}
+
+/** Linjediagram 0–100 % över provtillfällen med kravlinjer; punkter klickbara. Bredden följer containern. */
+function LinjeDiagram(props: {
   tillfallen: Array<{ etikett: string; titel: string }>;
   serier: Array<{ namn: string; varden: Array<number | null>; farg: string; streckad?: boolean }>;
   kravLinjer: Array<{ procent: number; namn: string }>;
@@ -2160,20 +2175,40 @@ function LinjeDiagram({ tillfallen, serier, kravLinjer, onKlick, hojd = 220, vis
   hojd?: number;
   visaVarden?: boolean;
 }) {
-  const w = 720; const h = hojd; const ml = 36; const mr = 12; const mt = 12; const mb = 46;
+  const [ref, bredd] = useBredd(720);
+  return <div ref={ref} className="st-diagram-ram"><LinjeDiagramSvg {...props} w={bredd} /></div>;
+}
+
+function LinjeDiagramSvg({ tillfallen, serier, kravLinjer, onKlick, hojd = 220, visaVarden = false, w }: {
+  tillfallen: Array<{ etikett: string; titel: string }>;
+  serier: Array<{ namn: string; varden: Array<number | null>; farg: string; streckad?: boolean }>;
+  kravLinjer: Array<{ procent: number; namn: string }>;
+  onKlick?: (index: number) => void;
+  hojd?: number;
+  visaVarden?: boolean;
+  w: number;
+}) {
   const n = tillfallen.length;
+  // Etiketter roteras när de inte får plats; då behövs mer plats under axeln
+  const langsta = Math.max(0, ...tillfallen.map((t) => t.etikett.length));
+  const platsPerEtikett = n <= 1 ? Infinity : (w - 60) / (n - 1);
+  const rotera = n > 1 && platsPerEtikett < langsta * 6.5;
+  const legendRader = Math.ceil((serier.length * 160) / Math.max(200, w - 60));
+  const mb = (rotera ? 30 + Math.min(70, langsta * 4.6) : 34) + legendRader * 16;
+  const h = hojd + (rotera ? Math.min(70, langsta * 4.6) : 0) + (legendRader - 1) * 16;
+  const ml = 40; const mr = 16; const mt = 14;
   const x = (i: number) => (n <= 1 ? ml + (w - ml - mr) / 2 : ml + (i / (n - 1)) * (w - ml - mr));
   const y = (p: number) => mt + (1 - p / 100) * (h - mt - mb);
   if (n === 0) return <p className="muted small">Inga provtillfällen i urvalet ännu.</p>;
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="st-diagram" role="img" aria-label="Utveckling över provtillfällen">
+    <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h} className="st-diagram" role="img" aria-label="Utveckling över provtillfällen">
       {[0, 25, 50, 75, 100].map((p) => (
         <g key={p}><line x1={ml} x2={w - mr} y1={y(p)} y2={y(p)} stroke="#E4E8EF" />
-          <text x={ml - 6} y={y(p) + 4} fontSize={10} textAnchor="end" fill="#777">{p} %</text></g>
+          <text x={ml - 6} y={y(p) + 4} fontSize={11} textAnchor="end" fill="#777">{p} %</text></g>
       ))}
       {kravLinjer.map((k) => (
         <g key={k.namn}><line x1={ml} x2={w - mr} y1={y(k.procent)} y2={y(k.procent)} stroke="#E65100" strokeDasharray="5 4" strokeWidth={1.2} />
-          <text x={w - mr} y={y(k.procent) - 3} fontSize={10} textAnchor="end" fill="#E65100">{k.namn}</text></g>
+          <text x={w - mr} y={y(k.procent) - 3} fontSize={11} textAnchor="end" fill="#E65100">{k.namn}</text></g>
       ))}
       {serier.map((se) => {
         const pts = se.varden.map((v, i) => (v === null ? null : { x: x(i), y: y(v) }));
@@ -2189,18 +2224,18 @@ function LinjeDiagram({ tillfallen, serier, kravLinjer, onKlick, hojd = 220, vis
               </circle>
             ))}
             {visaVarden && !se.streckad && pts.map((pt, i) => pt !== null && (
-              <text key={`t${i}`} x={pt.x} y={pt.y - 8} fontSize={10} fontWeight={700} textAnchor="middle" fill={se.farg}>{se.varden[i]} %</text>
+              <text key={`t${i}`} x={pt.x} y={pt.y - 9} fontSize={11} fontWeight={700} textAnchor="middle" fill={se.farg} stroke="#fff" strokeWidth={3} paintOrder="stroke">{se.varden[i]} %</text>
             ))}
           </g>
         );
       })}
       {tillfallen.map((t, i) => (
-        <text key={i} x={x(i)} y={h - mb + 14} fontSize={10} textAnchor="middle" fill="#555"
-          transform={n > 8 ? `rotate(-35 ${x(i)} ${h - mb + 14})` : undefined}>{t.etikett}</text>
+        <text key={i} x={x(i)} y={h - mb + 16} fontSize={11} textAnchor={rotera ? 'end' : 'middle'} fill="#555"
+          transform={rotera ? `rotate(-40 ${x(i)} ${h - mb + 16})` : undefined}><title>{t.titel}</title>{t.etikett}</text>
       ))}
-      <g transform={`translate(${ml},${h - 8})`}>
+      <g transform={`translate(${ml},${h - 8 - (legendRader - 1) * 16})`}>
         {serier.map((se, i) => (
-          <g key={se.namn} transform={`translate(${i * 160},0)`}>
+          <g key={se.namn} transform={`translate(${(i % Math.max(1, Math.floor((w - 60) / 160))) * 160},${Math.floor(i / Math.max(1, Math.floor((w - 60) / 160))) * 16})`}>
             <line x1={0} x2={22} y1={-4} y2={-4} stroke={se.farg} strokeWidth={2.2} strokeDasharray={se.streckad ? '6 4' : undefined} />
             <text x={28} y={0} fontSize={11} fill="#333">{se.namn}</text>
           </g>
@@ -2490,7 +2525,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
         <div className="uppg-kort st-widget">
           <b>Läxförhör vs Exit tickets</b> <small className="muted">snitt per vecka · streckad = klassmedel (alla källor)</small>
           <LinjeDiagram
-            hojd={230}
+            hojd={280}
             tillfallen={veckor.veckor.map((v) => ({ etikett: `v.${v}`, titel: `Vecka ${v}` }))}
             serier={[
               { namn: 'Läxförhör', varden: veckor.serier['socrative-laxforhor'], farg: KORT_FARG['socrative-laxforhor'] },
@@ -2535,7 +2570,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
             <div className="st-narvaro-grid">
               <div>
                 <LinjeDiagram
-                  hojd={200}
+                  hojd={240}
                   tillfallen={narvaro.perVecka.map((v) => ({ etikett: `v.${v.vecka}`, titel: `Vecka ${v.vecka}` }))}
                   serier={[{ namn: 'Närvaro', varden: narvaro.perVecka.map((v) => v.procent), farg: '#00838F' }]}
                   kravLinjer={[{ procent: 80, namn: 'mål 80 %' }]}
@@ -2743,7 +2778,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
               )}
 
               <LinjeDiagram
-                hojd={fokusElever.length > 1 ? 320 : 260}
+                hojd={fokusElever.length > 1 ? 420 : 360}
                 tillfallen={till.map((t) => ({ etikett: tillfalleEtikett(t), titel: `${t.datum} ${KALLNAMN[t.kalla]} ${t.prov}` }))}
                 serier={serier}
                 kravLinjer={fokusKravLinjer}
