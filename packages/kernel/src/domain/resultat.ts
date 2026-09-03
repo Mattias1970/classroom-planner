@@ -264,6 +264,10 @@ export interface FilPost {
   filnamn: string;
   /** ISO-tidpunkt när filen importerades i appen. */
   importerad: string;
+  /** Provdatum (YYYY-MM-DD) som filen klassificerades till — matchar planeringens förväntade prov på datum. */
+  datum?: string;
+  /** Antal resultat som matchade elever vid importen; 0 betyder att filen bör importeras om när eleverna finns. */
+  traffar?: number;
   kalla: ResultatKalla;
   prov: string;
 }
@@ -278,6 +282,18 @@ export function registreraFil(s: Struktur, post: Omit<FilPost, 'id'>): Struktur 
 /** Har filen redan importerats för ämnet? Skanning av mappen hoppar då över den. */
 export function arFilRegistrerad(s: Struktur, amneId: string, filnamn: string): boolean {
   return (s.filregister ?? []).some((f) => f.amneId === amneId && f.filnamn === filnamn);
+}
+
+/**
+ * Sant när filen är registrerad OCH gav minst ett resultat. En fil som importerades
+ * innan klassens elever fanns (0 träffar) räknas inte som klar utan erbjuds igen.
+ */
+export function arFilImporterad(s: Struktur, amneId: string, filnamn: string): boolean {
+  const post = (s.filregister ?? []).find((f) => f.amneId === amneId && f.filnamn === filnamn);
+  if (post === undefined) return false;
+  if (post.traffar !== undefined) return post.traffar > 0;
+  // Äldre poster utan traffar: klar om något resultat finns för provet
+  return (s.resultat ?? []).some((r) => r.amneId === amneId && r.kalla === post.kalla && r.prov === post.prov);
 }
 
 // ── Förväntningar ur planeringen: vilka prov BORDE ha resultat nu? ──
@@ -310,10 +326,21 @@ export function forvantadeProv(plan: PlaneradLektion[], idag: string): Forvantat
  * registrerad fil för ämnet — 'läxförhöret 2026-08-24 (Quiz 1.1a) saknar fil'.
  */
 export function saknadeResultat(s: Struktur, amneId: string, plan: PlaneradLektion[], idag: string): ForvantatProv[] {
-  const harResultat = new Set((s.resultat ?? []).filter((r) => r.amneId === amneId).map((r) => `${r.kalla}|${r.prov}`));
-  const harFil = new Set((s.filregister ?? []).filter((f) => f.amneId === amneId).map((f) => `${f.kalla}|${f.prov}`));
+  const rs = (s.resultat ?? []).filter((r) => r.amneId === amneId);
+  const harResultat = new Set(rs.map((r) => `${r.kalla}|${r.prov}`));
+  // Datum + källa täcker också: Socrative-quizet heter sällan exakt som planen ('Biologi41' vs 'Biologi 4.1 Begrepp')
+  const harResultatDag = new Set(rs.map((r) => `${r.kalla}|${r.datum}`));
+  const filer = (s.filregister ?? []).filter((f) => f.amneId === amneId && (f.traffar === undefined || f.traffar > 0));
+  const harFil = new Set(filer.map((f) => `${f.kalla}|${f.prov}`));
+  const harFilDag = new Set(filer.filter((f) => f.datum !== undefined).map((f) => `${f.kalla}|${f.datum}`));
+  const sedda = new Set<string>();
   return forvantadeProv(plan, idag).filter((p) => {
-    const nyckel = `${p.kalla}|${p.prov}`;
-    return !harResultat.has(nyckel) && !harFil.has(nyckel);
+    const nyckel = `${p.kalla}|${p.prov}`; const dag = `${p.kalla}|${p.datum}`;
+    if (harResultat.has(nyckel) || harFil.has(nyckel) || harResultatDag.has(dag) || harFilDag.has(dag)) return false;
+    // Samma prov samma dag (t.ex. grupp A och B i planen) visas en gång
+    const dubbel = `${dag}|${p.prov}`;
+    if (sedda.has(dubbel)) return false;
+    sedda.add(dubbel);
+    return true;
   });
 }

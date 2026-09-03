@@ -199,3 +199,30 @@ describe('filregister och varningar för saknade resultat', () => {
     expect(saknadeResultat(s, 'ma', plan, '2026-08-27').map((p) => p.prov)).toEqual(['Quiz 1.1b']);
   });
 });
+
+describe('Del 60: omimport vid 0 träffar och datummatchade varningar', async () => {
+  const { arFilImporterad } = await import('../src/domain/resultat.js');
+  const medAmne = () => laggTillAmne(bygg(), { id: 'ma', klassId: 'k', namn: 'Matematik', schema: [{ dag: 3, start: '09:00', slut: '10:00' }] });
+  it('arFilImporterad: fil med 0 träffar räknas inte som klar', () => {
+    let s = registreraFil(medAmne(), { amneId: 'ma', filnamn: 'a.xlsx', importerad: '2026-09-01T10:00:00Z', kalla: 'socrative-exit', prov: 'Quiz 1.1a', traffar: 0 });
+    expect(arFilImporterad(s, 'ma', 'a.xlsx')).toBe(false);
+    s = registreraFil(s, { amneId: 'ma', filnamn: 'a.xlsx', importerad: '2026-09-02T10:00:00Z', kalla: 'socrative-exit', prov: 'Quiz 1.1a', traffar: 12 });
+    expect(arFilImporterad(s, 'ma', 'a.xlsx')).toBe(true);
+    expect(arFilImporterad(s, 'ma', 'finns-ej.xlsx')).toBe(false);
+  });
+
+  it('saknadeResultat: fil med annat provnamn men samma dag och källa täcker förväntningen, dubbletter visas en gång', () => {
+    const plan = [
+      { datum: '2026-08-20', lektion: { socStart: '—', exit: 'Biologi41', avsnitt: '4.1' } },
+      { datum: '2026-08-20', lektion: { socStart: '—', exit: 'Biologi41', avsnitt: '4.1' } }, // grupp B
+      { datum: '2026-08-21', lektion: { socStart: 'Biologi41', exit: 'Biologi42', avsnitt: '4.2' } },
+    ] as unknown as Parameters<typeof saknadeResultat>[2];
+    let s = medAmne();
+    expect(saknadeResultat(s, 'ma', plan, '2026-09-01').map((p) => p.prov)).toEqual(['Biologi41', 'Biologi41', 'Biologi42']);
+    s = registreraFil(s, { amneId: 'ma', filnamn: 'exit.xlsx', importerad: '2026-09-01T10:00:00Z', kalla: 'socrative-exit', prov: 'Biologi 4.1 Begrepp', datum: '2026-08-20', traffar: 20 });
+    expect(saknadeResultat(s, 'ma', plan, '2026-09-01').map((p) => p.prov)).toEqual(['Biologi41', 'Biologi42']);
+    // 0 träffar täcker inte
+    s = registreraFil(s, { amneId: 'ma', filnamn: 'lax.xlsx', importerad: '2026-09-01T10:00:00Z', kalla: 'socrative-laxforhor', prov: 'x', datum: '2026-08-21', traffar: 0 });
+    expect(saknadeResultat(s, 'ma', plan, '2026-09-01')).toHaveLength(2);
+  });
+});

@@ -21,8 +21,8 @@ import {
   socrativeRum, sparaBok,
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
-  amnesOversikt, arFilRegistrerad, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
-  klassificeraSocrativeAktivitet, registreraFil, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
+  amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
+  arFilImporterad, klassificeraSocrativeAktivitet, registreraFil, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, KLUSTER_NAMN, TID_PASS, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
@@ -2576,6 +2576,7 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
     redanInne: boolean;
   }
   const [filRader, setFilRader] = useState<FilRad[]>([]);
+  const [importeraOm, setImporteraOm] = useState(false);
   const lasFiler = async (filer: FileList | null) => {
     if (filer === null) return;
     const ut: FilRad[] = [];
@@ -2603,7 +2604,7 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
           omatchadeNamn: deltagare.filter((r) => matchaElev(s, klass.id, r.namn, r.sidId) === null).map((r) => r.namn),
           deltog: deltagare.length,
           rader: deltagare.map((r) => ({ namn: r.namn, poang: r.poang, maxPoang: r.maxPoang, sidId: r.sidId })),
-          redanInne: amnet !== undefined && arFilRegistrerad(s, amnet.id, fil.name),
+          redanInne: amnet !== undefined && arFilImporterad(s, amnet.id, fil.name),
         });
       } catch (fel) {
         ut.push({ filnamn: fil.name, quiz: '—', rum: '—', amneId: null, amnesNamn: '—', kalla: null, tid: null,
@@ -2613,7 +2614,7 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
     }
     setFilRader(ut);
   };
-  const importerbara = filRader.filter((f) => f.amneId !== null && f.kalla !== null && !f.redanInne && f.rader.length > 0);
+  const importerbara = filRader.filter((f) => f.amneId !== null && f.kalla !== null && (importeraOm || !f.redanInne) && f.rader.length > 0);
   const importeraFiler = () => {
     kor(() => {
       let st = lasStruktur();
@@ -2621,7 +2622,7 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
         st = importeraResultat(st, {
           klassId: klass.id, amneId: f.amneId!, kalla: f.kalla!, prov: f.quiz, datum: f.datum, ...(f.tid !== null ? { tid: f.tid } : {}), rader: f.rader,
         }).s;
-        st = registreraFil(st, { amneId: f.amneId!, filnamn: f.filnamn, importerad: new Date().toISOString(), kalla: f.kalla!, prov: f.quiz });
+        st = registreraFil(st, { amneId: f.amneId!, filnamn: f.filnamn, importerad: new Date().toISOString(), kalla: f.kalla!, prov: f.quiz, datum: f.datum, traffar: f.matchade });
       }
       return st;
     }, `${importerbara.length} filer importerade (${importerbara.reduce((n, f) => n + f.matchade, 0)} resultat).`);
@@ -2674,7 +2675,11 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
         <div className="rad" style={{ marginTop: 6 }}>
           <input type="file" multiple accept=".xlsx" aria-label="Socrative-filer"
             onChange={(e) => { void lasFiler(e.target.files); e.target.value = ''; }} />
+          <label className="small"><input type="checkbox" checked={importeraOm} onChange={(e) => setImporteraOm(e.target.checked)} /> importera om redan importerade filer</label>
         </div>
+        {s.elever.filter((e) => e.klassId === klass.id).length === 0 && (
+          <p className="status warn">⚠ Klassen har inga elever registrerade — inga resultat kan matchas. Importera rostern (👥 ovan) först; filer som gav 0 resultat erbjuds igen automatiskt.</p>
+        )}
         {filRader.length > 0 && (<>
           <table className="tbl plan st-tabell">
             <thead><tr><th>Fil</th><th>Quiz</th><th>Ämne</th><th>Tolkning</th><th>Deltog</th><th>Matchade</th><th>Status</th></tr></thead>
