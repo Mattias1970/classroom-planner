@@ -1333,16 +1333,23 @@ describe('📊 SuperTeach', () => {
     spara('Quiz 1.1b', '2026-09-02', 'Anna Berg\t10\nOmar Ali\t8');
     valj(select(host, 'Källa'), 'socrative-laxforhor');
     spara('Quiz 1.1a', '2026-09-02', 'Anna Berg\t9\nOmar Ali\t10');
+    valj(select(host, 'Källa'), 'socrative-exit');
+    spara('Quiz 1.2a', '2026-09-09', 'Anna Berg\t10'); // Omar saknas → frånvarande v.37
 
     // Frågekorten
     const kort = [...host.querySelectorAll('.st-kort')];
     expect(kort.map((k) => k.querySelector('.st-kort-fraga')?.textContent)).toEqual([
       'Gör eleven läxor?', 'Lär sig eleven på lektionen?', 'Kan eleven begreppen?', 'Klarar eleven proven?', 'Hur går det sammantaget?',
-      'Elever som trendar tillsammans',
+      'Är eleven på lektionen?', 'Elever som trendar tillsammans',
     ]);
+    // Närvaro härledd ur Socrative: tre lektioner, Omar borta på en → klass 83 %
+    expect(kort[5].textContent).toContain('83 %');
+    expect(kort[5].textContent).toContain('1 elever under 80 %');
+    expect(host.querySelector('.st-narvarolista')!.textContent).toContain('Omar Ali');
+    expect(host.querySelector('.st-narvarolista')!.textContent).toContain('67 %');
     expect(kort[1].textContent).toContain('% vs tidigare i perioden'); // periodDelta i kortet
-    expect(kort[1].textContent).toContain('83 %');            // exit-snitt (9+6+10+8)/4
-    expect(kort[1].textContent).toContain('75 % klarar krav ≥ 70 %');
+    expect(kort[1].textContent).toContain('86 %');            // exit-snitt (9+6+10+8+10)/5
+    expect(kort[1].textContent).toContain('80 % klarar krav ≥ 70 %');
     expect(kort[0].textContent).toContain('100 % klarar krav ≥ 90 %');
     expect(kort[2].textContent).toContain('Inga resultat ännu');
 
@@ -1356,20 +1363,21 @@ describe('📊 SuperTeach', () => {
     expect(host.querySelector('.st-samband, .st-widget p.muted')).not.toBeNull(); // 2 elever → 'kräver minst tre'
 
     // Klasskurvan: tre tillfällen, kravlinjer 70 och 90, punkter klickbara
-    const diagram = host.querySelectorAll('.st-diagram')[1]!;
+    const diagram = host.querySelectorAll('.st-diagram')[2]!; // [0] vecko, [1] närvaro
     expect(diagram.textContent).toContain('krav 70 %');
     expect(diagram.textContent).toContain('krav 90 %');
     expect(diagram.querySelectorAll('.st-punkt').length).toBeGreaterThanOrEqual(3);
 
-    // Matrisen: 2 elever × 3 tillfällen, färgade celler
+    // Matrisen: 2 elever × 4 tillfällen, färgade celler; Omars saknade exit v.37 visas som frånvaro ✕
     const matris = host.querySelector('.st-matris')!;
     expect(matris.querySelectorAll('tbody tr')).toHaveLength(2);
-    expect(matris.querySelectorAll('tbody tr')[1].querySelectorAll('.st-cell')).toHaveLength(3);
+    expect(matris.querySelectorAll('tbody tr')[1].querySelectorAll('.st-cell')).toHaveLength(4);
+    expect(matris.querySelectorAll('.st-cell.franvaro')).toHaveLength(1);
     expect(matris.textContent).toContain('v.35 1.1a');
 
     // Periodfilter v.36 → ett exit + ett läxförhör
     skriv(input(host, 'Period (veckor)'), 'v.36');
-    expect(host.querySelector('.st-matris')!.querySelectorAll('thead th')).toHaveLength(3 + 2);
+    expect(host.querySelector('.st-matris')!.querySelectorAll('thead th')).toHaveLength(4 + 2);
     skriv(input(host, 'Period (veckor)'), '');
 
     // Elevsök + elevvy
@@ -1379,7 +1387,8 @@ describe('📊 SuperTeach', () => {
     const elevvy = host.querySelector('.st-elev')!;
     expect(elevvy.textContent).toContain('👤 Omar Ali');
     expect(elevvy.textContent).toContain('Gör eleven läxor?');
-    expect(elevvy.querySelectorAll('.st-krav.ej')).toHaveLength(1); // 60 % < 70
+    expect(elevvy.textContent).toContain('närvaro 67 % (2/3)');
+    expect(elevvy.querySelectorAll('.st-krav.ej')).toHaveLength(2); // 60 % < 70 + närvaro < 80
     expect(elevvy.querySelectorAll('.st-krav.ok')).toHaveLength(2);
 
     // Klick på en kurvpunkt öppnar provet i 'Visa prov'

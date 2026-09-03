@@ -498,3 +498,13 @@ input.fel { border-color: #B71C1C; }
 .st-bar i { display: inline-block; height: 6px; border-radius: 3px; max-width: 90px; }
 .st-r { font-weight: 800; white-space: nowrap; } .st-r.pos { color: #1B5E20; } .st-r.neg { color: #B71C1C; }
 .st-samband td, .st-grupper td { font-size: 13px; }
+
+/* Del 59: närvaro ur Socrative */
+.st-narvaro-grid { display: grid; grid-template-columns: 3fr 2fr; gap: 12px; margin-top: 6px; }
+@media (max-width: 1000px) { .st-narvaro-grid { grid-template-columns: 1fr; } }
+.st-tid th { font-size: 11px; text-align: center; }
+.st-tid .st-cell { text-align: center; font-size: 12px; min-width: 48px; }
+.st-insikt.neutral { background: #F4F6FA; border-color: var(--ram); }
+.st-matris .st-cell.franvaro { color: #B71C1C; font-weight: 800; background: #F8E1E1 !important; }
+.st-narv-lag { color: #B71C1C; font-weight: 700; }
+.st-narvarolista td { font-size: 13px; }

@@ -24,8 +24,8 @@ import {
   amnesOversikt, arFilRegistrerad, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   klassificeraSocrativeAktivitet, registreraFil, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tolkaSocrativeRoster, type RosterRad,
-  elevKurva, elevMatris, frageKort, gruppSnitt, klassKurva, periodDelta, sambandsanalys, tolkaVeckor, trendKluster, veckoSerier,
-  KLUSTER_NAMN, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
+  elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
+  tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, KLUSTER_NAMN, TID_PASS, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
   resultatProcent, saknadeResultat, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type KalenderDagRuta, type KalenderHandelse,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
@@ -2199,6 +2199,11 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
   const kluster = trendKluster(s, f);
   const grupper = gruppSnitt(s, f);
   const samband = sambandsanalys(s, f);
+  const narvaro = narvaroKort(s, f);
+  const narvaroPerElev = new Map(elevNarvaro(s, f).map((e) => [e.elev.id, e]));
+  const tid = tidPaDagen(s, f);
+  const tidHarData = tid.some((c) => c.antal > 0);
+  const narvaroSamband = sambandNarvaro(s, f);
   const insikt = (() => {
     const sb = samband.find((x) => x.a === 'socrative-laxforhor' && x.b === 'socrative-exit');
     if (sb === undefined) return null;
@@ -2252,6 +2257,22 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
             </div>
           );
         })}
+        <div className={`st-kort st-kort-narvaro${narvaro.antalLektioner === 0 ? ' tom' : ''}`} style={{ '--kort': '#00838F' } as React.CSSProperties}>
+          <div className="st-kort-topp">
+            <span className="st-ikon" aria-hidden="true">🙋</span>
+            <div><div className="st-kort-rubrik">{narvaro.rubrik}</div><div className="st-kort-fraga">{narvaro.fraga}</div></div>
+          </div>
+          {narvaro.antalLektioner === 0 ? <div className="muted small">Inga lektioner med Socrative ännu</div> : (<>
+            <div className="st-kort-mitt">
+              <div className="st-kort-tal">{narvaro.narvaroProcent ?? '—'} %{narvaro.trend !== null && <span className={`st-trend ${narvaro.trend}`} title="Trend">{TREND[narvaro.trend]}</span>}</div>
+              <Sparkline serie={narvaro.serie} farg="#00838F" krav={80} />
+            </div>
+            <div className="small">
+              {(() => { const d = periodDelta(narvaro.serie); return d !== null && <span className={`st-delta ${d > 0 ? 'upp' : d < 0 ? 'ned' : 'jamn'}`}>{d > 0 ? '+' : ''}{d} % vs tidigare i perioden</span>; })()}
+              <div>{narvaro.antalLektioner} lektioner · <b>{narvaro.riskElever.length}</b> elever under 80 %</div>
+            </div>
+          </>)}
+        </div>
         <div className="st-kort st-kort-kluster" style={{ '--kort': '#E65100' } as React.CSSProperties}>
           <div className="st-kort-topp">
             <span className="st-ikon" aria-hidden="true">✨</span>
@@ -2301,6 +2322,65 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
         </div>
       </div>
 
+      {/* Närvaro & tid på dagen */}
+      <div className="st-grid2">
+        <div className="uppg-kort st-widget st-narvaro">
+          <b>Närvaro & tid på dagen</b> <small className="muted">närvaro = svarat på läxförhör eller exit ticket den lektionen · saknat svar räknas som frånvaro</small>
+          {narvaro.antalLektioner === 0 ? <p className="muted small">Inga lektioner med Socrative-resultat i urvalet.</p> : (
+            <div className="st-narvaro-grid">
+              <div>
+                <LinjeDiagram
+                  hojd={200}
+                  tillfallen={narvaro.perVecka.map((v) => ({ etikett: `v.${v.vecka}`, titel: `Vecka ${v.vecka}` }))}
+                  serier={[{ namn: 'Närvaro', varden: narvaro.perVecka.map((v) => v.procent), farg: '#00838F' }]}
+                  kravLinjer={[{ procent: 80, namn: 'mål 80 %' }]}
+                  visaVarden
+                />
+                {narvaro.riskElever.length > 0 && (
+                  <div className="small" style={{ marginTop: 4 }}>⚠ Under 80 %: {narvaro.riskElever.map((e) => (
+                    <button key={e.id} className="st-chip" title={e.namn} onClick={() => setElevId(e.id)}>{e.namn} {narvaroPerElev.get(e.id)?.narvaroProcent ?? '—'} %</button>
+                  ))}</div>
+                )}
+              </div>
+              <div>
+                <div className="small muted" style={{ marginBottom: 4 }}>Tid på dagen — snittresultat per veckodag och pass{tidHarData ? '' : ' (kräver klockslag, importeras från Socrative-filer)'}</div>
+                <table className="tbl st-tid">
+                  <thead><tr><th></th>{TID_PASS.map((p) => <th key={p}>{p}</th>)}</tr></thead>
+                  <tbody>{['Mån', 'Tis', 'Ons', 'Tor', 'Fre'].map((namn, i) => (
+                    <tr key={namn}><td><b>{namn}</b></td>
+                      {TID_PASS.map((p) => { const c = tid.find((x) => x.veckodag === i + 1 && x.pass === p)!; return (
+                        <td key={p} className="st-cell" style={{ background: c.antal === 0 ? '#F1F3F6' : procentFarg(c.snittProcent, null) }}
+                          title={c.antal === 0 ? 'inga lektioner' : `${c.antal} lektioner · närvaro ${c.narvaroProcent ?? '—'} %`}>{c.antal === 0 ? '·' : `${c.snittProcent ?? '—'} %`}</td>); })}
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          {narvaroSamband !== null && (
+            <div className={`st-insikt${narvaroSamband.r < 0.3 ? ' neutral' : ''}`}>
+              {narvaroSamband.r >= 0.3
+                ? `✅ Närvaro hänger ihop med resultat: elever med högre närvaro har högre helhetssnitt (r = +${narvaroSamband.r.toFixed(2)}, ${narvaroSamband.n} elever).`
+                : `➖ Inget tydligt samband mellan närvaro och resultat i urvalet (r = ${narvaroSamband.r > 0 ? '+' : ''}${narvaroSamband.r.toFixed(2)}).`}
+            </div>
+          )}
+        </div>
+        <div className="uppg-kort st-widget">
+          <b>Närvaro per elev</b> <small className="muted">andel lektioner med inlämnat Socrative-svar</small>
+          <div className="st-scroll" style={{ maxHeight: 300 }}>
+            <table className="tbl st-narvarolista"><tbody>
+              {[...narvaroPerElev.values()].sort((a, b) => (a.narvaroProcent ?? 101) - (b.narvaroProcent ?? 101)).map((e) => (
+                <tr key={e.elev.id}>
+                  <td><button className="linkbtn" onClick={() => setElevId(e.elev.id)}>{e.elev.namn}</button></td>
+                  <td>{e.narvaroProcent === null ? <span className="muted">—</span> : (
+                    <span className="st-bar"><i style={{ width: `${e.narvaroProcent}%`, background: e.narvaroProcent >= 80 ? '#00838F' : '#B71C1C' }} /><b>{e.narvaroProcent} %</b> <small className="muted">{e.narvarande}/{e.lektioner}</small></span>)}</td>
+                </tr>
+              ))}
+            </tbody></table>
+          </div>
+        </div>
+      </div>
+
       {/* Grupper + samband */}
       <div className="st-grid2 smal">
         <div className="uppg-kort st-widget">
@@ -2319,8 +2399,8 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
 
         <div className="uppg-kort st-widget">
           <b>Sambandsanalys</b> <small className="muted">korrelation (Pearson r) mellan elevernas snitt i två källor</small>
-          {samband.length === 0 ? <p className="muted small">Kräver minst tre elever med resultat i båda källorna.</p> : (
-            <table className="tbl st-samband"><tbody>{samband.map((sb) => (
+          {samband.length === 0 && narvaroSamband === null ? <p className="muted small">Kräver minst tre elever med resultat i båda källorna.</p> : (
+            <table className="tbl st-samband"><tbody>{[...samband, ...(narvaroSamband !== null ? [{ a: 'narvaro', b: 'helhet', r: narvaroSamband.r, n: narvaroSamband.n, text: 'Närvaro ↔ helhetsresultat' }] : [])].map((sb) => (
               <tr key={`${sb.a}|${sb.b}`}><td>{sb.text} <small className="muted">({sb.n} elever)</small></td>
                 <td className={`st-r ${sb.r >= 0.3 ? 'pos' : sb.r <= -0.3 ? 'neg' : ''}`}>{sb.r > 0 ? '+' : ''}{sb.r.toFixed(2)} {sb.r >= 0.3 ? '↑' : sb.r <= -0.3 ? '↓' : '→'}</td></tr>
             ))}</tbody></table>
@@ -2352,7 +2432,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
         {matris.tillfallen.length === 0 ? <p className="muted small">Inga provtillfällen i urvalet.</p> : (
           <div className="st-scroll">
             <table className="tbl st-matris">
-              <thead><tr><th>Elev</th><th>Snitt</th><th>Krav</th>
+              <thead><tr><th>Elev</th><th>Snitt</th><th>Krav</th><th title="Närvaro (Socrative-svar / lektioner)">Närv.</th>
                 {matris.tillfallen.map((t) => <th key={t.nyckel} title={`${t.datum} ${KALLNAMN[t.kalla]}`}><span className="st-kol">{tillfalleEtikett(t)}</span></th>)}
               </tr></thead>
               <tbody>{matris.rader.map((r) => (
@@ -2360,10 +2440,15 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
                   <td><button className="linkbtn" onClick={() => setElevId(elevId === r.elev.id ? null : r.elev.id)}>{r.elev.namn}</button></td>
                   <td style={{ background: procentFarg(r.snitt, null) }}>{r.snitt ?? '—'}{r.snitt !== null ? ' %' : ''}</td>
                   <td className="small">{r.bedomda > 0 ? `${r.klarade}/${r.bedomda}` : '—'}</td>
-                  {r.celler.map((c, i) => (
-                    <td key={i} className="st-cell" style={{ background: procentFarg(c?.procent ?? null, matris.tillfallen[i].krav) }}
-                      title={c === null ? 'saknas' : `${c.poang}/${c.maxPoang}`}>{c === null ? '·' : c.procent}</td>
-                  ))}
+                  <td className="small">{(() => { const n = narvaroPerElev.get(r.elev.id); return n?.narvaroProcent === null || n === undefined ? '—' : <span className={n.narvaroProcent < 80 ? 'st-narv-lag' : undefined}>{n.narvaroProcent} %</span>; })()}</td>
+                  {r.celler.map((c, i) => {
+                    const socr = matris.tillfallen[i].kalla === 'socrative-laxforhor' || matris.tillfallen[i].kalla === 'socrative-exit';
+                    const franv = c === null && socr;
+                    return (
+                      <td key={i} className={`st-cell${franv ? ' franvaro' : ''}`} style={{ background: procentFarg(c?.procent ?? null, matris.tillfallen[i].krav) }}
+                        title={c === null ? (socr ? 'frånvarande (inget Socrative-svar)' : 'saknas') : `${c.poang}/${c.maxPoang}`}>{c === null ? (socr ? '✕' : '·') : c.procent}</td>
+                    );
+                  })}
                 </tr>
               ))}</tbody>
             </table>
@@ -2376,6 +2461,9 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
         <div className="uppg-kort st-elev">
           <div className="rad">
             <b>👤 {elev.namn}</b> <small className="muted">Grupp {elev.grupp}{elev.socrativeId !== undefined ? ` · Socrative ${elev.socrativeId}` : ''}</small>
+            {(() => { const n = narvaroPerElev.get(elev.id); return n !== undefined && n.narvaroProcent !== null && (
+              <span className={`st-krav ${n.narvaroProcent >= 80 ? 'ok' : 'ej'}`} title={n.franvaroDatum.length > 0 ? `Frånvaro: ${n.franvaroDatum.join(', ')}` : 'Ingen frånvaro'}>
+                🙋 närvaro {n.narvaroProcent} % ({n.narvarande}/{n.lektioner})</span>); })()}
             <span className="spacer" />
             <button className="icon-btn" title="Stäng elevvyn" onClick={() => setElevId(null)}>✕</button>
           </div>
@@ -2482,7 +2570,7 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
   interface FilRad {
     filnamn: string; quiz: string; rum: string;
     amneId: string | null; amnesNamn: string;
-    kalla: ResultatKalla | null; datum: string; beskrivning: string;
+    kalla: ResultatKalla | null; datum: string; tid: string | null; beskrivning: string;
     matchade: number; omatchadeNamn: string[]; deltog: number;
     rader: Array<{ namn: string; poang: number; maxPoang: number; sidId: string }>;
     redanInne: boolean;
@@ -2509,6 +2597,7 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
           amneId: amnet?.id ?? null, amnesNamn: amnet?.namn ?? '—',
           kalla: k?.kalla ?? null,
           datum: k?.datum ?? namninfo?.startUtc.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+          tid: k?.tid ?? null,
           beskrivning: k !== null ? `${k.avsnitt !== null ? `${k.avsnitt} · ` : ''}${k.beskrivning}` : 'kunde inte tidsbestämmas',
           matchade: deltagare.filter((r) => matchaElev(s, klass.id, r.namn, r.sidId) !== null).length,
           omatchadeNamn: deltagare.filter((r) => matchaElev(s, klass.id, r.namn, r.sidId) === null).map((r) => r.namn),
@@ -2517,7 +2606,7 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
           redanInne: amnet !== undefined && arFilRegistrerad(s, amnet.id, fil.name),
         });
       } catch (fel) {
-        ut.push({ filnamn: fil.name, quiz: '—', rum: '—', amneId: null, amnesNamn: '—', kalla: null,
+        ut.push({ filnamn: fil.name, quiz: '—', rum: '—', amneId: null, amnesNamn: '—', kalla: null, tid: null,
           datum: '', beskrivning: fel instanceof Error ? fel.message : 'kunde inte läsas',
           matchade: 0, omatchadeNamn: [], deltog: 0, rader: [], redanInne: false });
       }
@@ -2530,7 +2619,7 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
       let st = lasStruktur();
       for (const f of importerbara) {
         st = importeraResultat(st, {
-          klassId: klass.id, amneId: f.amneId!, kalla: f.kalla!, prov: f.quiz, datum: f.datum, rader: f.rader,
+          klassId: klass.id, amneId: f.amneId!, kalla: f.kalla!, prov: f.quiz, datum: f.datum, ...(f.tid !== null ? { tid: f.tid } : {}), rader: f.rader,
         }).s;
         st = registreraFil(st, { amneId: f.amneId!, filnamn: f.filnamn, importerad: new Date().toISOString(), kalla: f.kalla!, prov: f.quiz });
       }

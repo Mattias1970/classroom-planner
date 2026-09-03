@@ -175,3 +175,61 @@ describe('Del 58: veckoserier, samband, kluster, grupper', async () => {
     expect(periodDelta([50])).toBeNull();
   });
 });
+
+describe('Del 59: närvaro härledd ur Socrative-tillfällen', async () => {
+  const { narvaroLektioner, elevNarvaro, narvaroKort, tidPaDagen, sambandNarvaro } = await import('../src/domain/dashboard.js');
+  const { laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst } = await import('../src/domain/struktur.js');
+  const { tomStruktur } = await import('../src/domain/typer.js');
+  const { importeraResultat } = await import('../src/domain/resultat.js');
+
+  function bygg() {
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    for (const [id, namn] of [['a', 'Anna Berg'], ['b', 'Omar Ali'], ['c', 'Pia Provlund'], ['d', 'Ted Testsson']] as const) {
+      s = laggTillElev(s, { id, klassId: 'k', namn, grupp: 'A' });
+    }
+    const rad = (namn: string, p: number) => ({ namn, poang: p, maxPoang: 10 });
+    // Onsdag 26 aug 09:05: läxförhör (Ted saknas) + exit (Ted och Pia saknas) → Ted frånvarande, Pia närvarande
+    s = importeraResultat(s, { klassId: 'k', kalla: 'socrative-laxforhor', prov: 'L1', datum: '2026-08-26', tid: '09:05', rader: [rad('Anna Berg', 9), rad('Omar Ali', 8), rad('Pia Provlund', 10)] }).s;
+    s = importeraResultat(s, { klassId: 'k', kalla: 'socrative-exit', prov: 'E1', datum: '2026-08-26', tid: '09:50', rader: [rad('Anna Berg', 8), rad('Omar Ali', 5)] }).s;
+    // Fredag 28 aug 13:10: exit — Omar saknas
+    s = importeraResultat(s, { klassId: 'k', kalla: 'socrative-exit', prov: 'E2', datum: '2026-08-28', tid: '13:10', rader: [rad('Anna Berg', 9), rad('Pia Provlund', 9), rad('Ted Testsson', 4)] }).s;
+    // Magma-test räknas inte som lektion för närvaro
+    s = importeraResultat(s, { klassId: 'k', kalla: 'magma', prov: 'M1', datum: '2026-08-31', rader: [rad('Anna Berg', 9)] }).s;
+    return s;
+  }
+  const f = { klassId: 'k' };
+
+  it('slår ihop läxförhör + exit samma dag till en lektion och härleder frånvaro', () => {
+    const l = narvaroLektioner(bygg(), f);
+    expect(l).toHaveLength(2);
+    expect(l[0]).toMatchObject({ datum: '2026-08-26', veckodag: 3, tid: '09:05', prov: ['E1', 'L1'], franvarande: ['d'], narvaroProcent: 75 });
+    expect(l[1]).toMatchObject({ datum: '2026-08-28', veckodag: 5, franvarande: ['b'], narvaroProcent: 75 });
+  });
+
+  it('per elev, kort och trend', () => {
+    const e = elevNarvaro(bygg(), f);
+    expect(e.find((x) => x.elev.id === 'a')).toMatchObject({ lektioner: 2, narvarande: 2, narvaroProcent: 100, franvaroDatum: [] });
+    expect(e.find((x) => x.elev.id === 'd')).toMatchObject({ narvaroProcent: 50, franvaroDatum: ['2026-08-26'] });
+    const k = narvaroKort(bygg(), f);
+    expect(k).toMatchObject({ antalLektioner: 2, narvaroProcent: 75, fraga: 'Är eleven på lektionen?' });
+    expect(k.riskElever.map((x) => x.id).sort()).toEqual(['b', 'd']);
+    expect(k.perVecka).toEqual([{ vecka: 35, procent: 75 }]);
+  });
+
+  it('tid på dagen: veckodag × pass', () => {
+    const celler = tidPaDagen(bygg(), f);
+    expect(celler).toHaveLength(20);
+    expect(celler.find((c) => c.veckodag === 3 && c.pass === '08–10')).toMatchObject({ antal: 1, snittProcent: 80, narvaroProcent: 75 });
+    expect(celler.find((c) => c.veckodag === 5 && c.pass === '12–14')).toMatchObject({ antal: 1, snittProcent: 73 });
+    expect(celler.find((c) => c.veckodag === 1 && c.pass === '08–10')).toMatchObject({ antal: 0, snittProcent: null });
+  });
+
+  it('samband närvaro ↔ helhetsresultat', () => {
+    const sb = sambandNarvaro(bygg(), f);
+    expect(sb).not.toBeNull();
+    expect(sb!.n).toBe(4);
+    expect(sb!.r).toBeGreaterThan(0); // Anna (100 % närvaro, högst snitt) drar upp
+  });
+});

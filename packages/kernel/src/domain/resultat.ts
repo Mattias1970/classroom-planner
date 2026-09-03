@@ -25,6 +25,8 @@ export interface Resultat {
   prov: string;
   /** ISO-datum (YYYY-MM-DD) när provet genomfördes. */
   datum: string;
+  /** Klockslag HH:MM (svensk tid) när det är känt, t.ex. ur Socrative-filnamnet. */
+  tid?: string;
   poang: number;
   maxPoang: number;
 }
@@ -37,6 +39,8 @@ export interface ImportUnderlag {
   kalla: ResultatKalla;
   prov: string;
   datum: string;
+  /** Klockslag HH:MM (valfritt). */
+  tid?: string;
   amneId?: string;
   rader: ImportRad[];
 }
@@ -127,6 +131,7 @@ export function importeraResultat(s: Struktur, u: ImportUnderlag): ImportUtfall 
     nya.push({
       id: nyttId('res'), elevId: elev.id, kalla: u.kalla, prov: u.prov.trim(),
       datum: u.datum, poang: rad.poang, maxPoang: rad.maxPoang,
+      ...(u.tid !== undefined ? { tid: u.tid } : {}),
       ...(u.amneId !== undefined ? { amneId: u.amneId } : {}),
     });
   }
