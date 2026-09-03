@@ -233,3 +233,13 @@ describe('Del 59: närvaro härledd ur Socrative-tillfällen', async () => {
     expect(sb!.r).toBeGreaterThan(0); // Anna (100 % närvaro, högst snitt) drar upp
   });
 });
+
+describe('Del 63: trendLinje', async () => {
+  const { trendLinje } = await import('../src/domain/dashboard.js');
+  it('anpassar en rät linje och hoppar luckor, null utanför mätpunkterna', () => {
+    expect(trendLinje([50, null, 70, 90])).toEqual([48.6, 61.4, 74.3, 87.1]); // minsta kvadrat, ej genom ändpunkterna
+    expect(trendLinje([50, 60, 70, 80])).toEqual([50, 60, 70, 80]);
+    expect(trendLinje([null, 40, 40, null])).toEqual([null, 40, 40, null]);
+    expect(trendLinje([70])).toEqual([null]);
+  });
+});

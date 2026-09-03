@@ -18,6 +18,9 @@ export interface DashboardFilter {
   /** Veckointervall (ISO-veckor); till < från tolkas som årsskifte (v.35–3). */
   veckaFran?: number;
   veckaTill?: number;
+  /** Datumintervall (YYYY-MM-DD, inklusive) — används av sittplatsanalysen. */
+  fran?: string;
+  till?: string;
 }
 
 /** Elever i klassen som matchar fritextsökning på namn/e-post/Student ID. */
@@ -44,6 +47,7 @@ export function dashboardResultat(s: Struktur, f: DashboardFilter): Resultat[] {
     .filter((r) => f.amneId === undefined || f.amneId === '' || r.amneId === f.amneId)
     .filter((r) => f.kallor === undefined || f.kallor.length === 0 || f.kallor.includes(r.kalla))
     .filter((r) => inomVeckor(r.datum, f))
+    .filter((r) => (f.fran === undefined || r.datum >= f.fran) && (f.till === undefined || r.datum <= f.till))
     .sort((a, b) => a.datum.localeCompare(b.datum) || a.prov.localeCompare(b.prov, 'sv'));
 }
 
@@ -456,4 +460,23 @@ export function sambandNarvaro(s: Struktur, f: DashboardFilter): { r: number; n:
   const par = elevNarvaro(s, f).filter((e) => e.narvaroProcent !== null && helhet.has(e.elev.id));
   const r = pearson(par.map((e) => e.narvaroProcent!), par.map((e) => snitt(helhet.get(e.elev.id)!) ?? 0));
   return r === null ? null : { r, n: par.length };
+}
+
+// ── Del 63: trendlinje för fokusvyn ──────────────────────────
+
+/**
+ * Minsta-kvadrat-linje över index för en serie med luckor. Returnerar det
+ * anpassade värdet på varje index (null-index behålls som null när serien har
+ * färre än två mätpunkter). Används för att rita trenden ovanpå kurvan.
+ */
+export function trendLinje(varden: Array<number | null>): Array<number | null> {
+  const pts = varden.map((v, i) => [i, v] as const).filter((p): p is readonly [number, number] => p[1] !== null);
+  if (pts.length < 2) return varden.map(() => null);
+  const n = pts.length;
+  const mx = pts.reduce((a, p) => a + p[0], 0) / n; const my = pts.reduce((a, p) => a + p[1], 0) / n;
+  let sxy = 0; let sxx = 0;
+  for (const [x, y] of pts) { sxy += (x - mx) * (y - my); sxx += (x - mx) * (x - mx); }
+  const k = sxx === 0 ? 0 : sxy / sxx; const m = my - k * mx;
+  const forsta = pts[0][0]; const sista = pts[n - 1][0];
+  return varden.map((_, i) => (i < forsta || i > sista ? null : Math.round((k * i + m) * 10) / 10));
 }

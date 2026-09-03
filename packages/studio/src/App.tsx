@@ -7,6 +7,7 @@
  */
 import { Fragment, useMemo, useRef, useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
 import {
   NO_TK, NO_TK_AMNEN, STANDARD_AMNEN, amneBakgrund, antalSlots, arbetsNivaer, arHalvklass,
   begreppsRum, delaHalvklassPass, delkapitelUrAvsnitt, foreslagnaRum, hamtaLektionsplan,
@@ -25,9 +26,11 @@ import {
   arFilImporterad, klassificeraSocrativeFil, registreraFil, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
-  tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, KLUSTER_NAMN, TID_PASS, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
+  tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, KLUSTER_NAMN, TID_PASS,
+  byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
+  type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
-  resultatProcent, saknadeResultat, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type KalenderDagRuta, type KalenderHandelse,
+  resultatProcent, saknadeResultat, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type Elev, type KalenderDagRuta, type KalenderHandelse,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
 } from '@planner/kernel';
@@ -2211,14 +2214,172 @@ function tillfalleEtikett(t: ProvTillfalle): string {
   return `v.${t.vecka} ${t.prov.replace(/^Quiz\s*/i, '')}`;
 }
 
+// ── Sittplatser: import från PowerPoint + analys ─────────────
+/** Läser slide-XML ur en .pptx (zip) — UI-lagret packar upp, kernel tolkar. */
+async function lasPptxSlides(fil: File): Promise<Array<{ namn: string; xml: string }>> {
+  const zip = await JSZip.loadAsync(await fil.arrayBuffer());
+  const slides = zip.file(/^ppt\/slides\/slide\d+\.xml$/)
+    .sort((a, b) => Number(/slide(\d+)/.exec(a.name)?.[1] ?? 0) - Number(/slide(\d+)/.exec(b.name)?.[1] ?? 0));
+  return Promise.all(slides.map(async (sl) => ({ namn: sl.name, xml: await sl.async('string') })));
+}
+
+function SittplatsWidget({ s, f, klassId, klassNamn, kor, onElev }: {
+  s: Struktur; f: DashboardFilter; klassId: string; klassNamn: string;
+  kor: (fn: () => Struktur, m: string) => void; onElev: (id: string) => void;
+}) {
+  const placeringar = (s.sittplatser ?? []).filter((p) => p.klassId === klassId);
+  const [valdId, setValdId] = useState<string | null>(null);
+  const vald = placeringar.find((p) => p.id === valdId) ?? placeringar[placeringar.length - 1];
+  const analys = vald === undefined ? null : sittplatsAnalys(s, vald.id, f);
+  const elever = s.elever.filter((e) => e.klassId === klassId);
+
+  // Import
+  const idag = new Date().toISOString().slice(0, 10);
+  const [imp, setImp] = useState<{ filnamn: string; platser: Sittplats[]; rutor: SlideRuta[]; datum: string; datumKalla: string; fel: string | null } | null>(null);
+  const lasFil = async (filer: FileList | null) => {
+    const fil = filer?.[0]; if (fil === undefined) return;
+    try {
+      const slides = await lasPptxSlides(fil);
+      if (slides.length === 0) throw new Error('Inga bilder hittades i filen.');
+      // Välj bilden med flest elevmatchningar
+      let bast: { rutor: SlideRuta[]; platser: Sittplats[] } | null = null;
+      for (const sl of slides) {
+        const rutor = tolkaSlideRutor(sl.xml); const platser = byggSittplatser(rutor, elever);
+        const traffar = platser.filter((p) => p.elevId !== null).length;
+        if (bast === null || traffar > bast.platser.filter((p) => p.elevId !== null).length) bast = { rutor, platser };
+      }
+      const forslag = foreslaSittplatsDatum(bast!.rutor, fil.name, idag);
+      setImp({ filnamn: fil.name, platser: bast!.platser, rutor: bast!.rutor, datum: forslag.datum, datumKalla: forslag.kalla, fel: null });
+    } catch (fel) {
+      setImp({ filnamn: fil.name, platser: [], rutor: [], datum: idag, datumKalla: 'idag', fel: fel instanceof Error ? fel.message : 'Filen kunde inte läsas.' });
+    }
+  };
+  const spara = () => {
+    if (imp === null) return;
+    const p = { id: nyttId('sitt'), klassId, datum: imp.datum, kalla: imp.filnamn, platser: imp.platser };
+    const traffar = imp.platser.filter((x) => x.elevId !== null).length;
+    kor(() => sparaSittplatsering(lasStruktur(), p), `${klassNamn}: placering ${imp.datum} sparad (${traffar} elever på ${imp.platser.length} rutor).`);
+    setValdId(p.id); setImp(null);
+  };
+  const farg = (v: number | null) => procentFarg(v, null);
+  const DATUMKALLA: Record<string, string> = { bild: 'hittat på bilden', filnamn: 'hittat i filnamnet', idag: 'dagens datum — ändra om placeringen gällde tidigare' };
+
+  return (
+    <div className="uppg-kort st-widget st-sitt">
+      <div className="rad">
+        <b>🪑 Sittplatser & resultat</b> <small className="muted">grannar = angränsande rutor · färg = elevens snitt under placeringens giltighetstid</small>
+        <span className="spacer" />
+        {placeringar.length > 0 && (
+          <select aria-label="Placering" value={vald?.id ?? ''} onChange={(e) => setValdId(e.target.value)}>
+            {placeringar.map((p) => <option key={p.id} value={p.id}>från {p.datum} · {p.kalla}</option>)}
+          </select>
+        )}
+      </div>
+
+      <details className="bulk-elever sitt-import">
+        <summary>📥 Importera placering från PowerPoint (.pptx)</summary>
+        <p className="small muted">Varje elev i en egen textruta på bilden. Rutornas läge ger rad/kolumn; namnen matchas mot klassen (förnamn räcker om det är unikt, annars förnamn + initial). Datum föreslås från bilden eller filnamnet.</p>
+        <input type="file" accept=".pptx" aria-label="Placering (pptx)" onChange={(e) => { void lasFil(e.target.files); e.target.value = ''; }} />
+        {imp !== null && imp.fel !== null && <p className="status warn">⚠ {imp.filnamn}: {imp.fel}</p>}
+        {imp !== null && imp.fel === null && (() => {
+          const traffar = imp.platser.filter((p) => p.elevId !== null);
+          const okanda = imp.platser.filter((p) => p.elevId === null);
+          const saknade = elever.filter((e) => !traffar.some((p) => p.elevId === e.id));
+          const rader = Math.max(0, ...imp.platser.map((p) => p.rad)) + 1; const kol = Math.max(0, ...imp.platser.map((p) => p.kol)) + 1;
+          return (<>
+            <div className="rad" style={{ gap: 8, flexWrap: 'wrap' }}>
+              <label>Gäller från: <input type="date" aria-label="Placeringsdatum" value={imp.datum} onChange={(e) => setImp({ ...imp, datum: e.target.value })} /></label>
+              <small className="muted">{DATUMKALLA[imp.datumKalla]}</small>
+              <span className="spacer" />
+              <small><b>{traffar.length}</b> elever matchade · {okanda.length} rutor utan elev{saknade.length > 0 ? ` · saknas på bilden: ${saknade.map((e) => e.namn).join(', ')}` : ''}</small>
+            </div>
+            {okanda.length > 0 && <p className="small muted">Ej matchade rutor: {okanda.map((p) => p.text).join(' · ')}</p>}
+            <div className="st-sittgrid" style={{ gridTemplateColumns: `repeat(${kol}, minmax(70px, 1fr))` }}>
+              {Array.from({ length: rader * kol }, (_, i) => {
+                const r = Math.floor(i / kol); const c = i % kol;
+                const p = imp.platser.find((x) => x.rad === r && x.kol === c);
+                return <div key={i} className={`st-sittruta${p === undefined ? ' tom' : p.elevId === null ? ' okand' : ''}`}>{p?.text ?? ''}</div>;
+              })}
+            </div>
+            <div className="rad"><span className="spacer" />
+              <button className="btn sm" disabled={traffar.length === 0 || !/^\d{4}-\d{2}-\d{2}$/.test(imp.datum)} onClick={spara}>🪑 Spara placering</button>
+            </div>
+          </>);
+        })()}
+      </details>
+
+      {analys === null ? <p className="muted small">Ingen placering importerad för {klassNamn} ännu.</p> : (<>
+        <p className="small muted">Gäller {analys.placering.datum} – {analys.giltigTill ?? 'tills vidare'} · {analys.rader.filter((r) => r.elev !== null).length} elever</p>
+        <div className="st-sittgrid" style={{ gridTemplateColumns: `repeat(${analys.antalKolumner}, minmax(80px, 1fr))` }}>
+          {Array.from({ length: analys.antalRader * analys.antalKolumner }, (_, i) => {
+            const r = Math.floor(i / analys.antalKolumner); const c = i % analys.antalKolumner;
+            const rad = analys.rader.find((x) => x.plats.rad === r && x.plats.kol === c);
+            if (rad === undefined) return <div key={i} className="st-sittruta tom" />;
+            if (rad.elev === null) return <div key={i} className="st-sittruta okand">{rad.plats.text}</div>;
+            return (
+              <button key={i} className="st-sittruta" style={{ background: farg(rad.snitt) }}
+                title={`${rad.elev.namn}: snitt ${rad.snitt ?? '—'} % · grannar ${rad.grannSnitt ?? '—'} % (${rad.grannar.map((g) => g.namn).join(', ') || 'inga'})`}
+                onClick={() => onElev(rad.elev!.id)}>
+                <span className="st-sittnamn">{rad.elev.namn}</span>
+                <span className="st-sittsnitt">{rad.snitt ?? '—'}{rad.snitt !== null ? ' %' : ''}</span>
+                {rad.skillnad !== null && <span className={`st-sittdiff ${rad.skillnad > 5 ? 'upp' : rad.skillnad < -5 ? 'ned' : ''}`}>{rad.skillnad > 0 ? '+' : ''}{rad.skillnad} vs grannar</span>}
+              </button>
+            );
+          })}
+        </div>
+        {analys.klusterR !== null && (
+          <div className={`st-insikt${Math.abs(analys.klusterR) < 0.3 ? ' neutral' : ''}`}>
+            {analys.klusterR >= 0.3
+              ? `🪑 Tydliga kluster: elever som sitter nära varandra presterar lika (r = +${analys.klusterR.toFixed(2)}). Blanda grupperna om du vill jämna ut.`
+              : analys.klusterR <= -0.3
+                ? `🪑 Starka och svaga sitter blandat (r = ${analys.klusterR.toFixed(2)}) — bänkgrannar presterar olika.`
+                : `🪑 Inga tydliga kluster i placeringen (r = ${analys.klusterR > 0 ? '+' : ''}${analys.klusterR.toFixed(2)}).`}
+          </div>
+        )}
+        {analys.flyttar.length > 0 && (
+          <table className="tbl st-flyttar">
+            <thead><tr><th>Flyttad elev</th><th>Från (rad/kol)</th><th>Snitt före</th><th>Till</th><th>Snitt efter</th><th>Förändring</th><th>Grannar före → efter</th></tr></thead>
+            <tbody>{analys.flyttar.map((fl) => (
+              <tr key={fl.elev.id}>
+                <td><button className="linkbtn" onClick={() => onElev(fl.elev.id)}>{fl.elev.namn}</button></td>
+                <td>{fl.fran.rad + 1}/{fl.fran.kol + 1}</td><td>{fl.fran.snitt ?? '—'}{fl.fran.snitt !== null ? ' %' : ''}</td>
+                <td>{fl.till.rad + 1}/{fl.till.kol + 1}</td><td>{fl.till.snitt ?? '—'}{fl.till.snitt !== null ? ' %' : ''}</td>
+                <td className={fl.delta === null ? '' : fl.delta > 0 ? 'st-delta upp' : fl.delta < 0 ? 'st-delta ned' : ''}>{fl.delta === null ? '—' : `${fl.delta > 0 ? '+' : ''}${fl.delta}`}</td>
+                <td className="small">{fl.fran.grannSnitt ?? '—'} → {fl.till.grannSnitt ?? '—'}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        )}
+        <div className="rad"><span className="spacer" />
+          <button className="btn sm ghost" onClick={() => kor(() => taBortSittplatsering(lasStruktur(), analys.placering.id), `Placering ${analys.placering.datum} borttagen.`)}>🗑 Ta bort placeringen</button>
+        </div>
+      </>)}
+    </div>
+  );
+}
+
 /** Dashboarden: frågekort → klassens utveckling → elev × prov-heatmap → elevvy. */
-function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv }: {
+function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv, kor }: {
   s: Struktur; klassId: string; klassNamn: string; amneId: string; kallor: ResultatKalla[] | undefined;
-  onVisaProv: (prov: string) => void;
+  onVisaProv: (prov: string) => void; kor: (fn: () => Struktur, m: string) => void;
 }) {
   const [periodText, setPeriodText] = useState('');
   const [sok, setSok] = useState('');
-  const [elevId, setElevId] = useState<string | null>(null);
+  // Fokus: en eller flera elever i den stora vyn. Första eleven är 'huvudelev'.
+  const [fokus, setFokus] = useState<string[]>([]);
+  const [fokusRubrik, setFokusRubrik] = useState<string>('');
+  const elevId = fokus[0] ?? null;
+  const setElevId = (id: string | null) => { setFokus(id === null ? [] : [id]); setFokusRubrik(''); };
+  const fokuseraGrupp = (ids: string[], rubrik: string) => { setFokus(ids); setFokusRubrik(rubrik); };
+  const [fokusKallor, setFokusKallor] = useState<ResultatKalla[]>(['socrative-laxforhor', 'socrative-exit', 'magma', 'digiexam']);
+  const [visaTrend, setVisaTrend] = useState(false);
+  const [laggTillSok, setLaggTillSok] = useState('');
+  useEffect(() => {
+    if (fokus.length === 0) return;
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') setFokus([]); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [fokus.length]);
   const [visaAndel, setVisaAndel] = useState(true);
   const period = tolkaVeckor(periodText);
   const f: DashboardFilter = { klassId, ...(amneId !== '' ? { amneId } : {}), ...(kallor !== undefined ? { kallor } : {}), ...(period ?? {}) };
@@ -2340,7 +2501,10 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
           <div className="st-klusterrad">
             {kluster.map((g) => (
               <div key={g.kluster} className={`st-klusterkort ${g.kluster}`}>
-                <div className="rad"><b>{KLUSTER_NAMN[g.kluster]}</b><span className="spacer" /><small>{g.elever.length} elever</small></div>
+                <div className="rad">
+                  <button className="linkbtn st-klusterknapp" disabled={g.elever.length === 0} title="Visa hela gruppen i fokusvyn"
+                    onClick={() => fokuseraGrupp(g.elever.map((e) => e.id), KLUSTER_NAMN[g.kluster])}><b>{KLUSTER_NAMN[g.kluster]}</b></button>
+                  <span className="spacer" /><small>{g.elever.length} elever</small></div>
                 <Sparkline serie={g.serie} farg={KLUSTER_FARG[g.kluster]} krav={null} />
                 <div className="st-chips">{g.elever.map((e) => (
                   <button key={e.id} className="st-chip" title={e.namn} onClick={() => setElevId(e.id)}>{initialer(e.namn)}</button>
@@ -2485,44 +2649,120 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
         )}
       </div>
 
-      {/* Elevvy */}
-      {elev !== null && (
-        <div className="uppg-kort st-elev">
-          <div className="rad">
-            <b>👤 {elev.namn}</b> <small className="muted">Grupp {elev.grupp}{elev.socrativeId !== undefined ? ` · Socrative ${elev.socrativeId}` : ''}</small>
-            {(() => { const n = narvaroPerElev.get(elev.id); return n !== undefined && n.narvaroProcent !== null && (
-              <span className={`st-krav ${n.narvaroProcent >= 80 ? 'ok' : 'ej'}`} title={n.franvaroDatum.length > 0 ? `Frånvaro: ${n.franvaroDatum.join(', ')}` : 'Ingen frånvaro'}>
-                🙋 närvaro {n.narvaroProcent} % ({n.narvarande}/{n.lektioner})</span>); })()}
-            <span className="spacer" />
-            <button className="icon-btn" title="Stäng elevvyn" onClick={() => setElevId(null)}>✕</button>
-          </div>
-          <div className="st-kortrad">
-            {frageKort({ ...s, elever: s.elever, resultat: (s.resultat ?? []).filter((r) => r.elevId === elev.id) }, f).filter((k) => k.antalProv > 0).map((k) => (
-              <div key={k.kalla} className="st-kort" style={{ borderTopColor: KORT_FARG[k.kalla] }}>
-                <div className="st-kort-rubrik">{k.rubrik}</div>
-                <div className="st-kort-fraga">{k.fraga}</div>
-                <div className="st-kort-tal">{k.snittProcent ?? '—'} %{k.trend !== null && <span className={`st-trend ${k.trend}`}>{TREND[k.trend]}</span>}</div>
-                <div className="small">{k.andelKlarade !== null ? <><b>{k.andelKlarade} %</b> av {k.antalProv} klarade ≥ {k.krav} %</> : <>{k.antalProv} prov</>}</div>
-                <Sparkline serie={k.serie} farg={KORT_FARG[k.kalla]} krav={k.krav} />
+      {/* Sittplatser */}
+      <SittplatsWidget s={s} f={f} klassId={klassId} klassNamn={klassNamn} kor={kor} onElev={(id) => setElevId(id)} />
+
+      {/* Fokusvy — stor skärm för en eller flera elever; ✕ eller Esc går tillbaka */}
+      {elev !== null && (() => {
+        const fokusElever = fokus.map((id) => s.elever.find((e) => e.id === id)).filter((e): e is NonNullable<typeof e> => e !== undefined);
+        const fm = elevMatris(s, { ...f, kallor: fokusKallor }, '');
+        const till = fm.tillfallen;
+        const serieFor = (e: Elev, farg: string) => {
+          const rad = fm.rader.find((r) => r.elev.id === e.id);
+          return { namn: e.namn, varden: till.map((_, idx) => rad?.celler[idx]?.procent ?? null), farg };
+        };
+        const trendFor = (varden: Array<number | null>, farg: string, namn: string) => {
+          const pts = varden.map((v, idx) => (v === null ? null : { x: idx, y: v })).filter((p): p is { x: number; y: number } => p !== null);
+          if (pts.length < 2) return null;
+          const n = pts.length; const mx = pts.reduce((a, q) => a + q.x, 0) / n; const my = pts.reduce((a, q) => a + q.y, 0) / n;
+          const k = pts.reduce((a, q) => a + (q.x - mx) * (q.y - my), 0) / Math.max(1e-9, pts.reduce((a, q) => a + (q.x - mx) ** 2, 0));
+          return { namn: `${namn} trend`, varden: varden.map((_, idx) => Math.round(my + k * (idx - mx))), farg, streckad: true };
+        };
+        const PALETT = ['#2f5aa8', '#1B5E20', '#B71C1C', '#E65100', '#6A1B9A', '#00838F', '#5D4037', '#455A64'];
+        const serier = fokusElever.flatMap((e, idx) => {
+          const bas = serieFor(e, PALETT[idx % PALETT.length]);
+          const t = visaTrend ? trendFor(bas.varden, bas.farg, e.namn) : null;
+          return t === null ? [bas] : [bas, t];
+        });
+        const kandidater = laggTillSok.trim() === '' ? [] : sokElever(s, klassId, laggTillSok).filter((e) => !fokus.includes(e.id)).slice(0, 6);
+        const fokusKravLinjer = kravLinjer.filter((k) => till.some((t) => t.krav === k.procent));
+        return (
+          <div className="st-fokus-bak" onClick={(ev) => { if (ev.target === ev.currentTarget) setFokus([]); }}>
+            <div className="uppg-kort st-elev st-fokus" role="dialog" aria-label="Elevfokus">
+              <div className="rad">
+                <b>👤 {fokusRubrik !== '' ? `${fokusRubrik} · ` : ''}{fokusElever.length === 1 ? elev.namn : `${fokusElever.length} elever`}</b>
+                {fokusElever.length === 1 && <small className="muted">Grupp {elev.grupp}{elev.socrativeId !== undefined ? ` · Socrative ${elev.socrativeId}` : ''}</small>}
+                {fokusElever.length === 1 && (() => { const n = narvaroPerElev.get(elev.id); return n !== undefined && n.narvaroProcent !== null && (
+                  <span className={`st-krav ${n.narvaroProcent >= 80 ? 'ok' : 'ej'}`} title={n.franvaroDatum.length > 0 ? `Frånvaro: ${n.franvaroDatum.join(', ')}` : 'Ingen frånvaro'}>
+                    🙋 närvaro {n.narvaroProcent} % ({n.narvarande}/{n.lektioner})</span>); })()}
+                <span className="spacer" />
+                <button className="btn sm" title="Tillbaka till dashboarden (Esc)" onClick={() => setFokus([])}>✕ Tillbaka</button>
               </div>
-            ))}
+
+              {/* Vilka är med i urvalet */}
+              <div className="st-fokus-urval">
+                {fokusElever.map((e, idx) => (
+                  <span key={e.id} className="st-chip st-chip-elev" style={{ borderColor: PALETT[idx % PALETT.length] }}>
+                    <i style={{ background: PALETT[idx % PALETT.length] }} />{e.namn}
+                    {fokusElever.length > 1 && <button className="icon-btn" title="Ta bort ur urvalet" onClick={() => setFokus(fokus.filter((x) => x !== e.id))}>✕</button>}
+                  </span>
+                ))}
+                <span className="st-fokus-sok">
+                  <input aria-label="Lägg till elev i fokus" placeholder="+ lägg till elev…" value={laggTillSok} onChange={(ev) => setLaggTillSok(ev.target.value)} />
+                  {kandidater.length > 0 && <span className="st-chips">{kandidater.map((e) => (
+                    <button key={e.id} className="st-chip" onClick={() => { setFokus([...fokus, e.id]); setLaggTillSok(''); }}>+ {e.namn}</button>))}</span>}
+                </span>
+              </div>
+
+              {/* Filter: källor + trend */}
+              <div className="rad st-fokus-filter">
+                {(['socrative-laxforhor', 'socrative-exit', 'magma', 'digiexam'] as ResultatKalla[]).map((k) => (
+                  <label key={k} className="small"><input type="checkbox" checked={fokusKallor.includes(k)}
+                    onChange={(ev) => setFokusKallor(ev.target.checked ? [...fokusKallor, k] : fokusKallor.filter((x) => x !== k))} />
+                    <i className="st-legend-prick" style={{ background: KORT_FARG[k] }} /> {KORT_RUBRIK[k]}</label>
+                ))}
+                <label className="small"><input type="checkbox" checked={visaTrend} onChange={(ev) => setVisaTrend(ev.target.checked)} /> trendlinjer</label>
+                <span className="spacer" />
+                <small className="muted">{till.length} tillfällen i urvalet</small>
+              </div>
+
+              {fokusElever.length === 1 && (
+                <div className="st-kortrad">
+                  {frageKort({ ...s, elever: s.elever, resultat: (s.resultat ?? []).filter((r) => r.elevId === elev.id) }, f).filter((k) => k.antalProv > 0).map((k) => (
+                    <div key={k.kalla} className="st-kort" style={{ '--kort': KORT_FARG[k.kalla] } as React.CSSProperties}>
+                      <div className="st-kort-rubrik">{k.rubrik}</div>
+                      <div className="st-kort-fraga">{k.fraga}</div>
+                      <div className="st-kort-tal">{k.snittProcent ?? '—'} %{k.trend !== null && <span className={`st-trend ${k.trend}`}>{TREND[k.trend]}</span>}</div>
+                      <div className="small">{k.andelKlarade !== null ? <><b>{k.andelKlarade} %</b> av {k.antalProv} klarade ≥ {k.krav} %</> : <>{k.antalProv} prov</>}</div>
+                      <Sparkline serie={k.serie} farg={KORT_FARG[k.kalla]} krav={k.krav} />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <LinjeDiagram
+                hojd={fokusElever.length > 1 ? 320 : 260}
+                tillfallen={till.map((t) => ({ etikett: tillfalleEtikett(t), titel: `${t.datum} ${KALLNAMN[t.kalla]} ${t.prov}` }))}
+                serier={serier}
+                kravLinjer={fokusKravLinjer}
+                onKlick={(i) => onVisaProv(till[i].prov)}
+                visaVarden={fokusElever.length === 1}
+              />
+
+              {fokusElever.length > 1 ? (
+                <table className="tbl st-tabell">
+                  <thead><tr><th>Elev</th><th>Snitt</th><th>Närvaro</th>{till.map((t) => <th key={t.nyckel}><span className="st-kol">{tillfalleEtikett(t)}</span></th>)}</tr></thead>
+                  <tbody>{fokusElever.map((e, idx) => { const rad = fm.rader.find((r) => r.elev.id === e.id); const n = narvaroPerElev.get(e.id); return (
+                    <tr key={e.id}><td><i className="st-legend-prick" style={{ background: PALETT[idx % PALETT.length] }} /> {e.namn}</td>
+                      <td>{rad?.snitt ?? '—'}{rad?.snitt !== null && rad !== undefined ? ' %' : ''}</td>
+                      <td>{n?.narvaroProcent ?? '—'}{n?.narvaroProcent !== null && n !== undefined ? ' %' : ''}</td>
+                      {till.map((t, i) => { const c = rad?.celler[i] ?? null; return (
+                        <td key={t.nyckel} className="st-cell" style={{ background: procentFarg(c?.procent ?? null, t.krav) }}>{c === null ? '·' : c.procent}</td>); })}
+                    </tr>); })}</tbody>
+                </table>
+              ) : (
+                <table className="tbl st-tabell">
+                  <thead><tr><th>Datum</th><th>Källa</th><th>Prov</th><th>Resultat</th><th>Krav</th></tr></thead>
+                  <tbody>{[...ek].reverse().map((p, i) => (
+                    <tr key={i}><td>{p.datum}</td><td>{KALLNAMN[p.kalla]}</td><td>{p.prov}</td><td>{p.procent} %</td>
+                      <td>{p.klarat === null ? '—' : <span className={`st-krav ${p.klarat ? 'ok' : 'ej'}`}>{p.klarat ? `≥ ${p.krav} ✓` : `< ${p.krav}`}</span>}</td></tr>
+                  ))}</tbody>
+                </table>
+              )}
+            </div>
           </div>
-          <LinjeDiagram
-            hojd={200}
-            tillfallen={ek.map((p) => ({ etikett: `v.${p.vecka} ${p.prov.replace(/^Quiz\s*/i, '')}`, titel: `${p.datum} ${KALLNAMN[p.kalla]} ${p.prov}` }))}
-            serier={[{ namn: elev.namn, varden: ek.map((p) => p.procent), farg: '#2f5aa8' }]}
-            kravLinjer={kravLinjer}
-            onKlick={(i) => onVisaProv(ek[i].prov)}
-          />
-          <table className="tbl st-tabell">
-            <thead><tr><th>Datum</th><th>Källa</th><th>Prov</th><th>Resultat</th><th>Krav</th></tr></thead>
-            <tbody>{[...ek].reverse().map((p, i) => (
-              <tr key={i}><td>{p.datum}</td><td>{KALLNAMN[p.kalla]}</td><td>{p.prov}</td><td>{p.procent} %</td>
-                <td>{p.klarat === null ? '—' : <span className={`st-krav ${p.klarat ? 'ok' : 'ej'}`}>{p.klarat ? `≥ ${p.krav} ✓` : `< ${p.krav}`}</span>}</td></tr>
-            ))}</tbody>
-          </table>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
@@ -2693,7 +2933,7 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
       )}
 
       <SuperTeachDashboard s={s} klassId={klass.id} klassNamn={klass.namn} amneId={amne?.id ?? ''} kallor={kallor}
-        onVisaProv={(p) => setVisaProv(p)} />
+        onVisaProv={(p) => setVisaProv(p)} kor={kor} />
 
       {/* ── Elever: Socrative-roster ── */}
       <div className="uppg-kort">

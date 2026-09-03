@@ -257,6 +257,8 @@ export interface Struktur {
   resultat?: import('./resultat.js').Resultat[];
   /** SuperTeach: register över importerade resultatfiler per ämne. */
   filregister?: import('./resultat.js').FilPost[];
+  /** SuperTeach: sittplatsplaceringar importerade från PowerPoint. */
+  sittplatser?: import('./sittplatser.js').Sittplatsering[];
   skolar: Skolar[];
   larare: Larare[];
   tjanster: Tjanst[];

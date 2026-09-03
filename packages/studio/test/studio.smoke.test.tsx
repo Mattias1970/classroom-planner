@@ -14,6 +14,12 @@ const FEJK_ROSTER: Array<Array<string | null>> = [
   ['Omar', 'Ali', 'OMAR', null],
   ['Pia', 'Provlund', 'PIA', null],
 ];
+// Fejkad .pptx: en bild med rutor för Anna och Omar (rad 1) + rubrik med datum
+const SP = (t: string, x: number, y: number) => `<p:sp><p:spPr><a:xfrm><a:off x="${x}" y="${y}"/><a:ext cx="1000000" cy="500000"/></a:xfrm></p:spPr><p:txBody><a:p><a:r><a:t>${t}</a:t></a:r></a:p></p:txBody></p:sp>`;
+const FEJK_SLIDE = `<p:sld>${SP('Placering 8B 2 sep 2026', 500000, 100000)}${SP('Anna', 1000000, 1000000)}${SP('Omar', 2500000, 1000000)}${SP('Kateder', 1000000, 2500000)}</p:sld>`;
+vi.mock('jszip', () => ({
+  default: { loadAsync: async () => ({ file: () => [{ name: 'ppt/slides/slide1.xml', async: async () => FEJK_SLIDE }] }) },
+}));
 vi.mock('xlsx', () => ({
   read: () => ({ SheetNames: ['Roster'], Sheets: { Roster: {} } }),
   utils: { json_to_sheet: () => ({}), book_new: () => ({}), book_append_sheet: () => {}, sheet_to_json: () => FEJK_ROSTER },
@@ -1391,9 +1397,67 @@ describe('📊 SuperTeach', () => {
     expect(elevvy.querySelectorAll('.st-krav.ej')).toHaveLength(2); // 60 % < 70 + närvaro < 80
     expect(elevvy.querySelectorAll('.st-krav.ok')).toHaveLength(2);
 
+    // Fokusvyn är en stor overlay: källfilter, trendlinjer, lägg till elev → gruppvy, ✕ Tillbaka stänger
+    expect(host.querySelector('.st-fokus-bak')).not.toBeNull();
+    expect(host.querySelector('.st-elev')!.textContent).toContain('4 tillfällen i urvalet');
+    act(() => { (host.querySelector('.st-elev input[type="checkbox"]') as HTMLInputElement).click(); }); // Läxförhör av
+    expect(host.querySelector('.st-elev')!.textContent).toContain('3 tillfällen i urvalet'); // bara exit tickets kvar
+    act(() => { (host.querySelectorAll('.st-elev input[type="checkbox"]')[4] as HTMLInputElement).click(); }); // trendlinjer på
+    expect(host.querySelector('.st-elev .st-diagram')!.querySelectorAll('polyline, path').length).toBeGreaterThan(1);
+    skriv(input(host, 'Lägg till elev i fokus'), 'Anna');
+    act(() => { knapp(host, '+ Anna Berg').click(); });
+    expect(host.querySelector('.st-elev')!.textContent).toContain('2 elever');
+    expect(host.querySelectorAll('.st-chip-elev')).toHaveLength(2);
+    act(() => { knapp(host, '✕ Tillbaka').click(); });
+    expect(host.querySelector('.st-fokus-bak')).toBeNull();
+
+    // Klusterrubrik → hela gruppen i fokus
+    const klusterKnapp = [...host.querySelectorAll('.st-klusterknapp')].find((b) => !(b as HTMLButtonElement).disabled) as HTMLButtonElement;
+    act(() => { klusterKnapp.click(); });
+    expect(host.querySelector('.st-elev')!.textContent).toMatch(/Stigande|Stabil|Riskzon|Ojämn/);
+    act(() => { knapp(host, '✕ Tillbaka').click(); });
+
     // Klick på en kurvpunkt öppnar provet i 'Visa prov'
     act(() => { (diagram.querySelector('.st-punkt') as SVGCircleElement).dispatchEvent(new MouseEvent('click', { bubbles: true })); });
     expect(select(host, 'Visa prov').value).toBe('Quiz 1.1a');
+  });
+
+  it('sittplatser: pptx-import med datumförslag från bilden, karta med snitt och grannjämförelse', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    for (const n of ['Anna Berg', 'Omar Ali']) { skriv(input(host, 'Elevens namn'), n); act(() => { knapp(host, '➕ Lägg till elev').click(); }); }
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '📊 SuperTeach').click(); });
+    valj(select(host, 'SuperTeach ämne'), lasStruktur().amnen[0].id);
+    valj(select(host, 'Källa'), 'socrative-exit');
+    skriv(input(host, 'Provnamn'), 'E1'); skriv(input(host, 'Provdatum'), '2026-09-05');
+    skrivArea(host.querySelector('textarea[aria-label="Resultatrader"]') as HTMLTextAreaElement, 'Anna Berg\t9\nOmar Ali\t5');
+    act(() => { knapp(host, '💾 Spara resultat').click(); });
+
+    expect(host.textContent).toContain('Ingen placering importerad för 8B ännu.');
+    const filInput = input(host, 'Placering (pptx)');
+    Object.defineProperty(filInput, 'files', { value: [new File([new Uint8Array([1])], 'placering.pptx')], configurable: true });
+    await act(async () => { filInput.dispatchEvent(new Event('change', { bubbles: true })); await new Promise((r) => setTimeout(r, 0)); });
+    expect((input(host, 'Placeringsdatum') as HTMLInputElement).value).toBe('2026-09-02');
+    expect(host.textContent).toContain('hittat på bilden');
+    expect(host.textContent).toContain('2 elever matchade · 2 rutor utan elev'); // rubrik + Kateder
+    act(() => { knapp(host, '🪑 Spara placering').click(); });
+    expect(lasStruktur().sittplatser).toHaveLength(1);
+    expect(host.textContent).toContain('Gäller 2026-09-02 – tills vidare · 2 elever');
+    const rutor = [...host.querySelectorAll('button.st-sittruta')];
+    expect(rutor.map((r) => r.textContent)).toEqual(['Anna Berg90 %+40 vs grannar', 'Omar Ali50 %-40 vs grannar']);
+    act(() => { (rutor[1] as HTMLButtonElement).click(); });
+    expect(host.querySelector('.st-elev')!.textContent).toContain('👤 Omar Ali');
   });
 });
 

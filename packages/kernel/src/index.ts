@@ -9,6 +9,7 @@ export * from './domain/oversikt.js';
 export * from './domain/resultat.js';
 export * from './domain/socrative.js';
 export * from './domain/roster.js';
+export * from './domain/sittplatser.js';
 export * from './domain/dashboard.js';
 export * from './domain/kalender.js';
 export * from './domain/schemapdf.js';

@@ -508,3 +508,24 @@ input.fel { border-color: #B71C1C; }
 .st-matris .st-cell.franvaro { color: #B71C1C; font-weight: 800; background: #F8E1E1 !important; }
 .st-narv-lag { color: #B71C1C; font-weight: 700; }
 .st-narvarolista td { font-size: 13px; }
+
+/* Del 63: fokusvy (stor skärm) och sittplatser */
+.st-fokus-bak { position: fixed; inset: 0; background: rgba(20, 30, 60, .45); z-index: 60; display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px; overflow: auto; }
+.st-fokus { width: min(1400px, 100%); max-height: calc(100vh - 48px); overflow: auto; box-shadow: 0 12px 40px rgba(0,0,0,.25); border-left: 4px solid var(--bla); background: #fff; }
+.st-fokus-urval { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; }
+.st-chip-elev { display: inline-flex; align-items: center; gap: 5px; border-width: 2px; font-size: 13px; padding: 3px 8px; cursor: default; }
+.st-chip-elev i, .st-legend-prick { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+.st-chip-elev .icon-btn { padding: 0 2px; font-size: 11px; }
+.st-fokus-sok { position: relative; display: inline-flex; flex-direction: column; gap: 4px; }
+.st-fokus-filter { flex-wrap: wrap; gap: 12px; background: #F4F6FA; border-radius: 10px; padding: 6px 10px; margin-bottom: 6px; }
+.st-fokus-filter label { display: inline-flex; align-items: center; gap: 4px; }
+.st-klusterknapp { text-decoration: none; }
+.st-klusterknapp:hover:not(:disabled) { text-decoration: underline; }
+.st-sittgrid { display: grid; gap: 6px; margin: 8px 0; }
+.st-sittruta { border: 1px solid var(--ram); border-radius: 8px; padding: 6px 4px; min-height: 52px; font: inherit; font-size: 12px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2px; background: #fff; cursor: pointer; }
+.st-sittruta.tom { border-style: dashed; opacity: .35; cursor: default; }
+.st-sittruta.okand { background: #EEF0F3; color: #666; cursor: default; }
+.st-sittnamn { font-weight: 700; line-height: 1.15; }
+.st-sittsnitt { font-size: 15px; font-weight: 800; }
+.st-sittdiff { font-size: 10px; color: #666; } .st-sittdiff.upp { color: #1B5E20; } .st-sittdiff.ned { color: #B71C1C; }
+.st-flyttar td { font-size: 13px; }
