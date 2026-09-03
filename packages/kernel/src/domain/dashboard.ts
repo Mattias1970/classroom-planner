@@ -193,3 +193,128 @@ export function tolkaVeckor(text: string): { veckaFran: number; veckaTill: numbe
   if (fran < 1 || fran > 53 || till < 1 || till > 53) return null;
   return { veckaFran: fran, veckaTill: till };
 }
+
+// ── Del 58: veckoserier, samband, trendkluster, gruppjämförelse ──
+
+/** Snitt per ISO-vecka och källa (+ helhet) — underlag för 'Läxförhör vs Exit tickets'. */
+export interface VeckoSerier { veckor: number[]; serier: Record<KortKalla, Array<number | null>>; }
+
+export function veckoSerier(s: Struktur, f: DashboardFilter): VeckoSerier {
+  const rs = dashboardResultat(s, f);
+  const veckor = [...new Set(rs.map((r) => isoVecka(r.datum)))];
+  // kronologisk ordning bevaras eftersom dashboardResultat är datumsorterad
+  const per = (k: KortKalla): Array<number | null> => veckor.map((v) => snitt(rs
+    .filter((r) => isoVecka(r.datum) === v && (k === 'helhet' || r.kalla === k))
+    .map(resultatProcent).filter((p): p is number => p !== null)));
+  return { veckor, serier: {
+    'socrative-laxforhor': per('socrative-laxforhor'), 'socrative-exit': per('socrative-exit'),
+    magma: per('magma'), digiexam: per('digiexam'), helhet: per('helhet'),
+  } };
+}
+
+/** Pearsons korrelationskoefficient; null vid < 3 par eller nollvarians. */
+export function pearson(xs: number[], ys: number[]): number | null {
+  const n = Math.min(xs.length, ys.length);
+  if (n < 3) return null;
+  const mx = xs.slice(0, n).reduce((a, b) => a + b, 0) / n; const my = ys.slice(0, n).reduce((a, b) => a + b, 0) / n;
+  let sxy = 0; let sxx = 0; let syy = 0;
+  for (let i = 0; i < n; i++) { const dx = xs[i] - mx; const dy = ys[i] - my; sxy += dx * dy; sxx += dx * dx; syy += dy * dy; }
+  if (sxx === 0 || syy === 0) return null;
+  return Math.round((sxy / Math.sqrt(sxx * syy)) * 100) / 100;
+}
+
+/** Snittprocent per elev och källa (elever utan resultat i källan saknas i kartan). */
+function elevSnittPerKalla(rs: Resultat[], kalla: ResultatKalla): Map<string, number> {
+  const per = new Map<string, number[]>();
+  for (const r of rs) {
+    if (r.kalla !== kalla) continue;
+    const p = resultatProcent(r); if (p === null) continue;
+    per.set(r.elevId, [...(per.get(r.elevId) ?? []), p]);
+  }
+  return new Map([...per.entries()].map(([id, ps]) => [id, snitt(ps) ?? 0]));
+}
+
+export interface Samband { a: ResultatKalla; b: ResultatKalla; r: number; n: number; text: string; }
+
+const SAMBAND_PAR: Array<[ResultatKalla, ResultatKalla, string]> = [
+  ['socrative-laxforhor', 'socrative-exit', 'Läxförhör ↔ exit ticket'],
+  ['socrative-laxforhor', 'magma', 'Läxförhör ↔ Magma'],
+  ['socrative-exit', 'magma', 'Exit ticket ↔ Magma'],
+  ['socrative-laxforhor', 'digiexam', 'Läxförhör ↔ prov'],
+  ['socrative-exit', 'digiexam', 'Exit ticket ↔ prov'],
+  ['magma', 'digiexam', 'Magma ↔ prov'],
+];
+
+/** Korrelation mellan elevers snitt i två källor (≥ 3 elever med båda). */
+export function sambandsanalys(s: Struktur, f: DashboardFilter): Samband[] {
+  const rs = dashboardResultat(s, { ...f, kallor: undefined });
+  const ut: Samband[] = [];
+  for (const [a, b, text] of SAMBAND_PAR) {
+    const ma = elevSnittPerKalla(rs, a); const mb = elevSnittPerKalla(rs, b);
+    const ids = [...ma.keys()].filter((id) => mb.has(id));
+    const r = pearson(ids.map((id) => ma.get(id)!), ids.map((id) => mb.get(id)!));
+    if (r !== null) ut.push({ a, b, r, n: ids.length, text });
+  }
+  return ut;
+}
+
+export type Kluster = 'stigande' | 'stabil' | 'riskzon' | 'ojamn';
+export const KLUSTER_NAMN: Record<Kluster, string> = { stigande: 'Stigande', stabil: 'Stabil', riskzon: 'Riskzon', ojamn: 'Ojämn utveckling' };
+export interface KlusterGrupp { kluster: Kluster; elever: Elev[]; serie: number[]; }
+
+/**
+ * Delar in elever efter hur de trendar: Riskzon = snitt under lägsta krav
+ * i urvalet (annars < 60 %), Ojämn = stora kast mellan tillfällen,
+ * Stigande = trend upp, annars Stabil. `serie` = klustrets snitt per tillfälle.
+ */
+export function trendKluster(s: Struktur, f: DashboardFilter): KlusterGrupp[] {
+  const tillfallen = provTillfallen(s, f);
+  const krav = tillfallen.map((t) => t.krav).filter((k): k is number => k !== null);
+  const grans = krav.length > 0 ? Math.min(...krav) : 60;
+  const per = new Map<Kluster, Elev[]>([['stigande', []], ['stabil', []], ['riskzon', []], ['ojamn', []]]);
+  const kurvor = new Map<string, number[]>();
+  for (const elev of sokElever(s, f.klassId, '')) {
+    const k = elevKurva(s, elev.id, f).map((p) => p.procent);
+    if (k.length === 0) continue;
+    kurvor.set(elev.id, k);
+    const m = snitt(k) ?? 0;
+    const hopp = k.slice(1).map((v, i) => Math.abs(v - k[i]));
+    const kluster: Kluster = m < grans ? 'riskzon'
+      : hopp.length >= 2 && (snitt(hopp) ?? 0) > 25 ? 'ojamn'
+        : trendFor(k) === 'upp' ? 'stigande' : 'stabil';
+    per.get(kluster)!.push(elev);
+  }
+  return (['stigande', 'stabil', 'riskzon', 'ojamn'] as Kluster[]).map((kluster) => {
+    const elever = per.get(kluster)!;
+    const langd = Math.max(0, ...elever.map((e) => kurvor.get(e.id)!.length));
+    const serie: number[] = [];
+    for (let i = 0; i < langd; i++) {
+      const v = snitt(elever.map((e) => kurvor.get(e.id)![i]).filter((x): x is number => x !== undefined));
+      if (v !== null) serie.push(v);
+    }
+    return { kluster, elever, serie };
+  });
+}
+
+export interface GruppSnitt { grupp: 'A' | 'B'; antalElever: number; perKalla: Record<KortKalla, number | null>; }
+
+/** Snitt per grupp (A/B) och källa — 'Grupp A vs B'-widgeten. */
+export function gruppSnitt(s: Struktur, f: DashboardFilter): GruppSnitt[] {
+  const rs = dashboardResultat(s, f);
+  const elever = s.elever.filter((e) => e.klassId === f.klassId);
+  return (['A', 'B'] as const).map((grupp) => {
+    const ids = new Set(elever.filter((e) => e.grupp === grupp).map((e) => e.id));
+    const egna = rs.filter((r) => ids.has(r.elevId));
+    const per = (k: KortKalla) => snitt(egna.filter((r) => k === 'helhet' || r.kalla === k).map(resultatProcent).filter((p): p is number => p !== null));
+    return { grupp, antalElever: ids.size, perKalla: {
+      'socrative-laxforhor': per('socrative-laxforhor'), 'socrative-exit': per('socrative-exit'),
+      magma: per('magma'), digiexam: per('digiexam'), helhet: per('helhet') } };
+  });
+}
+
+/** Förändring i procentenheter: senare halvan av tillfällena mot tidigare; null vid < 2 tillfällen. */
+export function periodDelta(serie: number[]): number | null {
+  if (serie.length < 2) return null;
+  const mitt = Math.floor(serie.length / 2);
+  return (snitt(serie.slice(mitt)) ?? 0) - (snitt(serie.slice(0, mitt)) ?? 0);
+}

@@ -24,7 +24,8 @@ import {
   amnesOversikt, arFilRegistrerad, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   klassificeraSocrativeAktivitet, registreraFil, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tolkaSocrativeRoster, type RosterRad,
-  elevKurva, elevMatris, frageKort, klassKurva, tolkaVeckor, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
+  elevKurva, elevMatris, frageKort, gruppSnitt, klassKurva, periodDelta, sambandsanalys, tolkaVeckor, trendKluster, veckoSerier,
+  KLUSTER_NAMN, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
   resultatProcent, saknadeResultat, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type KalenderDagRuta, type KalenderHandelse,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
@@ -2089,6 +2090,13 @@ const ALLA_KALLOR: ResultatKalla[] = ['socrative-laxforhor', 'socrative-exit', '
 const KORT_FARG: Record<KortKalla, string> = {
   'socrative-laxforhor': '#1A2A6B', 'socrative-exit': '#2f5aa8', magma: '#6A1B9A', digiexam: '#BF360C', helhet: '#1B5E20',
 };
+const KORT_IKON: Record<KortKalla, string> = { 'socrative-laxforhor': '✅', 'socrative-exit': '🎟', magma: '🧠', digiexam: '📝', helhet: '📊' };
+const KORT_RUBRIK: Record<KortKalla, string> = { 'socrative-laxforhor': 'Läxförhör', 'socrative-exit': 'Exit tickets', magma: 'Magma test', digiexam: 'DigiExam prov', helhet: 'Helhet' };
+const KLUSTER_FARG = { stigande: '#1B5E20', stabil: '#2f5aa8', riskzon: '#B71C1C', ojamn: '#E65100' } as const;
+function initialer(namn: string): string {
+  const d = namn.replace(',', ' ').split(/\s+/).filter(Boolean);
+  return d.length >= 2 ? (namn.includes(',') ? d[1][0] + d[0][0] : d[0][0] + d[d.length - 1][0]).toUpperCase() : namn.slice(0, 2).toUpperCase();
+}
 function procentFarg(p: number | null, krav: number | null): string {
   if (p === null) return '#F1F3F6';
   if (krav !== null) return p >= krav ? '#C8E6C9' : p >= krav - 20 ? '#FFE0B2' : '#FFCDD2';
@@ -2112,12 +2120,13 @@ function Sparkline({ serie, farg, krav }: { serie: number[]; farg: string; krav:
 }
 
 /** Linjediagram 0–100 % över provtillfällen med kravlinjer; punkter klickbara. */
-function LinjeDiagram({ tillfallen, serier, kravLinjer, onKlick, hojd = 220 }: {
+function LinjeDiagram({ tillfallen, serier, kravLinjer, onKlick, hojd = 220, visaVarden = false }: {
   tillfallen: Array<{ etikett: string; titel: string }>;
   serier: Array<{ namn: string; varden: Array<number | null>; farg: string; streckad?: boolean }>;
   kravLinjer: Array<{ procent: number; namn: string }>;
   onKlick?: (index: number) => void;
   hojd?: number;
+  visaVarden?: boolean;
 }) {
   const w = 720; const h = hojd; const ml = 36; const mr = 12; const mt = 12; const mb = 46;
   const n = tillfallen.length;
@@ -2146,6 +2155,9 @@ function LinjeDiagram({ tillfallen, serier, kravLinjer, onKlick, hojd = 220 }: {
                 onClick={onKlick ? () => onKlick(i) : undefined}>
                 <title>{`${tillfallen[i].titel} · ${se.namn}: ${se.varden[i]} %`}</title>
               </circle>
+            ))}
+            {visaVarden && !se.streckad && pts.map((pt, i) => pt !== null && (
+              <text key={`t${i}`} x={pt.x} y={pt.y - 8} fontSize={10} fontWeight={700} textAnchor="middle" fill={se.farg}>{se.varden[i]} %</text>
             ))}
           </g>
         );
@@ -2183,6 +2195,17 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
   const f: DashboardFilter = { klassId, ...(amneId !== '' ? { amneId } : {}), ...(kallor !== undefined ? { kallor } : {}), ...(period ?? {}) };
   const kort = frageKort(s, f);
   const kurva = klassKurva(s, f);
+  const veckor = veckoSerier(s, f);
+  const kluster = trendKluster(s, f);
+  const grupper = gruppSnitt(s, f);
+  const samband = sambandsanalys(s, f);
+  const insikt = (() => {
+    const sb = samband.find((x) => x.a === 'socrative-laxforhor' && x.b === 'socrative-exit');
+    if (sb === undefined) return null;
+    if (sb.r >= 0.3) return `✅ Elever med högre läxförhör har också högre exit tickets (r = ${sb.r > 0 ? '+' : ''}${sb.r.toFixed(2)}).`;
+    if (sb.r <= -0.3) return `⚠ Läxförhör och exit tickets går åt olika håll (r = ${sb.r.toFixed(2)}) — kontrollera vad som testas.`;
+    return `➖ Inget tydligt samband mellan läxförhör och exit tickets (r = ${sb.r > 0 ? '+' : ''}${sb.r.toFixed(2)}).`;
+  })();
   const matris = elevMatris(s, f, sok);
   const elev = elevId === null ? null : s.elever.find((e) => e.id === elevId) ?? null;
   const ek = elev === null ? [] : elevKurva(s, elev.id, f);
@@ -2204,24 +2227,105 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
         <small className="muted">{klassNamn}{amneId !== '' ? ` · ${s.amnen.find((a) => a.id === amneId)?.namn ?? ''}` : ' · alla ämnen'}{period !== null ? ` · v.${period.veckaFran}–${period.veckaTill}` : ''}</small>
       </div>
 
-      {/* Frågekort */}
+      {/* KPI-rad — frågekort i mockupens stil: ikon, rubrik, fråga, stort tal, delta, sparkline */}
       <div className="st-kortrad">
-        {kort.map((k) => (
-          <div key={k.kalla} className={kortKlass(k)} style={{ borderTopColor: KORT_FARG[k.kalla] }}>
-            <div className="st-kort-rubrik">{k.rubrik}</div>
-            <div className="st-kort-fraga">{k.fraga}</div>
-            {k.antalProv === 0 ? <div className="muted small">Inga resultat ännu</div> : (<>
-              <div className="st-kort-tal">{k.snittProcent ?? '—'} %{k.trend !== null && <span className={`st-trend ${k.trend}`} title="Trend">{TREND[k.trend]}</span>}</div>
-              <div className="small">
-                {k.andelKlarade !== null
-                  ? <><b>{k.andelKlarade} %</b> klarar krav ≥ {k.krav} %</>
-                  : <>{k.antalProv} prov · {k.antalElever} elever</>}
+        {kort.map((k) => {
+          const delta = periodDelta(k.serie);
+          return (
+            <div key={k.kalla} className={kortKlass(k)} style={{ '--kort': KORT_FARG[k.kalla] } as React.CSSProperties}>
+              <div className="st-kort-topp">
+                <span className="st-ikon" aria-hidden="true">{KORT_IKON[k.kalla]}</span>
+                <div><div className="st-kort-rubrik">{k.rubrik}</div><div className="st-kort-fraga">{k.fraga}</div></div>
               </div>
-              <Sparkline serie={k.serie} farg={KORT_FARG[k.kalla]} krav={k.krav} />
-              {k.andelKlarade !== null && <div className="muted small">{k.antalProv} prov · {k.antalElever} elever</div>}
-            </>)}
+              {k.antalProv === 0 ? <div className="muted small">Inga resultat ännu</div> : (<>
+                <div className="st-kort-mitt">
+                  <div className="st-kort-tal">{k.snittProcent ?? '—'} %{k.trend !== null && <span className={`st-trend ${k.trend}`} title="Trend">{TREND[k.trend]}</span>}</div>
+                  <Sparkline serie={k.serie} farg={KORT_FARG[k.kalla]} krav={k.krav} />
+                </div>
+                <div className="small">
+                  {delta !== null && <span className={`st-delta ${delta > 0 ? 'upp' : delta < 0 ? 'ned' : 'jamn'}`}>{delta > 0 ? '+' : ''}{delta} % vs tidigare i perioden</span>}
+                  {k.andelKlarade !== null
+                    ? <div><b>{k.andelKlarade} %</b> klarar krav ≥ {k.krav} %</div>
+                    : <div>{k.antalProv} prov · {k.antalElever} elever</div>}
+                </div>
+              </>)}
+            </div>
+          );
+        })}
+        <div className="st-kort st-kort-kluster" style={{ '--kort': '#E65100' } as React.CSSProperties}>
+          <div className="st-kort-topp">
+            <span className="st-ikon" aria-hidden="true">✨</span>
+            <div><div className="st-kort-rubrik">Trendkluster</div><div className="st-kort-fraga">Elever som trendar tillsammans</div></div>
           </div>
-        ))}
+          <div className="st-kort-tal">{kluster.filter((g) => g.elever.length > 0).length}</div>
+          <div className="small muted">{kluster.find((g) => g.kluster === 'riskzon')?.elever.length ?? 0} i riskzon</div>
+        </div>
+      </div>
+
+      {/* Jämförelse + kluster */}
+      <div className="st-grid2">
+        <div className="uppg-kort st-widget">
+          <b>Läxförhör vs Exit tickets</b> <small className="muted">snitt per vecka · streckad = klassmedel (alla källor)</small>
+          <LinjeDiagram
+            hojd={230}
+            tillfallen={veckor.veckor.map((v) => ({ etikett: `v.${v}`, titel: `Vecka ${v}` }))}
+            serier={[
+              { namn: 'Läxförhör', varden: veckor.serier['socrative-laxforhor'], farg: KORT_FARG['socrative-laxforhor'] },
+              { namn: 'Exit tickets', varden: veckor.serier['socrative-exit'], farg: KORT_FARG['socrative-exit'] },
+              { namn: 'Klassmedel', varden: veckor.serier.helhet, farg: '#9AA3AE', streckad: true },
+            ]}
+            kravLinjer={kravLinjer}
+            visaVarden
+          />
+          <div className="st-legend">
+            <span><i style={{ background: KORT_FARG['socrative-laxforhor'] }} /> Läxförhör</span>
+            <span><i style={{ background: KORT_FARG['socrative-exit'] }} /> Exit tickets</span>
+            <span><i className="streck" /> Klassmedel</span>
+          </div>
+          {insikt !== null && <div className="st-insikt">{insikt}</div>}
+        </div>
+
+        <div className="uppg-kort st-widget">
+          <b>Trendkluster</b> <small className="muted">elever som trendar tillsammans · baserat på alla tillfällen i urvalet</small>
+          <div className="st-klusterrad">
+            {kluster.map((g) => (
+              <div key={g.kluster} className={`st-klusterkort ${g.kluster}`}>
+                <div className="rad"><b>{KLUSTER_NAMN[g.kluster]}</b><span className="spacer" /><small>{g.elever.length} elever</small></div>
+                <Sparkline serie={g.serie} farg={KLUSTER_FARG[g.kluster]} krav={null} />
+                <div className="st-chips">{g.elever.map((e) => (
+                  <button key={e.id} className="st-chip" title={e.namn} onClick={() => setElevId(e.id)}>{initialer(e.namn)}</button>
+                ))}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Grupper + samband */}
+      <div className="st-grid2 smal">
+        <div className="uppg-kort st-widget">
+          <b>Grupp A vs B</b> <small className="muted">snitt per källa</small>
+          <table className="tbl st-grupper">
+            <thead><tr><th>Källa</th><th>Grupp A <small className="muted">({grupper[0].antalElever})</small></th><th>Grupp B <small className="muted">({grupper[1].antalElever})</small></th></tr></thead>
+            <tbody>{(['socrative-laxforhor', 'socrative-exit', 'magma', 'digiexam', 'helhet'] as KortKalla[]).map((k) => (
+              <tr key={k}><td>{KORT_RUBRIK[k]}</td>
+                {grupper.map((g) => { const v = g.perKalla[k]; return (
+                  <td key={g.grupp}>{v === null ? <span className="muted">—</span> : (
+                    <span className="st-bar"><i style={{ width: `${v}%`, background: KORT_FARG[k] }} /><b>{v} %</b></span>)}</td>); })}
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+
+        <div className="uppg-kort st-widget">
+          <b>Sambandsanalys</b> <small className="muted">korrelation (Pearson r) mellan elevernas snitt i två källor</small>
+          {samband.length === 0 ? <p className="muted small">Kräver minst tre elever med resultat i båda källorna.</p> : (
+            <table className="tbl st-samband"><tbody>{samband.map((sb) => (
+              <tr key={`${sb.a}|${sb.b}`}><td>{sb.text} <small className="muted">({sb.n} elever)</small></td>
+                <td className={`st-r ${sb.r >= 0.3 ? 'pos' : sb.r <= -0.3 ? 'neg' : ''}`}>{sb.r > 0 ? '+' : ''}{sb.r.toFixed(2)} {sb.r >= 0.3 ? '↑' : sb.r <= -0.3 ? '↓' : '→'}</td></tr>
+            ))}</tbody></table>
+          )}
+        </div>
       </div>
 
       {/* Klassens utveckling */}

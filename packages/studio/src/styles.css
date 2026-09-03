@@ -468,3 +468,33 @@ body[data-tema="klassisk"] .tema-valj { border-color: var(--ram); background: #f
 .st-elev { border-left: 4px solid var(--bla); }
 .linkbtn { background: none; border: none; padding: 0; color: var(--bla); cursor: pointer; font: inherit; text-decoration: underline; }
 input.fel { border-color: #B71C1C; }
+
+/* Del 58: dashboard-layout efter designexemplen (Resultat) */
+.st-dash { background: #F4F6FA; border-radius: 14px; padding: 10px 12px; }
+.st-kortrad { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.st-kort { border-top: 1px solid var(--ram); border-left: 4px solid var(--kort, var(--bla)); box-shadow: 0 1px 3px rgba(20,40,80,.06); min-height: 128px; }
+.st-kort-topp { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 4px; }
+.st-ikon { width: 30px; height: 30px; border-radius: 50%; background: var(--kort, var(--bla)); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; flex: none; }
+.st-kort-mitt { display: flex; align-items: flex-end; justify-content: space-between; gap: 6px; }
+.st-kort-mitt .st-kort-tal { color: var(--kort, var(--bla)); }
+.st-delta { display: block; font-weight: 700; }
+.st-delta.upp { color: #1B5E20; } .st-delta.ned { color: #B71C1C; } .st-delta.jamn { color: #777; }
+.st-kort-kluster .st-kort-tal { color: #E65100; font-size: 30px; }
+.st-grid2 { display: grid; grid-template-columns: 3fr 2fr; gap: 10px; }
+.st-grid2.smal { grid-template-columns: 1fr 1fr; }
+@media (max-width: 1000px) { .st-grid2, .st-grid2.smal { grid-template-columns: 1fr; } }
+.st-widget { margin: 0 0 10px; }
+.st-legend { display: flex; gap: 14px; font-size: 12px; margin-top: 4px; }
+.st-legend i { display: inline-block; width: 18px; height: 3px; vertical-align: middle; margin-right: 4px; border-radius: 2px; }
+.st-legend i.streck { background: repeating-linear-gradient(90deg, #9AA3AE 0 4px, transparent 4px 7px); }
+.st-insikt { margin-top: 8px; background: #E8F5E9; border: 1px solid #A5D6A7; border-radius: 10px; padding: 8px 10px; font-size: 13px; }
+.st-klusterrad { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+.st-klusterkort { border: 1px solid var(--ram); border-radius: 10px; padding: 6px 8px; background: #fff; }
+.st-klusterkort.stigande { background: #F1F8E9; } .st-klusterkort.stabil { background: #EEF3FB; }
+.st-klusterkort.riskzon { background: #FFEBEE; } .st-klusterkort.ojamn { background: #FFF3E0; }
+.st-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.st-chip { border: 1px solid var(--ram); background: #fff; border-radius: 6px; font: inherit; font-size: 11px; font-weight: 700; padding: 1px 5px; cursor: pointer; }
+.st-bar { display: inline-flex; align-items: center; gap: 6px; min-width: 130px; }
+.st-bar i { display: inline-block; height: 6px; border-radius: 3px; max-width: 90px; }
+.st-r { font-weight: 800; white-space: nowrap; } .st-r.pos { color: #1B5E20; } .st-r.neg { color: #B71C1C; }
+.st-samband td, .st-grupper td { font-size: 13px; }

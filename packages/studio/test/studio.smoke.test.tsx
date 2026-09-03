@@ -1338,14 +1338,25 @@ describe('📊 SuperTeach', () => {
     const kort = [...host.querySelectorAll('.st-kort')];
     expect(kort.map((k) => k.querySelector('.st-kort-fraga')?.textContent)).toEqual([
       'Gör eleven läxor?', 'Lär sig eleven på lektionen?', 'Kan eleven begreppen?', 'Klarar eleven proven?', 'Hur går det sammantaget?',
+      'Elever som trendar tillsammans',
     ]);
+    expect(kort[1].textContent).toContain('% vs tidigare i perioden'); // periodDelta i kortet
     expect(kort[1].textContent).toContain('83 %');            // exit-snitt (9+6+10+8)/4
     expect(kort[1].textContent).toContain('75 % klarar krav ≥ 70 %');
     expect(kort[0].textContent).toContain('100 % klarar krav ≥ 90 %');
     expect(kort[2].textContent).toContain('Inga resultat ännu');
 
+    // Veckodiagram 'Läxförhör vs Exit tickets' med värdeetiketter, insiktsruta, kluster, grupper och samband
+    const vecko = host.querySelectorAll('.st-diagram')[0]!;
+    expect(vecko.textContent).toContain('v.35');
+    expect(vecko.textContent).toContain('v.36');
+    expect(vecko.querySelectorAll('text').length).toBeGreaterThan(8);
+    expect(host.querySelectorAll('.st-klusterkort')).toHaveLength(4);
+    expect(host.querySelector('.st-grupper')!.textContent).toContain('Grupp A');
+    expect(host.querySelector('.st-samband, .st-widget p.muted')).not.toBeNull(); // 2 elever → 'kräver minst tre'
+
     // Klasskurvan: tre tillfällen, kravlinjer 70 och 90, punkter klickbara
-    const diagram = host.querySelector('.st-diagram')!;
+    const diagram = host.querySelectorAll('.st-diagram')[1]!;
     expect(diagram.textContent).toContain('krav 70 %');
     expect(diagram.textContent).toContain('krav 90 %');
     expect(diagram.querySelectorAll('.st-punkt').length).toBeGreaterThanOrEqual(3);

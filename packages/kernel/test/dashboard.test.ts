@@ -105,3 +105,73 @@ describe('tolkaVeckor', () => {
     expect(tolkaVeckor('0-99')).toBeNull();
   });
 });
+
+describe('Del 58: veckoserier, samband, kluster, grupper', async () => {
+  const { veckoSerier, pearson, sambandsanalys, trendKluster, gruppSnitt, periodDelta } = await import('../src/domain/dashboard.js');
+  const { laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst } = await import('../src/domain/struktur.js');
+  const { tomStruktur } = await import('../src/domain/typer.js');
+  const { importeraResultat } = await import('../src/domain/resultat.js');
+
+  function bygg() {
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillElev(s, { id: 'a', klassId: 'k', namn: 'Anna Berg', grupp: 'A' });
+    s = laggTillElev(s, { id: 'b', klassId: 'k', namn: 'Omar Ali', grupp: 'B' });
+    s = laggTillElev(s, { id: 'c', klassId: 'k', namn: 'Pia Provlund', grupp: 'A' });
+    const imp = (kalla: 'socrative-laxforhor' | 'socrative-exit', prov: string, datum: string, p: number[]) => {
+      s = importeraResultat(s, { klassId: 'k', kalla, prov, datum, rader: [
+        { namn: 'Anna Berg', poang: p[0], maxPoang: 10 }, { namn: 'Omar Ali', poang: p[1], maxPoang: 10 }, { namn: 'Pia Provlund', poang: p[2], maxPoang: 10 }] }).s;
+    };
+    // v.35: exit; v.36: läxförhör + exit; v.37: läxförhör + exit
+    imp('socrative-exit', 'E1', '2026-08-26', [6, 3, 9]);
+    imp('socrative-laxforhor', 'L1', '2026-09-02', [7, 4, 10]);
+    imp('socrative-exit', 'E2', '2026-09-02', [8, 4, 10]);
+    imp('socrative-laxforhor', 'L2', '2026-09-09', [9, 5, 10]);
+    imp('socrative-exit', 'E3', '2026-09-09', [10, 2, 10]);
+    return s;
+  }
+  const f = { klassId: 'k' };
+
+  it('veckoSerier ger snitt per vecka och källa', () => {
+    const v = veckoSerier(bygg(), f);
+    expect(v.veckor).toEqual([35, 36, 37]);
+    expect(v.serier['socrative-exit']).toEqual([60, 73, 73]);
+    expect(v.serier['socrative-laxforhor']).toEqual([null, 70, 80]);
+    expect(v.serier.helhet[1]).toBe(72);
+  });
+
+  it('pearson och sambandsanalys', () => {
+    expect(pearson([1, 2, 3], [2, 4, 6])).toBe(1);
+    expect(pearson([1, 2, 3], [3, 2, 1])).toBe(-1);
+    expect(pearson([1, 2], [1, 2])).toBeNull();
+    expect(pearson([1, 1, 1], [1, 2, 3])).toBeNull();
+    const sb = sambandsanalys(bygg(), f);
+    expect(sb).toHaveLength(1);
+    expect(sb[0]).toMatchObject({ a: 'socrative-laxforhor', b: 'socrative-exit', n: 3 });
+    expect(sb[0].r).toBeGreaterThan(0.9);
+  });
+
+  it('trendKluster: Anna stigande, Pia stabil, Omar i riskzon', () => {
+    const kl = trendKluster(bygg(), f);
+    const namn = (k: string) => kl.find((x) => x.kluster === k)!.elever.map((e) => e.namn);
+    expect(namn('stigande')).toEqual(['Anna Berg']);
+    expect(namn('stabil')).toEqual(['Pia Provlund']);
+    expect(namn('riskzon')).toEqual(['Omar Ali']);
+    expect(namn('ojamn')).toEqual([]);
+    expect(kl[0].serie).toEqual([60, 80, 70, 100, 90]); // samma dag: exit före läxförhör (provnamn)
+  });
+
+  it('gruppSnitt jämför A och B', () => {
+    const g = gruppSnitt(bygg(), f);
+    expect(g[0]).toMatchObject({ grupp: 'A', antalElever: 2 });
+    expect(g[0].perKalla['socrative-exit']).toBe(88);
+    expect(g[1].perKalla['socrative-laxforhor']).toBe(45);
+    expect(g[1].perKalla.magma).toBeNull();
+  });
+
+  it('periodDelta', () => {
+    expect(periodDelta([60, 70, 80, 90])).toBe(20);
+    expect(periodDelta([50])).toBeNull();
+  });
+});
