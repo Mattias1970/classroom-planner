@@ -353,3 +353,36 @@ export function saknadeResultat(s: Struktur, amneId: string, plan: PlaneradLekti
     return true;
   });
 }
+
+// ── Del 67: ta bort importerade filer och resultat ──────────
+
+/** Tar bort en filpost och alla resultat den gav (samma ämne, källa och prov). Grafer töms när sista filen är borta. */
+export function taBortFil(s: Struktur, filId: string): Struktur {
+  const post = (s.filregister ?? []).find((f) => f.id === filId);
+  if (post === undefined) return s;
+  return {
+    ...s,
+    filregister: (s.filregister ?? []).filter((f) => f.id !== filId),
+    resultat: (s.resultat ?? []).filter((r) => !(r.amneId === post.amneId && r.kalla === post.kalla && r.prov === post.prov
+      && (post.rum === undefined || r.rum === undefined || r.rum === post.rum))),
+  };
+}
+
+/** Rensar alla resultat och filposter för en klass (valfritt bara ett ämne). */
+export function rensaResultat(s: Struktur, klassId: string, amneId?: string): Struktur {
+  const elevIds = new Set(s.elever.filter((e) => e.klassId === klassId).map((e) => e.id));
+  const amnesIds = new Set(s.amnen.filter((a) => a.klassId === klassId && (amneId === undefined || a.id === amneId)).map((a) => a.id));
+  const bort = (r: Resultat) => elevIds.has(r.elevId) && (amneId === undefined || r.amneId === amneId);
+  return {
+    ...s,
+    resultat: (s.resultat ?? []).filter((r) => !bort(r)),
+    filregister: (s.filregister ?? []).filter((f) => !amnesIds.has(f.amneId)),
+  };
+}
+
+/** Källor som ingår i ett ämnes undervisning: Magma är ett matematikverktyg och visas inte i NO. */
+export function amnesKallor(amnesNamn: string | undefined): ResultatKalla[] {
+  const alla: ResultatKalla[] = ['socrative-laxforhor', 'socrative-exit', 'magma', 'digiexam'];
+  if (amnesNamn === undefined || amnesNamn.trim() === '') return alla;
+  return /matematik|matte/i.test(amnesNamn) ? alla : alla.filter((k) => k !== 'magma');
+}

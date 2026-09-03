@@ -568,3 +568,16 @@ input.fel { border-color: #B71C1C; }
 .st-begrepp dt { font-weight: 700; }
 .st-begrepp dd { margin: 0; }
 .st-filmer { margin: 0; padding-left: 18px; font-size: 13px; }
+
+/* Del 67: på/av-knappar, klusterrutor, normerad graf, fillista */
+.st-toggle { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--ram); background: #fff; color: #555; border-radius: 999px; padding: 4px 12px; font: inherit; font-size: 13px; cursor: pointer; opacity: .75; }
+.st-toggle.on { background: var(--tf, var(--bla)); border-color: var(--tf, var(--bla)); color: #fff; opacity: 1; font-weight: 700; }
+.st-toggle-prick { width: 10px; height: 10px; border-radius: 50%; background: var(--tf, var(--bla)); display: inline-block; }
+.st-toggle.on .st-toggle-prick { background: #fff; }
+.st-klusterfilter { gap: 6px; flex-wrap: wrap; margin: 10px 0 4px; }
+.st-klusterkort.klickbar { cursor: pointer; transition: box-shadow .15s; }
+.st-klusterkort.klickbar:hover, .st-klusterkort.klickbar:focus-visible { box-shadow: 0 0 0 2px var(--bla); outline: none; }
+.st-normerad text { user-select: none; }
+.st-filer { margin: 8px 0; }
+.st-filer summary { cursor: pointer; font-weight: 700; }
+.st-filer table { margin-top: 6px; }

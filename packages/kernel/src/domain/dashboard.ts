@@ -62,6 +62,8 @@ export interface ProvTillfalle {
   datumTill: string;
   /** Alla datum som ingår — två vid halvklass A/B. */
   sessioner: string[];
+  /** Socrative-rum när det är känt ('Biologi412') — ger kapiteletiketten. */
+  rum?: string;
   vecka: number;
   antal: number;
   snittProcent: number | null;
@@ -119,8 +121,9 @@ export function provTillfallen(s: Struktur, f: DashboardFilter): ProvTillfalle[]
     const procent = rs.map(resultatProcent).filter((p): p is number => p !== null);
     const bedomda = rs.map(klaratKrav).filter((k): k is boolean => k !== null);
     const sessioner = [...new Set(rs.map((r) => r.datum))].sort();
+    const rum = rs.find((r) => r.rum !== undefined)?.rum;
     return {
-      nyckel, kalla, prov, datum, datumTill, sessioner, vecka: isoVecka(datum), antal: rs.length,
+      nyckel, kalla, prov, datum, datumTill, sessioner, ...(rum !== undefined ? { rum } : {}), vecka: isoVecka(datum), antal: rs.length,
       snittProcent: snitt(procent),
       andelKlarade: bedomda.length === 0 ? null : Math.round((bedomda.filter(Boolean).length / bedomda.length) * 100),
       krav: kravFor(kalla),
@@ -581,4 +584,83 @@ export function spridningsOpacitet(varde: number, snittProcent: number, min: num
   const spann = Math.max(snittProcent - min, max - snittProcent);
   if (spann <= 0) return 1;
   return Math.max(0, 1 - Math.abs(varde - snittProcent) / spann);
+}
+
+// ── Del 67: etiketter, normerad spridning, klusterkurvor ──────
+
+const VECKODAG_KORT = ['', 'Må', 'Ti', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön'];
+
+/** 'Biologi412' → 'Kap 4.1–2', 'Biologi41' → 'Kap 4.1', 'Quiz 1.2a' → 'Kap 1.2', annars provnamnet. */
+export function kapitelEtikett(prov: string, rum?: string): string {
+  const m = rum !== undefined ? /^[^\d]+(\d)(\d+)$/.exec(rum.trim()) : null;
+  if (m !== null) {
+    const delar = m[2].split('').map(Number);
+    return delar.length === 1 ? `Kap ${m[1]}.${delar[0]}` : `Kap ${m[1]}.${delar[0]}–${delar[delar.length - 1]}`;
+  }
+  const p = /(\d+)\.(\d+)/.exec(prov);
+  return p !== null ? `Kap ${Number(p[1])}.${Number(p[2])}` : prov.replace(/^Quiz\s*/i, '');
+}
+
+/** Treradig axeletikett: ['v36', 'Ons 26/8', 'Kap 4.1–3'] (+ 'A+B' vid halvklass). */
+export function tillfalleEtiketter(t: ProvTillfalle): [string, string, string] {
+  const dag = VECKODAG_KORT[veckodagFor(t.datum)];
+  return [`v${t.vecka}`, `${dag} ${Number(t.datum.slice(8, 10))}/${Number(t.datum.slice(5, 7))}`, `${kapitelEtikett(t.prov, t.rum)}${t.sessioner.length > 1 ? ' A+B' : ''}`];
+}
+
+export const NORM_BAND = 3;
+export const NORM_MAX = 30;
+
+export interface NormeratTillfalle {
+  tillfalle: ProvTillfalle;
+  /** Andel elever (0–1) per band; index 0 = [−30,−27) … index 19 = [+27,+30]; värden utanför hamnar i yttersta bandet. */
+  band: number[];
+  antal: number;
+}
+
+/** Fördelar en lista procent i band om NORM_BAND procentenheter runt snittet, ±NORM_MAX. */
+export function normeraBand(varden: number[], snittProcent: number): number[] {
+  const n = (NORM_MAX * 2) / NORM_BAND;
+  const band = new Array<number>(n).fill(0);
+  if (varden.length === 0) return band;
+  for (const v of varden) {
+    const i = Math.min(n - 1, Math.max(0, Math.floor((v - snittProcent + NORM_MAX) / NORM_BAND)));
+    band[i] += 1 / varden.length;
+  }
+  return band;
+}
+
+/** Klassens spridning normerad: snittet = 100, band om 3 procentenheter, yttersta kanten ±30. */
+export function normeradSpridning(s: Struktur, f: DashboardFilter): NormeratTillfalle[] {
+  return klassSpridning(s, f).map((t) => ({ tillfalle: t, band: normeraBand(t.varden, t.snittProcent ?? 0), antal: t.varden.length }));
+}
+
+export interface KlusterKurva {
+  kluster: Kluster;
+  antal: number;
+  /** Klustrets snitt per tillfälle (procent), null där ingen i klustret har resultat. */
+  procent: Array<number | null>;
+  /** Relativt klassens snitt: 100 = som klassen. */
+  index: Array<number | null>;
+  /** Klustrets fördelning kring KLASSENS snitt per tillfälle. */
+  band: number[][];
+}
+
+/** Trendklustrens kurvor längs klassens provtillfällen, normerade mot klassens snitt. */
+export function klusterKurvor(s: Struktur, f: DashboardFilter): KlusterKurva[] {
+  const tillfallen = klassSpridning(s, f);
+  const rs = dashboardResultat(s, f);
+  const { avResultat } = tillfalleIndex(rs);
+  const perElevTillfalle = new Map<string, number>();
+  for (const r of rs) { const p = resultatProcent(r); const n = avResultat.get(r.id); if (p !== null && n !== undefined) perElevTillfalle.set(`${r.elevId}|${n}`, p); }
+  return trendKluster(s, f).map((g) => {
+    const procent: Array<number | null> = []; const index: Array<number | null> = []; const band: number[][] = [];
+    for (const t of tillfallen) {
+      const v = g.elever.map((e) => perElevTillfalle.get(`${e.id}|${t.nyckel}`)).filter((x): x is number => x !== undefined);
+      const m = snitt(v);
+      procent.push(m);
+      index.push(m === null || (t.snittProcent ?? 0) === 0 ? null : Math.round((m / (t.snittProcent ?? 1)) * 100));
+      band.push(normeraBand(v, t.snittProcent ?? 0));
+    }
+    return { kluster: g.kluster, antal: g.elever.length, procent, index, band };
+  });
 }

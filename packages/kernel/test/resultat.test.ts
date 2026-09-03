@@ -241,3 +241,13 @@ describe('Del 61: förväntat prov matchas på Socrative-rum', () => {
     expect(s.resultat![0].rum).toBe('Biologi41');
   });
 });
+
+describe('Del 67: amnesKallor', async () => {
+  const { amnesKallor } = await import('../src/domain/resultat.js');
+  it('Magma bara i matematik', () => {
+    expect(amnesKallor('Biologi')).toEqual(['socrative-laxforhor', 'socrative-exit', 'digiexam']);
+    expect(amnesKallor('Matematik')).toHaveLength(4);
+    expect(amnesKallor('Matte')).toHaveLength(4);
+    expect(amnesKallor(undefined)).toHaveLength(4);
+  });
+});

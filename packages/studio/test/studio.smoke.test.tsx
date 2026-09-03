@@ -1377,19 +1377,30 @@ describe('📊 SuperTeach', () => {
     act(() => { knapp(host, '✕ visa alla dagar').click(); });
     expect(host.querySelectorAll('.st-kort')[1].textContent).toContain('86 %');
 
-    // Spridningsgrafen (standard): en punkt per elev och tillfälle, snittetikett, min/max
-    const spridning = host.querySelectorAll('.st-diagram')[2]!; // [0] vecko, [1] närvaro
+    // Normerad graf (standard): snittet = 100, band om 3 procentenheter, axeletiketter v/dag/kapitel
+    const alla = host.querySelectorAll('.st-diagram');
+    const normerad = [...alla].find((d) => d.getAttribute('aria-label') === 'Normerad spridning kring klassens snitt')!;
+    expect(normerad).not.toBeUndefined();
+    expect(normerad.textContent).toContain('100 snitt');
+    expect(normerad.textContent).toContain('v35');
+    expect(normerad.textContent).toContain('Ons 26/8');
+    expect(normerad.textContent).toContain('Kap 1.1');
+    expect(normerad.querySelectorAll('rect').length).toBeGreaterThan(0);
+    // Klusterknapparna är på/av-knappar med aria-pressed
+    expect(host.querySelectorAll('.st-toggle[aria-pressed="true"]').length).toBeGreaterThan(0);
+    // Växla till Spridning
+    act(() => { knapp(host, 'Spridning').click(); });
+    const spridning = [...host.querySelectorAll('.st-diagram')].find((d) => d.getAttribute('aria-label') === 'Klassens spridning per provtillfälle')!;
     expect(spridning.getAttribute('aria-label')).toBe('Klassens spridning per provtillfälle');
     expect(spridning.querySelectorAll('linearGradient')).toHaveLength(4);
     expect(spridning.textContent).toContain('(snitt 75 %, 60–90 %)');
     const punkter = [...spridning.querySelectorAll('circle')].filter((c) => c.getAttribute('opacity') !== null);
     expect(punkter.length).toBe(7); // 2 elever × 4 tillfällen minus Omars saknade 1.2a
     // Växla till kurvan
-    const spridCheck = [...host.querySelectorAll('input[type="checkbox"]')].find((c) => c.parentElement?.textContent?.includes('spridning')) as HTMLInputElement;
-    act(() => { spridCheck.click(); });
+    act(() => { knapp(host, 'Kurva').click(); });
 
     // Klasskurvan: tre tillfällen, kravlinjer 70 och 90, punkter klickbara
-    const diagram = host.querySelectorAll('.st-diagram')[2]!;
+    const diagram = [...host.querySelectorAll('.st-diagram')].find((d) => d.getAttribute('aria-label') === 'Utveckling över provtillfällen' && d.querySelector('.st-punkt') !== null)!;
     expect(diagram.textContent).toContain('krav 70 %');
     expect(diagram.textContent).toContain('krav 90 %');
     expect(diagram.querySelectorAll('.st-punkt').length).toBeGreaterThanOrEqual(3);
@@ -1399,7 +1410,7 @@ describe('📊 SuperTeach', () => {
     expect(matris.querySelectorAll('tbody tr')).toHaveLength(2);
     expect(matris.querySelectorAll('tbody tr')[1].querySelectorAll('.st-cell')).toHaveLength(4);
     expect(matris.querySelectorAll('.st-cell.franvaro')).toHaveLength(1);
-    expect(matris.textContent).toContain('v.35 1.1a');
+    expect(matris.textContent).toContain('v35 Kap 1.1');
 
     // Periodfilter v.36 → ett exit + ett läxförhör
     skriv(input(host, 'Period (veckor)'), 'v.36');

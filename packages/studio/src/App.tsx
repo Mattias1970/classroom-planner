@@ -27,7 +27,8 @@ import {
   importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
-  elevrapport, elevrapportText, KLUSTER_NAMN, TID_PASS,
+  elevrapport, elevrapportText, tillfalleEtiketter, normeradSpridning, klusterKurvor, normeraBand, taBortFil, rensaResultat,
+  NORM_BAND, NORM_MAX, amnesKallor, KLUSTER_NAMN, TID_PASS, type Kluster,
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
@@ -2162,10 +2163,10 @@ function SpridningsDiagram({ tillfallen, hojd = 300, w, onKlick }: {
   tillfallen: ReturnType<typeof klassSpridning>; hojd?: number; w: number; onKlick?: (index: number) => void;
 }) {
   const n = tillfallen.length;
-  const ml = 40; const mr = 16; const mt = 16; const mb = 44; const h = hojd;
+  const rotera = n > 1 && (w - 60) / (n - 1) < 70;
+  const ml = 40; const mr = 16; const mt = 16; const mb = rotera ? 90 : AXEL_HOJD + 8; const h = hojd + mb - 44;
   const x = (i: number) => (n <= 1 ? ml + (w - ml - mr) / 2 : ml + (i / (n - 1)) * (w - ml - mr));
   const y = (p: number) => mt + (1 - p / 100) * (h - mt - mb);
-  if (n === 0) return <p className="muted small">Inga provtillfällen i urvalet ännu.</p>;
   const farg = '#2f5aa8';
   const gid = `spridning-${Math.random().toString(36).slice(2, 8)}`;
   return (
@@ -2215,11 +2216,81 @@ function SpridningsDiagram({ tillfallen, hojd = 300, w, onKlick }: {
           <text x={x(i)} y={y(t.snittProcent ?? 0) - 11} fontSize={11} fontWeight={700} textAnchor="middle" fill={farg} stroke="#fff" strokeWidth={3} paintOrder="stroke">{t.snittProcent ?? '—'} %</text>
           <text x={x(i)} y={y(t.max) - 4} fontSize={9} textAnchor="middle" fill="#8a94a3">{t.max}</text>
           <text x={x(i)} y={y(t.min) + 11} fontSize={9} textAnchor="middle" fill="#8a94a3">{t.min}</text>
-          <text x={x(i)} y={h - mb + 16} fontSize={11} textAnchor={n > 8 ? 'end' : 'middle'} fill="#555"
-            transform={n > 8 ? `rotate(-40 ${x(i)} ${h - mb + 16})` : undefined}>{tillfalleEtikett(t)}</text>
+          <AxelText x={x(i)} y={h - mb + 16} rader={axelEtikett(t)} rotera={rotera} titel={`${t.datum} ${t.prov}`} />
         </g>
       ))}
     </svg>
+  );
+}
+
+/**
+ * Normerad graf: klassens snitt = 100 i varje tillfälle. Band om NORM_BAND
+ * procentenheter upp och ner till ±NORM_MAX; bandets ton = andel elever i
+ * bandet. Varje serie (klass eller trendkluster) har egen färg, egna band och
+ * en linje för seriens snitt relativt klassen. Serier utan `pa` ritas inte.
+ */
+interface NormSerie { namn: string; farg: string; band: number[][]; linje: Array<number | null>; pa: boolean; }
+function NormeradDiagram({ tillfallen, serier, w, hojd = 320, onKlick }: {
+  tillfallen: ReturnType<typeof klassSpridning>; serier: NormSerie[]; w: number; hojd?: number; onKlick?: (index: number) => void;
+}) {
+  const n = tillfallen.length;
+  const rotera = n > 1 && (w - 60) / (n - 1) < 70;
+  const ml = 44; const mr = 16; const mt = 14; const mb = rotera ? 90 : AXEL_HOJD + 8; const h = hojd + mb - 44;
+  const x = (i: number) => (n <= 1 ? ml + (w - ml - mr) / 2 : ml + (i / (n - 1)) * (w - ml - mr));
+  const y = (avv: number) => mt + (1 - (avv + NORM_MAX) / (NORM_MAX * 2)) * (h - mt - mb); // avv = procentenheter från snittet
+  const aktiva = serier.filter((se) => se.pa);
+  const antalBand = (NORM_MAX * 2) / NORM_BAND;
+  const bredd = Math.max(14, Math.min(46, (n <= 1 ? w / 2 : (w - ml - mr) / (n - 1)) * 0.55));
+  const stapel = bredd / Math.max(1, aktiva.length);
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h} className="st-diagram st-normerad" role="img" aria-label="Normerad spridning kring klassens snitt">
+      {Array.from({ length: antalBand + 1 }, (_, k) => -NORM_MAX + k * NORM_BAND).map((avv) => (
+        <g key={avv}>
+          <line x1={ml} x2={w - mr} y1={y(avv)} y2={y(avv)} stroke={avv === 0 ? '#555' : avv % 15 === 0 ? '#C9D0DA' : '#EEF1F5'} strokeWidth={avv === 0 ? 1.5 : 1} />
+          {avv % 15 === 0 && <text x={ml - 6} y={y(avv) + 4} fontSize={11} textAnchor="end" fill={avv === 0 ? '#333' : '#777'} fontWeight={avv === 0 ? 700 : 400}>{100 + avv}{avv === 0 ? ' snitt' : ''}</text>}
+        </g>
+      ))}
+      {tillfallen.map((t, i) => aktiva.map((se, si) => {
+        const band = se.band[i] ?? [];
+        const x0 = x(i) - bredd / 2 + si * stapel;
+        const maxAndel = Math.max(0.0001, ...band);
+        return band.map((andel, k) => andel > 0 && (
+          <rect key={`${si}-${k}`} x={x0} y={y(-NORM_MAX + (k + 1) * NORM_BAND)} width={stapel - 1} height={y(0) - y(NORM_BAND)}
+            fill={se.farg} opacity={0.12 + 0.88 * (andel / maxAndel)}>
+            <title>{`${se.namn} · ${t.prov}: ${Math.round(andel * 100)} % av eleverna ${-NORM_MAX + k * NORM_BAND >= 0 ? '+' : ''}${-NORM_MAX + k * NORM_BAND}…${-NORM_MAX + (k + 1) * NORM_BAND} från snittet`}</title>
+          </rect>
+        ));
+      }))}
+      {aktiva.map((se) => {
+        const pts = se.linje.map((v, i) => (v === null ? null : { x: x(i), y: y(Math.max(-NORM_MAX, Math.min(NORM_MAX, v))) }));
+        let d = ''; let pen = false;
+        pts.forEach((pt) => { if (pt === null) { pen = false; return; } d += `${pen ? 'L' : 'M'}${pt.x.toFixed(1)},${pt.y.toFixed(1)} `; pen = true; });
+        return (
+          <g key={se.namn}>
+            <path d={d} fill="none" stroke={se.farg} strokeWidth={2.4} />
+            {pts.map((pt, i) => pt !== null && (
+              <circle key={i} cx={pt.x} cy={pt.y} r={4.2} fill="#fff" stroke={se.farg} strokeWidth={2.2} className={onKlick ? 'st-punkt' : undefined} onClick={onKlick ? () => onKlick(i) : undefined}>
+                <title>{`${se.namn}: ${se.linje[i]! >= 0 ? '+' : ''}${se.linje[i]} procentenheter mot klassens snitt (${tillfallen[i].snittProcent ?? '—'} %)`}</title>
+              </circle>
+            ))}
+          </g>
+        );
+      })}
+      {tillfallen.map((t, i) => <AxelText key={i} x={x(i)} y={h - mb + 16} rader={axelEtikett(t)} rotera={rotera} titel={`${t.datum} ${t.prov} · snitt ${t.snittProcent ?? '—'} %`} />)}
+    </svg>
+  );
+}
+function NormeradGraf(props: { tillfallen: ReturnType<typeof klassSpridning>; serier: NormSerie[]; hojd?: number; onKlick?: (index: number) => void }) {
+  const [ref, bredd] = useBredd(720);
+  return <div ref={ref} className="st-diagram-ram"><NormeradDiagram {...props} w={bredd} /></div>;
+}
+/** På/av-knapp med färgprick — på = linjen (och banden) ritas. */
+function FilterKnapp({ pa, farg, onClick, children, title }: { pa: boolean; farg?: string; onClick: () => void; children: React.ReactNode; title?: string }) {
+  return (
+    <button type="button" className={`st-toggle${pa ? ' on' : ''}`} aria-pressed={pa} onClick={onClick} title={title}
+      style={farg !== undefined ? ({ '--tf': farg } as React.CSSProperties) : undefined}>
+      {farg !== undefined && <i className="st-toggle-prick" />}{children}
+    </button>
   );
 }
 
@@ -2245,7 +2316,7 @@ function useBredd(fallback: number): [React.RefObject<HTMLDivElement>, number] {
 
 /** Linjediagram 0–100 % över provtillfällen med kravlinjer; punkter klickbara. Bredden följer containern. */
 function LinjeDiagram(props: {
-  tillfallen: Array<{ etikett: string; titel: string }>;
+  tillfallen: Array<{ etikett: string | string[]; titel: string }>;
   serier: Array<{ namn: string; varden: Array<number | null>; farg: string; streckad?: boolean }>;
   kravLinjer: Array<{ procent: number; namn: string }>;
   onKlick?: (index: number) => void;
@@ -2257,7 +2328,7 @@ function LinjeDiagram(props: {
 }
 
 function LinjeDiagramSvg({ tillfallen, serier, kravLinjer, onKlick, hojd = 220, visaVarden = false, w }: {
-  tillfallen: Array<{ etikett: string; titel: string }>;
+  tillfallen: Array<{ etikett: string | string[]; titel: string }>;
   serier: Array<{ namn: string; varden: Array<number | null>; farg: string; streckad?: boolean }>;
   kravLinjer: Array<{ procent: number; namn: string }>;
   onKlick?: (index: number) => void;
@@ -2266,13 +2337,14 @@ function LinjeDiagramSvg({ tillfallen, serier, kravLinjer, onKlick, hojd = 220, 
   w: number;
 }) {
   const n = tillfallen.length;
+  const rader = (e: string | string[]) => (Array.isArray(e) ? e : e.split('\n'));
   // Etiketter roteras när de inte får plats; då behövs mer plats under axeln
-  const langsta = Math.max(0, ...tillfallen.map((t) => t.etikett.length));
+  const langsta = Math.max(0, ...tillfallen.map((t) => Math.max(...rader(t.etikett).map((r) => r.length))));
   const platsPerEtikett = n <= 1 ? Infinity : (w - 60) / (n - 1);
-  const rotera = n > 1 && platsPerEtikett < langsta * 6.5;
+  const rotera = n > 1 && platsPerEtikett < langsta * 6.8;
   const legendRader = Math.ceil((serier.length * 160) / Math.max(200, w - 60));
-  const mb = (rotera ? 30 + Math.min(70, langsta * 4.6) : 34) + legendRader * 16;
-  const h = hojd + (rotera ? Math.min(70, langsta * 4.6) : 0) + (legendRader - 1) * 16;
+  const mb = (rotera ? 30 + Math.min(90, langsta * 5.5) : AXEL_HOJD + 8) + legendRader * 16;
+  const h = hojd + (rotera ? Math.min(90, langsta * 5.5) : AXEL_HOJD - 20) + (legendRader - 1) * 16;
   const ml = 40; const mr = 16; const mt = 14;
   const x = (i: number) => (n <= 1 ? ml + (w - ml - mr) / 2 : ml + (i / (n - 1)) * (w - ml - mr));
   const y = (p: number) => mt + (1 - p / 100) * (h - mt - mb);
@@ -2306,10 +2378,7 @@ function LinjeDiagramSvg({ tillfallen, serier, kravLinjer, onKlick, hojd = 220, 
           </g>
         );
       })}
-      {tillfallen.map((t, i) => (
-        <text key={i} x={x(i)} y={h - mb + 16} fontSize={11} textAnchor={rotera ? 'end' : 'middle'} fill="#555"
-          transform={rotera ? `rotate(-40 ${x(i)} ${h - mb + 16})` : undefined}><title>{t.titel}</title>{t.etikett}</text>
-      ))}
+      {tillfallen.map((t, i) => <AxelText key={i} x={x(i)} y={h - mb + 16} rader={rader(t.etikett)} rotera={rotera} titel={t.titel} />)}
       <g transform={`translate(${ml},${h - 8 - (legendRader - 1) * 16})`}>
         {serier.map((se, i) => (
           <g key={se.namn} transform={`translate(${(i % Math.max(1, Math.floor((w - 60) / 160))) * 160},${Math.floor(i / Math.max(1, Math.floor((w - 60) / 160))) * 16})`}>
@@ -2322,10 +2391,25 @@ function LinjeDiagramSvg({ tillfallen, serier, kravLinjer, onKlick, hojd = 220, 
   );
 }
 
+/** Kort etikett för tabellkolumner: 'v36 Kap 4.1–3 A+B'. */
 function tillfalleEtikett(t: ProvTillfalle): string {
-  const halv = t.sessioner.length > 1 ? ' A+B' : '';
-  return `v.${t.vecka} ${t.prov.replace(/^Quiz\s*/i, '')}${halv}`;
+  const [v, , kap] = tillfalleEtiketter(t);
+  return `${v} ${kap}`;
 }
+/** Axeletikett i tre rader: v36 / Ons 26/8 / Kap 4.1–3. */
+function axelEtikett(t: ProvTillfalle): string[] { return tillfalleEtiketter(t); }
+/** Radbruten axeltext (SVG) — ger diagrammen plats för vecka, dag och kapitel. */
+function AxelText({ x, y, rader, rotera, titel }: { x: number; y: number; rader: string[]; rotera: boolean; titel?: string }) {
+  if (rotera) {
+    return (<text x={x} y={y} fontSize={11} textAnchor="end" fill="#555" transform={`rotate(-40 ${x} ${y})`}>{titel !== undefined && <title>{titel}</title>}{rader.join(' · ')}</text>);
+  }
+  return (
+    <text x={x} y={y} fontSize={11} textAnchor="middle" fill="#555">{titel !== undefined && <title>{titel}</title>}
+      {rader.map((r, i) => <tspan key={i} x={x} dy={i === 0 ? 0 : 13} fontWeight={i === rader.length - 1 ? 700 : 400} fill={i === rader.length - 1 ? '#333' : '#666'}>{r}</tspan>)}
+    </text>
+  );
+}
+const AXEL_RADER = 3; const AXEL_HOJD = AXEL_RADER * 13 + 10;
 
 // ── Sittplatser: import från PowerPoint + analys ─────────────
 /** Läser slide-XML ur en .pptx (zip) — UI-lagret packar upp, kernel tolkar. */
@@ -2494,7 +2578,8 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
     return () => window.removeEventListener('keydown', h);
   }, [fokus.length]);
   const [visaAndel, setVisaAndel] = useState(true);
-  const [visaSpridning, setVisaSpridning] = useState(true);
+  const [klassLage, setKlassLage] = useState<'normerad' | 'spridning' | 'kurva'>('normerad');
+  const [klusterPa, setKlusterPa] = useState<Kluster[]>(['stigande', 'stabil', 'riskzon', 'ojamn']);
   const period = tolkaVeckor(periodText);
   const [dag, setDag] = useState('');
   const grundF: DashboardFilter = { klassId, ...(amneId !== '' ? { amneId } : {}), ...(kallor !== undefined ? { kallor } : {}), ...(period ?? {}) };
@@ -2505,6 +2590,8 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
   const kort = frageKort(s, f);
   const kurva = klassKurva(s, f);
   const spridning = klassSpridning(s, f);
+  const normerad = normeradSpridning(s, f);
+  const klusterK = klusterKurvor(s, f);
   const veckor = veckoSerier(s, f);
   const kluster = trendKluster(s, f);
   const grupper = gruppSnitt(s, f);
@@ -2550,7 +2637,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
 
       {/* KPI-rad — frågekort i mockupens stil: ikon, rubrik, fråga, stort tal, delta, sparkline */}
       <div className="st-kortrad">
-        {kort.map((k) => {
+        {kort.filter((k) => k.kalla === 'helhet' || kallor === undefined || kallor.includes(k.kalla)).map((k) => {
           const delta = periodDelta(k.serie);
           return (
             <div key={k.kalla} className={kortKlass(k)} style={{ '--kort': KORT_FARG[k.kalla] } as React.CSSProperties}>
@@ -2626,18 +2713,34 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
           <b>Trendkluster</b> <small className="muted">elever som trendar tillsammans · baserat på alla tillfällen i urvalet</small>
           <div className="st-klusterrad">
             {kluster.map((g) => (
-              <div key={g.kluster} className={`st-klusterkort ${g.kluster}`}>
+              <div key={g.kluster} className={`st-klusterkort ${g.kluster}${g.elever.length > 0 ? ' klickbar' : ''}`} role={g.elever.length > 0 ? 'button' : undefined}
+                tabIndex={g.elever.length > 0 ? 0 : undefined} title={g.elever.length > 0 ? 'Öppna gruppens graf' : undefined}
+                onClick={() => { if (g.elever.length > 0) fokuseraGrupp(g.elever.map((e) => e.id), KLUSTER_NAMN[g.kluster]); }}
+                onKeyDown={(ev) => { if ((ev.key === 'Enter' || ev.key === ' ') && g.elever.length > 0) { ev.preventDefault(); fokuseraGrupp(g.elever.map((e) => e.id), KLUSTER_NAMN[g.kluster]); } }}>
                 <div className="rad">
                   <button className="linkbtn st-klusterknapp" disabled={g.elever.length === 0} title="Visa hela gruppen i fokusvyn"
-                    onClick={() => fokuseraGrupp(g.elever.map((e) => e.id), KLUSTER_NAMN[g.kluster])}><b>{KLUSTER_NAMN[g.kluster]}</b></button>
+                    onClick={(ev) => { ev.stopPropagation(); fokuseraGrupp(g.elever.map((e) => e.id), KLUSTER_NAMN[g.kluster]); }}><b>{KLUSTER_NAMN[g.kluster]}</b></button>
                   <span className="spacer" /><small>{g.elever.length} elever</small></div>
                 <Sparkline serie={g.serie} farg={KLUSTER_FARG[g.kluster]} krav={null} />
                 <div className="st-chips">{g.elever.map((e) => (
-                  <button key={e.id} className="st-chip" title={e.namn} onClick={() => setElevId(e.id)}>{initialer(e.namn)}</button>
+                  <button key={e.id} className="st-chip" title={e.namn} onClick={(ev) => { ev.stopPropagation(); setElevId(e.id); }}>{initialer(e.namn)}</button>
                 ))}</div>
               </div>
             ))}
           </div>
+          {/* Klustrens kurvor relativt klassens snitt — på-knappar aktiverar linje + tonade band i klustrets färg */}
+          <div className="rad st-klusterfilter">
+            {klusterK.map((k) => (
+              <FilterKnapp key={k.kluster} pa={klusterPa.includes(k.kluster)} farg={KLUSTER_FARG[k.kluster]}
+                onClick={() => setKlusterPa(klusterPa.includes(k.kluster) ? klusterPa.filter((x) => x !== k.kluster) : [...klusterPa, k.kluster])}
+                title={`${k.antal} elever`}>{KLUSTER_NAMN[k.kluster]} <small>{k.antal}</small></FilterKnapp>
+            ))}
+          </div>
+          <NormeradGraf tillfallen={spridning} hojd={300} onKlick={(i) => onVisaProv(spridning[i].prov)}
+            serier={klusterK.map((k) => ({
+              namn: KLUSTER_NAMN[k.kluster], farg: KLUSTER_FARG[k.kluster], band: k.band, pa: klusterPa.includes(k.kluster) && k.antal > 0,
+              linje: k.procent.map((p, i) => (p === null || spridning[i].snittProcent === null ? null : Math.round(p - (spridning[i].snittProcent ?? 0)))),
+            }))} />
         </div>
       </div>
 
@@ -2706,7 +2809,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
           <b>Grupp A vs B</b> <small className="muted">snitt per källa</small>
           <table className="tbl st-grupper">
             <thead><tr><th>Källa</th><th>Grupp A <small className="muted">({grupper[0].antalElever})</small></th><th>Grupp B <small className="muted">({grupper[1].antalElever})</small></th></tr></thead>
-            <tbody>{(['socrative-laxforhor', 'socrative-exit', 'magma', 'digiexam', 'helhet'] as KortKalla[]).map((k) => (
+            <tbody>{(['socrative-laxforhor', 'socrative-exit', 'magma', 'digiexam', 'helhet'] as KortKalla[]).filter((k) => k === 'helhet' || kallor === undefined || kallor.includes(k)).map((k) => (
               <tr key={k}><td>{KORT_RUBRIK[k]}</td>
                 {grupper.map((g) => { const v = g.perKalla[k]; return (
                   <td key={g.grupp}>{v === null ? <span className="muted">—</span> : (
@@ -2732,15 +2835,21 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
         <div className="rad">
           <b>📈 {klassNamn} över tid</b> <small className="muted">snitt per provtillfälle · klicka på en punkt för provets elevlista</small>
           <span className="spacer" />
-          <label className="small"><input type="checkbox" checked={visaSpridning} onChange={(e) => setVisaSpridning(e.target.checked)} /> spridning (blekare längre från snittet)</label>
-          {!visaSpridning && <label className="small"><input type="checkbox" checked={visaAndel} onChange={(e) => setVisaAndel(e.target.checked)} /> andel som klarar kravet</label>}
+          <FilterKnapp pa={klassLage === 'normerad'} onClick={() => setKlassLage('normerad')} title="Snittet = 100, band om 3 procentenheter till ±30">Normerad</FilterKnapp>
+          <FilterKnapp pa={klassLage === 'spridning'} onClick={() => setKlassLage('spridning')} title="Elevpunkter som bleknar med avståndet till snittet">Spridning</FilterKnapp>
+          <FilterKnapp pa={klassLage === 'kurva'} onClick={() => setKlassLage('kurva')} title="Snitt och andel som klarar kravet">Kurva</FilterKnapp>
+          {klassLage === 'kurva' && <label className="small"><input type="checkbox" checked={visaAndel} onChange={(e) => setVisaAndel(e.target.checked)} /> andel som klarar kravet</label>}
         </div>
-        {visaSpridning ? (<>
+        {klassLage === 'normerad' ? (<>
+          <NormeradGraf tillfallen={spridning} hojd={340} onKlick={(i) => onVisaProv(spridning[i].prov)}
+            serier={[{ namn: klassNamn, farg: '#2f5aa8', band: normerad.map((t) => t.band), linje: normerad.map(() => 0), pa: true }]} />
+          <div className="small muted">Snittet är 100 i varje tillfälle. Varje band är {NORM_BAND} procentenheter; tonen visar andelen elever i bandet (mörkast = flest). Yttersta kanten är ±{NORM_MAX}; elever utanför ligger i kantbandet.</div>
+        </>) : klassLage === 'spridning' ? (<>
           <SpridningsGraf tillfallen={spridning} hojd={320} onKlick={(i) => onVisaProv(spridning[i].prov)} />
           <div className="small muted">Varje punkt är en elev. Full färg = vid snittet, genomskinlig = längst från snittet; stapeln visar spannet lägsta–högsta i procent, sd i tooltip.</div>
         </>) : (
         <LinjeDiagram
-          tillfallen={kurva.map((t) => ({ etikett: tillfalleEtikett(t), titel: `${t.datum} ${KALLNAMN[t.kalla]} ${t.prov}` }))}
+          tillfallen={kurva.map((t) => ({ etikett: axelEtikett(t), titel: `${t.datum} ${KALLNAMN[t.kalla]} ${t.prov}` }))}
           serier={[
             { namn: 'Snitt', varden: kurva.map((t) => t.snittProcent), farg: '#2f5aa8' },
             ...(visaAndel ? [{ namn: 'Andel klarade', varden: kurva.map((t) => t.andelKlarade), farg: '#1B5E20', streckad: true }] : []),
@@ -2838,7 +2947,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
 
               {/* Filter: källor + trend */}
               <div className="rad st-fokus-filter">
-                {(['socrative-laxforhor', 'socrative-exit', 'magma', 'digiexam'] as ResultatKalla[]).map((k) => (
+                {amnesKallor(amneId === '' ? undefined : s.amnen.find((a) => a.id === amneId)?.namn).map((k) => (
                   <label key={k} className="small"><input type="checkbox" checked={fokusKallor.includes(k)}
                     onChange={(ev) => setFokusKallor(ev.target.checked ? [...fokusKallor, k] : fokusKallor.filter((x) => x !== k))} />
                     <i className="st-legend-prick" style={{ background: KORT_FARG[k] }} /> {KORT_RUBRIK[k]}</label>
@@ -2864,7 +2973,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
 
               <LinjeDiagram
                 hojd={fokusElever.length > 1 ? 420 : 360}
-                tillfallen={till.map((t) => ({ etikett: tillfalleEtikett(t), titel: `${t.datum} ${KALLNAMN[t.kalla]} ${t.prov}` }))}
+                tillfallen={till.map((t) => ({ etikett: axelEtikett(t), titel: `${t.datum} ${KALLNAMN[t.kalla]} ${t.prov}` }))}
                 serier={serier}
                 kravLinjer={fokusKravLinjer}
                 onKlick={(i) => onVisaProv(till[i].prov)}
@@ -3094,7 +3203,9 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
     setFilRader([]);
   };
 
-  const kallor = filter.length > 0 ? filter : undefined;
+  // Ämnets källor (Biologi: inte Magma) begränsar alltid; chipparna väljer inom dem
+  const tillatna = amnesKallor(amne?.namn);
+  const kallor = filter.filter((k) => tillatna.includes(k)).length > 0 ? filter.filter((k) => tillatna.includes(k)) : (amne === undefined ? undefined : tillatna);
   const oversikt = amne !== undefined
     ? amnesOversikt(s, amne.id, kallor)
     : klassOversikt(s, klass.id, kallor !== undefined ? { kallor } : undefined);
@@ -3114,7 +3225,7 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
             {amnen.map((a) => <option key={a.id} value={a.id}>{a.namn}</option>)}
           </select></label>
         <span className="spacer" />
-        {ALLA_KALLOR.map((k) => (
+        {amnesKallor(amne?.namn).map((k) => (
           <button key={k} className={`chipbtn ${filter.includes(k) ? 'act' : ''}`}
             onClick={() => setFilter(filter.includes(k) ? filter.filter((x) => x !== k) : [...filter, k])}>{KALLNAMN[k]}</button>
         ))}
@@ -3143,6 +3254,29 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
             onChange={(e) => { void lasFiler(e.target.files); e.target.value = ''; }} />
           <label className="small"><input type="checkbox" checked={importeraOm} onChange={(e) => setImporteraOm(e.target.checked)} /> importera om redan importerade filer</label>
         </div>
+        {(() => {
+          const amnesIds = new Set(amnen.map((a) => a.id));
+          const filer = (s.filregister ?? []).filter((fp) => amnesIds.has(fp.amneId)).sort((a, b) => (b.datum ?? '').localeCompare(a.datum ?? ''));
+          return filer.length === 0 ? null : (
+            <details className="st-filer">
+              <summary>📁 {filer.length} importerade filer <small className="muted">· ta bort en fil tar bort dess resultat; graferna töms när sista filen är borta</small></summary>
+              <table className="tbl small">
+                <thead><tr><th>Datum</th><th>Ämne</th><th>Källa</th><th>Prov</th><th>Rum</th><th>Träffar</th><th></th></tr></thead>
+                <tbody>{filer.map((fp) => (
+                  <tr key={fp.id}>
+                    <td>{fp.datum ?? '—'}</td><td>{amnen.find((a) => a.id === fp.amneId)?.namn ?? '—'}</td><td>{KALLNAMN[fp.kalla]}</td>
+                    <td title={fp.filnamn}>{fp.prov}</td><td>{fp.rum ?? '—'}</td><td>{fp.traffar ?? '—'}</td>
+                    <td><button className="icon-btn" title={`Ta bort ${fp.filnamn} och dess resultat`} aria-label={`Ta bort fil ${fp.prov}`}
+                      onClick={() => kor(() => taBortFil(lasStruktur(), fp.id), `${fp.filnamn} borttagen — resultaten för ${fp.prov} är raderade.`)}>🗑</button></td>
+                  </tr>
+                ))}</tbody>
+              </table>
+              <div className="rad"><span className="spacer" />
+                <button className="btn sm" onClick={() => { if (window.confirm(`Ta bort ALLA resultat och filposter för ${klass.namn}${amne !== undefined ? ` · ${amne.namn}` : ''}?`)) kor(() => rensaResultat(lasStruktur(), klass.id, amne?.id), `Alla resultat för ${klass.namn}${amne !== undefined ? ` · ${amne.namn}` : ''} är raderade.`); }}>🗑 Rensa alla</button>
+              </div>
+            </details>
+          );
+        })()}
         {s.elever.filter((e) => e.klassId === klass.id).length === 0 && (
           <p className="status warn">⚠ Klassen har inga elever registrerade — inga resultat kan matchas. Importera rostern (👥 ovan) först; filer som gav 0 resultat erbjuds igen automatiskt.</p>
         )}
@@ -3195,12 +3329,12 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
       {/* ── Översikt ── */}
       <h3>{amne !== undefined ? `${klass.namn} · ${amne.namn}` : `${klass.namn} · alla ämnen`} <small className="muted">— snitt och BAM-krav per källa</small></h3>
       <table className="tbl plan st-tabell">
-        <thead><tr><th>Elev</th><th>Snitt</th>{ALLA_KALLOR.map((k) => <th key={k}>{KALLNAMN[k]}</th>)}</tr></thead>
+        <thead><tr><th>Elev</th><th>Snitt</th>{(kallor ?? ALLA_KALLOR).map((k) => <th key={k}>{KALLNAMN[k]}</th>)}</tr></thead>
         <tbody>{oversikt.map(({ elev, perKalla, snittProcent }) => (
           <tr key={elev.id}>
             <td>{elev.namn}</td>
             <td><b>{snittProcent !== null ? `${snittProcent} %` : '—'}</b></td>
-            {ALLA_KALLOR.map((k) => {
+            {(kallor ?? ALLA_KALLOR).map((k) => {
               const a = perKalla.find((x) => x.kalla === k);
               if (a === undefined) return <td key={k} className="muted">—</td>;
               return (

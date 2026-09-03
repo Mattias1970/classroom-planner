@@ -97,3 +97,55 @@ describe('klassSpridning', () => {
     expect(spridningsOpacitet(40, 60, 40, 100)).toBeCloseTo(0.5);
   });
 });
+
+describe('Del 67: etiketter, normerad spridning, klusterkurvor, borttagning', async () => {
+  const { kapitelEtikett, tillfalleEtiketter, normeraBand, normeradSpridning, klusterKurvor, provTillfallen } = await import('../src/domain/dashboard.js');
+  const { taBortFil, rensaResultat, registreraFil } = await import('../src/domain/resultat.js');
+
+  it('kapitelEtikett ur rum eller provnamn', () => {
+    expect(kapitelEtikett('x', 'Biologi41')).toBe('Kap 4.1');
+    expect(kapitelEtikett('x', 'Biologi4123')).toBe('Kap 4.1–3');
+    expect(kapitelEtikett('Quiz 1.2a', 'Matte8B')).toBe('Kap 1.2');
+    expect(kapitelEtikett('Fotosyntes')).toBe('Fotosyntes');
+  });
+
+  it('tillfalleEtiketter: veckodag + kapitel, A+B vid halvklass', () => {
+    const t = provTillfallen(bygg(), { klassId: 'k', amneId: 'bi' });
+    expect(tillfalleEtiketter(t[0])).toEqual(['v34', 'Tor 20/8', 'Kap 4.1']);
+    expect(tillfalleEtiketter(t.find((x) => x.rum === 'Biologi412')!)).toEqual(['v35', 'Må 24/8', 'Kap 4.1–2']);
+  });
+
+  it('normeraBand: 20 band om 3 procentenheter, utanför ±30 hamnar i kanten', () => {
+    const b = normeraBand([70, 71, 73, 100, 10], 70);
+    expect(b).toHaveLength(20);
+    expect(b[10]).toBeCloseTo(0.4); // [0,3): 70, 71
+    expect(b[11]).toBeCloseTo(0.2); // [3,6): 73
+    expect(b[19]).toBeCloseTo(0.2); // +30 → yttersta
+    expect(b[0]).toBeCloseTo(0.2);  // −60 → yttersta
+    expect(normeraBand([], 50).every((x) => x === 0)).toBe(true);
+  });
+
+  it('normeradSpridning och klusterKurvor följer klassens tillfällen', () => {
+    const f = { klassId: 'k', amneId: 'bi' };
+    const n = normeradSpridning(bygg(), f);
+    expect(n).toHaveLength(4);
+    expect(n[0].band.reduce((a, b) => a + b, 0)).toBeCloseTo(1);
+    const kk = klusterKurvor(bygg(), f);
+    expect(kk.map((k) => k.kluster)).toEqual(['stigande', 'stabil', 'riskzon', 'ojamn']);
+    expect(kk.every((k) => k.index.length === 4 && k.band.length === 4)).toBe(true);
+    const medElever = kk.filter((k) => k.antal > 0);
+    expect(medElever.length).toBeGreaterThan(0);
+    for (const k of medElever) expect(k.index.some((i) => i !== null)).toBe(true);
+  });
+
+  it('taBortFil tar bort filens resultat; rensaResultat tömmer klassen/ämnet', () => {
+    let s = registreraFil(bygg(), { amneId: 'bi', filnamn: 'exit41.xlsx', importerad: '2026-08-20T10:00:00Z', kalla: 'socrative-exit', prov: 'Biologi 4.1 Begrepp', rum: 'Biologi41', traffar: 3 });
+    const filId = s.filregister![0].id;
+    const fore = s.resultat!.length;
+    s = taBortFil(s, filId);
+    expect(s.filregister).toHaveLength(0);
+    expect(s.resultat).toHaveLength(fore - 3);
+    expect(s.resultat!.some((r) => r.prov === 'Biologi 4.1 Begrepp')).toBe(false);
+    expect(provTillfallen(rensaResultat(s, 'k'), { klassId: 'k' })).toEqual([]);
+  });
+});
