@@ -1377,8 +1377,19 @@ describe('📊 SuperTeach', () => {
     act(() => { knapp(host, '✕ visa alla dagar').click(); });
     expect(host.querySelectorAll('.st-kort')[1].textContent).toContain('86 %');
 
+    // Spridningsgrafen (standard): en punkt per elev och tillfälle, snittetikett, min/max
+    const spridning = host.querySelectorAll('.st-diagram')[2]!; // [0] vecko, [1] närvaro
+    expect(spridning.getAttribute('aria-label')).toBe('Klassens spridning per provtillfälle');
+    expect(spridning.querySelectorAll('linearGradient')).toHaveLength(4);
+    expect(spridning.textContent).toContain('(snitt 75 %, 60–90 %)');
+    const punkter = [...spridning.querySelectorAll('circle')].filter((c) => c.getAttribute('opacity') !== null);
+    expect(punkter.length).toBe(7); // 2 elever × 4 tillfällen minus Omars saknade 1.2a
+    // Växla till kurvan
+    const spridCheck = [...host.querySelectorAll('input[type="checkbox"]')].find((c) => c.parentElement?.textContent?.includes('spridning')) as HTMLInputElement;
+    act(() => { spridCheck.click(); });
+
     // Klasskurvan: tre tillfällen, kravlinjer 70 och 90, punkter klickbara
-    const diagram = host.querySelectorAll('.st-diagram')[2]!; // [0] vecko, [1] närvaro
+    const diagram = host.querySelectorAll('.st-diagram')[2]!;
     expect(diagram.textContent).toContain('krav 70 %');
     expect(diagram.textContent).toContain('krav 90 %');
     expect(diagram.querySelectorAll('.st-punkt').length).toBeGreaterThanOrEqual(3);

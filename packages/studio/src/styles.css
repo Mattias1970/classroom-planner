@@ -553,3 +553,18 @@ input.fel { border-color: #B71C1C; }
 .st-fokus .st-diagram-ram { margin: 6px 0 10px; }
 @media (min-width: 1500px) { .st-grid2 { grid-template-columns: 2fr 1fr; } }
 @media (max-width: 1200px) { .st-kortrad { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); } }
+
+/* Del 66: spridningsgraf + elevrapport */
+.st-rapport { margin-top: 14px; border-top: 2px solid var(--ram); padding-top: 10px; }
+.st-rapport-ingress { font-size: 15px; font-weight: 600; margin: 6px 0 10px; }
+.st-rapport-kap { background: #F7F9FC; border: 1px solid var(--ram); border-radius: 12px; padding: 10px 14px; margin-bottom: 10px; }
+.st-rapport-kap h4 { margin: 0 0 8px; }
+.st-rapport-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 1000px) { .st-rapport-grid { grid-template-columns: 1fr; } }
+.st-rapport-rubrik { font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted-varm); margin: 10px 0 4px; }
+.st-rapport-del td { font-size: 13px; }
+.st-rapport-del tr.ova td:first-child { color: #B71C1C; }
+.st-begrepp { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; font-size: 13px; }
+.st-begrepp dt { font-weight: 700; }
+.st-begrepp dd { margin: 0; }
+.st-filmer { margin: 0; padding-left: 18px; font-size: 13px; }

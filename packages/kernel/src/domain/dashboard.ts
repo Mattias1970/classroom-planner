@@ -551,3 +551,34 @@ export function lektionsDagar(s: Struktur, f: DashboardFilter): LektionsDag[] {
       etikett: `${kortDatum(datum)} · ${[...new Set(delar)].join(' + ')}${halv ? ' · halvklass A+B' : ''}` };
   });
 }
+
+// ── Del 66: klassens spridning per tillfälle ──────────────────
+
+export interface SpridningsTillfalle extends ProvTillfalle {
+  /** Alla elevers procent, fallande. */
+  varden: number[];
+  min: number;
+  max: number;
+  /** Standardavvikelse (procentenheter). */
+  sd: number;
+}
+
+/** Tillfällen med hela fördelningen — underlag för spridningsgrafen (skarpast vid snittet, blekare mot min/max). */
+export function klassSpridning(s: Struktur, f: DashboardFilter): SpridningsTillfalle[] {
+  const rs = dashboardResultat(s, f);
+  const { tillfallen } = tillfalleIndex(rs);
+  const per = new Map(tillfallen.map((t) => [t.nyckel, t.resultat]));
+  return provTillfallen(s, f).map((t) => {
+    const varden = (per.get(t.nyckel) ?? []).map(resultatProcent).filter((p): p is number => p !== null).sort((a, b) => b - a);
+    const m = varden.length === 0 ? 0 : varden.reduce((a, b) => a + b, 0) / varden.length;
+    const sd = varden.length < 2 ? 0 : Math.sqrt(varden.reduce((a, v) => a + (v - m) ** 2, 0) / (varden.length - 1));
+    return { ...t, varden, min: varden.length === 0 ? 0 : varden[varden.length - 1], max: varden[0] ?? 0, sd: Math.round(sd * 10) / 10 };
+  });
+}
+
+/** Opacitet 1 vid snittet, linjärt mot 0 vid det längst bort liggande värdet (min eller max). */
+export function spridningsOpacitet(varde: number, snittProcent: number, min: number, max: number): number {
+  const spann = Math.max(snittProcent - min, max - snittProcent);
+  if (spann <= 0) return 1;
+  return Math.max(0, 1 - Math.abs(varde - snittProcent) / spann);
+}

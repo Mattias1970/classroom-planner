@@ -26,7 +26,8 @@ import {
   arFilImporterad, klassificeraSocrativeFil, registreraFil, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
-  tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, KLUSTER_NAMN, TID_PASS,
+  tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
+  elevrapport, elevrapportText, KLUSTER_NAMN, TID_PASS,
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
@@ -2151,6 +2152,82 @@ function Sparkline({ serie, farg, krav }: { serie: number[]; farg: string; krav:
   );
 }
 
+/**
+ * Spridningsgraf: snittlinje per tillfälle; varje elevs resultat som en punkt
+ * vars opacitet avtar linjärt med avståndet till snittet (1 vid snittet, 0 vid
+ * det yttersta värdet). Mellan tillfällena ett band från min till max, tonat
+ * mot snittet, så att spridningen syns som en 'dimma' kring linjen.
+ */
+function SpridningsDiagram({ tillfallen, hojd = 300, w, onKlick }: {
+  tillfallen: ReturnType<typeof klassSpridning>; hojd?: number; w: number; onKlick?: (index: number) => void;
+}) {
+  const n = tillfallen.length;
+  const ml = 40; const mr = 16; const mt = 16; const mb = 44; const h = hojd;
+  const x = (i: number) => (n <= 1 ? ml + (w - ml - mr) / 2 : ml + (i / (n - 1)) * (w - ml - mr));
+  const y = (p: number) => mt + (1 - p / 100) * (h - mt - mb);
+  if (n === 0) return <p className="muted small">Inga provtillfällen i urvalet ännu.</p>;
+  const farg = '#2f5aa8';
+  const gid = `spridning-${Math.random().toString(36).slice(2, 8)}`;
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h} className="st-diagram" role="img" aria-label="Klassens spridning per provtillfälle">
+      <defs>
+        {tillfallen.map((t, i) => {
+          const m = t.snittProcent ?? 0;
+          const mitt = t.max === t.min ? 0.5 : (t.max - m) / (t.max - t.min);
+          return (
+            <linearGradient key={i} id={`${gid}-${i}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor={farg} stopOpacity={0.02} />
+              <stop offset={mitt} stopColor={farg} stopOpacity={0.45} />
+              <stop offset="1" stopColor={farg} stopOpacity={0.02} />
+            </linearGradient>
+          );
+        })}
+        <filter id={`${gid}-blur`}><feGaussianBlur stdDeviation="3" /></filter>
+      </defs>
+      {[0, 25, 50, 75, 100].map((p) => (
+        <g key={p}><line x1={ml} x2={w - mr} y1={y(p)} y2={y(p)} stroke="#E4E8EF" />
+          <text x={ml - 6} y={y(p) + 4} fontSize={11} textAnchor="end" fill="#777">{p} %</text></g>
+      ))}
+      {/* band min–max mellan tillfällen (suddat) */}
+      {n > 1 && tillfallen.slice(0, -1).map((t, i) => {
+        const u = tillfallen[i + 1];
+        const d = `M${x(i)},${y(t.max)} L${x(i + 1)},${y(u.max)} L${x(i + 1)},${y(u.min)} L${x(i)},${y(t.min)} Z`;
+        return <path key={i} d={d} fill={farg} opacity={0.08} filter={`url(#${gid}-blur)`} />;
+      })}
+      {/* spridningsstapel per tillfälle: tonad från max via snitt till min */}
+      {tillfallen.map((t, i) => (
+        <rect key={i} x={x(i) - 9} y={y(t.max)} width={18} height={Math.max(2, y(t.min) - y(t.max))} rx={5} fill={`url(#${gid}-${i})`} />
+      ))}
+      {/* elevpunkter med avtagande opacitet */}
+      {tillfallen.map((t, i) => t.varden.map((v, j) => (
+        <circle key={`${i}-${j}`} cx={x(i) + ((j % 3) - 1) * 3} cy={y(v)} r={3.2} fill={farg}
+          opacity={0.15 + 0.85 * spridningsOpacitet(v, t.snittProcent ?? 0, t.min, t.max)}>
+          <title>{`${v} % (snitt ${t.snittProcent ?? '—'} %, ${t.min}–${t.max} %)`}</title>
+        </circle>
+      )))}
+      {/* snittlinje */}
+      <path d={tillfallen.map((t, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(t.snittProcent ?? 0)}`).join(' ')} fill="none" stroke={farg} strokeWidth={2.6} />
+      {tillfallen.map((t, i) => (
+        <g key={i}>
+          <circle cx={x(i)} cy={y(t.snittProcent ?? 0)} r={5.5} fill="#fff" stroke={farg} strokeWidth={2.6} className={onKlick ? 'st-punkt' : undefined} onClick={onKlick ? () => onKlick(i) : undefined}>
+            <title>{`${t.datum} ${t.prov} · snitt ${t.snittProcent ?? '—'} % · sd ${t.sd} · ${t.antal} elever`}</title>
+          </circle>
+          <text x={x(i)} y={y(t.snittProcent ?? 0) - 11} fontSize={11} fontWeight={700} textAnchor="middle" fill={farg} stroke="#fff" strokeWidth={3} paintOrder="stroke">{t.snittProcent ?? '—'} %</text>
+          <text x={x(i)} y={y(t.max) - 4} fontSize={9} textAnchor="middle" fill="#8a94a3">{t.max}</text>
+          <text x={x(i)} y={y(t.min) + 11} fontSize={9} textAnchor="middle" fill="#8a94a3">{t.min}</text>
+          <text x={x(i)} y={h - mb + 16} fontSize={11} textAnchor={n > 8 ? 'end' : 'middle'} fill="#555"
+            transform={n > 8 ? `rotate(-40 ${x(i)} ${h - mb + 16})` : undefined}>{tillfalleEtikett(t)}</text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+function SpridningsGraf(props: { tillfallen: ReturnType<typeof klassSpridning>; hojd?: number; onKlick?: (index: number) => void }) {
+  const [ref, bredd] = useBredd(720);
+  return <div ref={ref} className="st-diagram-ram"><SpridningsDiagram {...props} w={bredd} /></div>;
+}
+
 /** Mäter containerns bredd så att SVG-diagram ritas i riktiga pixlar (skarp text, ingen uppskalning). */
 function useBredd(fallback: number): [React.RefObject<HTMLDivElement>, number] {
   const ref = useRef<HTMLDivElement>(null);
@@ -2417,6 +2494,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
     return () => window.removeEventListener('keydown', h);
   }, [fokus.length]);
   const [visaAndel, setVisaAndel] = useState(true);
+  const [visaSpridning, setVisaSpridning] = useState(true);
   const period = tolkaVeckor(periodText);
   const [dag, setDag] = useState('');
   const grundF: DashboardFilter = { klassId, ...(amneId !== '' ? { amneId } : {}), ...(kallor !== undefined ? { kallor } : {}), ...(period ?? {}) };
@@ -2426,6 +2504,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
   const f: DashboardFilter = valdDag === null ? grundF : { ...grundF, fran: valdDag.datum, till: valdDag.datumTill };
   const kort = frageKort(s, f);
   const kurva = klassKurva(s, f);
+  const spridning = klassSpridning(s, f);
   const veckor = veckoSerier(s, f);
   const kluster = trendKluster(s, f);
   const grupper = gruppSnitt(s, f);
@@ -2653,8 +2732,13 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
         <div className="rad">
           <b>📈 {klassNamn} över tid</b> <small className="muted">snitt per provtillfälle · klicka på en punkt för provets elevlista</small>
           <span className="spacer" />
-          <label className="small"><input type="checkbox" checked={visaAndel} onChange={(e) => setVisaAndel(e.target.checked)} /> andel som klarar kravet</label>
+          <label className="small"><input type="checkbox" checked={visaSpridning} onChange={(e) => setVisaSpridning(e.target.checked)} /> spridning (blekare längre från snittet)</label>
+          {!visaSpridning && <label className="small"><input type="checkbox" checked={visaAndel} onChange={(e) => setVisaAndel(e.target.checked)} /> andel som klarar kravet</label>}
         </div>
+        {visaSpridning ? (<>
+          <SpridningsGraf tillfallen={spridning} hojd={320} onKlick={(i) => onVisaProv(spridning[i].prov)} />
+          <div className="small muted">Varje punkt är en elev. Full färg = vid snittet, genomskinlig = längst från snittet; stapeln visar spannet lägsta–högsta i procent, sd i tooltip.</div>
+        </>) : (
         <LinjeDiagram
           tillfallen={kurva.map((t) => ({ etikett: tillfalleEtikett(t), titel: `${t.datum} ${KALLNAMN[t.kalla]} ${t.prov}` }))}
           serier={[
@@ -2664,6 +2748,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
           kravLinjer={kravLinjer}
           onKlick={(i) => onVisaProv(kurva[i].prov)}
         />
+        )}
       </div>
 
       {/* Elev × prov */}
@@ -2806,10 +2891,71 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
                   ))}</tbody>
                 </table>
               )}
+              {fokusElever.length === 1 && amneId !== '' && <ElevrapportVy s={s} elevId={elev.id} amneId={amneId} period={period === null && valdDag === null ? undefined : { fran: f.fran, till: f.till }} />}
+              {fokusElever.length === 1 && amneId === '' && <p className="muted small" style={{ marginTop: 8 }}>Välj ett ämne överst för att få elevrapporten (begrepp att öva, sammanfattning, filmer).</p>}
             </div>
           </div>
         );
       })()}
+    </div>
+  );
+}
+
+/** Elevrapport: vad eleven inte lärt sig — begrepp med förklaring, sammanfattning per kapitel, filmer. Kopieras som text till Teams. */
+function ElevrapportVy({ s, elevId, amneId, period }: { s: Struktur; elevId: string; amneId: string; period?: { fran?: string; till?: string } }) {
+  const [kopierat, setKopierat] = useState(false);
+  let rapport: ReturnType<typeof elevrapport>;
+  try { rapport = elevrapport(s, elevId, amneId, period); } catch { return null; }
+  const STATUS = { klarat: ['✓ klarat', 'ok'], ova: ['✗ öva', 'ej'], 'ej-testat': ['– ej testat', ''] } as const;
+  const kopiera = () => {
+    const text = elevrapportText(rapport);
+    if (typeof navigator !== 'undefined' && navigator.clipboard !== undefined) { void navigator.clipboard.writeText(text); }
+    setKopierat(true); setTimeout(() => setKopierat(false), 2000);
+  };
+  return (
+    <div className="st-rapport">
+      <div className="rad">
+        <b>📄 Elevrapport — {rapport.amneNamn}</b>{rapport.bokNamn !== null && <small className="muted">{rapport.bokNamn}</small>}
+        <span className="spacer" />
+        <button className="btn sm" onClick={kopiera}>{kopierat ? '✓ kopierad' : '📋 Kopiera som text'}</button>
+      </div>
+      <p className="st-rapport-ingress">{rapport.sammanfattning}</p>
+      {rapport.kapitel.length === 0 && <p className="muted small">{rapport.bokNamn === null ? 'Ämnet saknar bok — koppla en bok under Struktur så kan förhören knytas till delkapitel och begrepp.' : 'Inga förhör i urvalet går att knyta till bokens delkapitel.'}</p>}
+      {rapport.kapitel.map((k) => (
+        <div key={k.nr} className="st-rapport-kap">
+          <h4>Kapitel {k.nr} · {k.namn}</h4>
+          <div className="st-rapport-grid">
+            <div>
+              <table className="tbl st-rapport-del"><tbody>{k.delkapitel.map((d) => (
+                <tr key={d.kod} className={d.status}>
+                  <td><b>{d.kod}</b> {d.namn}</td>
+                  <td>{STATUS[d.status][1] === '' ? <span className="muted">{STATUS[d.status][0]}</span> : <span className={`st-krav ${STATUS[d.status][1]}`}>{STATUS[d.status][0]}</span>}</td>
+                  <td className="small muted">{d.senaste.map((r) => `${KALLNAMN[r.kalla]} ${r.procent} %`).join(' · ')}</td>
+                </tr>
+              ))}</tbody></table>
+              {k.sammanfattning !== null && (<>
+                <div className="st-rapport-rubrik">Sammanfattning</div>
+                {k.sammanfattning.split('\n').map((rad, i) => <p key={i} className="small">{rad}</p>)}
+              </>)}
+            </div>
+            <div>
+              <div className="st-rapport-rubrik">Begrepp att öva ({k.attOva.length})</div>
+              {k.attOva.length === 0 ? <p className="small muted">Inga — alla testade delkapitel är klarade.</p> : (
+                <dl className="st-begrepp">{k.attOva.map((b) => (
+                  <Fragment key={b.begrepp}><dt>{b.begrepp}</dt><dd>{b.forklaring ?? <span className="muted">förklaring saknas i bokdatan</span>}</dd></Fragment>
+                ))}</dl>
+              )}
+              {k.filmer.length > 0 && (<>
+                <div className="st-rapport-rubrik">Filmer att se</div>
+                <ul className="st-filmer">{k.filmer.map((f) => (
+                  <li key={f.url}><a href={f.url} target="_blank" rel="noreferrer">▶ {f.titel}</a> <small className="muted">{f.for}</small></li>
+                ))}</ul>
+              </>)}
+            </div>
+          </div>
+        </div>
+      ))}
+      {rapport.okopplade.length > 0 && <p className="small muted">Utan delkapitel: {rapport.okopplade.map((r) => `${r.prov} ${r.procent} %`).join(' · ')}</p>}
     </div>
   );
 }
