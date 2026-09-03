@@ -77,3 +77,38 @@ describe('klassificeraSocrativeAktivitet — läxförhör vid start, exit nära 
     expect(k.beskrivning).toContain('utanför lektionstid');
   });
 });
+
+describe('Del 61: klassificering via rumsnamn (planens socStart/exit är Socrative-rum)', async () => {
+  const { klassificeraViaRum, klassificeraSocrativeFil } = await import('../src/domain/socrative.js');
+  const lekt = (avsnitt: string, socStart: string, exit: string): PlaneradLektion['lektion'] =>
+    ({ id: 1, typ: 'regular', avsnitt, del: 1, niva1: '—', niva2: '—', niva3: '—',
+       sidorTeori: '—', begrepp: '—', genomgang: '—', laxa: '—', ex: '—', socStart, exit });
+  const plan: PlaneradLektion[] = [
+    { kapitel: 4, lektion: lekt('4.1 Liv i samspel', '—', 'Biologi41'), datum: '2026-08-20', vecka: 34, start: '09:45', slutTid: '10:55' },
+    { kapitel: 4, lektion: lekt('4.2 Energi och materia', 'Biologi41', 'Biologi42'), datum: '2026-08-21', vecka: 34, start: '08:25', slutTid: '09:35' },
+    { kapitel: 4, lektion: lekt('4.3 Olika känsliga system', 'Biologi412', 'Biologi43'), datum: '2026-08-24', vecka: 35, start: '08:25', slutTid: '09:35' },
+    { kapitel: 4, lektion: lekt('Repetition', 'Biologi41', '—'), datum: '2026-09-07', vecka: 37, start: '08:25', slutTid: '09:35' },
+  ];
+
+  it('rum som står som exit → exit ticket, oavsett quiznamn och tid', () => {
+    const k = klassificeraViaRum('Biologi41', '2026-08-20T08:49:00Z', plan)!;
+    expect(k).toMatchObject({ kalla: 'socrative-exit', datum: '2026-08-20', lektionsIndex: 0, avsnitt: '4.1 Liv i samspel' });
+    expect(k.beskrivning).toBe('exit ticket via rum Biologi41');
+  });
+
+  it('samma rum som läxförhör dagen efter → läxförhör; nattkört quiz knyts till närmaste lektion', () => {
+    expect(klassificeraViaRum('biologi 41', '2026-08-21T06:27:00Z', plan)).toMatchObject({ kalla: 'socrative-laxforhor', datum: '2026-08-21' });
+    // Kört 2026-08-24 01:05 svensk tid (23:05 UTC den 23:e): närmast är läxförhöret 21/8 (3 dagar) framför 7/9
+    const natt = klassificeraViaRum('Biologi41', '2026-08-23T23:05:00Z', plan)!;
+    expect(natt).toMatchObject({ kalla: 'socrative-laxforhor', datum: '2026-08-21', tid: '01:05' });
+    expect(natt.beskrivning).toContain('körd 2026-08-24, lektion 2026-08-21');
+  });
+
+  it('vid lika avstånd vinner lektionen före filens datum; okänt rum → null och tidsfallback', () => {
+    expect(klassificeraViaRum('Biologi412', '2026-08-24T06:30:00Z', plan)).toMatchObject({ kalla: 'socrative-laxforhor', datum: '2026-08-24' });
+    expect(klassificeraViaRum('Matte8B', '2026-08-20T08:49:00Z', plan)).toBeNull();
+    const fb = klassificeraSocrativeFil('Matte8B', '2026-08-20T08:49:00Z', plan);
+    expect(fb).toMatchObject({ kalla: 'socrative-exit', datum: '2026-08-20' });
+    expect(fb.beskrivning).toContain('min före lektionsslut');
+  });
+});

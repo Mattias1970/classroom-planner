@@ -27,6 +27,8 @@ export interface Resultat {
   datum: string;
   /** Klockslag HH:MM (svensk tid) när det är känt, t.ex. ur Socrative-filnamnet. */
   tid?: string;
+  /** Socrative-rum där quizet kördes ('Biologi41') — planens nyckel för förhöret. */
+  rum?: string;
   poang: number;
   maxPoang: number;
 }
@@ -41,6 +43,8 @@ export interface ImportUnderlag {
   datum: string;
   /** Klockslag HH:MM (valfritt). */
   tid?: string;
+  /** Socrative-rum (valfritt). */
+  rum?: string;
   amneId?: string;
   rader: ImportRad[];
 }
@@ -132,6 +136,7 @@ export function importeraResultat(s: Struktur, u: ImportUnderlag): ImportUtfall 
       id: nyttId('res'), elevId: elev.id, kalla: u.kalla, prov: u.prov.trim(),
       datum: u.datum, poang: rad.poang, maxPoang: rad.maxPoang,
       ...(u.tid !== undefined ? { tid: u.tid } : {}),
+      ...(u.rum !== undefined ? { rum: u.rum } : {}),
       ...(u.amneId !== undefined ? { amneId: u.amneId } : {}),
     });
   }
@@ -268,6 +273,8 @@ export interface FilPost {
   datum?: string;
   /** Antal resultat som matchade elever vid importen; 0 betyder att filen bör importeras om när eleverna finns. */
   traffar?: number;
+  /** Socrative-rum ('Biologi41'). */
+  rum?: string;
   kalla: ResultatKalla;
   prov: string;
 }
@@ -327,15 +334,17 @@ export function forvantadeProv(plan: PlaneradLektion[], idag: string): Forvantat
  */
 export function saknadeResultat(s: Struktur, amneId: string, plan: PlaneradLektion[], idag: string): ForvantatProv[] {
   const rs = (s.resultat ?? []).filter((r) => r.amneId === amneId);
-  const harResultat = new Set(rs.map((r) => `${r.kalla}|${r.prov}`));
+  const norm = (x: string) => x.replace(/\s+/g, '').toUpperCase();
+  // Planens 'prov' är Socrative-RUMMET (Biologi41); rapportens rum matchar det direkt
+  const harResultat = new Set(rs.flatMap((r) => [`${r.kalla}|${norm(r.prov)}`, ...(r.rum !== undefined ? [`${r.kalla}|${norm(r.rum)}`] : [])]));
   // Datum + källa täcker också: Socrative-quizet heter sällan exakt som planen ('Biologi41' vs 'Biologi 4.1 Begrepp')
   const harResultatDag = new Set(rs.map((r) => `${r.kalla}|${r.datum}`));
   const filer = (s.filregister ?? []).filter((f) => f.amneId === amneId && (f.traffar === undefined || f.traffar > 0));
-  const harFil = new Set(filer.map((f) => `${f.kalla}|${f.prov}`));
+  const harFil = new Set(filer.flatMap((f) => [`${f.kalla}|${norm(f.prov)}`, ...(f.rum !== undefined ? [`${f.kalla}|${norm(f.rum)}`] : [])]));
   const harFilDag = new Set(filer.filter((f) => f.datum !== undefined).map((f) => `${f.kalla}|${f.datum}`));
   const sedda = new Set<string>();
   return forvantadeProv(plan, idag).filter((p) => {
-    const nyckel = `${p.kalla}|${p.prov}`; const dag = `${p.kalla}|${p.datum}`;
+    const nyckel = `${p.kalla}|${norm(p.prov)}`; const dag = `${p.kalla}|${p.datum}`;
     if (harResultat.has(nyckel) || harFil.has(nyckel) || harResultatDag.has(dag) || harFilDag.has(dag)) return false;
     // Samma prov samma dag (t.ex. grupp A och B i planen) visas en gång
     const dubbel = `${dag}|${p.prov}`;

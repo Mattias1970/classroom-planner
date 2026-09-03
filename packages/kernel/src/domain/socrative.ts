@@ -129,3 +129,47 @@ export function klassificeraSocrativeAktivitet(startUtc: string, plan: PlaneradL
   return { datum, tid, lektionsIndex: bast.index, avsnitt: bast.rad.lektion.avsnitt, kalla: 'socrative-laxforhor',
     beskrivning: franStart >= 0 ? `läxförhör (${franStart} min efter lektionsstart)` : `läxförhör (${-franStart} min före lektionsstart)` };
 }
+
+// ── Del 61: klassificering via rumsnamn ──────────────────────
+//
+// I planeringen är läxförhör (socStart) och exit ticket (exit) angivna som
+// Socrative-RUM ('Biologi41', 'Biologi412'). Quizet som körs i rummet kan
+// heta vad som helst ('Biologi 4.1 Begrepp'). Rummet i rapporten är därför
+// den säkraste nyckeln: det pekar ut både källa och lektion. Tiden i
+// filnamnet används bara för att välja rätt lektion när samma rum
+// förekommer flera gånger (kumulativa förhör) och som fallback när rummet
+// inte finns i planen (t.ex. Matte8B som används för allt).
+
+function normRum(r: string): string { return r.replace(/\s+/g, '').toUpperCase(); }
+
+/**
+ * Söker rummet i planen. Träff på `exit` ⇒ exit ticket, på `socStart` ⇒ läxförhör.
+ * Vid flera lektioner med samma rum väljs den vars datum ligger närmast (och helst
+ * senast på eller före) filens datum.
+ */
+export function klassificeraViaRum(rum: string, startUtc: string, plan: PlaneradLektion[]): AktivitetsKlassificering | null {
+  const { datum, tid } = svenskTid(startUtc);
+  const r = normRum(rum);
+  if (r === '') return null;
+  let bast: { index: number; rad: PlaneradLektion; kalla: 'socrative-laxforhor' | 'socrative-exit'; avstand: number } | null = null;
+  const dagar = (a: string, b: string) => Math.abs((Date.parse(a) - Date.parse(b)) / 86_400_000);
+  for (const [index, rad] of plan.entries()) {
+    if (rad.datum === null) continue;
+    const kalla = normRum(rad.lektion.exit) === r ? 'socrative-exit' : normRum(rad.lektion.socStart) === r ? 'socrative-laxforhor' : null;
+    if (kalla === null) continue;
+    // straffa lektioner efter filens datum något: förhöret kan inte ha körts före lektionen
+    const avstand = dagar(rad.datum, datum) + (rad.datum > datum ? 0.5 : 0);
+    if (bast === null || avstand < bast.avstand) bast = { index, rad, kalla, avstand };
+  }
+  if (bast === null) return null;
+  const sammaDag = bast.rad.datum === datum;
+  return {
+    datum: bast.rad.datum!, tid, lektionsIndex: bast.index, avsnitt: bast.rad.lektion.avsnitt, kalla: bast.kalla,
+    beskrivning: `${bast.kalla === 'socrative-exit' ? 'exit ticket' : 'läxförhör'} via rum ${rum}${sammaDag ? '' : ` (körd ${datum}, lektion ${bast.rad.datum})`}`,
+  };
+}
+
+/** Rum först, tid som fallback. */
+export function klassificeraSocrativeFil(rum: string, startUtc: string, plan: PlaneradLektion[]): AktivitetsKlassificering {
+  return klassificeraViaRum(rum, startUtc, plan) ?? klassificeraSocrativeAktivitet(startUtc, plan);
+}

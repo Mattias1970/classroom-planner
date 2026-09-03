@@ -226,3 +226,18 @@ describe('Del 60: omimport vid 0 träffar och datummatchade varningar', async ()
     expect(saknadeResultat(s, 'ma', plan, '2026-09-01')).toHaveLength(2);
   });
 });
+
+describe('Del 61: förväntat prov matchas på Socrative-rum', () => {
+  it('rapport i rum Biologi41 med quiz "Biologi 4.1 Begrepp" täcker planens Biologi41', () => {
+    const plan = [
+      { datum: '2026-08-20', lektion: { socStart: '—', exit: 'Biologi41', avsnitt: '4.1' } },
+      { datum: '2026-08-21', lektion: { socStart: 'Biologi41', exit: 'Biologi42', avsnitt: '4.2' } },
+    ] as unknown as Parameters<typeof saknadeResultat>[2];
+    let s = laggTillAmne(bygg(), { id: 'bi', klassId: 'k', namn: 'Biologi', schema: [{ dag: 4, start: '09:00', slut: '10:00' }] });
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-exit', prov: 'Biologi 4.1 Begrepp', datum: '2026-08-27', rum: 'Biologi41',
+      rader: [{ namn: 'Anna Berg', poang: 8, maxPoang: 10 }] }).s;
+    // datum avviker medvetet (2026-08-27) — träffen ska komma från rummet
+    expect(saknadeResultat(s, 'bi', plan, '2026-09-01').map((p) => `${p.kalla}|${p.prov}`)).toEqual(['socrative-laxforhor|Biologi41', 'socrative-exit|Biologi42']);
+    expect(s.resultat![0].rum).toBe('Biologi41');
+  });
+});

@@ -22,7 +22,7 @@ import {
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
-  arFilImporterad, klassificeraSocrativeAktivitet, registreraFil, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
+  arFilImporterad, klassificeraSocrativeFil, registreraFil, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, KLUSTER_NAMN, TID_PASS, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
@@ -2585,12 +2585,15 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
         const wb = XLSX.read(await fil.arrayBuffer(), { type: 'array' });
         const matris = XLSX.utils.sheet_to_json<Array<string | number | null>>(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: null });
         const rapport = tolkaSocrativeRapport(matris);
-        // Rummet pekar ut ämnet: socrativeRum(ämne, klass) — skiftlägesokänsligt
-        const viaRum = amnen.find((a2) => socrativeRum(a2.namn, klass.namn).toUpperCase() === rapport.rum.toUpperCase());
+        // Rummet pekar ut ämnet: antingen klassrummet socrativeRum(ämne, klass) ('Matte8B')
+        // eller ett rum som står som läxförhör/exit i något ämnes plan ('Biologi41')
+        const rumN = rapport.rum.replace(/\s+/g, '').toUpperCase();
+        const viaRum = amnen.find((a2) => socrativeRum(a2.namn, klass.namn).toUpperCase() === rumN)
+          ?? amnen.find((a2) => planFor(a2).some((r) => [r.lektion.exit, r.lektion.socStart].some((x) => x.replace(/\s+/g, '').toUpperCase() === rumN)));
         const amnet = viaRum ?? amne;
         const namninfo = tolkaSocrativeFilnamn(fil.name);
         const k = namninfo !== null && amnet !== undefined
-          ? klassificeraSocrativeAktivitet(namninfo.startUtc, planFor(amnet))
+          ? klassificeraSocrativeFil(rapport.rum, namninfo.startUtc, planFor(amnet))
           : null;
         const deltagare = rapport.rader.filter((r) => r.deltog);
         ut.push({
@@ -2620,9 +2623,9 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
       let st = lasStruktur();
       for (const f of importerbara) {
         st = importeraResultat(st, {
-          klassId: klass.id, amneId: f.amneId!, kalla: f.kalla!, prov: f.quiz, datum: f.datum, ...(f.tid !== null ? { tid: f.tid } : {}), rader: f.rader,
+          klassId: klass.id, amneId: f.amneId!, kalla: f.kalla!, prov: f.quiz, datum: f.datum, rum: f.rum, ...(f.tid !== null ? { tid: f.tid } : {}), rader: f.rader,
         }).s;
-        st = registreraFil(st, { amneId: f.amneId!, filnamn: f.filnamn, importerad: new Date().toISOString(), kalla: f.kalla!, prov: f.quiz, datum: f.datum, traffar: f.matchade });
+        st = registreraFil(st, { amneId: f.amneId!, filnamn: f.filnamn, importerad: new Date().toISOString(), kalla: f.kalla!, prov: f.quiz, datum: f.datum, traffar: f.matchade, rum: f.rum });
       }
       return st;
     }, `${importerbara.length} filer importerade (${importerbara.reduce((n, f) => n + f.matchade, 0)} resultat).`);
@@ -2671,7 +2674,7 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
 
       {/* ── Import: Socrative-filer ── */}
       <div className="uppg-kort">
-        <b>📥 Importera Socrative-filer</b> <small className="muted">Välj klassrapporter (xlsx). Rummet i filen pekar ut ämnet, och starttiden i filnamnet (UTC → svensk tid) avgör lektion samt läxförhör/exit ticket enligt BAM-rytmen. Redan importerade filer hoppas över.</small>
+        <b>📥 Importera Socrative-filer</b> <small className="muted">Välj klassrapporter (xlsx). Rummet i filen matchas mot planens läxförhör/exit-rum (t.ex. Biologi41) och pekar ut ämne, lektion och källa; för rum som används till allt (Matte8B) avgör starttiden i filnamnet (UTC → svensk tid) enligt BAM-rytmen. Redan importerade filer hoppas över.</small>
         <div className="rad" style={{ marginTop: 6 }}>
           <input type="file" multiple accept=".xlsx" aria-label="Socrative-filer"
             onChange={(e) => { void lasFiler(e.target.files); e.target.value = ''; }} />
