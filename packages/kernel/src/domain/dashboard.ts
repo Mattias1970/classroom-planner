@@ -56,7 +56,12 @@ export interface ProvTillfalle {
   nyckel: string;
   kalla: ResultatKalla;
   prov: string;
+  /** Första sessionens datum. */
   datum: string;
+  /** Sista sessionens datum (samma som datum utan halvklass). */
+  datumTill: string;
+  /** Alla datum som ingår — två vid halvklass A/B. */
+  sessioner: string[];
   vecka: number;
   antal: number;
   snittProcent: number | null;
@@ -69,19 +74,53 @@ function snitt(xs: number[]): number | null {
   return xs.length === 0 ? null : Math.round(xs.reduce((a, b) => a + b, 0) / xs.length);
 }
 
-/** Provtillfällen i klassen, kronologiskt. */
-export function provTillfallen(s: Struktur, f: DashboardFilter): ProvTillfalle[] {
-  const grupper = new Map<string, Resultat[]>();
-  for (const r of dashboardResultat(s, f)) {
-    const n = `${r.datum}|${r.kalla}|${r.prov}`;
-    grupper.set(n, [...(grupper.get(n) ?? []), r]);
+/** Fönster (dagar) inom vilket samma förhör i halvklass A och B slås ihop till ett tillfälle. */
+export const HALVKLASS_FONSTER_DAGAR = 7;
+
+function dagDiff(a: string, b: string): number { return Math.abs(Date.parse(a) - Date.parse(b)) / 86_400_000; }
+function normProv(r: Resultat): string { return (r.rum ?? r.prov).replace(/\s+/g, '').toUpperCase(); }
+
+/**
+ * Ett tillfälle = samma källa och samma rum/quiz, där sessioner inom
+ * HALVKLASS_FONSTER_DAGAR slås ihop (halvklass A måndag + B torsdag = ett
+ * läxförhör). Returnerar tillfällena i datumordning och en karta
+ * resultat-id → tillfällenyckel som alla andra vyer använder.
+ */
+export function tillfalleIndex(rs: Resultat[]): { tillfallen: Array<{ nyckel: string; resultat: Resultat[] }>; avResultat: Map<string, string> } {
+  const perProv = new Map<string, Resultat[]>();
+  for (const r of rs) { const n = `${r.kalla}|${normProv(r)}`; perProv.set(n, [...(perProv.get(n) ?? []), r]); }
+  const tillfallen: Array<{ nyckel: string; resultat: Resultat[] }> = [];
+  const avResultat = new Map<string, string>();
+  for (const [grund, lista] of perProv) {
+    const sorterad = [...lista].sort((a, b) => a.datum.localeCompare(b.datum));
+    let aktuell: { nyckel: string; resultat: Resultat[]; sista: string } | null = null;
+    for (const r of sorterad) {
+      // ny session om avståndet till förra sessionen är för stort ELLER eleven redan svarat i tillfället (omtag)
+      if (aktuell === null || dagDiff(aktuell.sista, r.datum) > HALVKLASS_FONSTER_DAGAR || aktuell.resultat.some((x) => x.elevId === r.elevId && x.datum !== r.datum)) {
+        aktuell = { nyckel: `${r.datum}|${grund}`, resultat: [], sista: r.datum };
+        tillfallen.push(aktuell);
+      }
+      aktuell.resultat.push(r); aktuell.sista = r.datum;
+      avResultat.set(r.id, aktuell.nyckel);
+    }
   }
-  return [...grupper.entries()].map(([nyckel, rs]) => {
-    const { kalla, prov, datum } = rs[0];
+  // Ordning som tidigare: datum, sedan provnamn, sedan källa
+  const ordn = (t: { resultat: Resultat[] }) => `${t.resultat[0].datum}|${t.resultat[0].prov}|${t.resultat[0].kalla}`;
+  tillfallen.sort((a, b) => ordn(a).localeCompare(ordn(b)));
+  return { tillfallen, avResultat };
+}
+
+/** Provtillfällen i klassen, kronologiskt; halvklassförhör sammanslagna. */
+export function provTillfallen(s: Struktur, f: DashboardFilter): ProvTillfalle[] {
+  return tillfalleIndex(dashboardResultat(s, f)).tillfallen.map(({ nyckel, resultat: rs }) => {
+    const { kalla, prov } = rs[0];
+    const datum = rs[0].datum;
+    const datumTill = rs[rs.length - 1].datum;
     const procent = rs.map(resultatProcent).filter((p): p is number => p !== null);
     const bedomda = rs.map(klaratKrav).filter((k): k is boolean => k !== null);
+    const sessioner = [...new Set(rs.map((r) => r.datum))].sort();
     return {
-      nyckel, kalla, prov, datum, vecka: isoVecka(datum), antal: rs.length,
+      nyckel, kalla, prov, datum, datumTill, sessioner, vecka: isoVecka(datum), antal: rs.length,
       snittProcent: snitt(procent),
       andelKlarade: bedomda.length === 0 ? null : Math.round((bedomda.filter(Boolean).length / bedomda.length) * 100),
       krav: kravFor(kalla),
@@ -156,9 +195,11 @@ export interface ElevMatris { tillfallen: ProvTillfalle[]; rader: MatrisRad[]; }
 export function elevMatris(s: Struktur, f: DashboardFilter, sok = ''): ElevMatris {
   const tillfallen = provTillfallen(s, f);
   const index = new Map(tillfallen.map((t, i) => [t.nyckel, i]));
+  const rs = dashboardResultat(s, f);
+  const { avResultat } = tillfalleIndex(rs);
   const perElev = new Map<string, Array<MatrisCell | null>>();
-  for (const r of dashboardResultat(s, f)) {
-    const i = index.get(`${r.datum}|${r.kalla}|${r.prov}`);
+  for (const r of rs) {
+    const i = index.get(avResultat.get(r.id) ?? '');
     if (i === undefined) continue;
     const rad = perElev.get(r.elevId) ?? tillfallen.map(() => null);
     rad[i] = { procent: resultatProcent(r), klarat: klaratKrav(r), poang: r.poang, maxPoang: r.maxPoang };
@@ -338,6 +379,8 @@ export interface NarvaroLektion {
   vecka: number;
   /** Veckodag 1 = måndag … 7 = söndag. */
   veckodag: number;
+  /** Datum som ingår i lektionen — två vid halvklass. */
+  sessioner: string[];
   /** Tidigaste kända klockslag HH:MM, annars null. */
   tid: string | null;
   amneId: string | undefined;
@@ -359,18 +402,23 @@ function veckodagFor(datum: string): number {
 export function narvaroLektioner(s: Struktur, f: DashboardFilter): NarvaroLektion[] {
   const rs = dashboardResultat(s, { ...f, kallor: NARVARO_KALLOR });
   const alla = sokElever(s, f.klassId, '').map((e) => e.id);
+  // Lektionsdag = det sammanslagna tillfällets första datum: halvklass A (mån) + B (tors) = en lektion
+  const { avResultat } = tillfalleIndex(rs);
   const grupper = new Map<string, Resultat[]>();
   for (const r of rs) {
-    const n = `${r.datum}|${r.amneId ?? ''}`;
+    const dag = (avResultat.get(r.id) ?? r.datum).slice(0, 10);
+    const n = `${dag}|${r.amneId ?? ''}`;
     grupper.set(n, [...(grupper.get(n) ?? []), r]);
   }
-  return [...grupper.values()].map((g) => {
+  return [...grupper.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([n, g]) => {
     const narv = new Set(g.map((r) => r.elevId));
     const narvarande = alla.filter((id) => narv.has(id));
     const franvarande = alla.filter((id) => !narv.has(id));
     const tider = g.map((r) => r.tid).filter((t): t is string => t !== undefined).sort();
+    const datum = n.slice(0, 10);
     return {
-      datum: g[0].datum, vecka: isoVecka(g[0].datum), veckodag: veckodagFor(g[0].datum),
+      datum, vecka: isoVecka(datum), veckodag: veckodagFor(datum),
+      sessioner: [...new Set(g.map((r) => r.datum))].sort(),
       tid: tider[0] ?? null, amneId: g[0].amneId,
       prov: [...new Set(g.map((r) => r.prov))],
       narvarande, franvarande,
@@ -479,4 +527,27 @@ export function trendLinje(varden: Array<number | null>): Array<number | null> {
   const k = sxx === 0 ? 0 : sxy / sxx; const m = my - k * mx;
   const forsta = pts[0][0]; const sista = pts[n - 1][0];
   return varden.map((_, i) => (i < forsta || i > sista ? null : Math.round((k * i + m) * 10) / 10));
+}
+
+
+/** En lektionsdag i urvalet: datum + vilka tillfällen (läxförhör/exit) som hölls, för dagfiltret. */
+export interface LektionsDag { datum: string; datumTill: string; vecka: number; veckodag: number; tillfallen: ProvTillfalle[]; etikett: string; }
+
+const VECKODAG = ['', 'mån', 'tis', 'ons', 'tor', 'fre', 'lör', 'sön'];
+const MANAD = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+export function kortDatum(datum: string): string {
+  return `${VECKODAG[veckodagFor(datum)]} ${Number(datum.slice(8, 10))} ${MANAD[Number(datum.slice(5, 7)) - 1]}`;
+}
+
+/** Dagar med tillfällen, kronologiskt; läxförhör och exit ticket samma dag bildar en post. */
+export function lektionsDagar(s: Struktur, f: DashboardFilter): LektionsDag[] {
+  const per = new Map<string, ProvTillfalle[]>();
+  for (const t of provTillfallen(s, { ...f, kallor: undefined, fran: undefined, till: undefined })) per.set(t.datum, [...(per.get(t.datum) ?? []), t]);
+  return [...per.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([datum, tillfallen]) => {
+    const datumTill = tillfallen.map((t) => t.datumTill).sort().pop() ?? datum;
+    const delar = tillfallen.map((t) => t.kalla === 'socrative-laxforhor' ? 'läxförhör' : t.kalla === 'socrative-exit' ? 'exit' : t.kalla === 'magma' ? 'Magma' : 'prov');
+    const halv = tillfallen.some((t) => t.sessioner.length > 1);
+    return { datum, datumTill, vecka: isoVecka(datum), veckodag: veckodagFor(datum), tillfallen,
+      etikett: `${kortDatum(datum)} · ${[...new Set(delar)].join(' + ')}${halv ? ' · halvklass A+B' : ''}` };
+  });
 }

@@ -26,7 +26,7 @@ import {
   arFilImporterad, klassificeraSocrativeFil, registreraFil, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
-  tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, KLUSTER_NAMN, TID_PASS,
+  tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, KLUSTER_NAMN, TID_PASS,
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
@@ -2211,7 +2211,8 @@ function LinjeDiagram({ tillfallen, serier, kravLinjer, onKlick, hojd = 220, vis
 }
 
 function tillfalleEtikett(t: ProvTillfalle): string {
-  return `v.${t.vecka} ${t.prov.replace(/^Quiz\s*/i, '')}`;
+  const halv = t.sessioner.length > 1 ? ' A+B' : '';
+  return `v.${t.vecka} ${t.prov.replace(/^Quiz\s*/i, '')}${halv}`;
 }
 
 // ── Sittplatser: import från PowerPoint + analys ─────────────
@@ -2382,7 +2383,12 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
   }, [fokus.length]);
   const [visaAndel, setVisaAndel] = useState(true);
   const period = tolkaVeckor(periodText);
-  const f: DashboardFilter = { klassId, ...(amneId !== '' ? { amneId } : {}), ...(kallor !== undefined ? { kallor } : {}), ...(period ?? {}) };
+  const [dag, setDag] = useState('');
+  const grundF: DashboardFilter = { klassId, ...(amneId !== '' ? { amneId } : {}), ...(kallor !== undefined ? { kallor } : {}), ...(period ?? {}) };
+  const dagar = lektionsDagar(s, grundF);
+  const valdDag = dagar.find((d) => d.datum === dag) ?? null;
+  // Dagfilter: läxförhör + exit ticket samma lektionsdag; vid halvklass täcker intervallet båda sessionerna
+  const f: DashboardFilter = valdDag === null ? grundF : { ...grundF, fran: valdDag.datum, till: valdDag.datumTill };
   const kort = frageKort(s, f);
   const kurva = klassKurva(s, f);
   const veckor = veckoSerier(s, f);
@@ -2417,9 +2423,15 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
         <label>Period:{' '}
           <input aria-label="Period (veckor)" placeholder="v.35–43" value={periodText} size={8}
             onChange={(e) => setPeriodText(e.target.value)} className={periodText !== '' && period === null ? 'fel' : undefined} /></label>
+        <label>Dag:{' '}
+          <select aria-label="Lektionsdag" value={dag} onChange={(e) => setDag(e.target.value)}>
+            <option value="">alla</option>
+            {dagar.map((d) => <option key={d.datum} value={d.datum}>{d.etikett}</option>)}
+          </select></label>
         <label>🔎 <input aria-label="Sök elev" placeholder="Sök elev, ID, e-post…" value={sok} onChange={(e) => setSok(e.target.value)} /></label>
+        {valdDag !== null && <button className="btn sm" onClick={() => setDag('')}>✕ visa alla dagar</button>}
         <span className="spacer" />
-        <small className="muted">{klassNamn}{amneId !== '' ? ` · ${s.amnen.find((a) => a.id === amneId)?.namn ?? ''}` : ' · alla ämnen'}{period !== null ? ` · v.${period.veckaFran}–${period.veckaTill}` : ''}</small>
+        <small className="muted">{klassNamn}{amneId !== '' ? ` · ${s.amnen.find((a) => a.id === amneId)?.namn ?? ''}` : ' · alla ämnen'}{period !== null ? ` · v.${period.veckaFran}–${period.veckaTill}` : ''}{valdDag !== null ? ` · ${kortDatum(valdDag.datum)}${valdDag.datumTill !== valdDag.datum ? `–${kortDatum(valdDag.datumTill)}` : ''}` : ''}</small>
       </div>
 
       {/* KPI-rad — frågekort i mockupens stil: ikon, rubrik, fråga, stort tal, delta, sparkline */}
@@ -2626,7 +2638,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
           <div className="st-scroll">
             <table className="tbl st-matris">
               <thead><tr><th>Elev</th><th>Snitt</th><th>Krav</th><th title="Närvaro (Socrative-svar / lektioner)">Närv.</th>
-                {matris.tillfallen.map((t) => <th key={t.nyckel} title={`${t.datum} ${KALLNAMN[t.kalla]}`}><span className="st-kol">{tillfalleEtikett(t)}</span></th>)}
+                {matris.tillfallen.map((t) => <th key={t.nyckel} title={`${t.sessioner.join(' + ')} ${KALLNAMN[t.kalla]}${t.sessioner.length > 1 ? ' (halvklass A+B sammanslaget)' : ''}`}><span className="st-kol">{tillfalleEtikett(t)}</span></th>)}
               </tr></thead>
               <tbody>{matris.rader.map((r) => (
                 <tr key={r.elev.id} className={elevId === r.elev.id ? 'vald' : undefined}>

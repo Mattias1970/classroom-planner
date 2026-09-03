@@ -1368,6 +1368,15 @@ describe('📊 SuperTeach', () => {
     expect(host.querySelector('.st-grupper')!.textContent).toContain('Grupp A');
     expect(host.querySelector('.st-samband, .st-widget p.muted')).not.toBeNull(); // 2 elever → 'kräver minst tre'
 
+    // Dagfilter: läxförhör + exit 2/9 blir en post; valet begränsar korten till den dagen
+    const dagSel = select(host, 'Lektionsdag');
+    expect([...dagSel.options].map((o) => o.textContent)).toEqual(['alla', 'ons 26 aug · exit', 'ons 2 sep · läxförhör + exit', 'ons 9 sep · exit']);
+    valj(dagSel, '2026-09-02');
+    expect(host.querySelectorAll('.st-kort')[1].textContent).toContain('90 %'); // exit 1.1b: (10+8)/2
+    expect(host.querySelectorAll('.st-kort')[0].textContent).toContain('95 %'); // läxförhör 1.1a: (9+10)/2
+    act(() => { knapp(host, '✕ visa alla dagar').click(); });
+    expect(host.querySelectorAll('.st-kort')[1].textContent).toContain('86 %');
+
     // Klasskurvan: tre tillfällen, kravlinjer 70 och 90, punkter klickbara
     const diagram = host.querySelectorAll('.st-diagram')[2]!; // [0] vecko, [1] närvaro
     expect(diagram.textContent).toContain('krav 70 %');

@@ -243,3 +243,70 @@ describe('Del 63: trendLinje', async () => {
     expect(trendLinje([70])).toEqual([null]);
   });
 });
+
+describe('Del 64: halvklass A/B slås ihop till ett tillfälle; dagfilter', async () => {
+  const { provTillfallen, elevMatris, narvaroLektioner, lektionsDagar, tillfalleIndex } = await import('../src/domain/dashboard.js');
+  const { laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst, laggTillAmne } = await import('../src/domain/struktur.js');
+  const { tomStruktur } = await import('../src/domain/typer.js');
+  const { importeraResultat } = await import('../src/domain/resultat.js');
+
+  function bygg() {
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', schema: [{ dag: 1, start: '09:00', slut: '10:00' }] });
+    s = laggTillElev(s, { id: 'a', klassId: 'k', namn: 'Anna Berg', grupp: 'A' });
+    s = laggTillElev(s, { id: 'b', klassId: 'k', namn: 'Omar Ali', grupp: 'A' });
+    s = laggTillElev(s, { id: 'c', klassId: 'k', namn: 'Pia Provlund', grupp: 'B' });
+    s = laggTillElev(s, { id: 'd', klassId: 'k', namn: 'Ted Testsson', grupp: 'B' });
+    const rad = (namn: string, p: number) => ({ namn, poang: p, maxPoang: 10 });
+    // Halvklass: grupp A måndag 24/8, grupp B torsdag 27/8 — samma rum Biologi41, olika quiznamn i Socrative
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-laxforhor', prov: 'Biologi 4.1 Begrepp', datum: '2026-08-24', rum: 'Biologi41', rader: [rad('Anna Berg', 9), rad('Omar Ali', 7)] }).s;
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-laxforhor', prov: 'Biologi 4.1 begrepp (B)', datum: '2026-08-27', rum: 'Biologi41', rader: [rad('Pia Provlund', 10)] }).s; // Ted borta
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-exit', prov: 'Exit 4.2', datum: '2026-08-24', rum: 'Biologi42', rader: [rad('Anna Berg', 8), rad('Omar Ali', 6)] }).s;
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-exit', prov: 'Exit 4.2', datum: '2026-08-27', rum: 'Biologi42', rader: [rad('Pia Provlund', 9), rad('Ted Testsson', 5)] }).s;
+    // Omtag av samma läxförhör tre veckor senare → eget tillfälle (utanför fönstret)
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-laxforhor', prov: 'Biologi 4.1 omtag', datum: '2026-09-21', rum: 'Biologi41', rader: [rad('Ted Testsson', 8)] }).s;
+    return s;
+  }
+  const f = { klassId: 'k' };
+
+  it('två halvklassessioner inom en vecka blir ett tillfälle med båda datumen', () => {
+    const t = provTillfallen(bygg(), f);
+    expect(t.map((x) => `${x.datum}..${x.datumTill} ${x.kalla} n=${x.antal}`)).toEqual([
+      '2026-08-24..2026-08-27 socrative-laxforhor n=3',
+      '2026-08-24..2026-08-27 socrative-exit n=4',
+      '2026-09-21..2026-09-21 socrative-laxforhor n=1',
+    ]);
+    expect(t[0].sessioner).toEqual(['2026-08-24', '2026-08-27']);
+    expect(t[0].snittProcent).toBe(87);
+  });
+
+  it('matrisen har en kolumn per sammanslaget tillfälle och alla elever hamnar i den', () => {
+    const m = elevMatris(bygg(), f);
+    expect(m.tillfallen).toHaveLength(3);
+    const pia = m.rader.find((r) => r.elev.id === 'c')!;
+    expect(pia.celler.map((c) => c?.procent ?? null)).toEqual([100, 90, null]);
+    const ted = m.rader.find((r) => r.elev.id === 'd')!;
+    expect(ted.celler.map((c) => c?.procent ?? null)).toEqual([null, 50, 80]);
+  });
+
+  it('närvaro räknar halvklassparet som EN lektion — inte 50 % frånvaro', () => {
+    const l = narvaroLektioner(bygg(), f);
+    expect(l).toHaveLength(2);
+    expect(l[0]).toMatchObject({ datum: '2026-08-24', sessioner: ['2026-08-24', '2026-08-27'], narvaroProcent: 100, franvarande: [] });
+    expect(l[1]).toMatchObject({ datum: '2026-09-21', narvarande: ['d'] });
+  });
+
+  it('lektionsDagar: läxförhör + exit samma dag = en post med etikett', () => {
+    const d = lektionsDagar(bygg(), f);
+    expect(d.map((x) => x.etikett)).toEqual(['mån 24 aug · läxförhör + exit · halvklass A+B', 'mån 21 sep · läxförhör']);
+    expect(d[0].datumTill).toBe('2026-08-27');
+  });
+
+  it('tillfalleIndex skiljer på omtag av samma elev inom fönstret', () => {
+    const s = bygg();
+    const extra = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-laxforhor', prov: 'Biologi 4.1 Begrepp igen', datum: '2026-08-26', rum: 'Biologi41', rader: [{ namn: 'Anna Berg', poang: 10, maxPoang: 10 }] }).s;
+    expect(tillfalleIndex(extra.resultat ?? []).tillfallen.filter((t) => t.nyckel.includes('laxforhor'))).toHaveLength(3);
+  });
+});
