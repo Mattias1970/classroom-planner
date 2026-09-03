@@ -23,7 +23,7 @@ import {
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   arFilImporterad, klassificeraSocrativeFil, registreraFil, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
-  importeraRoster, rosterNamn, tolkaSocrativeRoster, type RosterRad,
+  importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, KLUSTER_NAMN, TID_PASS, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
@@ -760,7 +760,8 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
 function RosterImport({ s, klassId, klassNamn, kor }: {
   s: Struktur; klassId: string; klassNamn: string; kor: (fn: () => Struktur, m: string) => void;
 }) {
-  const [grupp, setGrupp] = useState<Grupp>('A');
+  // Grupperna är laborationsgrupper och finns inte i Socrative — nya elever hamnar i A och flyttas i 🧪 Laborationsgrupper
+  const grupp: Grupp = 'A';
   const [fil, setFil] = useState<{ namn: string; rader: RosterRad[]; fel: string | null }>({ namn: '', rader: [], fel: null });
   const lasFil = async (filer: FileList | null) => {
     const f = filer?.[0];
@@ -781,10 +782,7 @@ function RosterImport({ s, klassId, klassNamn, kor }: {
       <p className="small muted">Socratives elevlista med kolumnerna <code>First Name · Last Name · Student ID</code> (valfritt <code>Email</code>). Befintliga elever hoppas över — importen kan köras om när klassen ändras.</p>
       <div className="rad" style={{ gap: 6 }}>
         <input type="file" accept=".xlsx,.xls,.csv" aria-label="Socrative-roster" onChange={(e) => { void lasFil(e.target.files); e.target.value = ''; }} />
-        <label>Grupp för nya elever:{' '}
-          <select aria-label="Grupp för roster" value={grupp} onChange={(e) => setGrupp(e.target.value as Grupp)}>
-            <option value="A">A</option><option value="B">B</option>
-          </select></label>
+        <small className="muted">Laborationsgrupp A/B sätts separat (🧪 nedan eller per elev under Struktur).</small>
       </div>
       {fil.fel !== null && <p className="status warn">⚠ {fil.namn}: {fil.fel}</p>}
       {forhands !== null && (<>
@@ -804,9 +802,39 @@ function RosterImport({ s, klassId, klassNamn, kor }: {
           <span className="spacer" />
           <button className="btn sm" disabled={forhands.tillagda.length + forhands.uppdaterade.length === 0} onClick={() => {
             kor(() => importeraRoster(lasStruktur(), klassId, fil.rader, grupp, () => nyttId('e')).struktur,
-              `${klassNamn}: ${forhands.tillagda.length} elever tillagda i Grupp ${grupp}${forhands.uppdaterade.length > 0 ? `, ${forhands.uppdaterade.length} kompletterade` : ''}${forhands.hoppade.length > 0 ? `, ${forhands.hoppade.length} fanns redan` : ''}.`);
+              `${klassNamn}: ${forhands.tillagda.length} elever tillagda${forhands.uppdaterade.length > 0 ? `, ${forhands.uppdaterade.length} kompletterade` : ''}${forhands.hoppade.length > 0 ? `, ${forhands.hoppade.length} fanns redan` : ''}.`);
             setFil({ namn: '', rader: [], fel: null });
           }}>📥 Importera till {klassNamn}</button>
+        </div>
+      </>)}
+    </details>
+  );
+}
+
+// ── Laborationsgrupper A/B ur inklistrad lista ───────────────
+function GruppImport({ s, klassId, klassNamn, kor }: {
+  s: Struktur; klassId: string; klassNamn: string; kor: (fn: () => Struktur, m: string) => void;
+}) {
+  const [text, setText] = useState('');
+  const rader = tolkaGruppLista(text);
+  const ut = rader.length > 0 ? tilldelaGrupper(s, klassId, rader) : null;
+  const andrade = ut === null ? 0 : ut.tilldelade.filter((t) => t.andrad).length;
+  return (
+    <details className="bulk-elever grupp-import">
+      <summary>🧪 Laborationsgrupper A/B (klistra in lista)</summary>
+      <p className="small muted">En elev per rad: <code>Förnamn A</code> eller <code>Förnamn Efternamn, B</code>. Förnamn räcker när det är unikt i klassen — annars ber jag om efternamn.</p>
+      <textarea aria-label="Grupplista" rows={6} value={text} placeholder={'Anna A\nOmar B\nPia Provlund B'} onChange={(e) => setText(e.target.value)} />
+      {ut !== null && (<>
+        {ut.tvetydiga.length > 0 && (
+          <p className="status warn">⚠ Flera elever heter {ut.tvetydiga.map((t) => `${t.namn} (${t.kandidater.map((k) => k.namn).join(' / ')})`).join(', ')} — skriv hela namnet.</p>
+        )}
+        {ut.okanda.length > 0 && <p className="status warn">⚠ Finns inte i {klassNamn}: {ut.okanda.join(', ')}</p>}
+        <p className="small">{ut.tilldelade.length} elever matchade · <b>{andrade}</b> byter grupp</p>
+        <div className="rad"><span className="spacer" />
+          <button className="btn sm" disabled={andrade === 0} onClick={() => {
+            kor(() => tilldelaGrupper(lasStruktur(), klassId, rader).struktur, `${klassNamn}: ${andrade} elever fick ny laborationsgrupp — deras lektioner följer gruppen.`);
+            setText('');
+          }}>🧪 Sätt grupper</button>
         </div>
       </>)}
     </details>
@@ -861,6 +889,7 @@ function Elevlista({ s, klassId, klassNamn, kor }: {
         </table>
       )}
       <RosterImport s={s} klassId={klassId} klassNamn={klassNamn} kor={kor} />
+      <GruppImport s={s} klassId={klassId} klassNamn={klassNamn} kor={kor} />
       <details className="bulk-elever">
         <summary>➕ Lägg till flera elever (klistra in lista)</summary>
         <p className="small muted">En elev per rad, t.ex. <code>Efternamn, Förnamn</code> eller <code>Förnamn Efternamn</code> — formatet i Socrative-rapporten fungerar rakt av. Dubbletter hoppas över.</p>
@@ -2670,6 +2699,7 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
       <div className="uppg-kort">
         <b>👥 Elever i {klass.namn}</b> <small className="muted">{s.elever.filter((e) => e.klassId === klass.id).length} elever registrerade — resultat kan bara matchas mot registrerade elever. Importera Socratives roster för klassen så matchas rapporterna på namn och Student ID.</small>
         <RosterImport s={s} klassId={klass.id} klassNamn={klass.namn} kor={kor} />
+        <GruppImport s={s} klassId={klass.id} klassNamn={klass.namn} kor={kor} />
       </div>
 
       {/* ── Import: Socrative-filer ── */}

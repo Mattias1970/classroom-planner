@@ -1792,7 +1792,6 @@ describe('👥 Socrative-roster', () => {
     skriv(input(host, 'Elevens namn'), 'Berg, Anna');
     act(() => { knapp(host, '➕ Lägg till elev').click(); });
 
-    valj(select(host, 'Grupp för roster'), 'B');
     const filInput = input(host, 'Socrative-roster');
     const fil = new File([new Uint8Array([1, 2, 3])], 'roster.xlsx');
     Object.defineProperty(filInput, 'files', { value: [fil], configurable: true });
@@ -1805,8 +1804,16 @@ describe('👥 Socrative-roster', () => {
     const elever = lasStruktur().elever;
     expect(elever).toHaveLength(3);
     expect(elever.find((e) => e.namn === 'Berg, Anna')).toMatchObject({ grupp: 'A', socrativeId: 'ANNA', epost: 'anna@skola.se' });
-    expect(elever.find((e) => e.namn === 'Omar Ali')).toMatchObject({ grupp: 'B', socrativeId: 'OMAR' });
-    expect(host.textContent).toContain('8B: 2 elever tillagda i Grupp B, 1 kompletterade.');
+    expect(elever.find((e) => e.namn === 'Omar Ali')).toMatchObject({ grupp: 'A', socrativeId: 'OMAR' });
+    expect(host.textContent).toContain('8B: 2 elever tillagda, 1 kompletterade.');
+
+    // Laborationsgrupper ur lista: förnamn räcker, "Pia Provlund B" med helt namn
+    const ta = host.querySelector('textarea[aria-label="Grupplista"]') as HTMLTextAreaElement;
+    skriv(ta, 'Omar B\nPia Provlund B\nOkänd A');
+    expect(host.textContent).toContain('Finns inte i 8B: Okänd');
+    expect(host.textContent).toContain('2 byter grupp');
+    act(() => { knapp(host, '🧪 Sätt grupper').click(); });
+    expect(lasStruktur().elever.filter((e) => e.grupp === 'B').map((e) => e.namn).sort()).toEqual(['Omar Ali', 'Pia Provlund']);
 
     // Rostern finns också i SuperTeach-fliken
     act(() => { knapp(host, '📊 SuperTeach').click(); });

@@ -110,3 +110,27 @@ describe('matchaElev via socrativeId', () => {
     expect(matchaElev(s, 'k8b', 'Testsson, Ted', '')?.id).toBe('e1');
   });
 });
+
+describe('Del 62: laborationsgrupper ur lista', async () => {
+  const { tolkaGruppLista, tilldelaGrupper } = await import('../src/domain/roster.js');
+
+  it('tolkaGruppLista klarar mellanslag, komma, tab, "Grupp B" och rubrikrad', () => {
+    expect(tolkaGruppLista('Namn\tGrupp\nTed A\nPia Provlund, B\nÖjvind\tgrupp b\n\nAnna Berg;A')).toEqual([
+      { namn: 'Ted', grupp: 'A' }, { namn: 'Pia Provlund', grupp: 'B' }, { namn: 'Öjvind', grupp: 'B' }, { namn: 'Anna Berg', grupp: 'A' },
+    ]);
+  });
+
+  it('tilldelaGrupper: förnamn räcker när det är unikt, annars tvetydigt; okända rapporteras', () => {
+    let s = grund();
+    s = laggTillElev(s, { id: 'e1', klassId: 'k8b', namn: 'Ted Testsson', grupp: 'A' });
+    s = laggTillElev(s, { id: 'e2', klassId: 'k8b', namn: 'Ted Tvillingsson', grupp: 'A' });
+    s = laggTillElev(s, { id: 'e3', klassId: 'k8b', namn: 'Provlund, Pia', grupp: 'A' });
+    const ut = tilldelaGrupper(s, 'k8b', tolkaGruppLista('Ted B\nTed Tvillingsson B\nPia B\nOkänd A'));
+    expect(ut.tvetydiga.map((t) => t.namn)).toEqual(['Ted']);
+    expect(ut.tvetydiga[0].kandidater.map((e) => e.id)).toEqual(['e1', 'e2']);
+    expect(ut.okanda).toEqual(['Okänd']);
+    expect(ut.tilldelade.map((t) => `${t.elev.id}:${t.grupp}:${t.andrad}`)).toEqual(['e2:B:true', 'e3:B:true']);
+    expect(ut.struktur.elever.map((e) => e.grupp)).toEqual(['A', 'B', 'B']);
+    expect(s.elever.map((e) => e.grupp)).toEqual(['A', 'A', 'A']); // ren funktion
+  });
+});

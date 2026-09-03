@@ -137,3 +137,67 @@ export function importeraRoster(
   }
   return { struktur: { ...s, elever }, tillagda, uppdaterade, hoppade };
 }
+
+// ── Del 62: laborationsgrupper A/B ur en inklistrad lista ────
+//
+// Grupperna är laborationsgrupper (halvklass i NO) och finns inte i
+// Socrative. De sätts i efterhand: per elev i Struktur, eller genom att
+// klistra in en lista 'Förnamn A' / 'Förnamn Efternamn, B'. Matchning på
+// förnamn räcker när det är unikt i klassen; annars krävs efternamn.
+
+export interface GruppRad { namn: string; grupp: Elev['grupp']; }
+
+/** Tolkar rader som 'Anna A', 'Anna Berg B', 'Anna, B', 'Anna\tB'. Rubrikrader och tomma rader hoppas över. */
+export function tolkaGruppLista(text: string): GruppRad[] {
+  const ut: GruppRad[] = [];
+  for (const rad of text.split(/\r?\n/)) {
+    const m = /^\s*(.+?)\s*[,;\t ]\s*(?:grupp\s*)?([AB])\s*$/i.exec(rad);
+    if (m === null) continue;
+    const namn = m[1].trim();
+    if (namn === '' || /^(namn|elev|förnamn|fornamn)$/i.test(namn)) continue;
+    ut.push({ namn, grupp: m[2].toUpperCase() as Elev['grupp'] });
+  }
+  return ut;
+}
+
+export interface GruppTilldelning {
+  struktur: Struktur;
+  /** Elever som fått (eller redan hade) rätt grupp. */
+  tilldelade: Array<{ elev: Elev; grupp: Elev['grupp']; andrad: boolean }>;
+  /** Rader där bara förnamn gavs och flera elever matchar — ange efternamn. */
+  tvetydiga: Array<{ namn: string; kandidater: Elev[] }>;
+  /** Rader som inte matchar någon elev i klassen. */
+  okanda: string[];
+}
+
+function fornamnAv(namn: string): string {
+  return delaNamn(namn).fornamn.toLowerCase();
+}
+
+/**
+ * Sätter grupp på klassens elever utifrån listan. Helt namn matchas
+ * ordningsoberoende; ett ensamt förnamn matchas bara om det är unikt.
+ */
+export function tilldelaGrupper(s: Struktur, klassId: string, rader: GruppRad[]): GruppTilldelning {
+  const elever = s.elever.filter((e) => e.klassId === klassId);
+  const helNyckel = (n: string) => n.toLowerCase().replace(/,/g, ' ').replace(/\s+/g, ' ').trim().split(' ').sort().join(' ');
+  const tilldelade: GruppTilldelning['tilldelade'] = [];
+  const tvetydiga: GruppTilldelning['tvetydiga'] = [];
+  const okanda: string[] = [];
+  const nyGrupp = new Map<string, Elev['grupp']>();
+  for (const r of rader) {
+    const hela = elever.filter((e) => helNyckel(e.namn) === helNyckel(r.namn));
+    let traff: Elev | null = hela.length === 1 ? hela[0] : null;
+    if (traff === null) {
+      const via = elever.filter((e) => fornamnAv(e.namn) === r.namn.toLowerCase().trim());
+      if (via.length === 1) traff = via[0];
+      else if (via.length > 1) { tvetydiga.push({ namn: r.namn, kandidater: via }); continue; }
+    }
+    if (traff === null) { okanda.push(r.namn); continue; }
+    nyGrupp.set(traff.id, r.grupp);
+    tilldelade.push({ elev: traff, grupp: r.grupp, andrad: traff.grupp !== r.grupp });
+  }
+  const struktur = nyGrupp.size === 0 ? s
+    : { ...s, elever: s.elever.map((e) => (nyGrupp.has(e.id) ? { ...e, grupp: nyGrupp.get(e.id)! } : e)) };
+  return { struktur, tilldelade, tvetydiga, okanda };
+}
