@@ -2147,7 +2147,7 @@ function Sparkline({ serie, farg, krav }: { serie: number[]; farg: string; krav:
   return (
     <svg width={w} height={h} className="st-spark" aria-hidden="true">
       {krav !== null && <line x1={0} x2={w} y1={y(krav)} y2={y(krav)} stroke="#E65100" strokeDasharray="3 3" strokeWidth={1} />}
-      <path d={d} fill="none" stroke={farg} strokeWidth={2} />
+      <path d={d} fill="none" stroke={farg} strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" />
       {serie.map((p, i) => <circle key={i} cx={x(i)} cy={y(p)} r={2.2} fill={farg} />)}
     </svg>
   );
@@ -2159,14 +2159,15 @@ function Sparkline({ serie, farg, krav }: { serie: number[]; farg: string; krav:
  * det yttersta värdet). Mellan tillfällena ett band från min till max, tonat
  * mot snittet, så att spridningen syns som en 'dimma' kring linjen.
  */
-function SpridningsDiagram({ tillfallen, hojd = 300, w, onKlick }: {
-  tillfallen: ReturnType<typeof klassSpridning>; hojd?: number; w: number; onKlick?: (index: number) => void;
+function SpridningsDiagram({ tillfallen, hojd = 300, w, onKlick, zoom = ZOOM_START }: {
+  tillfallen: ReturnType<typeof klassSpridning>; hojd?: number; w: number; onKlick?: (index: number) => void; zoom?: Zoom;
 }) {
   const n = tillfallen.length;
   const rotera = n > 1 && (w - 60) / (n - 1) < 70;
   const ml = 40; const mr = 16; const mt = 16; const mb = rotera ? 90 : AXEL_HOJD + 8; const h = hojd + mb - 44;
   const x = (i: number) => (n <= 1 ? ml + (w - ml - mr) / 2 : ml + (i / (n - 1)) * (w - ml - mr));
-  const y = (p: number) => mt + (1 - p / 100) * (h - mt - mb);
+  const y = (p: number) => mt + (1 - (p - zoom.yMin) / Math.max(1, zoom.yMax - zoom.yMin)) * (h - mt - mb);
+  const nivaer = axelNivaer(zoom);
   const farg = '#2f5aa8';
   const gid = `spridning-${Math.random().toString(36).slice(2, 8)}`;
   return (
@@ -2185,9 +2186,9 @@ function SpridningsDiagram({ tillfallen, hojd = 300, w, onKlick }: {
         })}
         <filter id={`${gid}-blur`}><feGaussianBlur stdDeviation="3" /></filter>
       </defs>
-      {[0, 25, 50, 75, 100].map((p) => (
-        <g key={p}><line x1={ml} x2={w - mr} y1={y(p)} y2={y(p)} stroke="#E4E8EF" />
-          <text x={ml - 6} y={y(p) + 4} fontSize={11} textAnchor="end" fill="#777">{p} %</text></g>
+      {nivaer.map((p) => (
+        <g key={p}><line x1={ml} x2={w - mr} y1={y(p)} y2={y(p)} stroke="#EDF0F5" />
+          <text x={ml - 8} y={y(p) + 4} fontSize={10.5} textAnchor="end" fill="#9AA3AE">{p} %</text></g>
       ))}
       {/* band min–max mellan tillfällen (suddat) */}
       {n > 1 && tillfallen.slice(0, -1).map((t, i) => {
@@ -2201,16 +2202,16 @@ function SpridningsDiagram({ tillfallen, hojd = 300, w, onKlick }: {
       ))}
       {/* elevpunkter med avtagande opacitet */}
       {tillfallen.map((t, i) => t.varden.map((v, j) => (
-        <circle key={`${i}-${j}`} cx={x(i) + ((j % 3) - 1) * 3} cy={y(v)} r={3.2} fill={farg}
+        <circle key={`${i}-${j}`} cx={x(i) + ((j % 3) - 1) * 2.6} cy={y(v)} r={2.1} fill={farg}
           opacity={0.15 + 0.85 * spridningsOpacitet(v, t.snittProcent ?? 0, t.min, t.max)}>
           <title>{`${v} % (snitt ${t.snittProcent ?? '—'} %, ${t.min}–${t.max} %)`}</title>
         </circle>
       )))}
       {/* snittlinje */}
-      <path d={tillfallen.map((t, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(t.snittProcent ?? 0)}`).join(' ')} fill="none" stroke={farg} strokeWidth={2.6} />
+      <path d={tillfallen.map((t, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(t.snittProcent ?? 0)}`).join(' ')} fill="none" stroke={farg} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
       {tillfallen.map((t, i) => (
         <g key={i}>
-          <circle cx={x(i)} cy={y(t.snittProcent ?? 0)} r={5.5} fill="#fff" stroke={farg} strokeWidth={2.6} className={onKlick ? 'st-punkt' : undefined} onClick={onKlick ? () => onKlick(i) : undefined}>
+          <circle cx={x(i)} cy={y(t.snittProcent ?? 0)} r={3.6} fill="#fff" stroke={farg} strokeWidth={2} className={onKlick ? 'st-punkt' : undefined} onClick={onKlick ? () => onKlick(i) : undefined}>
             <title>{`${t.datum} ${t.prov} · snitt ${t.snittProcent ?? '—'} % · sd ${t.sd} · ${t.antal} elever`}</title>
           </circle>
           <text x={x(i)} y={y(t.snittProcent ?? 0) - 11} fontSize={11} fontWeight={700} textAnchor="middle" fill={farg} stroke="#fff" strokeWidth={3} paintOrder="stroke">{t.snittProcent ?? '—'} %</text>
@@ -2230,24 +2231,25 @@ function SpridningsDiagram({ tillfallen, hojd = 300, w, onKlick }: {
  * en linje för seriens snitt relativt klassen. Serier utan `pa` ritas inte.
  */
 interface NormSerie { namn: string; farg: string; band: number[][]; linje: Array<number | null>; pa: boolean; }
-function NormeradDiagram({ tillfallen, serier, w, hojd = 320, onKlick }: {
-  tillfallen: ReturnType<typeof klassSpridning>; serier: NormSerie[]; w: number; hojd?: number; onKlick?: (index: number) => void;
+function NormeradDiagram({ tillfallen, serier, w, hojd = 320, onKlick, zoom = ZOOM_NORM }: {
+  tillfallen: ReturnType<typeof klassSpridning>; serier: NormSerie[]; w: number; hojd?: number; onKlick?: (index: number) => void; zoom?: Zoom;
 }) {
   const n = tillfallen.length;
   const rotera = n > 1 && (w - 60) / (n - 1) < 70;
   const ml = 44; const mr = 16; const mt = 14; const mb = rotera ? 90 : AXEL_HOJD + 8; const h = hojd + mb - 44;
   const x = (i: number) => (n <= 1 ? ml + (w - ml - mr) / 2 : ml + (i / (n - 1)) * (w - ml - mr));
-  const y = (avv: number) => mt + (1 - (avv + NORM_MAX) / (NORM_MAX * 2)) * (h - mt - mb); // avv = procentenheter från snittet
+  // avv = procentenheter från snittet; zoomen uttrycks som 100 ± spann
+  const y = (avv: number) => mt + (1 - (100 + avv - zoom.yMin) / Math.max(1, zoom.yMax - zoom.yMin)) * (h - mt - mb);
   const aktiva = serier.filter((se) => se.pa);
   const antalBand = (NORM_MAX * 2) / NORM_BAND;
   const bredd = Math.max(14, Math.min(46, (n <= 1 ? w / 2 : (w - ml - mr) / (n - 1)) * 0.55));
   const stapel = bredd / Math.max(1, aktiva.length);
   return (
     <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h} className="st-diagram st-normerad" role="img" aria-label="Normerad spridning kring klassens snitt">
-      {Array.from({ length: antalBand + 1 }, (_, k) => -NORM_MAX + k * NORM_BAND).map((avv) => (
+      {Array.from({ length: antalBand + 1 }, (_, k) => -NORM_MAX + k * NORM_BAND).filter((avv) => 100 + avv >= zoom.yMin - NORM_BAND && 100 + avv <= zoom.yMax + NORM_BAND).map((avv) => (
         <g key={avv}>
-          <line x1={ml} x2={w - mr} y1={y(avv)} y2={y(avv)} stroke={avv === 0 ? '#555' : avv % 15 === 0 ? '#C9D0DA' : '#EEF1F5'} strokeWidth={avv === 0 ? 1.5 : 1} />
-          {avv % 15 === 0 && <text x={ml - 6} y={y(avv) + 4} fontSize={11} textAnchor="end" fill={avv === 0 ? '#333' : '#777'} fontWeight={avv === 0 ? 700 : 400}>{100 + avv}{avv === 0 ? ' snitt' : ''}</text>}
+          <line x1={ml} x2={w - mr} y1={y(avv)} y2={y(avv)} stroke={avv === 0 ? '#8A94A3' : avv % 15 === 0 ? '#DDE3EB' : '#F2F5F9'} strokeWidth={avv === 0 ? 1.25 : 1} />
+          {avv % 15 === 0 && <text x={ml - 8} y={y(avv) + 4} fontSize={10.5} textAnchor="end" fill={avv === 0 ? '#556' : '#9AA3AE'} fontWeight={avv === 0 ? 700 : 400}>{100 + avv}{avv === 0 ? ' snitt' : ''}</text>}
         </g>
       ))}
       {tillfallen.map((t, i) => aktiva.map((se, si) => {
@@ -2267,7 +2269,7 @@ function NormeradDiagram({ tillfallen, serier, w, hojd = 320, onKlick }: {
         pts.forEach((pt) => { if (pt === null) { pen = false; return; } d += `${pen ? 'L' : 'M'}${pt.x.toFixed(1)},${pt.y.toFixed(1)} `; pen = true; });
         return (
           <g key={se.namn}>
-            <path d={d} fill="none" stroke={se.farg} strokeWidth={2.4} />
+            <path d={d} fill="none" stroke={se.farg} strokeWidth={1.9} strokeLinejoin="round" strokeLinecap="round" />
             {pts.map((pt, i) => pt !== null && (
               <circle key={i} cx={pt.x} cy={pt.y} r={4.2} fill="#fff" stroke={se.farg} strokeWidth={2.2} className={onKlick ? 'st-punkt' : undefined} onClick={onKlick ? () => onKlick(i) : undefined}>
                 <title>{`${se.namn}: ${se.linje[i]! >= 0 ? '+' : ''}${se.linje[i]} procentenheter mot klassens snitt (${tillfallen[i].snittProcent ?? '—'} %)`}</title>
@@ -2280,9 +2282,10 @@ function NormeradDiagram({ tillfallen, serier, w, hojd = 320, onKlick }: {
     </svg>
   );
 }
-function NormeradGraf(props: { tillfallen: ReturnType<typeof klassSpridning>; serier: NormSerie[]; hojd?: number; onKlick?: (index: number) => void }) {
+function NormeradGraf(props: { tillfallen: ReturnType<typeof klassSpridning>; serier: NormSerie[]; hojd?: number; onKlick?: (index: number) => void; zoom?: Zoom }) {
   const [ref, bredd] = useBredd(720);
-  return <div ref={ref} className="st-diagram-ram"><NormeradDiagram {...props} w={bredd} /></div>;
+  const skala = props.zoom?.xSkala ?? 1;
+  return <div ref={ref} className={`st-diagram-ram${skala > 1 ? ' bred' : ''}`}><NormeradDiagram {...props} w={Math.round(bredd * skala)} /></div>;
 }
 /** På/av-knapp med färgprick — på = linjen (och banden) ritas. */
 function FilterKnapp({ pa, farg, onClick, children, title }: { pa: boolean; farg?: string; onClick: () => void; children: React.ReactNode; title?: string }) {
@@ -2294,12 +2297,52 @@ function FilterKnapp({ pa, farg, onClick, children, title }: { pa: boolean; farg
   );
 }
 
-function SpridningsGraf(props: { tillfallen: ReturnType<typeof klassSpridning>; hojd?: number; onKlick?: (index: number) => void }) {
+function SpridningsGraf(props: { tillfallen: ReturnType<typeof klassSpridning>; hojd?: number; onKlick?: (index: number) => void; zoom?: Zoom }) {
   const [ref, bredd] = useBredd(720);
-  return <div ref={ref} className="st-diagram-ram"><SpridningsDiagram {...props} w={bredd} /></div>;
+  const skala = props.zoom?.xSkala ?? 1;
+  return <div ref={ref} className={`st-diagram-ram${skala > 1 ? ' bred' : ''}`}><SpridningsDiagram {...props} w={Math.round(bredd * skala)} /></div>;
 }
 
 /** Mäter containerns bredd så att SVG-diagram ritas i riktiga pixlar (skarp text, ingen uppskalning). */
+/** Zoomläge för ett diagram: y-spann (procent) och x-skala (bredd × faktor med scroll). */
+interface Zoom { yMin: number; yMax: number; xSkala: number; }
+const ZOOM_START: Zoom = { yMin: 0, yMax: 108, xSkala: 1 };
+/** Normerade grafen mäter avvikelse i procentenheter: 100 ± 30. */
+const ZOOM_NORM: Zoom = { yMin: 70, yMax: 130, xSkala: 1 };
+
+/** 4–6 jämna nivåer inom zoomens spann. */
+function axelNivaer({ yMin, yMax }: Zoom): number[] {
+  const spann = yMax - yMin;
+  const steg = spann > 80 ? 25 : spann > 40 ? 10 : spann > 16 ? 5 : 2;
+  const ut: number[] = [];
+  for (let p = Math.ceil(yMin / steg) * steg; p <= yMax; p += steg) ut.push(p);
+  return ut;
+}
+
+function useZoom(start: Zoom = ZOOM_START) {
+  const [zoom, setZoom] = useState<Zoom>(start);
+  const yIn = () => setZoom((z) => { const mitt = (z.yMin + z.yMax) / 2; const halv = Math.max(5, (z.yMax - z.yMin) / 2 / 1.5); return { ...z, yMin: Math.round(mitt - halv), yMax: Math.round(mitt + halv) }; });
+  const yUt = () => setZoom((z) => { const mitt = (z.yMin + z.yMax) / 2; const halv = Math.min(60, (z.yMax - z.yMin) / 2 * 1.5); return { ...z, yMin: Math.round(mitt - halv), yMax: Math.round(mitt + halv) }; });
+  const panna = (steg: number) => setZoom((z) => ({ ...z, yMin: z.yMin + steg, yMax: z.yMax + steg }));
+  return { zoom, setZoom, yIn, yUt, panna, aterstall: () => setZoom(start) };
+}
+
+function ZoomKnappar({ z }: { z: ReturnType<typeof useZoom> }) {
+  const { zoom } = z;
+  const bredd = zoom.yMax - zoom.yMin;
+  return (
+    <span className="st-zoom" role="group" aria-label="Zoom">
+      <button className="st-zoomknapp" title="Zooma in (smalare y-skala)" aria-label="Zooma in" onClick={z.yIn} disabled={bredd <= 10}>+</button>
+      <button className="st-zoomknapp" title="Zooma ut" aria-label="Zooma ut" onClick={z.yUt} disabled={bredd >= 120}>−</button>
+      <button className="st-zoomknapp" title="Panorera upp" aria-label="Panorera upp" onClick={() => z.panna(5)}>↑</button>
+      <button className="st-zoomknapp" title="Panorera ner" aria-label="Panorera ner" onClick={() => z.panna(-5)}>↓</button>
+      <span className="st-zoomspann">{zoom.yMin}–{zoom.yMax} %</span>
+      <button className="st-zoomknapp" title="Bredare diagram (scrolla i sidled)" aria-label="Bredda" onClick={() => z.setZoom((v) => ({ ...v, xSkala: Math.min(4, v.xSkala + 0.5) }))} disabled={zoom.xSkala >= 4}>↔</button>
+      <button className="st-zoomknapp" title="Återställ" aria-label="Återställ zoom" onClick={z.aterstall}>⟲</button>
+    </span>
+  );
+}
+
 function useBredd(fallback: number): [React.RefObject<HTMLDivElement>, number] {
   const ref = useRef<HTMLDivElement>(null);
   const [bredd, setBredd] = useState(fallback);
@@ -2322,12 +2365,14 @@ function LinjeDiagram(props: {
   onKlick?: (index: number) => void;
   hojd?: number;
   visaVarden?: boolean;
+  zoom?: Zoom;
 }) {
   const [ref, bredd] = useBredd(720);
-  return <div ref={ref} className="st-diagram-ram"><LinjeDiagramSvg {...props} w={bredd} /></div>;
+  const skala = props.zoom?.xSkala ?? 1;
+  return <div ref={ref} className={`st-diagram-ram${skala > 1 ? ' bred' : ''}`}><LinjeDiagramSvg {...props} w={Math.round(bredd * skala)} /></div>;
 }
 
-function LinjeDiagramSvg({ tillfallen, serier, kravLinjer, onKlick, hojd = 220, visaVarden = false, w }: {
+function LinjeDiagramSvg({ tillfallen, serier, kravLinjer, onKlick, hojd = 220, visaVarden = false, w, zoom = ZOOM_START }: {
   tillfallen: Array<{ etikett: string | string[]; titel: string }>;
   serier: Array<{ namn: string; varden: Array<number | null>; farg: string; streckad?: boolean }>;
   kravLinjer: Array<{ procent: number; namn: string }>;
@@ -2335,6 +2380,7 @@ function LinjeDiagramSvg({ tillfallen, serier, kravLinjer, onKlick, hojd = 220, 
   hojd?: number;
   visaVarden?: boolean;
   w: number;
+  zoom?: Zoom;
 }) {
   const n = tillfallen.length;
   const rader = (e: string | string[]) => (Array.isArray(e) ? e : e.split('\n'));
@@ -2347,13 +2393,13 @@ function LinjeDiagramSvg({ tillfallen, serier, kravLinjer, onKlick, hojd = 220, 
   const h = hojd + (rotera ? Math.min(90, langsta * 5.5) : AXEL_HOJD - 20) + (legendRader - 1) * 16;
   const ml = 40; const mr = 16; const mt = 14;
   const x = (i: number) => (n <= 1 ? ml + (w - ml - mr) / 2 : ml + (i / (n - 1)) * (w - ml - mr));
-  const y = (p: number) => mt + (1 - p / 100) * (h - mt - mb);
-  if (n === 0) return <p className="muted small">Inga provtillfällen i urvalet ännu.</p>;
+  const y = (p: number) => mt + (1 - (p - zoom.yMin) / Math.max(1, zoom.yMax - zoom.yMin)) * (h - mt - mb);
+  const nivaer = axelNivaer(zoom);
   return (
     <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h} className="st-diagram" role="img" aria-label="Utveckling över provtillfällen">
-      {[0, 25, 50, 75, 100].map((p) => (
-        <g key={p}><line x1={ml} x2={w - mr} y1={y(p)} y2={y(p)} stroke="#E4E8EF" />
-          <text x={ml - 6} y={y(p) + 4} fontSize={11} textAnchor="end" fill="#777">{p} %</text></g>
+      {nivaer.map((p) => (
+        <g key={p}><line x1={ml} x2={w - mr} y1={y(p)} y2={y(p)} stroke="#EDF0F5" />
+          <text x={ml - 8} y={y(p) + 4} fontSize={10.5} textAnchor="end" fill="#9AA3AE">{p} %</text></g>
       ))}
       {kravLinjer.map((k) => (
         <g key={k.namn}><line x1={ml} x2={w - mr} y1={y(k.procent)} y2={y(k.procent)} stroke="#E65100" strokeDasharray="5 4" strokeWidth={1.2} />
@@ -2367,7 +2413,7 @@ function LinjeDiagramSvg({ tillfallen, serier, kravLinjer, onKlick, hojd = 220, 
           <g key={se.namn}>
             <path d={d} fill="none" stroke={se.farg} strokeWidth={2.2} strokeDasharray={se.streckad ? '6 4' : undefined} />
             {pts.map((pt, i) => pt !== null && (
-              <circle key={i} cx={pt.x} cy={pt.y} r={4.5} fill={se.farg} className={onKlick ? 'st-punkt' : undefined}
+              <circle key={i} cx={pt.x} cy={pt.y} r={2.8} fill={se.farg} className={onKlick ? 'st-punkt' : undefined}
                 onClick={onKlick ? () => onKlick(i) : undefined}>
                 <title>{`${tillfallen[i].titel} · ${se.namn}: ${se.varden[i]} %`}</title>
               </circle>
@@ -2578,6 +2624,11 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
   }, [fokus.length]);
   const [visaAndel, setVisaAndel] = useState(true);
   const [visaElevDiff, setVisaElevDiff] = useState(false);
+  const zKlass = useZoom();
+  const zNorm = useZoom(ZOOM_NORM);
+  const zVecko = useZoom();
+  const zNarv = useZoom();
+  const zFokus = useZoom();
   const [klassLage, setKlassLage] = useState<'normerad' | 'spridning' | 'kurva'>('normerad');
   const [klusterPa, setKlusterPa] = useState<Kluster[]>(['stigande', 'stabil', 'riskzon', 'ojamn']);
   const period = tolkaVeckor(periodText);
@@ -2691,8 +2742,9 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
       {/* Jämförelse + kluster */}
       <div className="st-grid2">
         <div className="uppg-kort st-widget">
-          <b>Läxförhör vs Exit tickets</b> <small className="muted">snitt per vecka · streckad = klassmedel (alla källor)</small>
+          <div className="rad"><b>Läxförhör vs Exit tickets</b> <small className="muted">snitt per vecka · streckad = klassmedel</small><span className="spacer" /><ZoomKnappar z={zVecko} /></div>
           <LinjeDiagram
+            zoom={zVecko.zoom}
             hojd={280}
             tillfallen={veckor.veckor.map((v) => ({ etikett: `v.${v}`, titel: `Vecka ${v}` }))}
             serier={[
@@ -2738,7 +2790,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
                 title={`${k.antal} elever`}>{KLUSTER_NAMN[k.kluster]} <small>{k.antal}</small></FilterKnapp>
             ))}
           </div>
-          <NormeradGraf tillfallen={spridning} hojd={300} onKlick={(i) => onVisaProv(spridning[i].prov)}
+          <NormeradGraf zoom={zNorm.zoom} tillfallen={spridning} hojd={300} onKlick={(i) => onVisaProv(spridning[i].prov)}
             serier={klusterK.map((k) => ({
               namn: KLUSTER_NAMN[k.kluster], farg: KLUSTER_FARG[k.kluster], band: k.band, pa: klusterPa.includes(k.kluster) && k.antal > 0,
               linje: k.procent.map((p, i) => (p === null || spridning[i].snittProcent === null ? null : Math.round(p - (spridning[i].snittProcent ?? 0)))),
@@ -2749,11 +2801,12 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
       {/* Närvaro & tid på dagen */}
       <div className="st-grid2">
         <div className="uppg-kort st-widget st-narvaro">
-          <b>Närvaro & tid på dagen</b> <small className="muted">närvaro = svarat på läxförhör eller exit ticket den lektionen · saknat svar räknas som frånvaro</small>
+          <div className="rad"><b>Närvaro & tid på dagen</b> <small className="muted">närvaro = svarat på läxförhör eller exit ticket den lektionen</small><span className="spacer" /><ZoomKnappar z={zNarv} /></div>
           {narvaro.antalLektioner === 0 ? <p className="muted small">Inga lektioner med Socrative-resultat i urvalet.</p> : (
             <div className="st-narvaro-grid">
               <div>
                 <LinjeDiagram
+                  zoom={zNarv.zoom}
                   hojd={240}
                   tillfallen={narvaro.perVecka.map((v) => ({ etikett: `v.${v.vecka}`, titel: `Vecka ${v.vecka}` }))}
                   serier={[{ namn: 'Närvaro', varden: narvaro.perVecka.map((v) => v.procent), farg: '#00838F' }]}
@@ -2900,13 +2953,14 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
           <FilterKnapp pa={klassLage === 'spridning'} onClick={() => setKlassLage('spridning')} title="Elevpunkter som bleknar med avståndet till snittet">Spridning</FilterKnapp>
           <FilterKnapp pa={klassLage === 'kurva'} onClick={() => setKlassLage('kurva')} title="Snitt och andel som klarar kravet">Kurva</FilterKnapp>
           {klassLage === 'kurva' && <label className="small"><input type="checkbox" checked={visaAndel} onChange={(e) => setVisaAndel(e.target.checked)} /> andel som klarar kravet</label>}
+          <ZoomKnappar z={klassLage === 'normerad' ? zNorm : zKlass} />
         </div>
         {klassLage === 'normerad' ? (<>
-          <NormeradGraf tillfallen={spridning} hojd={340} onKlick={(i) => onVisaProv(spridning[i].prov)}
+          <NormeradGraf zoom={zNorm.zoom} tillfallen={spridning} hojd={340} onKlick={(i) => onVisaProv(spridning[i].prov)}
             serier={[{ namn: klassNamn, farg: '#2f5aa8', band: normerad.map((t) => t.band), linje: normerad.map(() => 0), pa: true }]} />
           <div className="small muted">Snittet är 100 i varje tillfälle. Varje band är {NORM_BAND} procentenheter; tonen visar andelen elever i bandet (mörkast = flest). Yttersta kanten är ±{NORM_MAX}; elever utanför ligger i kantbandet.</div>
         </>) : klassLage === 'spridning' ? (<>
-          <SpridningsGraf tillfallen={spridning} hojd={320} onKlick={(i) => onVisaProv(spridning[i].prov)} />
+          <SpridningsGraf zoom={zKlass.zoom} tillfallen={spridning} hojd={320} onKlick={(i) => onVisaProv(spridning[i].prov)} />
           <div className="small muted">Varje punkt är en elev. Full färg = vid snittet, genomskinlig = längst från snittet; stapeln visar spannet lägsta–högsta i procent, sd i tooltip.</div>
         </>) : (
         <LinjeDiagram
@@ -2917,6 +2971,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
           ]}
           kravLinjer={kravLinjer}
           onKlick={(i) => onVisaProv(kurva[i].prov)}
+          zoom={zKlass.zoom}
         />
         )}
       </div>
@@ -3032,7 +3087,9 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
                 </div>
               )}
 
+              <div className="rad"><small className="muted">Klicka på en punkt för provets elevlista</small><span className="spacer" /><ZoomKnappar z={zFokus} /></div>
               <LinjeDiagram
+                zoom={zFokus.zoom}
                 hojd={fokusElever.length > 1 ? 420 : 360}
                 tillfallen={till.map((t) => ({ etikett: axelEtikett(t), titel: `${t.datum} ${KALLNAMN[t.kalla]} ${t.prov}` }))}
                 serier={serier}

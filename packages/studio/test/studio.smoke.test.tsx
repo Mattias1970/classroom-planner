@@ -1386,6 +1386,20 @@ describe('📊 SuperTeach', () => {
     expect(normerad.textContent).toContain('Ons 26/8');
     expect(normerad.textContent).toContain('Quiz 1.1a'); // hela provnamnet på axeln
     expect(normerad.querySelectorAll('rect').length).toBeGreaterThan(0);
+    // Zoom i 'klassen över tid': y-spannet krymper vid +, panorerar och återställs med ⟲
+    const klasskort = [...host.querySelectorAll('.uppg-kort')].find((k) => k.textContent?.includes('över tid'))!;
+    const zknapp = (etikett: string) => klasskort.querySelector(`button[aria-label="${etikett}"]`) as HTMLButtonElement;
+    const spann = () => klasskort.querySelector('.st-zoomspann')!.textContent;
+    expect(spann()).toBe('70–130 %');
+    act(() => { zknapp('Zooma in').click(); });
+    expect(spann()).toBe('80–120 %'); // 60 → 40 procentenheter
+    act(() => { zknapp('Panorera upp').click(); });
+    expect(spann()).toBe('85–125 %');
+    act(() => { zknapp('Bredda').click(); });
+    expect(klasskort.querySelector('.st-diagram-ram.bred')).not.toBeNull();
+    act(() => { zknapp('Återställ zoom').click(); });
+    expect(spann()).toBe('70–130 %');
+
     // Klusterknapparna är på/av-knappar med aria-pressed
     expect(host.querySelectorAll('.st-toggle[aria-pressed="true"]').length).toBeGreaterThan(0);
     // Växla till Spridning

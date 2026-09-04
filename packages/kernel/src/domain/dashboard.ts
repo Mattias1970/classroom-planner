@@ -321,15 +321,21 @@ export function trendKluster(s: Struktur, f: DashboardFilter): KlusterGrupp[] {
   const grans = krav.length > 0 ? Math.min(...krav) : 60;
   const per = new Map<Kluster, Elev[]>([['stigande', []], ['stabil', []], ['riskzon', []], ['ojamn', []]]);
   const kurvor = new Map<string, number[]>();
+  // Läxförhören är aggregerande (4.1 testas av i alla senare förhör), så en elev som
+  // ligger ≥ 90 % och stiger har visat att den kan allt hittills — aldrig riskzon.
+  const laxKrav = kravFor('socrative-laxforhor') ?? 90;
   for (const elev of sokElever(s, f.klassId, '')) {
     const k = elevKurva(s, elev.id, f).map((p) => p.procent);
     if (k.length === 0) continue;
     kurvor.set(elev.id, k);
     const m = snitt(k) ?? 0;
     const hopp = k.slice(1).map((v, i) => Math.abs(v - k[i]));
-    const kluster: Kluster = m < grans ? 'riskzon'
-      : hopp.length >= 2 && (snitt(hopp) ?? 0) > 25 ? 'ojamn'
-        : trendFor(k) === 'upp' ? 'stigande' : 'stabil';
+    const lax = elevKurva(s, elev.id, { ...f, kallor: ['socrative-laxforhor'] }).map((p) => p.procent);
+    const laxStark = lax.length >= 2 && lax[lax.length - 1] >= laxKrav && trendFor(lax) !== 'ned';
+    const kluster: Kluster = laxStark ? (trendFor(k) === 'upp' || trendFor(lax) === 'upp' ? 'stigande' : 'stabil')
+      : m < grans ? 'riskzon'
+        : hopp.length >= 2 && (snitt(hopp) ?? 0) > 25 ? 'ojamn'
+          : trendFor(k) === 'upp' ? 'stigande' : 'stabil';
     per.get(kluster)!.push(elev);
   }
   return (['stigande', 'stabil', 'riskzon', 'ojamn'] as Kluster[]).map((kluster) => {

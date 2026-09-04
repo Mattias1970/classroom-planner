@@ -588,3 +588,22 @@ input.fel { border-color: #B71C1C; }
 .st-diff { font-weight: 800; text-align: center; }
 .st-diff.upp { color: #1B5E20; } .st-diff.ned { color: #B71C1C; }
 .st-cell-diff { min-width: 54px; text-align: center; font-size: 12px; }
+
+/* Del 69: zoom och en lugnare grafstil */
+.st-zoom { display: inline-flex; align-items: center; gap: 2px; background: #F4F6FA; border: 1px solid var(--ram); border-radius: 999px; padding: 2px 4px; }
+.st-zoomknapp { border: none; background: transparent; color: #5a6472; font: inherit; font-size: 13px; line-height: 1; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; }
+.st-zoomknapp:hover:not(:disabled) { background: #fff; color: var(--bla); box-shadow: 0 1px 2px rgba(20,40,80,.12); }
+.st-zoomknapp:disabled { opacity: .3; cursor: default; }
+.st-zoomspann { font-size: 11px; color: var(--muted-varm); padding: 0 6px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.st-diagram-ram.bred { overflow-x: auto; overscroll-behavior-x: contain; }
+.st-diagram-ram.bred .st-diagram { width: auto; max-width: none; }
+/* Lugnare kort och paneler */
+.st-widget, .st-dash .uppg-kort { border-radius: 14px; border-color: #E6EAF0; box-shadow: 0 1px 2px rgba(20,40,80,.04); }
+.st-kort { border-radius: 14px; box-shadow: 0 1px 2px rgba(20,40,80,.05); }
+.st-kort-rubrik { letter-spacing: -.01em; }
+.st-kort-tal { font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.st-diagram text { font-variant-numeric: tabular-nums; }
+.st-punkt { transition: r .12s ease; }
+.st-punkt:hover { r: 5.5; }
+.st-legend { color: #6b7480; }
+.tbl.st-tabell td, .tbl.st-tabell th { font-variant-numeric: tabular-nums; }

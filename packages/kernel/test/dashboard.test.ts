@@ -364,3 +364,38 @@ describe('Del 68: Lektionstest — läxförhör och exit ticket per lektion', as
     expect(tillfalleKortEtikett(t[0])).toBe('Kap 4.1');
   });
 });
+
+describe('Del 69: aggregerande läxförhör ≥ 90 % och stigande → aldrig riskzon', async () => {
+  const { trendKluster } = await import('../src/domain/dashboard.js');
+  const { laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst, laggTillAmne } = await import('../src/domain/struktur.js');
+  const { tomStruktur } = await import('../src/domain/typer.js');
+  const { importeraResultat } = await import('../src/domain/resultat.js');
+
+  function bygg() {
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', schema: [{ dag: 1, start: '09:00', slut: '10:00' }] });
+    for (const [id, namn] of [['a', 'Anna Berg'], ['b', 'Omar Ali']] as const) s = laggTillElev(s, { id, klassId: 'k', namn, grupp: 'A' });
+    const rad = (namn: string, p: number) => ({ namn, poang: p, maxPoang: 10 });
+    // Anna: läxförhör 90 → 100 (kan allt), men svaga exit tickets drar ner helhetssnittet
+    // Omar: läxförhör 50 → 40, svaga exit tickets
+    const dagar: Array<[string, string, string, number[], number[]]> = [
+      ['2026-08-21', 'Biologi41', 'Biologi42', [9, 5], [4, 4]],
+      ['2026-08-24', 'Biologi412', 'Biologi43', [10, 4], [4, 3]],
+      ['2026-08-28', 'Biologi4123', 'Biologi44', [10, 4], [5, 3]],
+    ];
+    for (const [datum, laxRum, exRum, lax, ex] of dagar) {
+      s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-laxforhor', prov: `${laxRum} Begrepp`, datum, rum: laxRum, rader: [rad('Anna Berg', lax[0]), rad('Omar Ali', lax[1])] }).s;
+      s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-exit', prov: `${exRum} Begrepp`, datum, rum: exRum, rader: [rad('Anna Berg', ex[0]), rad('Omar Ali', ex[1])] }).s;
+    }
+    return s;
+  }
+
+  it('Anna hamnar i stigande trots lågt helhetssnitt; Omar i riskzon', () => {
+    const kl = trendKluster(bygg(), { klassId: 'k' });
+    const namn = (k: string) => kl.find((x) => x.kluster === k)!.elever.map((e) => e.namn);
+    expect(namn('riskzon')).toEqual(['Omar Ali']);
+    expect(namn('stigande')).toEqual(['Anna Berg']);
+  });
+});
