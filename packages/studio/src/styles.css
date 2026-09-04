@@ -623,3 +623,29 @@ input.fel { border-color: #B71C1C; }
 
 /* Del 71: hjälptext om musgester */
 .st-zoomhjalp { font-size: 11px; color: var(--muted-varm); margin-top: 2px; }
+
+/* Del 73: kolumnbredder följer innehållet
+   .tbl har width:100%, vilket fördelade överbliven bredd jämnt över alla
+   kolumner — sifferkolumner blev orimligt breda. Nu krymper varje kolumn till
+   sitt innehåll och en utpekad kolumn (namn/prov) sväljer resten. */
+.st-dash .tbl, .st-rapport .tbl, .st-filer .tbl { table-layout: auto; }
+.st-dash .tbl th, .st-dash .tbl td,
+.st-rapport .tbl th, .st-rapport .tbl td,
+.st-filer .tbl th, .st-filer .tbl td { width: 1%; white-space: nowrap; padding: 5px 10px; }
+/* Kolumnen som får växa: första kolumnen (elev, lektion, källa, jämförelse) */
+.st-dash .tbl th:first-child, .st-dash .tbl td:first-child,
+.st-rapport .tbl th:first-child, .st-rapport .tbl td:first-child,
+.st-filer .tbl th:first-child, .st-filer .tbl td:first-child { width: auto; }
+/* Siffror högerställs och blir kompakta */
+.st-dash .tbl td.st-diff, .st-dash .tbl th.st-diff,
+.st-dash .st-cell, .st-dash .st-cell-diff { text-align: center; padding-left: 6px; padding-right: 6px; }
+.st-matris .st-cell { min-width: 32px; }
+.st-matris th:first-child, .st-matris td:first-child { min-width: 0; max-width: 240px; }
+.st-matris td:first-child .linkbtn { display: block; max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+/* Långa provnamn kapas med ellips i stället för att bredda tabellen */
+.st-provnamn { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-lektionstest .st-bar { min-width: 0; }
+.st-lektionstest .st-bar i { max-width: 70px; }
+.st-grupper .st-bar, .st-narvarolista .st-bar { min-width: 0; }
+/* Smala tabeller ska inte spänna ut hela kortet i onödan */
+.st-grupper, .st-samband, .st-narvarolista, .st-rapport-del { width: auto; max-width: 100%; }

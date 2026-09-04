@@ -2962,10 +2962,10 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
                 <tr key={l.datum}>
                   <td><b>v{l.vecka}</b> {kortDatum(l.datum)}{l.datumTill !== l.datum && <small className="muted"> +{kortDatum(l.datumTill)}</small>}</td>
                   <td>{l.laxforhorProv === null ? <span className="muted">—</span> : (<>
-                    <div className="st-provnamn" title={l.laxforhorRum}>{l.laxforhorProv}</div>
+                    <div className="st-provnamn" title={`${l.laxforhorProv}${l.laxforhorRum !== undefined ? ` (${l.laxforhorRum})` : ''}`}>{l.laxforhorProv}</div>
                     <span className="st-bar"><i style={{ width: `${l.laxforhorSnitt ?? 0}%`, background: KORT_FARG['socrative-laxforhor'] }} /><b>{l.laxforhorSnitt ?? '—'} %</b> <small className="muted">md {l.laxforhorMedian ?? '—'}</small></span></>)}</td>
                   <td>{l.exitProv === null ? <span className="muted">—</span> : (<>
-                    <div className="st-provnamn" title={l.exitRum}>{l.exitProv}</div>
+                    <div className="st-provnamn" title={`${l.exitProv}${l.exitRum !== undefined ? ` (${l.exitRum})` : ''}`}>{l.exitProv}</div>
                     <span className="st-bar"><i style={{ width: `${l.exitSnitt ?? 0}%`, background: KORT_FARG['socrative-exit'] }} /><b>{l.exitSnitt ?? '—'} %</b> <small className="muted">md {l.exitMedian ?? '—'}</small></span></>)}</td>
                   <td className={`st-diff ${(l.diffSnitt ?? 0) > 0 ? 'upp' : (l.diffSnitt ?? 0) < 0 ? 'ned' : ''}`}>{l.diffSnitt === null ? '—' : `${l.diffSnitt > 0 ? '+' : ''}${l.diffSnitt}`}</td>
                   <td className={`st-diff ${(l.diffMedian ?? 0) > 0 ? 'upp' : (l.diffMedian ?? 0) < 0 ? 'ned' : ''}`}>{l.diffMedian === null ? '—' : `${l.diffMedian > 0 ? '+' : ''}${l.diffMedian}`}</td>
@@ -3041,9 +3041,9 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
                 <thead><tr><th>Jämförelse</th><th>Gemensamma frågor</th><th>Lärt</th><th>Glömt</th><th>Netto</th><th>Glömska</th></tr></thead>
                 <tbody>{tk.par.map((p, i) => (
                   <tr key={i}>
-                    <td><div className="st-provnamn">{p.fore.prov}{p.fore.rum !== undefined && <small className="muted"> ({p.fore.rum})</small>}</div>
+                    <td><div className="st-provnamn" title={p.fore.prov}>{p.fore.prov}{p.fore.rum !== undefined && <small className="muted"> ({p.fore.rum})</small>}</div>
                       <small className="muted">{kortDatum(p.fore.datum)} → {kortDatum(p.efter.datum)}</small>
-                      <div className="st-provnamn">{p.efter.prov}{p.efter.rum !== undefined && <small className="muted"> ({p.efter.rum})</small>}</div></td>
+                      <div className="st-provnamn" title={p.efter.prov}>{p.efter.prov}{p.efter.rum !== undefined && <small className="muted"> ({p.efter.rum})</small>}</div></td>
                     <td>{p.gemensamma}</td>
                     <td className="st-diff upp">{p.lart}</td>
                     <td className="st-diff ned">{p.glomt}</td>
