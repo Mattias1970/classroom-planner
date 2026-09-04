@@ -581,3 +581,10 @@ input.fel { border-color: #B71C1C; }
 .st-filer { margin: 8px 0; }
 .st-filer summary { cursor: pointer; font-weight: 700; }
 .st-filer table { margin-top: 6px; }
+
+/* Del 68: Lektionstest */
+.st-lektionstest .st-provnamn { font-weight: 600; font-size: 12px; margin-bottom: 2px; }
+.st-lektionstest .st-bar { min-width: 150px; }
+.st-diff { font-weight: 800; text-align: center; }
+.st-diff.upp { color: #1B5E20; } .st-diff.ned { color: #B71C1C; }
+.st-cell-diff { min-width: 54px; text-align: center; font-size: 12px; }

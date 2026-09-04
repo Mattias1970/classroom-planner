@@ -1288,7 +1288,7 @@ describe('📊 SuperTeach', () => {
     expect(lasStruktur().resultat![0].amneId).toBe(lasStruktur().amnen[0].id);
 
     // Översikten: Annas exit 90 % klarar 70-kravet; Omars 60 % gör det inte
-    const tabell = host.querySelector('.st-tabell')!;
+    const tabell = [...host.querySelectorAll('.st-tabell')].find((t) => t.textContent?.includes('Anna Berg'))!;
     expect(tabell.textContent).toContain('Anna Berg');
     expect(tabell.textContent).toContain('90 %');
     expect(tabell.textContent).toContain('60 %');
@@ -1384,7 +1384,7 @@ describe('📊 SuperTeach', () => {
     expect(normerad.textContent).toContain('100 snitt');
     expect(normerad.textContent).toContain('v35');
     expect(normerad.textContent).toContain('Ons 26/8');
-    expect(normerad.textContent).toContain('Kap 1.1');
+    expect(normerad.textContent).toContain('Quiz 1.1a'); // hela provnamnet på axeln
     expect(normerad.querySelectorAll('rect').length).toBeGreaterThan(0);
     // Klusterknapparna är på/av-knappar med aria-pressed
     expect(host.querySelectorAll('.st-toggle[aria-pressed="true"]').length).toBeGreaterThan(0);
@@ -1405,12 +1405,22 @@ describe('📊 SuperTeach', () => {
     expect(diagram.textContent).toContain('krav 90 %');
     expect(diagram.querySelectorAll('.st-punkt').length).toBeGreaterThanOrEqual(3);
 
+    // Lektionstest: läxförhör och exit hålls isär, Δ = exit − läxförhör
+    const lt = host.querySelector('.st-lektionstest')!;
+    expect(lt.textContent).toContain('Quiz 1.1a');
+    expect(lt.textContent).toContain('Quiz 1.1b');
+    const elevDiff = [...lt.querySelectorAll('input[type="checkbox"]')][0] as HTMLInputElement;
+    act(() => { elevDiff.click(); });
+    expect(lt.textContent).toContain('Anna Berg');
+    expect(lt.querySelectorAll('.st-diff.ned').length + lt.querySelectorAll('.st-diff.upp').length).toBeGreaterThan(0);
+    act(() => { elevDiff.click(); });
+
     // Matrisen: 2 elever × 4 tillfällen, färgade celler; Omars saknade exit v.37 visas som frånvaro ✕
     const matris = host.querySelector('.st-matris')!;
     expect(matris.querySelectorAll('tbody tr')).toHaveLength(2);
     expect(matris.querySelectorAll('tbody tr')[1].querySelectorAll('.st-cell')).toHaveLength(4);
     expect(matris.querySelectorAll('.st-cell.franvaro')).toHaveLength(1);
-    expect(matris.textContent).toContain('v35 Kap 1.1');
+    expect(matris.textContent).toContain('v35 Kap 1.1'); // kortform i tabellkolumn
 
     // Periodfilter v.36 → ett exit + ett läxförhör
     skriv(input(host, 'Period (veckor)'), 'v.36');

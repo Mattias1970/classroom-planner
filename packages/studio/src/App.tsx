@@ -28,7 +28,7 @@ import {
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
   elevrapport, elevrapportText, tillfalleEtiketter, normeradSpridning, klusterKurvor, normeraBand, taBortFil, rensaResultat,
-  NORM_BAND, NORM_MAX, amnesKallor, KLUSTER_NAMN, TID_PASS, type Kluster,
+  NORM_BAND, NORM_MAX, amnesKallor, lektionstester, elevLektionstest, tillfalleKortEtikett, KLUSTER_NAMN, TID_PASS, type Kluster,
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
@@ -2391,10 +2391,9 @@ function LinjeDiagramSvg({ tillfallen, serier, kravLinjer, onKlick, hojd = 220, 
   );
 }
 
-/** Kort etikett för tabellkolumner: 'v36 Kap 4.1–3 A+B'. */
+/** Kort etikett för tabellkolumner: 'v36 Kap 4.1–3 A+B' (hela provnamnet i tooltip). */
 function tillfalleEtikett(t: ProvTillfalle): string {
-  const [v, , kap] = tillfalleEtiketter(t);
-  return `${v} ${kap}`;
+  return `${tillfalleEtiketter(t)[0]} ${tillfalleKortEtikett(t)}`;
 }
 /** Axeletikett i tre rader: v36 / Ons 26/8 / Kap 4.1–3. */
 function axelEtikett(t: ProvTillfalle): string[] { return tillfalleEtiketter(t); }
@@ -2578,6 +2577,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
     return () => window.removeEventListener('keydown', h);
   }, [fokus.length]);
   const [visaAndel, setVisaAndel] = useState(true);
+  const [visaElevDiff, setVisaElevDiff] = useState(false);
   const [klassLage, setKlassLage] = useState<'normerad' | 'spridning' | 'kurva'>('normerad');
   const [klusterPa, setKlusterPa] = useState<Kluster[]>(['stigande', 'stabil', 'riskzon', 'ojamn']);
   const period = tolkaVeckor(periodText);
@@ -2590,6 +2590,8 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
   const kort = frageKort(s, f);
   const kurva = klassKurva(s, f);
   const spridning = klassSpridning(s, f);
+  const lekt = lektionstester(s, f);
+  const elevLekt = elevLektionstest(s, f);
   const normerad = normeradSpridning(s, f);
   const klusterK = klusterKurvor(s, f);
   const veckor = veckoSerier(s, f);
@@ -2803,6 +2805,65 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
         </div>
       </div>
 
+      {/* Lektionstest: läxförhör vs exit ticket per lektion */}
+      <div className="uppg-kort st-widget st-lektionstest">
+        <div className="rad">
+          <b>🎯 Lektionstest</b> <small className="muted">läxförhöret i början (aggregerande) och exit ticket i slutet hålls isär · <b>Δ</b> = exit − läxförhör i procentenheter</small>
+          <span className="spacer" />
+          <label className="small"><input type="checkbox" checked={visaElevDiff} onChange={(e) => setVisaElevDiff(e.target.checked)} /> per elev</label>
+        </div>
+        {lekt.length === 0 ? <p className="muted small">Inga lektioner med både läxförhör och exit ticket i urvalet.</p> : !visaElevDiff ? (
+          <div className="st-scroll">
+            <table className="tbl st-tabell">
+              <thead><tr>
+                <th>Lektion</th><th>Läxförhör</th><th>Exit ticket</th>
+                <th title="Snitt av elevernas exit − läxförhör">Δ snitt</th><th>Δ median</th><th>Elever</th>
+              </tr></thead>
+              <tbody>{lekt.map((l) => (
+                <tr key={l.datum}>
+                  <td><b>v{l.vecka}</b> {kortDatum(l.datum)}{l.datumTill !== l.datum && <small className="muted"> +{kortDatum(l.datumTill)}</small>}</td>
+                  <td>{l.laxforhorProv === null ? <span className="muted">—</span> : (<>
+                    <div className="st-provnamn" title={l.laxforhorRum}>{l.laxforhorProv}</div>
+                    <span className="st-bar"><i style={{ width: `${l.laxforhorSnitt ?? 0}%`, background: KORT_FARG['socrative-laxforhor'] }} /><b>{l.laxforhorSnitt ?? '—'} %</b> <small className="muted">md {l.laxforhorMedian ?? '—'}</small></span></>)}</td>
+                  <td>{l.exitProv === null ? <span className="muted">—</span> : (<>
+                    <div className="st-provnamn" title={l.exitRum}>{l.exitProv}</div>
+                    <span className="st-bar"><i style={{ width: `${l.exitSnitt ?? 0}%`, background: KORT_FARG['socrative-exit'] }} /><b>{l.exitSnitt ?? '—'} %</b> <small className="muted">md {l.exitMedian ?? '—'}</small></span></>)}</td>
+                  <td className={`st-diff ${(l.diffSnitt ?? 0) > 0 ? 'upp' : (l.diffSnitt ?? 0) < 0 ? 'ned' : ''}`}>{l.diffSnitt === null ? '—' : `${l.diffSnitt > 0 ? '+' : ''}${l.diffSnitt}`}</td>
+                  <td className={`st-diff ${(l.diffMedian ?? 0) > 0 ? 'upp' : (l.diffMedian ?? 0) < 0 ? 'ned' : ''}`}>{l.diffMedian === null ? '—' : `${l.diffMedian > 0 ? '+' : ''}${l.diffMedian}`}</td>
+                  <td className="small muted">{l.antalBada} av {l.elever.length}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="st-scroll" style={{ maxHeight: 420 }}>
+            <table className="tbl st-tabell st-matris">
+              <thead><tr><th>Elev</th><th>Läxförhör</th><th>Exit</th><th>Δ snitt</th><th>Δ median</th>
+                {lekt.map((l) => <th key={l.datum} title={`${l.laxforhorProv ?? '—'} → ${l.exitProv ?? '—'}`}><span className="st-kol">v{l.vecka} {kortDatum(l.datum)}</span></th>)}
+              </tr></thead>
+              <tbody>{elevLekt.map((e) => (
+                <tr key={e.elev.id}>
+                  <td><button className="linkbtn" onClick={() => setElevId(e.elev.id)}>{e.elev.namn}</button></td>
+                  <td>{e.laxforhorSnitt ?? '—'} %</td><td>{e.exitSnitt ?? '—'} %</td>
+                  <td className={`st-diff ${(e.diffSnitt ?? 0) > 0 ? 'upp' : (e.diffSnitt ?? 0) < 0 ? 'ned' : ''}`}>{e.diffSnitt === null ? '—' : `${e.diffSnitt > 0 ? '+' : ''}${e.diffSnitt}`}</td>
+                  <td className={`st-diff ${(e.diffMedian ?? 0) > 0 ? 'upp' : (e.diffMedian ?? 0) < 0 ? 'ned' : ''}`}>{e.diffMedian === null ? '—' : `${e.diffMedian > 0 ? '+' : ''}${e.diffMedian}`}</td>
+                  {lekt.map((l) => {
+                    const r = l.elever.find((x) => x.elev.id === e.elev.id);
+                    return (
+                      <td key={l.datum} className="st-cell st-cell-diff" title={r === undefined ? 'saknas' : `läxförhör ${r.laxforhor ?? '—'} % → exit ${r.exit ?? '—'} %`}>
+                        {r === undefined || r.diff === null
+                          ? <span className="muted">{r === undefined ? '·' : `${r.laxforhor ?? '—'}/${r.exit ?? '—'}`}</span>
+                          : <span className={`st-diff ${r.diff > 0 ? 'upp' : r.diff < 0 ? 'ned' : ''}`}>{r.diff > 0 ? '+' : ''}{r.diff}</span>}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {/* Grupper + samband */}
       <div className="st-grid2 smal">
         <div className="uppg-kort st-widget">
@@ -2867,7 +2928,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
           <div className="st-scroll">
             <table className="tbl st-matris">
               <thead><tr><th>Elev</th><th>Snitt</th><th>Krav</th><th title="Närvaro (Socrative-svar / lektioner)">Närv.</th>
-                {matris.tillfallen.map((t) => <th key={t.nyckel} title={`${t.sessioner.join(' + ')} ${KALLNAMN[t.kalla]}${t.sessioner.length > 1 ? ' (halvklass A+B sammanslaget)' : ''}`}><span className="st-kol">{tillfalleEtikett(t)}</span></th>)}
+                {matris.tillfallen.map((t) => <th key={t.nyckel} title={`${t.prov} · ${KALLNAMN[t.kalla]} · ${t.sessioner.join(' + ')}${t.sessioner.length > 1 ? ' (halvklass A+B)' : ''}`}><span className="st-kol">{tillfalleEtikett(t)}</span></th>)}
               </tr></thead>
               <tbody>{matris.rader.map((r) => (
                 <tr key={r.elev.id} className={elevId === r.elev.id ? 'vald' : undefined}>
@@ -2982,7 +3043,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
 
               {fokusElever.length > 1 ? (
                 <table className="tbl st-tabell">
-                  <thead><tr><th>Elev</th><th>Snitt</th><th>Närvaro</th>{till.map((t) => <th key={t.nyckel}><span className="st-kol">{tillfalleEtikett(t)}</span></th>)}</tr></thead>
+                  <thead><tr><th>Elev</th><th>Snitt</th><th>Närvaro</th>{till.map((t) => <th key={t.nyckel} title={`${t.prov} · ${KALLNAMN[t.kalla]}`}><span className="st-kol">{tillfalleEtikett(t)}</span></th>)}</tr></thead>
                   <tbody>{fokusElever.map((e, idx) => { const rad = fm.rader.find((r) => r.elev.id === e.id); const n = narvaroPerElev.get(e.id); return (
                     <tr key={e.id}><td><i className="st-legend-prick" style={{ background: PALETT[idx % PALETT.length] }} /> {e.namn}</td>
                       <td>{rad?.snitt ?? '—'}{rad?.snitt !== null && rad !== undefined ? ' %' : ''}</td>

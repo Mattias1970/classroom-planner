@@ -109,10 +109,14 @@ describe('Del 67: etiketter, normerad spridning, klusterkurvor, borttagning', as
     expect(kapitelEtikett('Fotosyntes')).toBe('Fotosyntes');
   });
 
-  it('tillfalleEtiketter: veckodag + kapitel, A+B vid halvklass', () => {
+  it('tillfalleEtiketter: rad 3 är hela provnamnet (kortformen är kapitelkoden)', async () => {
+    const { tillfalleKortEtikett } = await import('../src/domain/dashboard.js');
     const t = provTillfallen(bygg(), { klassId: 'k', amneId: 'bi' });
-    expect(tillfalleEtiketter(t[0])).toEqual(['v34', 'Tor 20/8', 'Kap 4.1']);
-    expect(tillfalleEtiketter(t.find((x) => x.rum === 'Biologi412')!)).toEqual(['v35', 'Må 24/8', 'Kap 4.1–2']);
+    expect(tillfalleEtiketter(t[0])).toEqual(['v34', 'Tor 20/8', 'Biologi 4.1 Begrepp (Biologi41)']);
+    expect(tillfalleKortEtikett(t[0])).toBe('Kap 4.1');
+    const kum = t.find((x) => x.rum === 'Biologi412')!;
+    expect(tillfalleEtiketter(kum)).toEqual(['v35', 'Må 24/8', '4.1-4.2 Begrepp (Biologi412)']);
+    expect(tillfalleKortEtikett(kum)).toBe('Kap 4.1–2');
   });
 
   it('normeraBand: 20 band om 3 procentenheter, utanför ±30 hamnar i kanten', () => {

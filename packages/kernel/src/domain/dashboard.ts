@@ -604,7 +604,14 @@ export function kapitelEtikett(prov: string, rum?: string): string {
 /** Treradig axeletikett: ['v36', 'Ons 26/8', 'Kap 4.1–3'] (+ 'A+B' vid halvklass). */
 export function tillfalleEtiketter(t: ProvTillfalle): [string, string, string] {
   const dag = VECKODAG_KORT[veckodagFor(t.datum)];
-  return [`v${t.vecka}`, `${dag} ${Number(t.datum.slice(8, 10))}/${Number(t.datum.slice(5, 7))}`, `${kapitelEtikett(t.prov, t.rum)}${t.sessioner.length > 1 ? ' A+B' : ''}`];
+  // Rad 3 = provets fulla namn (aldrig förkortat), med rummet när det skiljer sig
+  const rum = t.rum !== undefined && t.rum.replace(/\s+/g, '').toUpperCase() !== t.prov.replace(/\s+/g, '').toUpperCase() ? ` (${t.rum})` : '';
+  return [`v${t.vecka}`, `${dag} ${Number(t.datum.slice(8, 10))}/${Number(t.datum.slice(5, 7))}`, `${t.prov}${rum}${t.sessioner.length > 1 ? ' A+B' : ''}`];
+}
+
+/** Kort form: 'Kap 4.1' — används där hela namnet inte får plats (t.ex. matriskolumner). */
+export function tillfalleKortEtikett(t: ProvTillfalle): string {
+  return `${kapitelEtikett(t.prov, t.rum)}${t.sessioner.length > 1 ? ' A+B' : ''}`;
 }
 
 export const NORM_BAND = 3;
@@ -663,4 +670,106 @@ export function klusterKurvor(s: Struktur, f: DashboardFilter): KlusterKurva[] {
     }
     return { kluster: g.kluster, antal: g.elever.length, procent, index, band };
   });
+}
+
+
+// ── Del 68: Lektionstest — läxförhör och exit ticket per lektion ──
+//
+// En lektion har ett läxförhör (i början, aggregerande: 4.1 testas av i
+// alla senare läxförhör) och en exit ticket (i slutet, på dagens avsnitt).
+// De hålls isär överallt; skillnaden exit − läxförhör visar vad lektionen
+// gav. Halvklass A/B är redan sammanslaget via tillfalleIndex.
+
+export interface LektionstestElev {
+  elev: Elev;
+  laxforhor: number | null;
+  exit: number | null;
+  /** exit − läxförhör i procentenheter; null när något saknas. */
+  diff: number | null;
+}
+
+export interface Lektionstest {
+  datum: string;
+  datumTill: string;
+  vecka: number;
+  veckodag: number;
+  /** Fullständigt provnamn per källa. */
+  laxforhorProv: string | null;
+  exitProv: string | null;
+  laxforhorRum?: string;
+  exitRum?: string;
+  elever: LektionstestElev[];
+  laxforhorSnitt: number | null;
+  exitSnitt: number | null;
+  laxforhorMedian: number | null;
+  exitMedian: number | null;
+  /** Snitt av elevernas individuella diff (bara elever med båda). */
+  diffSnitt: number | null;
+  diffMedian: number | null;
+  /** Antal elever med båda proven. */
+  antalBada: number;
+}
+
+export function median(varden: number[]): number | null {
+  if (varden.length === 0) return null;
+  const v = [...varden].sort((a, b) => a - b);
+  const m = Math.floor(v.length / 2);
+  return Math.round((v.length % 2 === 1 ? v[m] : (v[m - 1] + v[m]) / 2) * 10) / 10;
+}
+
+/** Lektionstest per lektionsdag: läxförhör, exit ticket och skillnaden dem emellan. */
+export function lektionstester(s: Struktur, f: DashboardFilter): Lektionstest[] {
+  const rs = dashboardResultat(s, { ...f, kallor: ['socrative-laxforhor', 'socrative-exit'] });
+  const { tillfallen } = tillfalleIndex(rs);
+  const elever = sokElever(s, f.klassId, '');
+  const perDag = new Map<string, typeof tillfallen>();
+  for (const t of tillfallen) {
+    const dag = t.nyckel.slice(0, 10);
+    perDag.set(dag, [...(perDag.get(dag) ?? []), t]);
+  }
+  return [...perDag.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([datum, ts]) => {
+    const lax = ts.find((t) => t.resultat[0].kalla === 'socrative-laxforhor') ?? null;
+    const ex = ts.find((t) => t.resultat[0].kalla === 'socrative-exit') ?? null;
+    const procentFor = (t: typeof lax, elevId: string): number | null => {
+      const r = t?.resultat.find((x) => x.elevId === elevId);
+      return r === undefined || r === null ? null : resultatProcent(r);
+    };
+    const rader: LektionstestElev[] = elever.map((elev) => {
+      const laxforhor = procentFor(lax, elev.id);
+      const exit = procentFor(ex, elev.id);
+      return { elev, laxforhor, exit, diff: laxforhor === null || exit === null ? null : Math.round((exit - laxforhor) * 10) / 10 };
+    }).filter((r) => r.laxforhor !== null || r.exit !== null);
+    const laxV = rader.map((r) => r.laxforhor).filter((v): v is number => v !== null);
+    const exV = rader.map((r) => r.exit).filter((v): v is number => v !== null);
+    const diffV = rader.map((r) => r.diff).filter((v): v is number => v !== null);
+    const sista = ts.flatMap((t) => t.resultat.map((r) => r.datum)).sort().pop() ?? datum;
+    return {
+      datum, datumTill: sista, vecka: isoVecka(datum), veckodag: veckodagFor(datum),
+      laxforhorProv: lax?.resultat[0].prov ?? null, exitProv: ex?.resultat[0].prov ?? null,
+      ...(lax?.resultat[0].rum !== undefined ? { laxforhorRum: lax.resultat[0].rum } : {}),
+      ...(ex?.resultat[0].rum !== undefined ? { exitRum: ex.resultat[0].rum } : {}),
+      elever: rader,
+      laxforhorSnitt: snitt(laxV), exitSnitt: snitt(exV),
+      laxforhorMedian: median(laxV), exitMedian: median(exV),
+      diffSnitt: snitt(diffV), diffMedian: median(diffV),
+      antalBada: diffV.length,
+    };
+  });
+}
+
+export interface ElevLektionstest { elev: Elev; laxforhorSnitt: number | null; exitSnitt: number | null; diffSnitt: number | null; diffMedian: number | null; lektioner: number; }
+
+/** Sammanställning per elev över lektionstesterna i urvalet. */
+export function elevLektionstest(s: Struktur, f: DashboardFilter): ElevLektionstest[] {
+  const lekt = lektionstester(s, f);
+  return sokElever(s, f.klassId, '').map((elev) => {
+    const rader = lekt.map((l) => l.elever.find((r) => r.elev.id === elev.id)).filter((r): r is LektionstestElev => r !== undefined);
+    const diffs = rader.map((r) => r.diff).filter((v): v is number => v !== null);
+    return {
+      elev,
+      laxforhorSnitt: snitt(rader.map((r) => r.laxforhor).filter((v): v is number => v !== null)),
+      exitSnitt: snitt(rader.map((r) => r.exit).filter((v): v is number => v !== null)),
+      diffSnitt: snitt(diffs), diffMedian: median(diffs), lektioner: rader.length,
+    };
+  }).filter((r) => r.lektioner > 0);
 }

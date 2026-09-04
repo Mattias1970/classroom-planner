@@ -310,3 +310,57 @@ describe('Del 64: halvklass A/B slås ihop till ett tillfälle; dagfilter', asyn
     expect(tillfalleIndex(extra.resultat ?? []).tillfallen.filter((t) => t.nyckel.includes('laxforhor'))).toHaveLength(3);
   });
 });
+
+describe('Del 68: Lektionstest — läxförhör och exit ticket per lektion', async () => {
+  const { lektionstester, elevLektionstest, median, tillfalleEtiketter, tillfalleKortEtikett, provTillfallen } = await import('../src/domain/dashboard.js');
+  const { laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst, laggTillAmne } = await import('../src/domain/struktur.js');
+  const { tomStruktur } = await import('../src/domain/typer.js');
+  const { importeraResultat } = await import('../src/domain/resultat.js');
+
+  function bygg() {
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', schema: [{ dag: 1, start: '09:00', slut: '10:00' }] });
+    for (const [id, namn] of [['a', 'Anna Berg'], ['b', 'Omar Ali'], ['c', 'Pia Provlund']] as const) s = laggTillElev(s, { id, klassId: 'k', namn, grupp: 'A' });
+    const rad = (namn: string, p: number) => ({ namn, poang: p, maxPoang: 10 });
+    // Fre 21/8: läxförhör 4.1 + exit 4.2 (samma dag, olika prov)
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-laxforhor', prov: 'Biologi 4.1 Begrepp', datum: '2026-08-21', rum: 'Biologi41', rader: [rad('Anna Berg', 9), rad('Omar Ali', 6), rad('Pia Provlund', 8)] }).s;
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-exit', prov: 'Biologi 4.2 Begrepp', datum: '2026-08-21', rum: 'Biologi42', rader: [rad('Anna Berg', 10), rad('Omar Ali', 5), rad('Pia Provlund', 9)] }).s;
+    // Mån 24/8: aggregerande läxförhör 4.1–4.2 + exit 4.3; Pia saknas på exit
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-laxforhor', prov: '4.1-4.2 Begrepp', datum: '2026-08-24', rum: 'Biologi412', rader: [rad('Anna Berg', 10), rad('Omar Ali', 8), rad('Pia Provlund', 9)] }).s;
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-exit', prov: 'Biologi 4.3 Begrepp', datum: '2026-08-24', rum: 'Biologi43', rader: [rad('Anna Berg', 9), rad('Omar Ali', 7)] }).s;
+    return s;
+  }
+  const f = { klassId: 'k' };
+
+  it('håller isär läxförhör och exit ticket per lektionsdag och räknar diff per elev', () => {
+    const l = lektionstester(bygg(), f);
+    expect(l).toHaveLength(2);
+    expect(l[0]).toMatchObject({ datum: '2026-08-21', laxforhorProv: 'Biologi 4.1 Begrepp', exitProv: 'Biologi 4.2 Begrepp', laxforhorRum: 'Biologi41', exitRum: 'Biologi42', antalBada: 3 });
+    expect(l[0].elever.map((r) => `${r.elev.id}:${r.laxforhor}/${r.exit}/${r.diff}`)).toEqual(['a:90/100/10', 'b:60/50/-10', 'c:80/90/10']);
+    expect(l[0]).toMatchObject({ laxforhorSnitt: 77, exitSnitt: 80, laxforhorMedian: 80, exitMedian: 90, diffSnitt: 3, diffMedian: 10 });
+    // Pia har bara läxförhör den 24/8 → ingen diff, men raden finns kvar
+    expect(l[1].elever.find((r) => r.elev.id === 'c')).toMatchObject({ laxforhor: 90, exit: null, diff: null });
+    expect(l[1].antalBada).toBe(2);
+  });
+
+  it('per elev: snitt per källa samt snitt och median för differensen', () => {
+    const e = elevLektionstest(bygg(), f);
+    expect(e.find((x) => x.elev.id === 'a')).toMatchObject({ laxforhorSnitt: 95, exitSnitt: 95, diffSnitt: 0, diffMedian: 0, lektioner: 2 }); // +10 och −10
+    expect(e.find((x) => x.elev.id === 'b')).toMatchObject({ diffSnitt: -10, diffMedian: -10 });
+    expect(e.find((x) => x.elev.id === 'c')).toMatchObject({ exitSnitt: 90, diffSnitt: 10, lektioner: 2 });
+  });
+
+  it('median hanterar jämnt och udda antal', () => {
+    expect(median([])).toBeNull();
+    expect(median([70, 90, 80])).toBe(80);
+    expect(median([70, 90, 80, 100])).toBe(85);
+  });
+
+  it('etiketten visar hela provnamnet; kortformen bara kapitlet', () => {
+    const t = provTillfallen(bygg(), f);
+    expect(tillfalleEtiketter(t[0])[2]).toBe('Biologi 4.1 Begrepp (Biologi41)');
+    expect(tillfalleKortEtikett(t[0])).toBe('Kap 4.1');
+  });
+});
