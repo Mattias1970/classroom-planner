@@ -1397,6 +1397,18 @@ describe('📊 SuperTeach', () => {
     expect(spann()).toBe('85–125 %');
     act(() => { zknapp('Bredda').click(); });
     expect(klasskort.querySelector('.st-diagram-ram.bred')).not.toBeNull();
+    expect(spann()).toContain('1.5×');
+    // Yttre ramen mäts, inte den scrollande — bredden ska inte krympa av sig själv
+    expect(klasskort.querySelector('.st-diagram-yttre')!.querySelector('.st-diagram-ram.bred')).not.toBeNull();
+    act(() => { zknapp('Smalna').click(); });
+    expect(klasskort.querySelector('.st-diagram-ram.bred')).toBeNull();
+    act(() => { zknapp('Bredda').click(); });
+    // Hjulet zoomar y, Shift+hjul breddar, dubbelklick återställer
+    const ram = klasskort.querySelector('.st-diagram-ram.gest')!;
+    act(() => { ram.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true, cancelable: true })); });
+    expect(spann()).not.toContain('70–130');
+    act(() => { ram.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
+    expect(spann()).toBe('70–130 %');
     act(() => { zknapp('Återställ zoom').click(); });
     expect(spann()).toBe('70–130 %');
 

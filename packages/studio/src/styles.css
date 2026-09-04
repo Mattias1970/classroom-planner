@@ -595,8 +595,12 @@ input.fel { border-color: #B71C1C; }
 .st-zoomknapp:hover:not(:disabled) { background: #fff; color: var(--bla); box-shadow: 0 1px 2px rgba(20,40,80,.12); }
 .st-zoomknapp:disabled { opacity: .3; cursor: default; }
 .st-zoomspann { font-size: 11px; color: var(--muted-varm); padding: 0 6px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.st-diagram-ram.bred { overflow-x: auto; overscroll-behavior-x: contain; }
-.st-diagram-ram.bred .st-diagram { width: auto; max-width: none; }
+.st-diagram-yttre { width: 100%; min-width: 0; }
+.st-diagram-ram.bred { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
+.st-diagram-ram.bred .st-diagram { width: auto; max-width: none; flex: none; }
+.st-diagram-ram.gest { cursor: grab; touch-action: pan-x; }
+.st-diagram-ram.gest.drar { cursor: grabbing; user-select: none; }
+.st-diagram-ram.gest .st-punkt { cursor: pointer; }
 /* Lugnare kort och paneler */
 .st-widget, .st-dash .uppg-kort { border-radius: 14px; border-color: #E6EAF0; box-shadow: 0 1px 2px rgba(20,40,80,.04); }
 .st-kort { border-radius: 14px; box-shadow: 0 1px 2px rgba(20,40,80,.05); }
@@ -616,3 +620,6 @@ input.fel { border-color: #B71C1C; }
 .st-tk-tal.lart b { color: #1B5E20; } .st-tk-tal.glomt b { color: #B71C1C; }
 .st-tk-steg { display: inline-block; min-width: 26px; text-align: center; font-size: 11px; font-weight: 700; border-radius: 6px; padding: 1px 4px; margin-right: 3px; background: #EEF1F5; color: #667; }
 .st-tk-steg.upp { background: #E8F5E9; color: #1B5E20; } .st-tk-steg.ned { background: #FFEBEE; color: #B71C1C; }
+
+/* Del 71: hjälptext om musgester */
+.st-zoomhjalp { font-size: 11px; color: var(--muted-varm); margin-top: 2px; }

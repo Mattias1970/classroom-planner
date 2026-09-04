@@ -2282,10 +2282,8 @@ function NormeradDiagram({ tillfallen, serier, w, hojd = 320, onKlick, zoom = ZO
     </svg>
   );
 }
-function NormeradGraf(props: { tillfallen: ReturnType<typeof klassSpridning>; serier: NormSerie[]; hojd?: number; onKlick?: (index: number) => void; zoom?: Zoom }) {
-  const [ref, bredd] = useBredd(720);
-  const skala = props.zoom?.xSkala ?? 1;
-  return <div ref={ref} className={`st-diagram-ram${skala > 1 ? ' bred' : ''}`}><NormeradDiagram {...props} w={Math.round(bredd * skala)} /></div>;
+function NormeradGraf({ z, ...props }: { tillfallen: ReturnType<typeof klassSpridning>; serier: NormSerie[]; hojd?: number; onKlick?: (index: number) => void; z?: ReturnType<typeof useZoom> }) {
+  return <DiagramRam z={z}>{(w) => <NormeradDiagram {...props} zoom={z?.zoom} w={w} />}</DiagramRam>;
 }
 /** På/av-knapp med färgprick — på = linjen (och banden) ritas. */
 function FilterKnapp({ pa, farg, onClick, children, title }: { pa: boolean; farg?: string; onClick: () => void; children: React.ReactNode; title?: string }) {
@@ -2297,10 +2295,8 @@ function FilterKnapp({ pa, farg, onClick, children, title }: { pa: boolean; farg
   );
 }
 
-function SpridningsGraf(props: { tillfallen: ReturnType<typeof klassSpridning>; hojd?: number; onKlick?: (index: number) => void; zoom?: Zoom }) {
-  const [ref, bredd] = useBredd(720);
-  const skala = props.zoom?.xSkala ?? 1;
-  return <div ref={ref} className={`st-diagram-ram${skala > 1 ? ' bred' : ''}`}><SpridningsDiagram {...props} w={Math.round(bredd * skala)} /></div>;
+function SpridningsGraf({ z, ...props }: { tillfallen: ReturnType<typeof klassSpridning>; hojd?: number; onKlick?: (index: number) => void; z?: ReturnType<typeof useZoom> }) {
+  return <DiagramRam z={z}>{(w) => <SpridningsDiagram {...props} zoom={z?.zoom} w={w} />}</DiagramRam>;
 }
 
 /** Mäter containerns bredd så att SVG-diagram ritas i riktiga pixlar (skarp text, ingen uppskalning). */
@@ -2319,12 +2315,100 @@ function axelNivaer({ yMin, yMax }: Zoom): number[] {
   return ut;
 }
 
+const MIN_SPANN = 6; const MAX_SPANN = 130;
+
 function useZoom(start: Zoom = ZOOM_START) {
   const [zoom, setZoom] = useState<Zoom>(start);
-  const yIn = () => setZoom((z) => { const mitt = (z.yMin + z.yMax) / 2; const halv = Math.max(5, (z.yMax - z.yMin) / 2 / 1.5); return { ...z, yMin: Math.round(mitt - halv), yMax: Math.round(mitt + halv) }; });
-  const yUt = () => setZoom((z) => { const mitt = (z.yMin + z.yMax) / 2; const halv = Math.min(60, (z.yMax - z.yMin) / 2 * 1.5); return { ...z, yMin: Math.round(mitt - halv), yMax: Math.round(mitt + halv) }; });
-  const panna = (steg: number) => setZoom((z) => ({ ...z, yMin: z.yMin + steg, yMax: z.yMax + steg }));
-  return { zoom, setZoom, yIn, yUt, panna, aterstall: () => setZoom(start) };
+  /** Skalar y-spannet med faktorn `f` och håller punkten `ankare` (0 = toppen, 1 = botten) stilla. */
+  const skala = (f: number, ankare = 0.5) => setZoom((z) => {
+    const spann = z.yMax - z.yMin;
+    const nytt = Math.min(MAX_SPANN, Math.max(MIN_SPANN, spann * f));
+    if (nytt === spann) return z;
+    const punkt = z.yMax - ankare * spann; // procentvärdet under muspekaren
+    const yMax = punkt + ankare * nytt;
+    return { ...z, yMin: Math.round((yMax - nytt) * 10) / 10, yMax: Math.round(yMax * 10) / 10 };
+  });
+  const panna = (steg: number) => setZoom((z) => ({ ...z, yMin: Math.round((z.yMin + steg) * 10) / 10, yMax: Math.round((z.yMax + steg) * 10) / 10 }));
+  const brdd = (f: number) => setZoom((z) => ({ ...z, xSkala: Math.min(4, Math.max(1, Math.round((z.xSkala * f) * 100) / 100)) }));
+  return {
+    zoom, setZoom, skala, panna, brdd,
+    yIn: () => skala(1 / 1.5), yUt: () => skala(1.5),
+    aterstall: () => setZoom(start),
+  };
+}
+
+/**
+ * Musgester på ett diagram: hjulet zoomar y kring pekaren, Shift+hjul (eller
+ * ⌘/Ctrl+hjul) skalar bredden, dra med vänster musknapp panorerar och
+ * dubbelklick återställer. Hjulet fångas med passive:false så att sidan inte
+ * scrollar samtidigt.
+ */
+function useZoomGester(ref: React.RefObject<HTMLElement>, z: ReturnType<typeof useZoom>) {
+  const senaste = useRef(z); senaste.current = z;
+  useEffect(() => {
+    const el = ref.current;
+    if (el === null) return;
+    const hjul = (ev: WheelEvent) => {
+      ev.preventDefault();
+      const zz = senaste.current;
+      if (ev.shiftKey || ev.ctrlKey || ev.metaKey) { zz.brdd(ev.deltaY < 0 ? 1.25 : 1 / 1.25); return; }
+      const box = el.getBoundingClientRect();
+      const ankare = Math.min(1, Math.max(0, (ev.clientY - box.top) / Math.max(1, box.height)));
+      zz.skala(ev.deltaY < 0 ? 1 / 1.2 : 1.2, ankare);
+    };
+    let drar = false; let senasteY = 0; let hojd = 1;
+    const ned = (ev: PointerEvent) => {
+      if (ev.button !== 0 || (ev.target as HTMLElement).closest('button,a,input,select') !== null) return;
+      drar = true; senasteY = ev.clientY; hojd = Math.max(1, el.getBoundingClientRect().height);
+      el.setPointerCapture(ev.pointerId); el.classList.add('drar');
+    };
+    const ror = (ev: PointerEvent) => {
+      if (!drar) return;
+      const zz = senaste.current;
+      const spann = zz.zoom.yMax - zz.zoom.yMin;
+      zz.panna(((ev.clientY - senasteY) / hojd) * spann);
+      senasteY = ev.clientY;
+    };
+    const upp = (ev: PointerEvent) => {
+      if (!drar) return;
+      drar = false; el.classList.remove('drar');
+      if (el.hasPointerCapture(ev.pointerId)) el.releasePointerCapture(ev.pointerId);
+    };
+    const dubbel = () => senaste.current.aterstall();
+    el.addEventListener('wheel', hjul, { passive: false });
+    el.addEventListener('pointerdown', ned);
+    el.addEventListener('pointermove', ror);
+    el.addEventListener('pointerup', upp);
+    el.addEventListener('pointercancel', upp);
+    el.addEventListener('dblclick', dubbel);
+    return () => {
+      el.removeEventListener('wheel', hjul);
+      el.removeEventListener('pointerdown', ned);
+      el.removeEventListener('pointermove', ror);
+      el.removeEventListener('pointerup', upp);
+      el.removeEventListener('pointercancel', upp);
+      el.removeEventListener('dblclick', dubbel);
+    };
+  }, [ref, z]);
+}
+
+/**
+ * Ram för ett diagram: yttre div mäts (stabil bredd), inre div scrollar i
+ * sidled när xSkala > 1. Att mäta den scrollande divens clientWidth gav en
+ * återkopplingsloop när scrollisten dök upp — därför två nivåer.
+ */
+function DiagramRam({ z, children }: { z?: ReturnType<typeof useZoom>; children: (bredd: number) => React.ReactNode }) {
+  const [ref, bredd] = useBredd(720);
+  const skala = z?.zoom.xSkala ?? 1;
+  const gestRef = useRef<HTMLDivElement>(null);
+  useZoomGester(gestRef, z ?? { zoom: ZOOM_START } as ReturnType<typeof useZoom>);
+  return (
+    <div ref={ref} className="st-diagram-yttre">
+      <div ref={gestRef} className={`st-diagram-ram${skala > 1 ? ' bred' : ''}${z !== undefined ? ' gest' : ''}`}>
+        {children(Math.round(bredd * skala))}
+      </div>
+    </div>
+  );
 }
 
 function ZoomKnappar({ z }: { z: ReturnType<typeof useZoom> }) {
@@ -2332,13 +2416,14 @@ function ZoomKnappar({ z }: { z: ReturnType<typeof useZoom> }) {
   const bredd = zoom.yMax - zoom.yMin;
   return (
     <span className="st-zoom" role="group" aria-label="Zoom">
-      <button className="st-zoomknapp" title="Zooma in (smalare y-skala)" aria-label="Zooma in" onClick={z.yIn} disabled={bredd <= 10}>+</button>
-      <button className="st-zoomknapp" title="Zooma ut" aria-label="Zooma ut" onClick={z.yUt} disabled={bredd >= 120}>−</button>
+      <button className="st-zoomknapp" title="Zooma in (hjulet gör samma sak)" aria-label="Zooma in" onClick={z.yIn} disabled={bredd <= MIN_SPANN + 0.5}>+</button>
+      <button className="st-zoomknapp" title="Zooma ut" aria-label="Zooma ut" onClick={z.yUt} disabled={bredd >= MAX_SPANN - 0.5}>−</button>
       <button className="st-zoomknapp" title="Panorera upp" aria-label="Panorera upp" onClick={() => z.panna(5)}>↑</button>
       <button className="st-zoomknapp" title="Panorera ner" aria-label="Panorera ner" onClick={() => z.panna(-5)}>↓</button>
-      <span className="st-zoomspann">{zoom.yMin}–{zoom.yMax} %</span>
-      <button className="st-zoomknapp" title="Bredare diagram (scrolla i sidled)" aria-label="Bredda" onClick={() => z.setZoom((v) => ({ ...v, xSkala: Math.min(4, v.xSkala + 0.5) }))} disabled={zoom.xSkala >= 4}>↔</button>
-      <button className="st-zoomknapp" title="Återställ" aria-label="Återställ zoom" onClick={z.aterstall}>⟲</button>
+      <span className="st-zoomspann">{Math.round(zoom.yMin)}–{Math.round(zoom.yMax)} %{zoom.xSkala > 1 ? ` · ${zoom.xSkala.toFixed(1)}×` : ''}</span>
+      <button className="st-zoomknapp" title="Bredda (Shift+hjul); scrolla sedan i sidled" aria-label="Bredda" onClick={() => z.brdd(1.5)} disabled={zoom.xSkala >= 4}>↔</button>
+      <button className="st-zoomknapp" title="Smalna" aria-label="Smalna" onClick={() => z.brdd(1 / 1.5)} disabled={zoom.xSkala <= 1}>↕</button>
+      <button className="st-zoomknapp" title="Återställ (dubbelklick i diagrammet)" aria-label="Återställ zoom" onClick={z.aterstall}>⟲</button>
     </span>
   );
 }
@@ -2365,11 +2450,10 @@ function LinjeDiagram(props: {
   onKlick?: (index: number) => void;
   hojd?: number;
   visaVarden?: boolean;
-  zoom?: Zoom;
+  z?: ReturnType<typeof useZoom>;
 }) {
-  const [ref, bredd] = useBredd(720);
-  const skala = props.zoom?.xSkala ?? 1;
-  return <div ref={ref} className={`st-diagram-ram${skala > 1 ? ' bred' : ''}`}><LinjeDiagramSvg {...props} w={Math.round(bredd * skala)} /></div>;
+  const { z, ...rest } = props;
+  return <DiagramRam z={z}>{(w) => <LinjeDiagramSvg {...rest} zoom={z?.zoom} w={w} />}</DiagramRam>;
 }
 
 function LinjeDiagramSvg({ tillfallen, serier, kravLinjer, onKlick, hojd = 220, visaVarden = false, w, zoom = ZOOM_START }: {
@@ -2746,7 +2830,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
         <div className="uppg-kort st-widget">
           <div className="rad"><b>Läxförhör vs Exit tickets</b> <small className="muted">snitt per vecka · streckad = klassmedel</small><span className="spacer" /><ZoomKnappar z={zVecko} /></div>
           <LinjeDiagram
-            zoom={zVecko.zoom}
+            z={zVecko}
             hojd={280}
             tillfallen={veckor.veckor.map((v) => ({ etikett: `v.${v}`, titel: `Vecka ${v}` }))}
             serier={[
@@ -2792,7 +2876,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
                 title={`${k.antal} elever`}>{KLUSTER_NAMN[k.kluster]} <small>{k.antal}</small></FilterKnapp>
             ))}
           </div>
-          <NormeradGraf zoom={zNorm.zoom} tillfallen={spridning} hojd={300} onKlick={(i) => onVisaProv(spridning[i].prov)}
+          <NormeradGraf z={zNorm} tillfallen={spridning} hojd={300} onKlick={(i) => onVisaProv(spridning[i].prov)}
             serier={klusterK.map((k) => ({
               namn: KLUSTER_NAMN[k.kluster], farg: KLUSTER_FARG[k.kluster], band: k.band, pa: klusterPa.includes(k.kluster) && k.antal > 0,
               linje: k.procent.map((p, i) => (p === null || spridning[i].snittProcent === null ? null : Math.round(p - (spridning[i].snittProcent ?? 0)))),
@@ -2808,7 +2892,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
             <div className="st-narvaro-grid">
               <div>
                 <LinjeDiagram
-                  zoom={zNarv.zoom}
+                  z={zNarv}
                   hojd={240}
                   tillfallen={narvaro.perVecka.map((v) => ({ etikett: `v.${v.vecka}`, titel: `Vecka ${v.vecka}` }))}
                   serier={[{ namn: 'Närvaro', varden: narvaro.perVecka.map((v) => v.procent), farg: '#00838F' }]}
@@ -3012,11 +3096,12 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
           <ZoomKnappar z={klassLage === 'normerad' ? zNorm : zKlass} />
         </div>
         {klassLage === 'normerad' ? (<>
-          <NormeradGraf zoom={zNorm.zoom} tillfallen={spridning} hojd={340} onKlick={(i) => onVisaProv(spridning[i].prov)}
+          <NormeradGraf z={zNorm} tillfallen={spridning} hojd={340} onKlick={(i) => onVisaProv(spridning[i].prov)}
             serier={[{ namn: klassNamn, farg: '#2f5aa8', band: normerad.map((t) => t.band), linje: normerad.map(() => 0), pa: true }]} />
+          <div className="st-zoomhjalp">Hjulet zoomar · Shift+hjul breddar · dra för att panorera · dubbelklick återställer</div>
           <div className="small muted">Snittet är 100 i varje tillfälle. Varje band är {NORM_BAND} procentenheter; tonen visar andelen elever i bandet (mörkast = flest). Yttersta kanten är ±{NORM_MAX}; elever utanför ligger i kantbandet.</div>
         </>) : klassLage === 'spridning' ? (<>
-          <SpridningsGraf zoom={zKlass.zoom} tillfallen={spridning} hojd={320} onKlick={(i) => onVisaProv(spridning[i].prov)} />
+          <SpridningsGraf z={zKlass} tillfallen={spridning} hojd={320} onKlick={(i) => onVisaProv(spridning[i].prov)} />
           <div className="small muted">Varje punkt är en elev. Full färg = vid snittet, genomskinlig = längst från snittet; stapeln visar spannet lägsta–högsta i procent, sd i tooltip.</div>
         </>) : (
         <LinjeDiagram
@@ -3027,7 +3112,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
           ]}
           kravLinjer={kravLinjer}
           onKlick={(i) => onVisaProv(kurva[i].prov)}
-          zoom={zKlass.zoom}
+          z={zKlass}
         />
         )}
       </div>
@@ -3145,7 +3230,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
 
               <div className="rad"><small className="muted">Klicka på en punkt för provets elevlista</small><span className="spacer" /><ZoomKnappar z={zFokus} /></div>
               <LinjeDiagram
-                zoom={zFokus.zoom}
+                z={zFokus}
                 hojd={fokusElever.length > 1 ? 420 : 360}
                 tillfallen={till.map((t) => ({ etikett: axelEtikett(t), titel: `${t.datum} ${KALLNAMN[t.kalla]} ${t.prov}` }))}
                 serier={serier}
