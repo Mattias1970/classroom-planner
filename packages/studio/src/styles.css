@@ -607,3 +607,12 @@ input.fel { border-color: #B71C1C; }
 .st-punkt:hover { r: 5.5; }
 .st-legend { color: #6b7480; }
 .tbl.st-tabell td, .tbl.st-tabell th { font-variant-numeric: tabular-nums; }
+
+/* Del 70: Trendkoll */
+.st-tk-kpi { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 8px 0; }
+.st-tk-tal { background: #F7F9FC; border: 1px solid #E6EAF0; border-radius: 12px; padding: 8px 10px; text-align: center; }
+.st-tk-tal b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.st-tk-tal span { font-size: 11px; color: var(--muted-varm); }
+.st-tk-tal.lart b { color: #1B5E20; } .st-tk-tal.glomt b { color: #B71C1C; }
+.st-tk-steg { display: inline-block; min-width: 26px; text-align: center; font-size: 11px; font-weight: 700; border-radius: 6px; padding: 1px 4px; margin-right: 3px; background: #EEF1F5; color: #667; }
+.st-tk-steg.upp { background: #E8F5E9; color: #1B5E20; } .st-tk-steg.ned { background: #FFEBEE; color: #B71C1C; }

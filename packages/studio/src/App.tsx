@@ -23,7 +23,7 @@ import {
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
-  arFilImporterad, klassificeraSocrativeFil, registreraFil, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
+  arFilImporterad, arRatt, klassificeraSocrativeFil, registreraFil, trendkoll, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
@@ -2624,6 +2624,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
   }, [fokus.length]);
   const [visaAndel, setVisaAndel] = useState(true);
   const [visaElevDiff, setVisaElevDiff] = useState(false);
+  const [visaTkPar, setVisaTkPar] = useState(false);
   const zKlass = useZoom();
   const zNorm = useZoom(ZOOM_NORM);
   const zVecko = useZoom();
@@ -2643,6 +2644,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
   const spridning = klassSpridning(s, f);
   const lekt = lektionstester(s, f);
   const elevLekt = elevLektionstest(s, f);
+  const tk = trendkoll(s, { klassId, ...(amneId !== '' ? { amneId } : {}), ...(kallor !== undefined ? { kallor } : {}), ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) });
   const normerad = normeradSpridning(s, f);
   const klusterK = klusterKurvor(s, f);
   const veckor = veckoSerier(s, f);
@@ -2917,6 +2919,60 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
         )}
       </div>
 
+      {/* Trendkoll: lär eller glömmer eleverna? */}
+      <div className="uppg-kort st-widget st-trendkoll">
+        <div className="rad">
+          <b>🔁 Trendkoll</b> <small className="muted">samma fråga i två förhör (kumulativa läxförhör upprepar tidigare delkapitel) · fel→rätt = lärt, rätt→fel = glömt</small>
+          <span className="spacer" />
+          {tk.par.length > 0 && <label className="small"><input type="checkbox" checked={visaTkPar} onChange={(e) => setVisaTkPar(e.target.checked)} /> per jämförelse</label>}
+        </div>
+        {tk.par.length === 0 ? <p className="muted small">{tk.sammanfattning}</p> : (<>
+          <div className="st-tk-kpi">
+            <div className="st-tk-tal lart"><b>{tk.lart}</b><span>fel → rätt</span></div>
+            <div className="st-tk-tal glomt"><b>{tk.glomt}</b><span>rätt → fel</span></div>
+            <div className={`st-tk-tal ${tk.netto >= 0 ? 'lart' : 'glomt'}`}><b>{tk.netto > 0 ? '+' : ''}{tk.netto}</b><span>netto</span></div>
+            <div className="st-tk-tal"><b>{tk.inlarningsProcent ?? '—'} %</b><span>av felen blev rätt</span></div>
+            <div className="st-tk-tal"><b>{tk.glomskeProcent ?? '—'} %</b><span>av det rätta glömdes</span></div>
+          </div>
+          <p className="st-insikt">{tk.sammanfattning}</p>
+          {!visaTkPar ? (
+            <div className="st-scroll" style={{ maxHeight: 340 }}>
+              <table className="tbl st-tabell">
+                <thead><tr><th>Elev</th><th>Lärt</th><th>Glömt</th><th>Netto</th><th>Utveckling</th><th>Omdöme</th></tr></thead>
+                <tbody>{[...tk.elever].sort((a, b) => a.netto - b.netto).map((e) => (
+                  <tr key={e.elev.id}>
+                    <td><button className="linkbtn" onClick={() => setElevId(e.elev.id)}>{e.elev.namn}</button></td>
+                    <td className="st-diff upp">{e.lart}</td>
+                    <td className="st-diff ned">{e.glomt}</td>
+                    <td className={`st-diff ${e.netto > 0 ? 'upp' : e.netto < 0 ? 'ned' : ''}`}>{e.netto > 0 ? '+' : ''}{e.netto}</td>
+                    <td>{e.serie.map((v, i) => <span key={i} className={`st-tk-steg ${v > 0 ? 'upp' : v < 0 ? 'ned' : ''}`} title={`Jämförelse ${i + 1}: ${v > 0 ? '+' : ''}${v}`}>{v > 0 ? '+' : ''}{v}</span>)}</td>
+                    <td>{e.omdome === 'glommer' ? <span className="st-krav ej">glömmer mer</span> : e.omdome === 'lar' ? <span className="st-krav ok">lär mer</span> : <span className="muted">jämnt</span>}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="st-scroll" style={{ maxHeight: 340 }}>
+              <table className="tbl st-tabell">
+                <thead><tr><th>Jämförelse</th><th>Gemensamma frågor</th><th>Lärt</th><th>Glömt</th><th>Netto</th><th>Glömska</th></tr></thead>
+                <tbody>{tk.par.map((p, i) => (
+                  <tr key={i}>
+                    <td><div className="st-provnamn">{p.fore.prov}{p.fore.rum !== undefined && <small className="muted"> ({p.fore.rum})</small>}</div>
+                      <small className="muted">{kortDatum(p.fore.datum)} → {kortDatum(p.efter.datum)}</small>
+                      <div className="st-provnamn">{p.efter.prov}{p.efter.rum !== undefined && <small className="muted"> ({p.efter.rum})</small>}</div></td>
+                    <td>{p.gemensamma}</td>
+                    <td className="st-diff upp">{p.lart}</td>
+                    <td className="st-diff ned">{p.glomt}</td>
+                    <td className={`st-diff ${p.netto > 0 ? 'upp' : p.netto < 0 ? 'ned' : ''}`}>{p.netto > 0 ? '+' : ''}{p.netto}</td>
+                    <td>{p.glomskeProcent ?? '—'} %</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+        </>)}
+      </div>
+
       {/* Grupper + samband */}
       <div className="st-grid2 smal">
         <div className="uppg-kort st-widget">
@@ -2983,7 +3039,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
           <div className="st-scroll">
             <table className="tbl st-matris">
               <thead><tr><th>Elev</th><th>Snitt</th><th>Krav</th><th title="Närvaro (Socrative-svar / lektioner)">Närv.</th>
-                {matris.tillfallen.map((t) => <th key={t.nyckel} title={`${t.prov} · ${KALLNAMN[t.kalla]} · ${t.sessioner.join(' + ')}${t.sessioner.length > 1 ? ' (halvklass A+B)' : ''}`}><span className="st-kol">{tillfalleEtikett(t)}</span></th>)}
+                {matris.tillfallen.map((t) => <th key={t.nyckel} title={`${t.prov} · ${KALLNAMN[t.kalla]} · ${t.sessioner.join(' + ')}${t.sessioner.length > 1 ? ' (halvklass A+B)' : ''}`}><span className="st-kol">{tillfalleEtiketter(t)[0]} {t.prov}</span></th>)}
               </tr></thead>
               <tbody>{matris.rader.map((r) => (
                 <tr key={r.elev.id} className={elevId === r.elev.id ? 'vald' : undefined}>
@@ -3100,7 +3156,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
 
               {fokusElever.length > 1 ? (
                 <table className="tbl st-tabell">
-                  <thead><tr><th>Elev</th><th>Snitt</th><th>Närvaro</th>{till.map((t) => <th key={t.nyckel} title={`${t.prov} · ${KALLNAMN[t.kalla]}`}><span className="st-kol">{tillfalleEtikett(t)}</span></th>)}</tr></thead>
+                  <thead><tr><th>Elev</th><th>Snitt</th><th>Närvaro</th>{till.map((t) => <th key={t.nyckel} title={`${t.prov} · ${KALLNAMN[t.kalla]}`}><span className="st-kol">{tillfalleEtiketter(t)[0]} {t.prov}</span></th>)}</tr></thead>
                   <tbody>{fokusElever.map((e, idx) => { const rad = fm.rader.find((r) => r.elev.id === e.id); const n = narvaroPerElev.get(e.id); return (
                     <tr key={e.id}><td><i className="st-legend-prick" style={{ background: PALETT[idx % PALETT.length] }} /> {e.namn}</td>
                       <td>{rad?.snitt ?? '—'}{rad?.snitt !== null && rad !== undefined ? ' %' : ''}</td>
@@ -3261,7 +3317,7 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
     amneId: string | null; amnesNamn: string;
     kalla: ResultatKalla | null; datum: string; tid: string | null; beskrivning: string;
     matchade: number; omatchadeNamn: string[]; deltog: number;
-    rader: Array<{ namn: string; poang: number; maxPoang: number; sidId: string }>;
+    rader: Array<{ namn: string; poang: number; maxPoang: number; sidId: string; svar?: FragaSvar[] }>;
     redanInne: boolean;
   }
   const [filRader, setFilRader] = useState<FilRad[]>([]);
@@ -3295,7 +3351,13 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
           matchade: deltagare.filter((r) => matchaElev(s, klass.id, r.namn, r.sidId) !== null).length,
           omatchadeNamn: deltagare.filter((r) => matchaElev(s, klass.id, r.namn, r.sidId) === null).map((r) => r.namn),
           deltog: deltagare.length,
-          rader: deltagare.map((r) => ({ namn: r.namn, poang: r.poang, maxPoang: r.maxPoang, sidId: r.sidId })),
+          rader: deltagare.map((r) => ({
+            namn: r.namn, poang: r.poang, maxPoang: r.maxPoang, sidId: r.sidId,
+            // Frågesvar + härlett facit gör trendkollen möjlig (samma fråga i två förhör)
+            ...(r.svar !== undefined && rapport.fragor.length > 0
+              ? { svar: rapport.fragor.map((fraga, j) => ({ fraga, svar: r.svar![j] ?? '', ratt: arRatt(r.svar![j] ?? '', rapport.nyckel[j]) })) }
+              : {}),
+          })),
           redanInne: amnet !== undefined && arFilImporterad(s, amnet.id, fil.name),
         });
       } catch (fel) {

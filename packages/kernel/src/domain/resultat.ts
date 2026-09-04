@@ -29,12 +29,16 @@ export interface Resultat {
   tid?: string;
   /** Socrative-rum där quizet kördes ('Biologi41') — planens nyckel för förhöret. */
   rum?: string;
+  /** Svar per fråga när rapporten innehåller frågekolumner. */
+  svar?: FragaSvar[];
   poang: number;
   maxPoang: number;
 }
 
 /** En rad ur en resultatfil, före elevmatchning. */
-export interface ImportRad { namn: string; poang: number; maxPoang: number; /** Student ID ur Socrative-rapporten (valfritt). */ sidId?: string; }
+/** Ett svar på en enskild fråga. */
+export interface FragaSvar { fraga: string; svar: string; ratt: boolean | null; }
+export interface ImportRad { namn: string; poang: number; maxPoang: number; /** Student ID ur Socrative-rapporten (valfritt). */ sidId?: string; svar?: FragaSvar[]; }
 
 export interface ImportUnderlag {
   klassId: string;
@@ -137,6 +141,7 @@ export function importeraResultat(s: Struktur, u: ImportUnderlag): ImportUtfall 
       datum: u.datum, poang: rad.poang, maxPoang: rad.maxPoang,
       ...(u.tid !== undefined ? { tid: u.tid } : {}),
       ...(u.rum !== undefined ? { rum: u.rum } : {}),
+      ...(rad.svar !== undefined && rad.svar.length > 0 ? { svar: rad.svar } : {}),
       ...(u.amneId !== undefined ? { amneId: u.amneId } : {}),
     });
   }

@@ -1419,6 +1419,9 @@ describe('📊 SuperTeach', () => {
     expect(diagram.textContent).toContain('krav 90 %');
     expect(diagram.querySelectorAll('.st-punkt').length).toBeGreaterThanOrEqual(3);
 
+    // Trendkoll: utan frågedata (inklistrade resultat) förklaras varför
+    expect(host.querySelector('.st-trendkoll')!.textContent).toContain('kräver att samma fråga ställs igen');
+
     // Lektionstest: läxförhör och exit hålls isär, Δ = exit − läxförhör
     const lt = host.querySelector('.st-lektionstest')!;
     expect(lt.textContent).toContain('Quiz 1.1a');
@@ -1434,7 +1437,7 @@ describe('📊 SuperTeach', () => {
     expect(matris.querySelectorAll('tbody tr')).toHaveLength(2);
     expect(matris.querySelectorAll('tbody tr')[1].querySelectorAll('.st-cell')).toHaveLength(4);
     expect(matris.querySelectorAll('.st-cell.franvaro')).toHaveLength(1);
-    expect(matris.textContent).toContain('v35 Kap 1.1'); // kortform i tabellkolumn
+    expect(matris.textContent).toContain('v35 Quiz 1.1a'); // hela provnamnet i kolumnrubriken
 
     // Periodfilter v.36 → ett exit + ett läxförhör
     skriv(input(host, 'Period (veckor)'), 'v.36');

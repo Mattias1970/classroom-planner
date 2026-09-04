@@ -23,6 +23,8 @@ export interface SocrativeElevRad {
   deltog: boolean;
   poang: number;
   maxPoang: number;
+  /** Elevens svar per fråga, i rapportens kolumnordning ('' = obesvarad). */
+  svar?: string[];
 }
 
 export interface SocrativeRapport {
@@ -30,6 +32,35 @@ export interface SocrativeRapport {
   rum: string;
   maxPoang: number;
   rader: SocrativeElevRad[];
+  /** Frågetexterna i kolumnordning (tomt när rapporten saknar frågekolumner). */
+  fragor: string[];
+  /** Härledd svarsnyckel per fråga (null när den inte gick att härleda). */
+  nyckel: Array<string | null>;
+}
+
+/**
+ * Härleder facit ur rapporten: elever med full poäng har alla rätt, så deras
+ * svar ÄR nyckeln. Saknas sådana elever används det vanligaste svaret bland
+ * dem som har högst poäng, och frågan lämnas null om det står oavgjort.
+ */
+export function harledSvarsnyckel(rader: SocrativeElevRad[], antalFragor: number): Array<string | null> {
+  const svarande = rader.filter((r) => r.deltog && r.svar !== undefined && r.svar.length > 0);
+  if (svarande.length === 0 || antalFragor === 0) return new Array<string | null>(antalFragor).fill(null);
+  const basta = Math.max(...svarande.map((r) => r.poang));
+  const topp = svarande.filter((r) => r.poang === basta);
+  const kallor = topp.length > 0 ? topp : svarande;
+  return Array.from({ length: antalFragor }, (_, i) => {
+    const rakna = new Map<string, number>();
+    for (const r of kallor) {
+      const v = (r.svar?.[i] ?? '').trim();
+      if (v === '') continue;
+      rakna.set(v, (rakna.get(v) ?? 0) + 1);
+    }
+    if (rakna.size === 0) return null;
+    const sorterad = [...rakna.entries()].sort((a, b) => b[1] - a[1]);
+    if (sorterad.length > 1 && sorterad[0][1] === sorterad[1][1]) return null;
+    return sorterad[0][0];
+  });
 }
 
 function text(c: Cell): string { return c === null || c === undefined ? '' : String(c).trim(); }
@@ -43,6 +74,8 @@ export function tolkaSocrativeRapport(celler: Cell[][]): SocrativeRapport {
   const rum = text(celler[2]?.[0]);
   const maxPoang = Number(text(celler[rubrikIndex + 1]?.[4]));
   if (!Number.isFinite(maxPoang) || maxPoang <= 0) throw new Error('Hittar ingen maxpoäng under Score (#).');
+  // Kolumn 5 och framåt är en fråga var; rubriken är frågetexten
+  const fragor = (celler[rubrikIndex] ?? []).slice(5).map(text).filter((f) => f !== '');
   const rader: SocrativeElevRad[] = [];
   for (let i = rubrikIndex + 2; i < celler.length; i++) {
     const rad = celler[i] ?? [];
@@ -54,10 +87,11 @@ export function tolkaSocrativeRapport(celler: Cell[][]): SocrativeRapport {
       namn, sidId: text(rad[2]), deltog,
       poang: deltog && Number.isFinite(poang) ? poang : 0,
       maxPoang,
+      ...(fragor.length > 0 ? { svar: fragor.map((_, j) => text(rad[5 + j])) } : {}),
     });
   }
   if (rader.length === 0) throw new Error('Rapporten innehåller inga elevrader.');
-  return { quiz, rum, maxPoang, rader };
+  return { quiz, rum, maxPoang, rader, fragor, nyckel: harledSvarsnyckel(rader, fragor.length) };
 }
 
 export interface SocrativeFilnamn {
