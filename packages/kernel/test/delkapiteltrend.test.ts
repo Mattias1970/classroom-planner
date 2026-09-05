@@ -162,3 +162,22 @@ describe('Del 78: testnamn ur delkapitel', async () => {
     expect(m.grupper.map((g) => g.etikett)).toEqual(['Test41', 'Test42', 'Test43']);
   });
 });
+
+describe('Del 80: delkapitel ur quiznamnet när rummet är klassrummet', async () => {
+  const { koderForTillfalle, fragematris } = await import('../src/domain/delkapiteltrend.js');
+  it('läser koder ur provnamnet när rummet saknar siffror', () => {
+    expect(koderForTillfalle({ prov: 'x', rum: 'Biologi412' })).toEqual(['4.1', '4.2']);
+    expect(koderForTillfalle({ prov: 'Biologi 4.1 Begrepp', rum: 'BIOLOGI8BB' })).toEqual(['4.1']);
+    expect(koderForTillfalle({ prov: '4.1-4.3 Begrepp', rum: 'BIOLOGI8BB' })).toEqual(['4.1', '4.2', '4.3']);
+    expect(koderForTillfalle({ prov: '4.1–4.2 Begrepp' })).toEqual(['4.1', '4.2']);
+    expect(koderForTillfalle({ prov: 'Fotosyntes' })).toEqual([]);
+  });
+
+  it('matrisen får rätt delkapitel även med klassrum', () => {
+    let s = bygg();
+    s = { ...s, resultat: (s.resultat ?? []).map((r) => ({ ...r, rum: 'BIOLOGI8BB' })) };
+    const m = fragematris(s, f);
+    expect(m.fragor.map((x) => x.kod)).toEqual(['4.1', '4.1', '4.2', '4.3']);
+    expect(m.rader.map((r) => r.test)).toEqual(['test41', 'test412', 'test4123']);
+  });
+});

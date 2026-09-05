@@ -671,7 +671,8 @@ input.fel { border-color: #B71C1C; }
 /* Lodrät linje där en ny delkapitelgrupp börjar */
 .st-fmtabell .gstart { box-shadow: -2px 0 0 0 #C9D2E0; }
 .st-fmnr { font-size: 10px; color: #9AA3AE; text-align: center; width: 18px; }
-.st-fmprov { font-size: 12px; font-weight: 600; white-space: nowrap; padding-right: 10px !important; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.st-fmprov { font-size: 12px; font-weight: 600; white-space: nowrap; padding-right: 10px !important; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.st-fmgrupp { max-width: 260px; }
 .st-fmruta { width: 18px; height: 18px; border-radius: 4px; cursor: pointer; }
 .st-fmruta:hover { outline: 2px solid var(--bla); }
 .st-fmruta.vald { outline: 2px solid #111; }

@@ -43,12 +43,32 @@ function tillfallenFor(s: Struktur, f: DelkapitelFilter): Tillfalle[] {
  * jämfört med tidigare tillfällen är det delkapitel frågan hör till.
  * Frågor i ett förstagångsrum med flera delar får dess sista del.
  */
+/**
+ * Delkapitelkoder för ett tillfälle. Rummet först ('Biologi412' → 4.1, 4.2);
+ * när rummet är klassrummet ('BIOLOGI8BB') läses koderna ur quiznamnet i
+ * stället: 'Biologi 4.1 Begrepp' → 4.1, '4.1-4.3 Begrepp' → 4.1, 4.2, 4.3.
+ */
+export function koderForTillfalle(t: { prov: string; rum?: string }): string[] {
+  const viaRum = t.rum === undefined ? null : tolkaRumKoder(t.rum);
+  if (viaRum !== null) return viaRum.delar.map((d) => `${viaRum.kapitel}.${d}`);
+  const koder: string[] = [];
+  // Intervall först: '4.1-4.3' eller '4.1–4.3'
+  for (const m of t.prov.matchAll(/(\d+)\.(\d+)\s*[-–]\s*(?:(\d+)\.)?(\d+)/g)) {
+    const kap = Number(m[1]); const fran = Number(m[2]); const till = Number(m[4]);
+    if (m[3] !== undefined && Number(m[3]) !== kap) continue;
+    for (let d = fran; d <= till && d - fran < 12; d++) koder.push(`${kap}.${d}`);
+  }
+  if (koder.length === 0) {
+    for (const m of t.prov.matchAll(/(\d+)\.(\d+)/g)) koder.push(`${Number(m[1])}.${Number(m[2])}`);
+  }
+  return [...new Set(koder)];
+}
+
 export function fragansDelkapitel(tillfallen: Tillfalle[]): Map<string, string> {
   const karta = new Map<string, string>();
   const sedda = new Set<string>();
   for (const t of tillfallen) {
-    const koder = t.rum === undefined ? null : tolkaRumKoder(t.rum);
-    const alla = koder === null ? [] : koder.delar.map((d) => `${koder.kapitel}.${d}`);
+    const alla = koderForTillfalle(t);
     const nya = alla.filter((k) => !sedda.has(k));
     const hemvist = nya.length > 0 ? nya[nya.length - 1] : alla[alla.length - 1] ?? '—';
     for (const k of alla) sedda.add(k);

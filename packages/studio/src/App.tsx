@@ -3261,10 +3261,10 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
                 <tr><th colSpan={4} className="st-fmhorn" /> {fm.grupper.map((g) => (
                   <th key={g.kod} colSpan={g.till - g.fran + 1} className="st-fmgrupp" title={`${g.ursprung} · ${g.etikett} · frågorna ${g.fran}–${g.till}`}>
                     <span className="st-fmgruppnamn">{g.ursprung}</span>
-                    <small>{g.etikett} · {g.till - g.fran + 1} frågor</small>
+                    <small>{g.kod !== '—' ? `${g.kod} · ` : ''}{g.till - g.fran + 1} frågor</small>
                   </th>
                 ))}</tr>
-                <tr><th>Vecka</th><th>Datum</th><th>Typ</th><th>Test</th>{fm.fragor.map((fr) => (
+                <tr><th>Vecka</th><th>Datum</th><th>Typ</th><th>Quiz</th>{fm.fragor.map((fr) => (
                   <th key={fr.nr} className={`st-fmnr${fm.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}`} title={`${fr.kod} · ${fr.fraga}`}>{fr.nr}</th>
                 ))}</tr>
               </thead>
@@ -3273,7 +3273,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
                   <td className="small muted">v{isoVeckaLbl(rad.datum)}</td>
                   <td className="small muted">{kortDatum(rad.datum)}</td>
                   <td className="small"><span className={`st-typ ${rad.kalla}`}>{TYPNAMN[rad.kalla]}</span></td>
-                  <td className="st-fmprov" title={`${rad.prov}${rad.rum !== undefined ? ` · rum ${rad.rum}` : ''} · ${kortDatum(rad.datum)}`}>{rad.test}</td>
+                  <td className="st-fmprov" title={`${rad.prov}${rad.rum !== undefined ? ` · rum ${rad.rum}` : ''} · ${rad.test} · ${kortDatum(rad.datum)}`}>{rad.prov}</td>
                   {fm.fragor.map((fr, i) => {
                     const c = rad.celler[i];
                     const elevSvar = rad.elevCeller?.[i];
