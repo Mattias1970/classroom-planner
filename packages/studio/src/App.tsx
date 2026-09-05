@@ -23,7 +23,8 @@ import {
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
-  arFilImporterad, arRatt, klassificeraSocrativeFil, registreraFil, trendkoll, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
+  arFilImporterad, arRatt, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
+  delkapitelSegment, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
@@ -2299,6 +2300,70 @@ function SpridningsGraf({ z, ...props }: { tillfallen: ReturnType<typeof klassSp
   return <DiagramRam z={z}>{(w) => <SpridningsDiagram {...props} zoom={z?.zoom} w={w} />}</DiagramRam>;
 }
 
+const DEL_FARGER = ['#2f5aa8', '#1B5E20', '#B71C1C', '#E65100', '#6A1B9A', '#00838F', '#795548'];
+
+/**
+ * Delkapitel som staplade led: varje tillfälle är en stapel där segmentens
+ * höjd står för antalet frågor från respektive delkapitel och den fyllda
+ * delen för andelen rätt. Så syns om 4.1-delen håller i sig när provet
+ * vuxit till 4.1–4.4.
+ */
+function LedDiagram({ tillfallen, w, hojd = 300, farg }: {
+  tillfallen: ReturnType<typeof delkapitelSegment>; w: number; hojd?: number; farg: Map<string, string>;
+}) {
+  const n = tillfallen.length;
+  const ml = 44; const mr = 16; const mt = 14; const mb = 78;
+  const h = hojd;
+  const maxFragor = Math.max(1, ...tillfallen.map((t) => t.antalFragor));
+  const bandbredd = n === 0 ? 0 : (w - ml - mr) / n;
+  const stapel = Math.min(74, Math.max(18, bandbredd * 0.58));
+  const x = (i: number) => ml + bandbredd * (i + 0.5);
+  const yBotten = h - mb;
+  const skala = (antal: number) => (antal / maxFragor) * (yBotten - mt);
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h} className="st-diagram" role="img" aria-label="Delkapitel som led i varje förhör">
+      {[0, 0.25, 0.5, 0.75, 1].map((andel) => (
+        <g key={andel}>
+          <line x1={ml} x2={w - mr} y1={yBotten - andel * (yBotten - mt)} y2={yBotten - andel * (yBotten - mt)} stroke="#EDF0F5" />
+          <text x={ml - 8} y={yBotten - andel * (yBotten - mt) + 4} fontSize={10.5} textAnchor="end" fill="#9AA3AE">{Math.round(andel * maxFragor)}</text>
+        </g>
+      ))}
+      <text x={12} y={mt + 8} fontSize={10.5} fill="#9AA3AE">frågor</text>
+      {tillfallen.map((t, i) => {
+        let botten = yBotten;
+        return (
+          <g key={t.nyckel}>
+            {t.segment.map((seg) => {
+              const hoj = skala(seg.antalFragor);
+              const topp = botten - hoj;
+              const fyllt = seg.procent === null ? 0 : (seg.procent / 100) * hoj;
+              const c = farg.get(seg.kod) ?? '#8A94A3';
+              const ruta = (
+                <g key={seg.kod}>
+                  <rect x={x(i) - stapel / 2} y={topp} width={stapel} height={Math.max(1, hoj)} fill={c} opacity={0.14} />
+                  <rect x={x(i) - stapel / 2} y={botten - fyllt} width={stapel} height={Math.max(0, fyllt)} fill={c} opacity={0.85} />
+                  <rect x={x(i) - stapel / 2} y={topp} width={stapel} height={Math.max(1, hoj)} fill="none" stroke="#fff" strokeWidth={1.5} />
+                  {hoj > 16 && <text x={x(i)} y={topp + hoj / 2 + 4} fontSize={11} fontWeight={700} textAnchor="middle"
+                    fill={fyllt > hoj / 2 ? '#fff' : c} stroke={fyllt > hoj / 2 ? 'none' : '#fff'} strokeWidth={fyllt > hoj / 2 ? 0 : 3} paintOrder="stroke">{seg.procent ?? '—'} %</text>}
+                  <title>{`${seg.kod}: ${seg.procent ?? '—'} % rätt · ${seg.antalFragor} frågor`}</title>
+                </g>
+              );
+              botten = topp;
+              return ruta;
+            })}
+            <text x={x(i)} y={yBotten + 14} fontSize={10.5} textAnchor="middle" fill="#556" fontWeight={700}>{t.procent ?? '—'} %</text>
+            <AxelText x={x(i)} y={yBotten + 26} rader={[kortDatum(t.datum), t.prov]} rotera={n > 4} titel={t.prov} />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function LedGraf(props: { tillfallen: ReturnType<typeof delkapitelSegment>; hojd?: number; farg: Map<string, string> }) {
+  return <DiagramRam>{(w) => <LedDiagram {...props} w={w} />}</DiagramRam>;
+}
+
 /** Mäter containerns bredd så att SVG-diagram ritas i riktiga pixlar (skarp text, ingen uppskalning). */
 /** Zoomläge för ett diagram: y-spann (procent) och x-skala (bredd × faktor med scroll). */
 interface Zoom { yMin: number; yMax: number; xSkala: number; }
@@ -2709,6 +2774,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
   const [visaAndel, setVisaAndel] = useState(true);
   const [visaElevDiff, setVisaElevDiff] = useState(false);
   const [visaTkPar, setVisaTkPar] = useState(false);
+  const [ledElev, setLedElev] = useState<string | null>(null);
   const zKlass = useZoom();
   const zNorm = useZoom(ZOOM_NORM);
   const zVecko = useZoom();
@@ -2728,6 +2794,10 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
   const spridning = klassSpridning(s, f);
   const lekt = lektionstester(s, f);
   const elevLekt = elevLektionstest(s, f);
+  const tkFilter = { klassId, ...(amneId !== '' ? { amneId } : {}), ...(kallor !== undefined ? { kallor } : {}), ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) };
+  const led = delkapitelSegment(s, ledElev === null ? tkFilter : { ...tkFilter, elevId: ledElev });
+  const delFarger = new Map([...new Set(led.flatMap((t) => t.segment.map((x) => x.kod)))].sort((a, b) => a.localeCompare(b, 'sv', { numeric: true })).map((kod, i) => [kod, DEL_FARGER[i % DEL_FARGER.length]]));
+  const klassFastnat = aterkommandeFelKlass(s, tkFilter);
   const tk = trendkoll(s, { klassId, ...(amneId !== '' ? { amneId } : {}), ...(kallor !== undefined ? { kallor } : {}), ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) });
   const normerad = normeradSpridning(s, f);
   const klusterK = klusterKurvor(s, f);
@@ -3055,6 +3125,69 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
             </div>
           )}
         </>)}
+      </div>
+
+      {/* Delkapitel som led + begrepp som fastnat */}
+      <div className="st-grid2">
+        <div className="uppg-kort st-widget st-led">
+          <div className="rad">
+            <b>🧱 Delkapitel i förhören</b> <small className="muted">varje förhör som led · stapelns höjd = antal frågor, fylld del = andel rätt</small>
+            <span className="spacer" />
+            {ledElev !== null && <button className="btn sm" onClick={() => setLedElev(null)}>✕ hela klassen</button>}
+          </div>
+          {led.length === 0 ? <p className="muted small">Kräver förhör med frågedata (filimport) och rumsnamn som Biologi41, Biologi412 …</p> : (<>
+            <LedGraf tillfallen={led} hojd={320} farg={delFarger} />
+            <div className="st-legend">
+              {[...delFarger.entries()].map(([kod, c]) => <span key={kod}><i style={{ background: c }} /> {kod}</span>)}
+            </div>
+            <div className="rad" style={{ gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+              <small className="muted">Visa för:</small>
+              <button className={`chipbtn ${ledElev === null ? 'act' : ''}`} onClick={() => setLedElev(null)}>Klassen</button>
+              {sokElever(s, klassId, sok).slice(0, 40).map((e) => (
+                <button key={e.id} className={`chipbtn ${ledElev === e.id ? 'act' : ''}`} onClick={() => setLedElev(e.id)}>{e.namn}</button>
+              ))}
+            </div>
+          </>)}
+        </div>
+
+        <div className="uppg-kort st-widget st-fastnat">
+          <b>📌 Begrepp som fastnat</b> <small className="muted">fel minst två gånger · försvinner när eleven svarat rätt två gånger sedan senaste felet</small>
+          {ledElev !== null ? (
+            (() => {
+              const lista = aterkommandeFel(s, ledElev, tkFilter);
+              const namn = s.elever.find((e) => e.id === ledElev)?.namn ?? '';
+              return lista.length === 0
+                ? <p className="muted small">{namn} har inga begrepp som fastnat i urvalet.</p>
+                : (<div className="st-scroll" style={{ maxHeight: 320 }}>
+                  <table className="tbl st-tabell"><thead><tr><th>Begrepp ({namn})</th><th>Del</th><th>Fel</th><th>Historik</th></tr></thead>
+                    <tbody>{lista.map((b) => (
+                      <tr key={b.fraga}>
+                        <td><div className="st-provnamn" title={b.fraga}>{b.fraga}</div></td>
+                        <td>{b.kod}</td>
+                        <td className="st-diff ned">{b.antalFel}</td>
+                        <td>{b.historik.map((h, i) => <span key={i} className={`st-tk-steg ${h.ratt ? 'upp' : 'ned'}`} title={`${h.prov} ${h.datum}`}>{h.ratt ? '✓' : '✗'}</span>)}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>);
+            })()
+          ) : klassFastnat.length === 0 ? <p className="muted small">Inga begrepp som fastnat för klassen i urvalet.</p> : (
+            <div className="st-scroll" style={{ maxHeight: 320 }}>
+              <table className="tbl st-tabell"><thead><tr><th>Begrepp</th><th>Del</th><th>Elever</th><th>Vilka</th></tr></thead>
+                <tbody>{klassFastnat.map((b) => (
+                  <tr key={b.fraga}>
+                    <td><div className="st-provnamn" title={b.fraga}>{b.fraga}</div></td>
+                    <td>{b.kod}</td>
+                    <td className="st-diff ned">{b.antalElever}</td>
+                    <td>{b.elever.map((e) => (
+                      <button key={e.elev.id} className="st-chip" title={`${e.elev.namn} · ${e.antalFel} fel`} onClick={() => setLedElev(e.elev.id)}>{initialer(e.elev.namn)}</button>
+                    ))}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Grupper + samband */}

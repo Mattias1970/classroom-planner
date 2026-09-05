@@ -11,6 +11,7 @@ export * from './domain/socrative.js';
 export * from './domain/roster.js';
 export * from './domain/elevrapport.js';
 export * from './domain/trendkoll.js';
+export * from './domain/delkapiteltrend.js';
 export * from './domain/sittplatser.js';
 export * from './domain/dashboard.js';
 export * from './domain/kalender.js';

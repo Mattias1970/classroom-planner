@@ -1431,6 +1431,10 @@ describe('📊 SuperTeach', () => {
     expect(diagram.textContent).toContain('krav 90 %');
     expect(diagram.querySelectorAll('.st-punkt').length).toBeGreaterThanOrEqual(3);
 
+    // Delkapitel som led + begrepp som fastnat: kräver frågedata, förklaras annars
+    expect(host.querySelector('.st-led')!.textContent).toContain('rumsnamn som Biologi41');
+    expect(host.querySelector('.st-fastnat')!.textContent).toContain('Inga begrepp som fastnat');
+
     // Trendkoll: utan frågedata (inklistrade resultat) förklaras varför
     expect(host.querySelector('.st-trendkoll')!.textContent).toContain('kräver att samma fråga ställs igen');
 

@@ -649,3 +649,9 @@ input.fel { border-color: #B71C1C; }
 .st-grupper .st-bar, .st-narvarolista .st-bar { min-width: 0; }
 /* Smala tabeller ska inte spänna ut hela kortet i onödan */
 .st-grupper, .st-samband, .st-narvarolista, .st-rapport-del { width: auto; max-width: 100%; }
+
+/* Del 74: delkapitel som led + begrepp som fastnat */
+.st-led .st-legend { flex-wrap: wrap; margin-top: 6px; }
+.st-led .chipbtn { font-size: 11px; padding: 2px 8px; }
+.st-fastnat .st-provnamn { max-width: 320px; }
+.st-fastnat .st-tk-steg { min-width: 20px; }
