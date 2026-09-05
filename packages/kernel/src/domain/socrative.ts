@@ -127,7 +127,7 @@ export interface AktivitetsKlassificering {
   /** Index i planen när aktiviteten kunde knytas till en lektion. */
   lektionsIndex: number | null;
   avsnitt: string | null;
-  kalla: 'socrative-laxforhor' | 'socrative-exit' | null;
+  kalla: 'socrative-laxforhor' | 'socrative-exit' | 'socrative-ovning' | null;
   /** Läsbar förklaring: 'läxförhör (2 min efter lektionsstart)' osv. */
   beskrivning: string;
 }
@@ -151,8 +151,9 @@ export function klassificeraSocrativeAktivitet(startUtc: string, plan: PlaneradL
     if (avstand <= 15 && (bast === null || avstand < bast.avstand)) bast = { index, rad, avstand };
   }
   if (bast === null) {
-    return { datum, tid, lektionsIndex: null, avsnitt: null, kalla: null,
-      beskrivning: `utanför lektionstid (${datum} ${tid})` };
+    // Ingen lektion matchar tiden: det är en övning (extrapass, hemläxa, omtag)
+    return { datum, tid, lektionsIndex: null, avsnitt: null, kalla: 'socrative-ovning',
+      beskrivning: `övning — utanför lektionstid (${datum} ${tid})` };
   }
   const s = minuter(bast.rad.start ?? '0:0'); const e = minuter(bast.rad.slutTid ?? '0:0');
   const franStart = t - s; const tillSlut = e - t;

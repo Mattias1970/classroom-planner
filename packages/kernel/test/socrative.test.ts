@@ -70,11 +70,11 @@ describe('klassificeraSocrativeAktivitet — läxförhör vid start, exit nära 
     expect(k.beskrivning).toContain('före lektionsstart');
   });
 
-  it('mitt i natten → utanför lektionstid, ingen källa gissas', () => {
+  it('mitt i natten → övning, ingen lektion knyts till', () => {
     const k = klassificeraSocrativeAktivitet('2026-08-23T23:05:00Z', plan);   // må 01:05 sv
-    expect(k.kalla).toBeNull();
+    expect(k.kalla).toBe('socrative-ovning');
     expect(k.lektionsIndex).toBeNull();
-    expect(k.beskrivning).toContain('utanför lektionstid');
+    expect(k.beskrivning).toContain('övning — utanför lektionstid');
   });
 });
 

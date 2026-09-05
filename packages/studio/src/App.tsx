@@ -24,7 +24,7 @@ import {
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   arFilImporterad, arRatt, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
-  delkapitelSegment, fragematris, filtreraFragor, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
+  delkapitelSegment, fragematris, filtreraFragor, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
@@ -2117,16 +2117,16 @@ const MANADSNAMN = ['januari','februari','mars','april','maj','juni','juli','aug
 /** 📋 Planering: egen huvudflik — välj klass · ämne och arbeta direkt med lektionsplan,
  * detaljplanering (alla texter redigerbara), egna rader (prov/diagnoser/övningar) och filmer. */
 const KALLNAMN: Record<ResultatKalla, string> = {
-  'socrative-laxforhor': 'Läxförhör', 'socrative-exit': 'Exit tickets', magma: 'Magma test', digiexam: 'DigiExam prov',
+  'socrative-laxforhor': 'Läxförhör', 'socrative-exit': 'Exit tickets', 'socrative-ovning': 'Övning', magma: 'Magma test', digiexam: 'DigiExam prov',
 };
-const ALLA_KALLOR: ResultatKalla[] = ['socrative-laxforhor', 'socrative-exit', 'magma', 'digiexam'];
+const ALLA_KALLOR: ResultatKalla[] = ['socrative-laxforhor', 'socrative-exit', 'socrative-ovning', 'magma', 'digiexam'];
 
 // ── SuperTeach-dashboard (Del 57) ─────────────────────────────
 const KORT_FARG: Record<KortKalla, string> = {
-  'socrative-laxforhor': '#1A2A6B', 'socrative-exit': '#2f5aa8', magma: '#6A1B9A', digiexam: '#BF360C', helhet: '#1B5E20',
+  'socrative-laxforhor': '#1A2A6B', 'socrative-exit': '#2f5aa8', 'socrative-ovning': '#00838F', magma: '#6A1B9A', digiexam: '#BF360C', helhet: '#1B5E20',
 };
-const KORT_IKON: Record<KortKalla, string> = { 'socrative-laxforhor': '✅', 'socrative-exit': '🎟', magma: '🧠', digiexam: '📝', helhet: '📊' };
-const KORT_RUBRIK: Record<KortKalla, string> = { 'socrative-laxforhor': 'Läxförhör', 'socrative-exit': 'Exit tickets', magma: 'Magma test', digiexam: 'DigiExam prov', helhet: 'Helhet' };
+const KORT_IKON: Record<KortKalla, string> = { 'socrative-laxforhor': '✅', 'socrative-exit': '🎟', 'socrative-ovning': '✏️', magma: '🧠', digiexam: '📝', helhet: '📊' };
+const KORT_RUBRIK: Record<KortKalla, string> = { 'socrative-laxforhor': 'Läxförhör', 'socrative-exit': 'Exit tickets', 'socrative-ovning': 'Övning', magma: 'Magma test', digiexam: 'DigiExam prov', helhet: 'Helhet' };
 const KLUSTER_FARG = { stigande: '#1B5E20', stabil: '#2f5aa8', riskzon: '#B71C1C', ojamn: '#E65100' } as const;
 function initialer(namn: string): string {
   const d = namn.replace(',', ' ').split(/\s+/).filter(Boolean);
@@ -2862,7 +2862,8 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
 
       {/* KPI-rad — frågekort i mockupens stil: ikon, rubrik, fråga, stort tal, delta, sparkline */}
       <div className="st-kortrad">
-        {kort.filter((k) => k.kalla === 'helhet' || kallor === undefined || kallor.includes(k.kalla)).map((k) => {
+        {kort.filter((k) => (k.kalla === 'helhet' || kallor === undefined || kallor.includes(k.kalla))
+          && !(k.kalla === 'socrative-ovning' && k.antalProv === 0)).map((k) => {
           const delta = periodDelta(k.serie);
           return (
             <div key={k.kalla} className={kortKlass(k)} style={{ '--kort': KORT_FARG[k.kalla] } as React.CSSProperties}>
@@ -3218,7 +3219,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
           <div className="st-scroll">
             <table className="tbl st-fmtabell">
               <thead>
-                <tr><th rowSpan={2}>Test</th>{fm.grupper.map((g) => (
+                <tr><th rowSpan={2}>Vecka</th><th rowSpan={2}>Datum</th><th rowSpan={2}>Typ</th><th rowSpan={2}>Test</th>{fm.grupper.map((g) => (
                   <th key={g.kod} colSpan={g.till - g.fran + 1} className="st-fmgrupp" title={g.ursprung}>{g.kod}</th>
                 ))}</tr>
                 <tr>{fm.fragor.map((fr) => (
@@ -3227,7 +3228,10 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
               </thead>
               <tbody>{fm.rader.map((rad) => (
                 <tr key={rad.nyckel}>
-                  <td className="st-fmprov" title={`${rad.prov} · ${kortDatum(rad.datum)}`}>{rad.prov}</td>
+                  <td className="small muted">v{isoVeckaLbl(rad.datum)}</td>
+                  <td className="small muted">{kortDatum(rad.datum)}</td>
+                  <td className="small"><span className={`st-typ ${rad.kalla}`}>{TYPNAMN[rad.kalla]}</span></td>
+                  <td className="st-fmprov" title={`${rad.prov}${rad.rum !== undefined ? ` (${rad.rum})` : ''}`}>{rad.rum ?? rad.prov}</td>
                   {fm.fragor.map((fr, i) => {
                     const c = rad.celler[i];
                     const elevSvar = rad.elevCeller?.[i];

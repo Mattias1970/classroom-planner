@@ -1348,6 +1348,7 @@ describe('📊 SuperTeach', () => {
       'Gör eleven läxor?', 'Lär sig eleven på lektionen?', 'Kan eleven begreppen?', 'Klarar eleven proven?', 'Hur går det sammantaget?',
       'Är eleven på lektionen?', 'Elever som trendar tillsammans',
     ]);
+    // Övningskortet visas bara när det finns övningar
     // Närvaro härledd ur Socrative: tre lektioner, Omar borta på en → klass 83 %
     expect(kort[5].textContent).toContain('83 %');
     expect(kort[5].textContent).toContain('1 elever under 80 %');
@@ -1478,7 +1479,7 @@ describe('📊 SuperTeach', () => {
     expect(host.querySelector('.st-elev')!.textContent).toContain('4 tillfällen i urvalet');
     act(() => { (host.querySelector('.st-elev input[type="checkbox"]') as HTMLInputElement).click(); }); // Läxförhör av
     expect(host.querySelector('.st-elev')!.textContent).toContain('3 tillfällen i urvalet'); // bara exit tickets kvar
-    act(() => { (host.querySelectorAll('.st-elev input[type="checkbox"]')[4] as HTMLInputElement).click(); }); // trendlinjer på
+    act(() => { (host.querySelectorAll('.st-elev input[type="checkbox"]')[5] as HTMLInputElement).click(); }); // trendlinjer på
     expect(host.querySelector('.st-elev .st-diagram')!.querySelectorAll('polyline, path').length).toBeGreaterThan(1);
     skriv(input(host, 'Lägg till elev i fokus'), 'Anna');
     act(() => { knapp(host, '+ Anna Berg').click(); });

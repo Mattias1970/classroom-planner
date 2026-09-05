@@ -147,6 +147,7 @@ export type KortKalla = ResultatKalla | 'helhet';
 export const KORT_FRAGA: Record<KortKalla, { rubrik: string; fraga: string }> = {
   'socrative-laxforhor': { rubrik: 'Läxförhör', fraga: 'Gör eleven läxor?' },
   'socrative-exit': { rubrik: 'Exit tickets', fraga: 'Lär sig eleven på lektionen?' },
+  'socrative-ovning': { rubrik: 'Övning', fraga: 'Hur går det på övningarna?' },
   magma: { rubrik: 'Magma test', fraga: 'Kan eleven begreppen?' },
   digiexam: { rubrik: 'DigiExam prov', fraga: 'Klarar eleven proven?' },
   helhet: { rubrik: 'Helhet', fraga: 'Hur går det sammantaget?' },
@@ -166,7 +167,7 @@ export interface FrageKort {
   serie: number[];
 }
 
-const KORT_ORDNING: KortKalla[] = ['socrative-laxforhor', 'socrative-exit', 'magma', 'digiexam', 'helhet'];
+const KORT_ORDNING: KortKalla[] = ['socrative-laxforhor', 'socrative-exit', 'socrative-ovning', 'magma', 'digiexam', 'helhet'];
 
 /** Ett kort per källa + helhet. Källor utan resultat får antalProv 0. */
 export function frageKort(s: Struktur, f: DashboardFilter): FrageKort[] {
@@ -256,7 +257,7 @@ export function veckoSerier(s: Struktur, f: DashboardFilter): VeckoSerier {
     .map(resultatProcent).filter((p): p is number => p !== null)));
   return { veckor, serier: {
     'socrative-laxforhor': per('socrative-laxforhor'), 'socrative-exit': per('socrative-exit'),
-    magma: per('magma'), digiexam: per('digiexam'), helhet: per('helhet'),
+    'socrative-ovning': per('socrative-ovning'), magma: per('magma'), digiexam: per('digiexam'), helhet: per('helhet'),
   } };
 }
 
@@ -362,7 +363,7 @@ export function gruppSnitt(s: Struktur, f: DashboardFilter): GruppSnitt[] {
     const per = (k: KortKalla) => snitt(egna.filter((r) => k === 'helhet' || r.kalla === k).map(resultatProcent).filter((p): p is number => p !== null));
     return { grupp, antalElever: ids.size, perKalla: {
       'socrative-laxforhor': per('socrative-laxforhor'), 'socrative-exit': per('socrative-exit'),
-      magma: per('magma'), digiexam: per('digiexam'), helhet: per('helhet') } };
+      'socrative-ovning': per('socrative-ovning'), magma: per('magma'), digiexam: per('digiexam'), helhet: per('helhet') } };
   });
 }
 

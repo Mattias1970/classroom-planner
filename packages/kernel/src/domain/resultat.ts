@@ -12,7 +12,18 @@
 import type { Elev, PlaneradLektion, Struktur } from './typer.js';
 import { nyttId } from './struktur.js';
 
-export type ResultatKalla = 'socrative-laxforhor' | 'socrative-exit' | 'magma' | 'digiexam';
+/**
+ * Källa/testtyp. Socrative-testerna delas i tre typer: läxförhör (början av
+ * lektionen, aggregerande), exit ticket (slutet, dagens avsnitt) och övning
+ * (allt annat — extrapass, hemläxa, omtag utan lektionstid).
+ */
+export type ResultatKalla = 'socrative-laxforhor' | 'socrative-exit' | 'socrative-ovning' | 'magma' | 'digiexam';
+
+/** Kort typnamn som i lärarens kalkylblad: Läxförhör · Exit · Övning. */
+export const TYPNAMN: Record<ResultatKalla, string> = {
+  'socrative-laxforhor': 'Läxförhör', 'socrative-exit': 'Exit', 'socrative-ovning': 'Övning',
+  magma: 'Magma', digiexam: 'DigiExam',
+};
 
 /** Ett provresultat för en elev — alltid kopplat till en matchad elev. */
 export interface Resultat {
@@ -387,7 +398,7 @@ export function rensaResultat(s: Struktur, klassId: string, amneId?: string): St
 
 /** Källor som ingår i ett ämnes undervisning: Magma är ett matematikverktyg och visas inte i NO. */
 export function amnesKallor(amnesNamn: string | undefined): ResultatKalla[] {
-  const alla: ResultatKalla[] = ['socrative-laxforhor', 'socrative-exit', 'magma', 'digiexam'];
+  const alla: ResultatKalla[] = ['socrative-laxforhor', 'socrative-exit', 'socrative-ovning', 'magma', 'digiexam'];
   if (amnesNamn === undefined || amnesNamn.trim() === '') return alla;
   return /matematik|matte/i.test(amnesNamn) ? alla : alla.filter((k) => k !== 'magma');
 }

@@ -17,7 +17,7 @@ import { tolkaRumKoder } from './elevrapport.js';
 export interface DelkapitelFilter { klassId: string; amneId?: string; kallor?: ResultatKalla[]; fran?: string; till?: string; elevId?: string; }
 
 /** Ett tillfälle med frågor grupperade per delkapitel. */
-export interface Tillfalle { nyckel: string; prov: string; datum: string; rum?: string; resultat: Resultat[] }
+export interface Tillfalle { nyckel: string; prov: string; datum: string; kalla: ResultatKalla; rum?: string; resultat: Resultat[] }
 
 function tillfallenFor(s: Struktur, f: DelkapitelFilter): Tillfalle[] {
   const elevIds = new Set(s.elever.filter((e) => e.klassId === f.klassId).map((e) => e.id));
@@ -32,7 +32,7 @@ function tillfallenFor(s: Struktur, f: DelkapitelFilter): Tillfalle[] {
     grupper.set(n, [...(grupper.get(n) ?? []), r]);
   }
   return [...grupper.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([nyckel, resultat]) => ({
-    nyckel, prov: resultat[0].prov, datum: resultat[0].datum,
+    nyckel, prov: resultat[0].prov, datum: resultat[0].datum, kalla: resultat[0].kalla,
     ...(resultat[0].rum !== undefined ? { rum: resultat[0].rum } : {}), resultat,
   }));
 }
@@ -74,7 +74,7 @@ export interface Segment {
 }
 
 export interface SegmentTillfalle {
-  nyckel: string; prov: string; datum: string; rum?: string;
+  nyckel: string; prov: string; datum: string; kalla: ResultatKalla; rum?: string;
   segment: Segment[];
   antalFragor: number;
   /** Andel rätt i hela tillfället. */
@@ -110,7 +110,7 @@ export function delkapitelSegment(s: Struktur, f: DelkapitelFilter): SegmentTill
     const bedomda = segment.reduce((n, x) => n + x.bedomda, 0);
     const ratt = segment.reduce((n, x) => n + x.ratt, 0);
     return {
-      nyckel: t.nyckel, prov: t.prov, datum: t.datum, ...(t.rum !== undefined ? { rum: t.rum } : {}),
+      nyckel: t.nyckel, prov: t.prov, datum: t.datum, kalla: t.kalla, ...(t.rum !== undefined ? { rum: t.rum } : {}),
       segment, antalFragor: segment.reduce((n, x) => n + x.antalFragor, 0),
       procent: bedomda === 0 ? null : Math.round((ratt / bedomda) * 100),
     };
@@ -202,7 +202,7 @@ export interface MatrisFraga {
 export interface FragaCell { bedomda: number; ratt: number; procent: number | null; }
 
 export interface FragaRad {
-  nyckel: string; prov: string; datum: string; rum?: string;
+  nyckel: string; prov: string; datum: string; kalla: ResultatKalla; rum?: string;
   /** En cell per fråga i `fragor`; null = frågan ingick inte i provet. */
   celler: Array<FragaCell | null>;
   /** Per elev: true/false/null (obesvarad). Sätts bara när elevId angetts. */
@@ -260,7 +260,7 @@ export function fragematris(s: Struktur, f: DelkapitelFilter): Fragematris {
       }
     }
     return {
-      nyckel: t.nyckel, prov: t.prov, datum: t.datum, ...(t.rum !== undefined ? { rum: t.rum } : {}),
+      nyckel: t.nyckel, prov: t.prov, datum: t.datum, kalla: t.kalla, ...(t.rum !== undefined ? { rum: t.rum } : {}),
       celler, ...(f.elevId !== undefined ? { elevCeller } : {}),
     };
   });

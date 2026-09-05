@@ -245,9 +245,19 @@ describe('Del 61: förväntat prov matchas på Socrative-rum', () => {
 describe('Del 67: amnesKallor', async () => {
   const { amnesKallor } = await import('../src/domain/resultat.js');
   it('Magma bara i matematik', () => {
-    expect(amnesKallor('Biologi')).toEqual(['socrative-laxforhor', 'socrative-exit', 'digiexam']);
-    expect(amnesKallor('Matematik')).toHaveLength(4);
-    expect(amnesKallor('Matte')).toHaveLength(4);
-    expect(amnesKallor(undefined)).toHaveLength(4);
+    expect(amnesKallor('Biologi')).toEqual(['socrative-laxforhor', 'socrative-exit', 'socrative-ovning', 'digiexam']);
+    expect(amnesKallor('Matematik')).toHaveLength(5);
+    expect(amnesKallor('Matte')).toHaveLength(5);
+    expect(amnesKallor(undefined)).toHaveLength(5);
+  });
+});
+
+describe('Del 76: Övning som testtyp', async () => {
+  const { TYPNAMN, kravFor } = await import('../src/domain/resultat.js');
+  it('kort typnamn som i kalkylbladet, övning saknar krav', () => {
+    expect(TYPNAMN['socrative-exit']).toBe('Exit');
+    expect(TYPNAMN['socrative-laxforhor']).toBe('Läxförhör');
+    expect(TYPNAMN['socrative-ovning']).toBe('Övning');
+    expect(kravFor('socrative-ovning')).toBeNull();
   });
 });

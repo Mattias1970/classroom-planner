@@ -55,15 +55,16 @@ describe('provTillfallen + klassKurva', () => {
 describe('frageKort', () => {
   it('ett kort per källa + helhet med fråga, snitt, andel och trend', () => {
     const kort = frageKort(grund(), { klassId: 'k', amneId: 'ma' });
-    expect(kort.map((k) => k.kalla)).toEqual(['socrative-laxforhor', 'socrative-exit', 'magma', 'digiexam', 'helhet']);
+    expect(kort.map((k) => k.kalla)).toEqual(['socrative-laxforhor', 'socrative-exit', 'socrative-ovning', 'magma', 'digiexam', 'helhet']);
     const exit = kort[1];
     expect(exit.fraga).toBe('Lär sig eleven på lektionen?');
     expect(exit).toMatchObject({ antalProv: 3, antalElever: 3, krav: 70, serie: [75, 90, 87] });
     expect(exit.snittProcent).toBe(84); // 9+6+10+8+10+9+7 = 59/7 → 84
     expect(exit.andelKlarade).toBe(86); // 6 av 7 ≥ 70
     expect(exit.trend).toBe('upp');
-    expect(kort[2]).toMatchObject({ kalla: 'magma', antalProv: 0, snittProcent: null, trend: null });
-    expect(kort[4]).toMatchObject({ kalla: 'helhet', antalProv: 4, krav: null });
+    expect(kort[2]).toMatchObject({ kalla: 'socrative-ovning', antalProv: 0, snittProcent: null });
+    expect(kort[3]).toMatchObject({ kalla: 'magma', antalProv: 0, snittProcent: null, trend: null });
+    expect(kort[5]).toMatchObject({ kalla: 'helhet', antalProv: 4, krav: null });
   });
 });
 
