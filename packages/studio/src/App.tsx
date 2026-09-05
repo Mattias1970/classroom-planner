@@ -2228,7 +2228,7 @@ function SpridningsDiagram({ tillfallen, hojd = 300, w, onKlick, zoom = ZOOM_STA
           <text x={x(i)} y={y(t.snittProcent ?? 0) - 11} fontSize={11} fontWeight={700} textAnchor="middle" fill={farg} stroke="#fff" strokeWidth={3} paintOrder="stroke">{t.snittProcent ?? '—'} %</text>
           <text x={x(i)} y={y(t.max) - 4} fontSize={9} textAnchor="middle" fill="#8a94a3">{t.max}</text>
           <text x={x(i)} y={y(t.min) + 11} fontSize={9} textAnchor="middle" fill="#8a94a3">{t.min}</text>
-          <AxelText x={x(i)} y={h - mb + 16} rader={axelEtikett(t)} rotera={rotera} titel={`${t.datum} ${t.prov}`} />
+          <AxelText x={x(i)} y={h - mb + 16} bredd={n <= 1 ? 200 : (w - 56) / n} rader={axelEtikett(t, i)} rotera={rotera} titel={`T${i + 1}: ${t.prov} · ${t.datum}`} />
         </g>
       ))}
     </svg>
@@ -2289,7 +2289,7 @@ function NormeradDiagram({ tillfallen, serier, w, hojd = 320, onKlick, zoom = ZO
           </g>
         );
       })}
-      {tillfallen.map((t, i) => <AxelText key={i} x={x(i)} y={h - mb + 16} rader={axelEtikett(t)} rotera={rotera} titel={`${t.datum} ${t.prov} · snitt ${t.snittProcent ?? '—'} %`} />)}
+      {tillfallen.map((t, i) => <AxelText key={i} x={x(i)} y={h - mb + 16} bredd={n <= 1 ? 200 : (w - 56) / n} rader={axelEtikett(t, i)} rotera={rotera} titel={`T${i + 1}: ${t.prov} · ${t.datum} · snitt ${t.snittProcent ?? '—'} %`} />)}
     </svg>
   );
 }
@@ -2362,7 +2362,7 @@ function LedDiagram({ tillfallen, w, hojd = 300, farg }: {
               return ruta;
             })}
             <text x={x(i)} y={yBotten + 14} fontSize={10.5} textAnchor="middle" fill="#556" fontWeight={700}>{t.procent ?? '—'} %</text>
-            <AxelText x={x(i)} y={yBotten + 26} rader={[kortDatum(t.datum), t.prov]} rotera={n > 4} titel={t.prov} />
+            <AxelText x={x(i)} y={yBotten + 26} bredd={bandbredd} rader={[kortDatum(t.datum), `T${i + 1}`]} rotera={false} titel={t.prov} />
           </g>
         );
       })}
@@ -2601,16 +2601,40 @@ function tillfalleEtikett(t: ProvTillfalle): string {
   return `${tillfalleEtiketter(t)[0]} ${tillfalleKortEtikett(t)}`;
 }
 /** Axeletikett i tre rader: v36 / Ons 26/8 / Kap 4.1–3. */
-function axelEtikett(t: ProvTillfalle): string[] { return tillfalleEtiketter(t); }
+/** Axelns tre rader: vecka, dag och testets nummer (namnet står i 🏷 Testnamn). */
+function axelEtikett(t: ProvTillfalle, i: number): string[] {
+  const [vecka, dag] = tillfalleEtiketter(t);
+  return [vecka, dag, `T${i + 1}`];
+}
 /** Radbruten axeltext (SVG) — ger diagrammen plats för vecka, dag och kapitel. */
-function AxelText({ x, y, rader, rotera, titel }: { x: number; y: number; rader: string[]; rotera: boolean; titel?: string }) {
+/** Kapar text som inte ryms på `bredd` pixlar (ca 6 px per tecken vid 11 px). */
+function kapa(text: string, bredd: number): string {
+  const max = Math.max(3, Math.floor(bredd / 6));
+  return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
+}
+
+function AxelText({ x, y, rader, rotera, titel, bredd = 999 }: { x: number; y: number; rader: string[]; rotera: boolean; titel?: string; bredd?: number }) {
   if (rotera) {
-    return (<text x={x} y={y} fontSize={11} textAnchor="end" fill="#555" transform={`rotate(-40 ${x} ${y})`}>{titel !== undefined && <title>{titel}</title>}{rader.join(' · ')}</text>);
+    return (<text x={x} y={y} fontSize={11} textAnchor="end" fill="#555" transform={`rotate(-40 ${x} ${y})`}>{titel !== undefined && <title>{titel}</title>}{kapa(rader.join(' · '), 150)}</text>);
   }
   return (
     <text x={x} y={y} fontSize={11} textAnchor="middle" fill="#555">{titel !== undefined && <title>{titel}</title>}
-      {rader.map((r, i) => <tspan key={i} x={x} dy={i === 0 ? 0 : 13} fontWeight={i === rader.length - 1 ? 700 : 400} fill={i === rader.length - 1 ? '#333' : '#666'}>{r}</tspan>)}
+      {rader.map((r, i) => <tspan key={i} x={x} dy={i === 0 ? 0 : 13} fontWeight={i === rader.length - 1 ? 700 : 400} fill={i === rader.length - 1 ? '#333' : '#666'}>{kapa(r, bredd)}</tspan>)}
     </text>
+  );
+}
+
+/** Numrerad förteckning över tillfällena — provnamnen får inte plats under axeln. */
+function TestLista({ tillfallen }: { tillfallen: Array<{ nyckel: string; prov: string; datum: string; kalla: ResultatKalla; rum?: string }> }) {
+  if (tillfallen.length === 0) return null;
+  return (
+    <details className="st-testlista">
+      <summary>🏷 Testnamn (T1–T{tillfallen.length})</summary>
+      <ol>{tillfallen.map((t, i) => (
+        <li key={t.nyckel}><b>T{i + 1}</b> <span className={`st-typ ${t.kalla}`}>{TYPNAMN[t.kalla]}</span> {t.prov}
+          {t.rum !== undefined && <small className="muted"> ({t.rum})</small>} <small className="muted">· {kortDatum(t.datum)}</small></li>
+      ))}</ol>
+    </details>
   );
 }
 const AXEL_RADER = 3; const AXEL_HOJD = AXEL_RADER * 13 + 10;
@@ -2968,6 +2992,21 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
               namn: KLUSTER_NAMN[k.kluster], farg: KLUSTER_FARG[k.kluster], band: k.band, pa: klusterPa.includes(k.kluster) && k.antal > 0,
               linje: k.procent.map((p, i) => (p === null || spridning[i].snittProcent === null ? null : Math.round(p - (spridning[i].snittProcent ?? 0)))),
             }))} />
+          <TestLista tillfallen={spridning} />
+          <details className="st-forklaring">
+            <summary>❓ Vad visar trendklustren?</summary>
+            <p><b>Grupperna.</b> Varje elev placeras i en av fyra grupper utifrån sina resultat i urvalet:</p>
+            <ul>
+              <li><b>Stigande</b> — resultaten går uppåt över tid.</li>
+              <li><b>Stabil</b> — jämna resultat utan tydlig riktning.</li>
+              <li><b>Riskzon</b> — snittet ligger under det lägsta kravet i urvalet (90 % för läxförhör, 70 % för exit tickets). En elev vars aggregerande läxförhör ligger på minst 90 % och inte faller hamnar aldrig här, även om exit tickets drar ner snittet.</li>
+              <li><b>Ojämn utveckling</b> — stora hopp mellan tillfällena, i genomsnitt mer än 25 procentenheter.</li>
+            </ul>
+            <p><b>Diagrammet.</b> Den vågräta linjen i mitten är <b>klassens snitt vid varje enskilt tillfälle</b>, satt till 100. Ett prov där alla gick dåligt sänker alltså linjen för alla — kurvorna visar avstånd till klassen, inte absoluta resultat. Skalan går ±30 procentenheter i band om 3.</p>
+            <p>En färgad linje är gruppens snitt jämfört med klassen: ligger <i>Riskzon</i> på 85 betyder det att gruppen presterade 15 procentenheter under klassen det tillfället. De tonade banden bakom linjen visar hur gruppens elever fördelar sig — brett band = eleverna i gruppen skiljer sig mycket åt, smalt band = de följs åt.</p>
+            <p><b>Att läsa av:</b> närmar sig Riskzon-linjen 100 håller stödet på att verka. Går den nedåt medan Stigande går uppåt ökar spridningen i klassen. Ett tillfälle där alla grupper faller mot 100 handlar oftare om provet än om eleverna.</p>
+            <p>Knapparna tänder och släcker grupperna, staplarna i rutorna ovanför är gruppens snitt över tid, och klick på en ruta öppnar hela gruppen i fokusvyn.</p>
+          </details>
         </div>
       </div>
 
@@ -3340,6 +3379,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
         {klassLage === 'normerad' ? (<>
           <NormeradGraf z={zNorm} tillfallen={spridning} hojd={340} onKlick={(i) => onVisaProv(spridning[i].prov)}
             serier={[{ namn: klassNamn, farg: '#2f5aa8', band: normerad.map((t) => t.band), linje: normerad.map(() => 0), pa: true }]} />
+          <TestLista tillfallen={spridning} />
           <div className="st-zoomhjalp">Hjulet zoomar · Shift+hjul breddar · dra för att panorera · dubbelklick återställer</div>
           <div className="small muted">Snittet är 100 i varje tillfälle. Varje band är {NORM_BAND} procentenheter; tonen visar andelen elever i bandet (mörkast = flest). Yttersta kanten är ±{NORM_MAX}; elever utanför ligger i kantbandet.</div>
         </>) : klassLage === 'spridning' ? (<>
@@ -3347,7 +3387,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
           <div className="small muted">Varje punkt är en elev. Full färg = vid snittet, genomskinlig = längst från snittet; stapeln visar spannet lägsta–högsta i procent, sd i tooltip.</div>
         </>) : (
         <LinjeDiagram
-          tillfallen={kurva.map((t) => ({ etikett: axelEtikett(t), titel: `${t.datum} ${KALLNAMN[t.kalla]} ${t.prov}` }))}
+          tillfallen={kurva.map((t, i) => ({ etikett: axelEtikett(t, i), titel: `T${i + 1}: ${t.prov} · ${t.datum} · ${KALLNAMN[t.kalla]}` }))}
           serier={[
             { namn: 'Snitt', varden: kurva.map((t) => t.snittProcent), farg: '#2f5aa8' },
             ...(visaAndel ? [{ namn: 'Andel klarade', varden: kurva.map((t) => t.andelKlarade), farg: '#1B5E20', streckad: true }] : []),
@@ -3474,7 +3514,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
               <LinjeDiagram
                 z={zFokus}
                 hojd={fokusElever.length > 1 ? 420 : 360}
-                tillfallen={till.map((t) => ({ etikett: axelEtikett(t), titel: `${t.datum} ${KALLNAMN[t.kalla]} ${t.prov}` }))}
+                tillfallen={till.map((t, i) => ({ etikett: axelEtikett(t, i), titel: `T${i + 1}: ${t.prov} · ${t.datum} · ${KALLNAMN[t.kalla]}` }))}
                 serier={serier}
                 kravLinjer={fokusKravLinjer}
                 onKlick={(i) => onVisaProv(till[i].prov)}

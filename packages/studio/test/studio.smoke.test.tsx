@@ -1385,10 +1385,9 @@ describe('📊 SuperTeach', () => {
     expect(normerad.textContent).toContain('100 snitt');
     expect(normerad.textContent).toContain('v35');
     expect(normerad.textContent).toContain('Ons 26/8');
-    expect(normerad.textContent).toContain('Quiz 1.1a'); // hela provnamnet på axeln
     expect(normerad.querySelectorAll('rect').length).toBeGreaterThan(0);
     // Zoom i 'klassen över tid': y-spannet krymper vid +, panorerar och återställs med ⟲
-    const klasskort = [...host.querySelectorAll('.uppg-kort')].find((k) => k.textContent?.includes('över tid'))!;
+    const klasskort = [...host.querySelectorAll('.uppg-kort')].find((k) => k.textContent?.includes('📈'))!;
     const zknapp = (etikett: string) => klasskort.querySelector(`button[aria-label="${etikett}"]`) as HTMLButtonElement;
     const spann = () => klasskort.querySelector('.st-zoomspann')!.textContent;
     expect(spann()).toBe('70–130 %');
@@ -1412,6 +1411,19 @@ describe('📊 SuperTeach', () => {
     expect(spann()).toBe('70–130 %');
     act(() => { zknapp('Återställ zoom').click(); });
     expect(spann()).toBe('70–130 %');
+
+    // Axeln visar T-nummer i stället för långa provnamn; namnen står i testlistan
+    // Axeltexterna (tspan) är korta; provnamnet finns bara i tooltip (<title>)
+    const axelText = [...normerad.querySelectorAll('tspan')].map((t) => t.textContent).join(' ');
+    expect(axelText).toContain('T1');
+    expect(axelText).not.toContain('Quiz 1.1a');
+    expect([...normerad.querySelectorAll('title')].map((t) => t.textContent).join(' ')).toContain('Quiz 1.1a');
+    const listor = [...host.querySelectorAll('.st-testlista')];
+    expect(listor.length).toBeGreaterThan(0);
+    expect(listor[0].textContent).toContain('Quiz 1.1a');
+    expect(listor[0].textContent).toContain('T1');
+    // Förklaringen till trendklustren finns att fälla ut
+    expect(host.querySelector('.st-forklaring')!.textContent).toContain('klassens snitt vid varje enskilt tillfälle');
 
     // Klusterknapparna är på/av-knappar med aria-pressed
     expect(host.querySelectorAll('.st-toggle[aria-pressed="true"]').length).toBeGreaterThan(0);
