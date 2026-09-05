@@ -105,3 +105,43 @@ describe('aterkommandeFelKlass', () => {
     expect(lista[0].elever.map((e) => e.elev.namn)).toEqual(['Anna Berg', 'Omar Ali']);
   });
 });
+
+describe('Del 75: frågematris och frågefilter', async () => {
+  const { fragematris, filtreraFragor } = await import('../src/domain/delkapiteltrend.js');
+
+  it('numrerar frågorna per delkapitel och ger en cell per fråga och tillfälle', () => {
+    const m = fragematris(bygg(), f);
+    expect(m.fragor.map((x) => `${x.nr}:${x.kod}`)).toEqual(['1:4.1', '2:4.1', '3:4.2', '4:4.3']);
+    expect(m.grupper).toEqual([
+      { kod: '4.1', ursprung: 'Biologi 4.1 Begrepp', fran: 1, till: 2 },
+      { kod: '4.2', ursprung: '4.1-4.2 Begrepp', fran: 3, till: 3 },
+      { kod: '4.3', ursprung: '4.1-4.3 Begrepp', fran: 4, till: 4 },
+    ]);
+    // Första förhöret innehöll bara fråga 1 och 2
+    expect(m.rader[0].celler.map((c) => c?.procent ?? null)).toEqual([50, 50, null, null]);
+    expect(m.rader[2].celler.map((c) => c?.procent ?? null)).toEqual([50, 50, 100, 50]);
+    expect(m.rader[0].celler[0]).toMatchObject({ bedomda: 2, ratt: 1 });
+    expect(m.rader[0].elevCeller).toBeUndefined();
+  });
+
+  it('med elevId ges rätt/fel/tomt per ruta', () => {
+    const m = fragematris(bygg(), { ...f, elevId: 'a' });
+    expect(m.rader.map((r) => r.elevCeller)).toEqual([
+      [true, true, null, null],
+      [true, false, true, null],
+      [false, false, true, true],
+    ]);
+  });
+
+  it('filtrerar frågor på andel rätt och valda tillfällen', () => {
+    const m = fragematris(bygg(), f);
+    const svaga = filtreraFragor(m, { max: 50 });
+    expect(svaga.map((x) => `${x.nr}:${x.procent}`)).toEqual(['2:33', '4:50']); // fråga 1 ligger på 67 %
+    expect(svaga[0]).toMatchObject({ bedomda: 6, ratt: 2, antalTillfallen: 3 });
+    // Bara sista tillfället
+    const bara3 = filtreraFragor(m, { tillfallen: [m.rader[2].nyckel] });
+    expect(bara3.map((x) => `${x.nr}:${x.procent}`)).toEqual(['1:50', '2:50', '4:50', '3:100']);
+    expect(filtreraFragor(m, { min: 90 }).map((x) => x.nr)).toEqual([3]);
+    expect(filtreraFragor(m, { min: 101 })).toEqual([]);
+  });
+});

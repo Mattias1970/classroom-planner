@@ -184,3 +184,130 @@ export function aterkommandeFelKlass(s: Struktur, f: DelkapitelFilter): KlassBeg
   }
   return [...per.values()].sort((a, b) => b.antalElever - a.antalElever);
 }
+
+// ── Del 75: frågematris — fråga × testtillfälle ──────────────
+
+export interface MatrisFraga {
+  /** Löpnummer 1..N, grupperat efter ursprungsdelkapitel. */
+  nr: number;
+  fraga: string;
+  /** Delkapitlet frågan hör till ('4.1'). */
+  kod: string;
+  /** Provet där frågan först ställdes. */
+  ursprung: string;
+  ursprungRum?: string;
+}
+
+/** Klassens utfall på en fråga i ett tillfälle. */
+export interface FragaCell { bedomda: number; ratt: number; procent: number | null; }
+
+export interface FragaRad {
+  nyckel: string; prov: string; datum: string; rum?: string;
+  /** En cell per fråga i `fragor`; null = frågan ingick inte i provet. */
+  celler: Array<FragaCell | null>;
+  /** Per elev: true/false/null (obesvarad). Sätts bara när elevId angetts. */
+  elevCeller?: Array<boolean | null>;
+}
+
+export interface Fragematris {
+  fragor: MatrisFraga[];
+  rader: FragaRad[];
+  /** Kolumngrupper: delkapitlet och dess intervall av frågenummer. */
+  grupper: Array<{ kod: string; ursprung: string; fran: number; till: number }>;
+}
+
+/**
+ * Matris med en rad per testtillfälle och en kolumn per fråga. Frågorna
+ * numreras i den ordning delkapitlen introduceras, så kolumnerna grupperar
+ * sig som Test41 · Test42 · Test43 … precis som i lärarens kalkylblad.
+ */
+export function fragematris(s: Struktur, f: DelkapitelFilter): Fragematris {
+  const tillfallen = tillfallenFor(s, f);
+  const hemvist = fragansDelkapitel(tillfallen);
+  // Frågornas ordning: efter delkapitel, sedan efter när de först dök upp
+  const forstaGangen = new Map<string, { fraga: string; ursprung: string; rum?: string; ordning: number }>();
+  let raknare = 0;
+  for (const t of tillfallen) {
+    for (const r of t.resultat) {
+      for (const sv of r.svar ?? []) {
+        const n = fragenyckel(sv.fraga);
+        if (forstaGangen.has(n)) continue;
+        forstaGangen.set(n, { fraga: sv.fraga, ursprung: t.prov, ...(t.rum !== undefined ? { rum: t.rum } : {}), ordning: raknare++ });
+      }
+    }
+  }
+  const nycklar = [...forstaGangen.keys()].sort((a, b) => {
+    const ka = hemvist.get(a) ?? '—'; const kb = hemvist.get(b) ?? '—';
+    return ka.localeCompare(kb, 'sv', { numeric: true }) || forstaGangen.get(a)!.ordning - forstaGangen.get(b)!.ordning;
+  });
+  const fragor: MatrisFraga[] = nycklar.map((n, i) => {
+    const post = forstaGangen.get(n)!;
+    return { nr: i + 1, fraga: post.fraga, kod: hemvist.get(n) ?? '—', ursprung: post.ursprung, ...(post.rum !== undefined ? { ursprungRum: post.rum } : {}) };
+  });
+  const index = new Map(nycklar.map((n, i) => [n, i]));
+  const rader: FragaRad[] = tillfallen.map((t) => {
+    const celler: Array<FragaCell | null> = fragor.map(() => null);
+    const elevCeller: Array<boolean | null> = fragor.map(() => null);
+    for (const r of t.resultat) {
+      for (const sv of r.svar ?? []) {
+        const i = index.get(fragenyckel(sv.fraga));
+        if (i === undefined) continue;
+        const cell = celler[i] ?? { bedomda: 0, ratt: 0, procent: null };
+        if (sv.ratt !== null) { cell.bedomda += 1; if (sv.ratt) cell.ratt += 1; }
+        cell.procent = cell.bedomda === 0 ? null : Math.round((cell.ratt / cell.bedomda) * 100);
+        celler[i] = cell;
+        if (f.elevId !== undefined && r.elevId === f.elevId) elevCeller[i] = sv.ratt;
+      }
+    }
+    return {
+      nyckel: t.nyckel, prov: t.prov, datum: t.datum, ...(t.rum !== undefined ? { rum: t.rum } : {}),
+      celler, ...(f.elevId !== undefined ? { elevCeller } : {}),
+    };
+  });
+  const grupper: Fragematris['grupper'] = [];
+  for (const fr of fragor) {
+    const sista = grupper[grupper.length - 1];
+    if (sista !== undefined && sista.kod === fr.kod) sista.till = fr.nr;
+    else grupper.push({ kod: fr.kod, ursprung: fr.ursprung, fran: fr.nr, till: fr.nr });
+  }
+  return { fragor, rader, grupper };
+}
+
+export interface FragefilterVal {
+  /** Lägsta andel rätt (0–100) som frågan ska ha i klassen. */
+  min?: number;
+  /** Högsta andel rätt. */
+  max?: number;
+  /** Bara dessa tillfällen (nycklar ur matrisen); tom eller utelämnad = alla. */
+  tillfallen?: string[];
+}
+
+export interface FragefilterRad extends MatrisFraga {
+  bedomda: number;
+  ratt: number;
+  /** Andel rätt över de valda tillfällena. */
+  procent: number;
+  /** Antal tillfällen frågan ställdes i urvalet. */
+  antalTillfallen: number;
+}
+
+/**
+ * Plockar ut frågor efter hur väl klassen svarat, över valda tillfällen —
+ * t.ex. "alla frågor under 50 % i test412 och test4123".
+ */
+export function filtreraFragor(m: Fragematris, val: FragefilterVal = {}): FragefilterRad[] {
+  const valda = val.tillfallen !== undefined && val.tillfallen.length > 0
+    ? m.rader.filter((r) => val.tillfallen!.includes(r.nyckel))
+    : m.rader;
+  const min = val.min ?? 0; const max = val.max ?? 100;
+  return m.fragor.map((fr, i) => {
+    let bedomda = 0; let ratt = 0; let antal = 0;
+    for (const rad of valda) {
+      const c = rad.celler[i];
+      if (c === null) continue;
+      antal += 1; bedomda += c.bedomda; ratt += c.ratt;
+    }
+    return { ...fr, bedomda, ratt, procent: bedomda === 0 ? 0 : Math.round((ratt / bedomda) * 100), antalTillfallen: antal };
+  }).filter((r) => r.bedomda > 0 && r.procent >= min && r.procent <= max)
+    .sort((a, b) => a.procent - b.procent || a.nr - b.nr);
+}

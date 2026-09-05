@@ -24,7 +24,7 @@ import {
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   arFilImporterad, arRatt, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
-  delkapitelSegment, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
+  delkapitelSegment, fragematris, filtreraFragor, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
@@ -2132,6 +2132,16 @@ function initialer(namn: string): string {
   const d = namn.replace(',', ' ').split(/\s+/).filter(Boolean);
   return d.length >= 2 ? (namn.includes(',') ? d[1][0] + d[0][0] : d[0][0] + d[d.length - 1][0]).toUpperCase() : namn.slice(0, 2).toUpperCase();
 }
+/** Röd (0 %) → gul (50 %) → grön (100 %). */
+function ratFarg(p: number | null): string {
+  if (p === null) return '#F1F3F6';
+  const t = Math.max(0, Math.min(100, p)) / 100;
+  const [r, g, b] = t < 0.5
+    ? [211 + (250 - 211) * (t / 0.5), 47 + (203 - 47) * (t / 0.5), 47 + (60 - 47) * (t / 0.5)]
+    : [250 + (46 - 250) * ((t - 0.5) / 0.5), 203 + (125 - 203) * ((t - 0.5) / 0.5), 60 + (50 - 60) * ((t - 0.5) / 0.5)];
+  return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
+}
+
 function procentFarg(p: number | null, krav: number | null): string {
   if (p === null) return '#F1F3F6';
   if (krav !== null) return p >= krav ? '#C8E6C9' : p >= krav - 20 ? '#FFE0B2' : '#FFCDD2';
@@ -2775,6 +2785,10 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
   const [visaElevDiff, setVisaElevDiff] = useState(false);
   const [visaTkPar, setVisaTkPar] = useState(false);
   const [ledElev, setLedElev] = useState<string | null>(null);
+  const [vald, setVald] = useState<{ nr: number; fraga: string; kod: string; ursprung: string } | null>(null);
+  const [fMin, setFMin] = useState(0);
+  const [fMax, setFMax] = useState(50);
+  const [valdaTest, setValdaTest] = useState<string[]>([]);
   const zKlass = useZoom();
   const zNorm = useZoom(ZOOM_NORM);
   const zVecko = useZoom();
@@ -2798,6 +2812,8 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
   const led = delkapitelSegment(s, ledElev === null ? tkFilter : { ...tkFilter, elevId: ledElev });
   const delFarger = new Map([...new Set(led.flatMap((t) => t.segment.map((x) => x.kod)))].sort((a, b) => a.localeCompare(b, 'sv', { numeric: true })).map((kod, i) => [kod, DEL_FARGER[i % DEL_FARGER.length]]));
   const klassFastnat = aterkommandeFelKlass(s, tkFilter);
+  const fm = fragematris(s, ledElev === null ? tkFilter : { ...tkFilter, elevId: ledElev });
+  const traffar = filtreraFragor(fm, { min: fMin, max: fMax, ...(valdaTest.length > 0 ? { tillfallen: valdaTest } : {}) });
   const tk = trendkoll(s, { klassId, ...(amneId !== '' ? { amneId } : {}), ...(kallor !== undefined ? { kallor } : {}), ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) });
   const normerad = normeradSpridning(s, f);
   const klusterK = klusterKurvor(s, f);
@@ -3188,6 +3204,95 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
             </div>
           )}
         </div>
+      </div>
+
+      {/* Frågematris */}
+      <div className="uppg-kort st-widget st-fragematris">
+        <div className="rad">
+          <b>🔢 Frågematris</b> <small className="muted">en rad per förhör, en kolumn per fråga · klicka på en ruta för att se frågan</small>
+          <span className="spacer" />
+          <button className={`chipbtn ${ledElev === null ? 'act' : ''}`} onClick={() => setLedElev(null)}>Klassen</button>
+          {ledElev !== null && <span className="small">{s.elever.find((e) => e.id === ledElev)?.namn}</span>}
+        </div>
+        {fm.fragor.length === 0 ? <p className="muted small">Kräver förhör med frågedata (filimport).</p> : (<>
+          <div className="st-scroll">
+            <table className="tbl st-fmtabell">
+              <thead>
+                <tr><th rowSpan={2}>Test</th>{fm.grupper.map((g) => (
+                  <th key={g.kod} colSpan={g.till - g.fran + 1} className="st-fmgrupp" title={g.ursprung}>{g.kod}</th>
+                ))}</tr>
+                <tr>{fm.fragor.map((fr) => (
+                  <th key={fr.nr} className="st-fmnr" title={fr.fraga}>{fr.nr}</th>
+                ))}</tr>
+              </thead>
+              <tbody>{fm.rader.map((rad) => (
+                <tr key={rad.nyckel}>
+                  <td className="st-fmprov" title={`${rad.prov} · ${kortDatum(rad.datum)}`}>{rad.prov}</td>
+                  {fm.fragor.map((fr, i) => {
+                    const c = rad.celler[i];
+                    const elevSvar = rad.elevCeller?.[i];
+                    const bg = c === null ? '#F7F8FA'
+                      : ledElev !== null ? (elevSvar === true ? '#4CAF50' : elevSvar === false ? '#D32F2F' : '#F7F8FA')
+                        : ratFarg(c.procent);
+                    const titel = c === null ? `Fråga ${fr.nr} ingick inte i ${rad.prov}`
+                      : ledElev !== null ? `Fråga ${fr.nr}: ${elevSvar === true ? 'rätt' : elevSvar === false ? 'fel' : 'ej gjord'}`
+                        : `Fråga ${fr.nr}: ${c.procent} % rätt (${c.ratt}/${c.bedomda})`;
+                    return (
+                      <td key={fr.nr} className={`st-fmruta${vald?.nr === fr.nr ? ' vald' : ''}`} style={{ background: bg }} title={titel}
+                        onClick={() => setVald(vald?.nr === fr.nr ? null : fr)} />
+                    );
+                  })}
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+          {vald !== null && (
+            <div className="st-fmvald">
+              <b>Fråga {vald.nr}</b> <span className="chip">{vald.kod}</span> <small className="muted">först ställd i {vald.ursprung}</small>
+              <p>{vald.fraga}</p>
+              <div className="small">
+                {fm.rader.map((rad, i) => { const c = rad.celler[fm.fragor.findIndex((x) => x.nr === vald.nr)]; return c === null ? null : (
+                  <span key={i} className="st-fmhist" style={{ background: ratFarg(c.procent) }} title={`${rad.prov}: ${c.procent} %`}>{rad.prov}: {c.procent} %</span>
+                ); })}
+              </div>
+              <button className="btn sm" onClick={() => setVald(null)}>✕ stäng</button>
+            </div>
+          )}
+          <details className="st-fmfilter">
+            <summary>🔍 Filtrera frågor</summary>
+            <div className="rad" style={{ gap: 8, flexWrap: 'wrap' }}>
+              <label className="small">Andel rätt i klassen från{' '}
+                <input type="number" min={0} max={100} step={5} aria-label="Andel rätt från" value={fMin} onChange={(e) => setFMin(Number(e.target.value))} style={{ width: 64 }} /> %</label>
+              <label className="small">till{' '}
+                <input type="number" min={0} max={100} step={5} aria-label="Andel rätt till" value={fMax} onChange={(e) => setFMax(Number(e.target.value))} style={{ width: 64 }} /> %</label>
+            </div>
+            <div className="rad" style={{ gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+              <small className="muted">Tester:</small>
+              <button className={`chipbtn ${valdaTest.length === 0 ? 'act' : ''}`} onClick={() => setValdaTest([])}>Alla</button>
+              {fm.rader.map((rad) => (
+                <button key={rad.nyckel} className={`chipbtn ${valdaTest.includes(rad.nyckel) ? 'act' : ''}`}
+                  onClick={() => setValdaTest(valdaTest.includes(rad.nyckel) ? valdaTest.filter((x) => x !== rad.nyckel) : [...valdaTest, rad.nyckel])}>{rad.prov}</button>
+              ))}
+            </div>
+            <p className="small"><b>{traffar.length}</b> frågor mellan {fMin} och {fMax} % rätt{valdaTest.length > 0 ? ` i ${valdaTest.length} valda tester` : ''}.</p>
+            {traffar.length > 0 && (
+              <div className="st-scroll" style={{ maxHeight: 300 }}>
+                <table className="tbl st-tabell">
+                  <thead><tr><th>Fråga</th><th>Nr</th><th>Del</th><th>Rätt</th><th>Svar</th><th>Tillfällen</th></tr></thead>
+                  <tbody>{traffar.map((t) => (
+                    <tr key={t.nr}>
+                      <td><button className="linkbtn st-provnamn" title={t.fraga} onClick={() => setVald(t)}>{t.fraga}</button></td>
+                      <td>{t.nr}</td><td>{t.kod}</td>
+                      <td><span className="st-fmhist" style={{ background: ratFarg(t.procent) }}>{t.procent} %</span></td>
+                      <td className="small muted">{t.ratt}/{t.bedomda}</td>
+                      <td className="small muted">{t.antalTillfallen}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            )}
+          </details>
+        </>)}
       </div>
 
       {/* Grupper + samband */}

@@ -1435,6 +1435,8 @@ describe('📊 SuperTeach', () => {
     expect(host.querySelector('.st-led')!.textContent).toContain('rumsnamn som Biologi41');
     expect(host.querySelector('.st-fastnat')!.textContent).toContain('Inga begrepp som fastnat');
 
+    expect(host.querySelector('.st-fragematris')!.textContent).toContain('Kräver förhör med frågedata');
+
     // Trendkoll: utan frågedata (inklistrade resultat) förklaras varför
     expect(host.querySelector('.st-trendkoll')!.textContent).toContain('kräver att samma fråga ställs igen');
 
