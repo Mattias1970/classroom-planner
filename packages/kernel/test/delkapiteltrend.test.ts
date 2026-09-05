@@ -113,9 +113,9 @@ describe('Del 75: frågematris och frågefilter', async () => {
     const m = fragematris(bygg(), f);
     expect(m.fragor.map((x) => `${x.nr}:${x.kod}`)).toEqual(['1:4.1', '2:4.1', '3:4.2', '4:4.3']);
     expect(m.grupper).toEqual([
-      { kod: '4.1', ursprung: 'Biologi 4.1 Begrepp', fran: 1, till: 2 },
-      { kod: '4.2', ursprung: '4.1-4.2 Begrepp', fran: 3, till: 3 },
-      { kod: '4.3', ursprung: '4.1-4.3 Begrepp', fran: 4, till: 4 },
+      { kod: '4.1', etikett: 'Test41', ursprung: 'Biologi 4.1 Begrepp', fran: 1, till: 2 },
+      { kod: '4.2', etikett: 'Test42', ursprung: '4.1-4.2 Begrepp', fran: 3, till: 3 },
+      { kod: '4.3', etikett: 'Test43', ursprung: '4.1-4.3 Begrepp', fran: 4, till: 4 },
     ]);
     // Första förhöret innehöll bara fråga 1 och 2
     expect(m.rader[0].celler.map((c) => c?.procent ?? null)).toEqual([50, 50, null, null]);
@@ -143,5 +143,22 @@ describe('Del 75: frågematris och frågefilter', async () => {
     expect(bara3.map((x) => `${x.nr}:${x.procent}`)).toEqual(['1:50', '2:50', '4:50', '3:100']);
     expect(filtreraFragor(m, { min: 90 }).map((x) => x.nr)).toEqual([3]);
     expect(filtreraFragor(m, { min: 101 })).toEqual([]);
+  });
+});
+
+describe('Del 78: testnamn ur delkapitel', async () => {
+  const { fragematris, testEtikett } = await import('../src/domain/delkapiteltrend.js');
+  it('bygger namnet av delkapitelsiffrorna', () => {
+    expect(testEtikett(['4.1'])).toBe('test41');
+    expect(testEtikett(['4.1', '4.2'])).toBe('test412');
+    expect(testEtikett(['4.1', '4.2', '4.3', '4.4'])).toBe('test41234');
+    expect(testEtikett(['4.2'], 'Test')).toBe('Test42');
+    expect(testEtikett([])).toBe('test?');
+    expect(testEtikett(['4.1', '5.1'])).toBe('test4.1/5.1');
+  });
+  it('varje rad får testnamn efter vilka delkapitel provet innehåller', () => {
+    const m = fragematris(bygg(), f);
+    expect(m.rader.map((r) => r.test)).toEqual(['test41', 'test412', 'test4123']);
+    expect(m.grupper.map((g) => g.etikett)).toEqual(['Test41', 'Test42', 'Test43']);
   });
 });

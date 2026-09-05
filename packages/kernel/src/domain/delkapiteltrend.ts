@@ -187,6 +187,18 @@ export function aterkommandeFelKlass(s: Struktur, f: DelkapitelFilter): KlassBeg
 
 // ── Del 75: frågematris — fråga × testtillfälle ──────────────
 
+/**
+ * Kort testnamn ur delkapitelkoder: ['4.1','4.2'] → 'test412', ['4.3'] → 'test43'.
+ * Blandas kapitel eller saknas koder används koderna rakt av.
+ */
+export function testEtikett(koder: string[], prefix = 'test'): string {
+  const unika = [...new Set(koder)].sort((a, b) => a.localeCompare(b, 'sv', { numeric: true }));
+  if (unika.length === 0) return `${prefix}?`;
+  const kapitel = [...new Set(unika.map((k) => k.split('.')[0]))];
+  if (kapitel.length !== 1) return prefix + unika.join('/');
+  return prefix + kapitel[0] + unika.map((k) => k.split('.')[1]).join('');
+}
+
 export interface MatrisFraga {
   /** Löpnummer 1..N, grupperat efter ursprungsdelkapitel. */
   nr: number;
@@ -203,6 +215,8 @@ export interface FragaCell { bedomda: number; ratt: number; procent: number | nu
 
 export interface FragaRad {
   nyckel: string; prov: string; datum: string; kalla: ResultatKalla; rum?: string;
+  /** Kort testnamn ur de delkapitel provet täcker: 'test41', 'test412'. */
+  test: string;
   /** En cell per fråga i `fragor`; null = frågan ingick inte i provet. */
   celler: Array<FragaCell | null>;
   /** Per elev: true/false/null (obesvarad). Sätts bara när elevId angetts. */
@@ -213,7 +227,7 @@ export interface Fragematris {
   fragor: MatrisFraga[];
   rader: FragaRad[];
   /** Kolumngrupper: delkapitlet och dess intervall av frågenummer. */
-  grupper: Array<{ kod: string; ursprung: string; fran: number; till: number }>;
+  grupper: Array<{ kod: string; etikett: string; ursprung: string; fran: number; till: number }>;
 }
 
 /**
@@ -259,16 +273,18 @@ export function fragematris(s: Struktur, f: DelkapitelFilter): Fragematris {
         if (f.elevId !== undefined && r.elevId === f.elevId) elevCeller[i] = sv.ratt;
       }
     }
+    // Testnamnet byggs av de delkapitel provet faktiskt innehåller: 4.1 + 4.2 → test412
+    const koder = fragor.filter((_, i) => celler[i] !== null).map((fr) => fr.kod).filter((k) => k !== '—');
     return {
       nyckel: t.nyckel, prov: t.prov, datum: t.datum, kalla: t.kalla, ...(t.rum !== undefined ? { rum: t.rum } : {}),
-      celler, ...(f.elevId !== undefined ? { elevCeller } : {}),
+      test: testEtikett(koder), celler, ...(f.elevId !== undefined ? { elevCeller } : {}),
     };
   });
   const grupper: Fragematris['grupper'] = [];
   for (const fr of fragor) {
     const sista = grupper[grupper.length - 1];
     if (sista !== undefined && sista.kod === fr.kod) sista.till = fr.nr;
-    else grupper.push({ kod: fr.kod, ursprung: fr.ursprung, fran: fr.nr, till: fr.nr });
+    else grupper.push({ kod: fr.kod, etikett: testEtikett([fr.kod], 'Test'), ursprung: fr.ursprung, fran: fr.nr, till: fr.nr });
   }
   return { fragor, rader, grupper };
 }

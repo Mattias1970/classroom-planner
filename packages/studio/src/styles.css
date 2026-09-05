@@ -657,9 +657,13 @@ input.fel { border-color: #B71C1C; }
 .st-fastnat .st-tk-steg { min-width: 20px; }
 
 /* Del 75: frågematris */
-.st-fmtabell { border-collapse: separate; border-spacing: 2px; }
+.st-fmtabell { border-collapse: separate; border-spacing: 2px; width: auto; max-width: none; table-layout: auto; }
+.st-fragematris .st-scroll { display: inline-block; max-width: 100%; }
 .st-fmtabell th, .st-fmtabell td { border: none; padding: 0; }
-.st-fmgrupp { text-align: center; font-size: 11px; font-weight: 800; color: #46506080; background: #F1F3F6; border-radius: 6px; padding: 2px 4px !important; }
+.st-fmgrupp { text-align: center; font-size: 11px; font-weight: 800; color: #465060; background: #E8ECF3; border-radius: 6px 6px 0 0; padding: 3px 6px !important; border-bottom: 2px solid #C9D2E0 !important; }
+.st-fmhorn { background: transparent; }
+/* Lodrät linje där en ny delkapitelgrupp börjar */
+.st-fmtabell .gstart { box-shadow: -2px 0 0 0 #C9D2E0; }
 .st-fmnr { font-size: 10px; color: #9AA3AE; text-align: center; width: 18px; }
 .st-fmprov { font-size: 12px; font-weight: 600; white-space: nowrap; padding-right: 10px !important; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
 .st-fmruta { width: 18px; height: 18px; border-radius: 4px; cursor: pointer; }

@@ -3258,11 +3258,11 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
           <div className="st-scroll">
             <table className="tbl st-fmtabell">
               <thead>
-                <tr><th rowSpan={2}>Vecka</th><th rowSpan={2}>Datum</th><th rowSpan={2}>Typ</th><th rowSpan={2}>Test</th>{fm.grupper.map((g) => (
-                  <th key={g.kod} colSpan={g.till - g.fran + 1} className="st-fmgrupp" title={g.ursprung}>{g.kod}</th>
+                <tr><th colSpan={4} className="st-fmhorn" /> {fm.grupper.map((g) => (
+                  <th key={g.kod} colSpan={g.till - g.fran + 1} className="st-fmgrupp" title={`${g.ursprung} · frågorna ${g.fran}–${g.till}`}>{g.etikett}</th>
                 ))}</tr>
-                <tr>{fm.fragor.map((fr) => (
-                  <th key={fr.nr} className="st-fmnr" title={fr.fraga}>{fr.nr}</th>
+                <tr><th>Vecka</th><th>Datum</th><th>Typ</th><th>Test</th>{fm.fragor.map((fr) => (
+                  <th key={fr.nr} className={`st-fmnr${fm.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}`} title={`${fr.kod} · ${fr.fraga}`}>{fr.nr}</th>
                 ))}</tr>
               </thead>
               <tbody>{fm.rader.map((rad) => (
@@ -3270,7 +3270,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
                   <td className="small muted">v{isoVeckaLbl(rad.datum)}</td>
                   <td className="small muted">{kortDatum(rad.datum)}</td>
                   <td className="small"><span className={`st-typ ${rad.kalla}`}>{TYPNAMN[rad.kalla]}</span></td>
-                  <td className="st-fmprov" title={`${rad.prov}${rad.rum !== undefined ? ` (${rad.rum})` : ''}`}>{rad.rum ?? rad.prov}</td>
+                  <td className="st-fmprov" title={`${rad.prov}${rad.rum !== undefined ? ` · rum ${rad.rum}` : ''} · ${kortDatum(rad.datum)}`}>{rad.test}</td>
                   {fm.fragor.map((fr, i) => {
                     const c = rad.celler[i];
                     const elevSvar = rad.elevCeller?.[i];
@@ -3281,7 +3281,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
                       : ledElev !== null ? `Fråga ${fr.nr}: ${elevSvar === true ? 'rätt' : elevSvar === false ? 'fel' : 'ej gjord'}`
                         : `Fråga ${fr.nr}: ${c.procent} % rätt (${c.ratt}/${c.bedomda})`;
                     return (
-                      <td key={fr.nr} className={`st-fmruta${vald?.nr === fr.nr ? ' vald' : ''}`} style={{ background: bg }} title={titel}
+                      <td key={fr.nr} className={`st-fmruta${vald?.nr === fr.nr ? ' vald' : ''}${fm.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}`} style={{ background: bg }} title={titel}
                         onClick={() => setVald(vald?.nr === fr.nr ? null : fr)} />
                     );
                   })}
