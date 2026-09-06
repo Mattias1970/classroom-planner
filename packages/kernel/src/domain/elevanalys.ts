@@ -1,0 +1,243 @@
+/**
+ * SuperTeach · Elevanalys — hur går det för eleven, och vad kan eleven göra?
+ *
+ * Väver ihop det som redan räknas fram på annat håll (kurva, närvaro,
+ * lektionstest, trendkoll, delkapitel, begrepp som fastnat) till en
+ * rapport som går att läsa av en elev eller vårdnadshavare, med konkreta
+ * råd som följer av siffrorna — inga generella uppmaningar.
+ *
+ * (Ring 1, I2: ingen fetch/DOM/lagring.)
+ */
+import type { Elev, Struktur } from './typer.js';
+import { kravFor, resultatProcent, type ResultatKalla } from './resultat.js';
+import {
+  elevKurva, elevLektionstest, elevNarvaro, provTillfallen, trendFor,
+  type DashboardFilter, type KurvPunkt, type ProvTillfalle, type Trend,
+} from './dashboard.js';
+import { trendkoll } from './trendkoll.js';
+import { aterkommandeFel, delkapitelSegment, type BegreppsFel, type SegmentTillfalle } from './delkapiteltrend.js';
+import { elevrapport, type Elevrapport } from './elevrapport.js';
+
+export interface KallaSammanfattning {
+  kalla: ResultatKalla;
+  namn: string;
+  snittProcent: number | null;
+  krav: number | null;
+  /** Andel av elevens prov i källan som klarade kravet. */
+  andelKlarade: number | null;
+  antal: number;
+  trend: Trend | null;
+  /** Klassens snitt i samma källa, för jämförelse. */
+  klassSnitt: number | null;
+}
+
+export interface Rad {
+  /** Kort rubrik, t.ex. 'Läxförhören håller'. */
+  rubrik: string;
+  /** Förklarande mening i löptext. */
+  text: string;
+  /** 'bra' | 'okej' | 'oro' — styr färg i utskriften. */
+  ton: 'bra' | 'okej' | 'oro';
+}
+
+
+export interface Elevanalys {
+  elev: Elev;
+  amneNamn: string;
+  period: { fran: string | null; till: string | null };
+  kurva: KurvPunkt[];
+  tillfallen: ProvTillfalle[];
+  kallor: KallaSammanfattning[];
+  narvaroProcent: number | null;
+  narvaroLektioner: number;
+  franvaroDatum: string[];
+  /** Exit − läxförhör i procentenheter (elevens egna lektioner). */
+  lektionsDiff: number | null;
+  /** Fel → rätt och rätt → fel på upprepade frågor. */
+  lart: number;
+  glomt: number;
+  segment: SegmentTillfalle[];
+  fastnat: BegreppsFel[];
+  rapport: Elevrapport | null;
+  /** Läget i punkter — det som ska stå under "Hur går det?". */
+  laget: Rad[];
+  /** Konkreta råd — det som ska stå under "Vad kan du göra?". */
+  rad: Rad[];
+  sammanfattning: string;
+}
+
+const KALLNAMN: Record<ResultatKalla, string> = {
+  'socrative-laxforhor': 'Läxförhör', 'socrative-exit': 'Exit tickets', 'socrative-ovning': 'Övningar',
+  magma: 'Magma', digiexam: 'Prov',
+};
+
+function snitt(v: number[]): number | null {
+  return v.length === 0 ? null : Math.round(v.reduce((a, b) => a + b, 0) / v.length);
+}
+
+/** Hela analysen för en elev i ett ämne. */
+export function elevanalys(s: Struktur, elevId: string, f: DashboardFilter & { amneId?: string }): Elevanalys {
+  const elev = s.elever.find((e) => e.id === elevId);
+  if (elev === undefined) throw new Error('Okänd elev.');
+  const amneNamn = s.amnen.find((a) => a.id === f.amneId)?.namn ?? 'Alla ämnen';
+  const egna = (s.resultat ?? []).filter((r) => r.elevId === elevId
+    && (f.amneId === undefined || r.amneId === f.amneId)
+    && (f.fran === undefined || r.datum >= f.fran) && (f.till === undefined || r.datum <= f.till));
+
+  const kallor: KallaSammanfattning[] = (['socrative-laxforhor', 'socrative-exit', 'socrative-ovning', 'magma', 'digiexam'] as ResultatKalla[])
+    .map((kalla) => {
+      const rs = egna.filter((r) => r.kalla === kalla);
+      const p = rs.map(resultatProcent).filter((x): x is number => x !== null);
+      const krav = kravFor(kalla);
+      const klass = provTillfallen(s, { ...f, kallor: [kalla] });
+      return {
+        kalla, namn: KALLNAMN[kalla], snittProcent: snitt(p), krav,
+        andelKlarade: krav === null || p.length === 0 ? null : Math.round((p.filter((x) => x >= krav).length / p.length) * 100),
+        antal: p.length, trend: trendFor(p),
+        klassSnitt: snitt(klass.map((t) => t.snittProcent).filter((x): x is number => x !== null)),
+      };
+    }).filter((k) => k.antal > 0);
+
+  const narvaro = elevNarvaro(s, f).find((n) => n.elev.id === elevId) ?? null;
+  const lekt = elevLektionstest(s, f).find((l) => l.elev.id === elevId) ?? null;
+  const tk = trendkoll(s, { klassId: f.klassId, ...(f.amneId !== undefined ? { amneId: f.amneId } : {}) });
+  const tkElev = tk.elever.find((e) => e.elev.id === elevId) ?? null;
+  const delF = { klassId: f.klassId, ...(f.amneId !== undefined ? { amneId: f.amneId } : {}), ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) };
+  const segment = delkapitelSegment(s, { ...delF, elevId });
+  const fastnat = aterkommandeFel(s, elevId, delF);
+  let rapport: Elevrapport | null = null;
+  if (f.amneId !== undefined) {
+    try { rapport = elevrapport(s, elevId, f.amneId, { ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) }); } catch { rapport = null; }
+  }
+
+  // ── Läget ────────────────────────────────────────────────
+  const laget: Rad[] = [];
+  const lax = kallor.find((k) => k.kalla === 'socrative-laxforhor');
+  const exit = kallor.find((k) => k.kalla === 'socrative-exit');
+  if (lax !== undefined && lax.snittProcent !== null) {
+    const over = lax.krav !== null && lax.snittProcent >= lax.krav;
+    laget.push({
+      ton: over ? 'bra' : lax.snittProcent >= 75 ? 'okej' : 'oro',
+      rubrik: over ? 'Läxförhören sitter' : 'Läxförhören behöver mer tid',
+      text: `Snittet på läxförhören är ${lax.snittProcent} %${lax.krav !== null ? ` mot kravet ${lax.krav} %` : ''}`
+        + `${lax.klassSnitt !== null ? ` (klassen ${lax.klassSnitt} %)` : ''}. `
+        + `Läxförhören är kumulativa: varje nytt förhör tar med begreppen från de tidigare, så resultatet visar hur mycket du har kvar från hela kapitlet.`
+        + `${lax.trend === 'upp' ? ' Kurvan pekar uppåt.' : lax.trend === 'ned' ? ' Kurvan pekar nedåt.' : ''}`,
+    });
+  }
+  if (exit !== undefined && exit.snittProcent !== null) {
+    const over = exit.krav !== null && exit.snittProcent >= exit.krav;
+    laget.push({
+      ton: over ? 'bra' : exit.snittProcent >= 60 ? 'okej' : 'oro',
+      rubrik: over ? 'Du tar till dig lektionerna' : 'Lektionsinnehållet fastnar inte helt',
+      text: `Exit tickets ligger på ${exit.snittProcent} %${exit.krav !== null ? ` mot kravet ${exit.krav} %` : ''}`
+        + `${exit.klassSnitt !== null ? ` (klassen ${exit.klassSnitt} %)` : ''}. Exit ticket görs i slutet av lektionen och mäter dagens innehåll.`,
+    });
+  }
+  if (lekt?.diffSnitt !== null && lekt !== null) {
+    const d = lekt.diffSnitt;
+    laget.push({
+      ton: d >= 5 ? 'bra' : d <= -5 ? 'oro' : 'okej',
+      rubrik: d >= 5 ? 'Lektionerna lyfter dig' : d <= -5 ? 'Du tappar under lektionen' : 'Jämnt före och efter lektionen',
+      text: `Skillnaden mellan exit ticket och läxförhör är i snitt ${d > 0 ? '+' : ''}${d} procentenheter. `
+        + (d >= 5 ? 'Du kan mer efter lektionen än före — genomgångarna fungerar för dig.'
+          : d <= -5 ? 'Du svarar sämre i slutet av lektionen än i början. Det brukar handla om att koncentrationen tar slut eller att det nya innehållet inte hann landa.'
+            : 'Du ligger ungefär lika före och efter lektionen.'),
+    });
+  }
+  if (narvaro?.narvaroProcent !== null && narvaro !== null) {
+    laget.push({
+      ton: narvaro.narvaroProcent >= 90 ? 'bra' : narvaro.narvaroProcent >= 80 ? 'okej' : 'oro',
+      rubrik: narvaro.narvaroProcent >= 90 ? 'Du är med på lektionerna' : 'Frånvaron påverkar',
+      text: `Du har deltagit i ${narvaro.narvarande} av ${narvaro.lektioner} lektioner (${narvaro.narvaroProcent} %).`
+        + (narvaro.franvaroDatum.length > 0 ? ` Frånvaro: ${narvaro.franvaroDatum.join(', ')}.` : ''),
+    });
+  }
+  if (tkElev !== null && (tkElev.lart > 0 || tkElev.glomt > 0)) {
+    laget.push({
+      ton: tkElev.netto > 0 ? 'bra' : tkElev.netto < 0 ? 'oro' : 'okej',
+      rubrik: tkElev.netto > 0 ? 'Du lär dig mer än du glömmer' : tkElev.netto < 0 ? 'Du glömmer mer än du lär dig' : 'Lika mycket lärt som glömt',
+      text: `På frågor som återkommit har ${tkElev.lart} svar gått från fel till rätt och ${tkElev.glomt} från rätt till fel.`,
+    });
+  }
+  const svaga = segment.length === 0 ? [] : (segment[segment.length - 1].segment ?? []).filter((x) => x.procent !== null && x.procent < 70);
+  if (svaga.length > 0) {
+    laget.push({
+      ton: 'oro', rubrik: 'Delar som halkat efter',
+      text: `I det senaste förhöret låg ${svaga.map((x) => `${x.kod} på ${x.procent} %`).join(', ')}. Det är de delkapitlen som drar ner helheten.`,
+    });
+  }
+
+  // ── Råd ──────────────────────────────────────────────────
+  const rad: Rad[] = [];
+  if (fastnat.length > 0) {
+    rad.push({
+      ton: 'oro', rubrik: `Börja med ${Math.min(3, fastnat.length)} begrepp`,
+      text: `Dessa har du svarat fel på minst två gånger: ${fastnat.slice(0, 5).map((b) => b.fraga).join(' · ')}. `
+        + 'Skriv en egen förklaring till varje, med ett exempel. De försvinner ur listan när du svarat rätt på dem två gånger i rad.',
+    });
+  }
+  if (rapport !== null) {
+    const ova = rapport.kapitel.flatMap((k) => k.delkapitel.filter((d) => d.status === 'ova'));
+    if (ova.length > 0) {
+      rad.push({
+        ton: 'okej', rubrik: 'Repetera dessa delkapitel',
+        text: `${ova.map((d) => `${d.kod} ${d.namn}`).join(', ')}. Läs sammanfattningen och gå igenom begreppen innan nästa läxförhör.`,
+      });
+    }
+    const filmer = rapport.kapitel.flatMap((k) => k.filmer).slice(0, 4);
+    if (filmer.length > 0) {
+      rad.push({ ton: 'okej', rubrik: 'Se filmerna', text: filmer.map((x) => `${x.titel} (${x.for})`).join(' · ') });
+    }
+  }
+  if (lax !== undefined && lax.krav !== null && lax.snittProcent !== null && lax.snittProcent < lax.krav) {
+    rad.push({
+      ton: 'okej', rubrik: 'Plugga begreppen i flera omgångar',
+      text: 'Eftersom läxförhören är kumulativa räcker det inte att läsa dagen före. Gå igenom alla tidigare delkapitels begrepp i tio minuter före varje läxförhör — det du redan kan går snabbt, och du upptäcker vad som glidit iväg.',
+    });
+  }
+  if (lekt?.diffSnitt !== null && lekt !== null && lekt.diffSnitt <= -5) {
+    rad.push({
+      ton: 'okej', rubrik: 'Fånga upp lektionens slut',
+      text: 'Skriv tre rader om vad lektionen handlade om innan du lämnar salen, och fråga direkt när något är oklart — exit ticket kommer på samma innehåll.',
+    });
+  }
+  if (narvaro !== null && narvaro.narvaroProcent !== null && narvaro.narvaroProcent < 80) {
+    rad.push({
+      ton: 'oro', rubrik: 'Ta igen de missade lektionerna',
+      text: `Du saknar ${narvaro.lektioner - narvaro.narvarande} lektioner. Be om materialet för ${narvaro.franvaroDatum.slice(0, 3).join(', ')} och gör förhören i efterhand — de räknas.`,
+    });
+  }
+  if (tkElev !== null && tkElev.netto < 0) {
+    rad.push({
+      ton: 'okej', rubrik: 'Repetera med mellanrum',
+      text: 'Du kan sakerna när du lär dig dem men tappar dem senare. Repetera samma begrepp efter en dag, efter en vecka och efter en månad i stället för allt på en gång.',
+    });
+  }
+  if (rad.length === 0) {
+    rad.push({ ton: 'bra', rubrik: 'Fortsätt som du gör', text: 'Inget i siffrorna pekar ut något som behöver ändras just nu. Håll i rutinen med begreppen före varje läxförhör.' });
+  }
+
+  const helhet = snitt(egna.map(resultatProcent).filter((x): x is number => x !== null));
+  const sammanfattning = kallor.length === 0
+    ? `${elev.namn} har inga resultat i urvalet.`
+    : `${elev.namn} ligger på ${helhet ?? '—'} % sammantaget i ${amneNamn}`
+      + `${lax?.snittProcent !== undefined && lax.snittProcent !== null ? `, läxförhör ${lax.snittProcent} %` : ''}`
+      + `${exit?.snittProcent !== undefined && exit.snittProcent !== null ? ` och exit tickets ${exit.snittProcent} %` : ''}`
+      + `${narvaro?.narvaroProcent !== undefined && narvaro.narvaroProcent !== null ? `, med ${narvaro.narvaroProcent} % närvaro` : ''}.`;
+
+  return {
+    elev, amneNamn,
+    period: { fran: f.fran ?? null, till: f.till ?? null },
+    kurva: elevKurva(s, elevId, f),
+    tillfallen: provTillfallen(s, f),
+    kallor,
+    narvaroProcent: narvaro?.narvaroProcent ?? null,
+    narvaroLektioner: narvaro?.lektioner ?? 0,
+    franvaroDatum: narvaro?.franvaroDatum ?? [],
+    lektionsDiff: lekt?.diffSnitt ?? null,
+    lart: tkElev?.lart ?? 0,
+    glomt: tkElev?.glomt ?? 0,
+    segment, fastnat, rapport, laget, rad, sammanfattning,
+  };
+}

@@ -24,7 +24,7 @@ import {
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   arFilImporterad, arRatt, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
-  delkapitelSegment, fragematris, filtreraFragor, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
+  delkapitelSegment, fragematris, filtreraFragor, elevanalys, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
@@ -3578,8 +3578,11 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
 /** Elevrapport: vad eleven inte lärt sig — begrepp med förklaring, sammanfattning per kapitel, filmer. Kopieras som text till Teams. */
 function ElevrapportVy({ s, elevId, amneId, period }: { s: Struktur; elevId: string; amneId: string; period?: { fran?: string; till?: string } }) {
   const [kopierat, setKopierat] = useState(false);
+  const [skriver, setSkriver] = useState(false);
+  const elev = s.elever.find((e) => e.id === elevId);
   let rapport: ReturnType<typeof elevrapport>;
   try { rapport = elevrapport(s, elevId, amneId, period); } catch { return null; }
+  if (elev === undefined) return null;
   const STATUS = { klarat: ['✓ klarat', 'ok'], ova: ['✗ öva', 'ej'], 'ej-testat': ['– ej testat', ''] } as const;
   const kopiera = () => {
     const text = elevrapportText(rapport);
@@ -3592,6 +3595,14 @@ function ElevrapportVy({ s, elevId, amneId, period }: { s: Struktur; elevId: str
         <b>📄 Elevrapport — {rapport.amneNamn}</b>{rapport.bokNamn !== null && <small className="muted">{rapport.bokNamn}</small>}
         <span className="spacer" />
         <button className="btn sm" onClick={kopiera}>{kopierat ? '✓ kopierad' : '📋 Kopiera som text'}</button>
+        <button className="btn sm" disabled={skriver} onClick={() => {
+          setSkriver(true);
+          // docx laddas först vid klick — det är ett tungt paket
+          void import('./elevrapportWord.js')
+            .then(({ elevrapportTillWord }) => elevrapportTillWord(elevanalys(s, elevId, { klassId: elev.klassId, amneId, ...(period ?? {}) })))
+            .catch(() => window.alert('Rapporten kunde inte skapas.'))
+            .finally(() => setSkriver(false));
+        }}>{skriver ? '… skapar' : '📝 Word'}</button>
       </div>
       <p className="st-rapport-ingress">{rapport.sammanfattning}</p>
       {rapport.kapitel.length === 0 && <p className="muted small">{rapport.bokNamn === null ? 'Ämnet saknar bok — koppla en bok under Struktur så kan förhören knytas till delkapitel och begrepp.' : 'Inga förhör i urvalet går att knyta till bokens delkapitel.'}</p>}
