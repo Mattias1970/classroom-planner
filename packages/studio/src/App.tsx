@@ -67,7 +67,7 @@ function valdFinns(s: Struktur, v: Vald): boolean {
 export function App() {
   const [s, setS] = useState<Struktur>(() => lasStruktur());
   const [vald, setVald] = useState<Vald>(null);
-  const [huvudvy, setHuvudvy] = useState<'struktur' | 'planering' | 'kalender' | 'superteach'>('struktur');
+  const [huvudvy, setHuvudvy] = useState<'struktur' | 'planering' | 'kalender' | 'superteach' | 'rapporter'>('struktur');
   const [lektionsHopp, setLektionsHopp] = useState<{ amneId: string; i: number; n: number } | null>(null);
   const [tema, setTema] = useState<string>(() => {
     try { return window.localStorage.getItem('classroom-planner.studio.tema') ?? 'varm'; } catch { return 'varm'; }
@@ -102,6 +102,7 @@ export function App() {
           <button className={`tflik ${huvudvy === 'planering' ? 'act' : ''}`} onClick={() => setHuvudvy('planering')}>📋 Planering</button>
           <button className={`tflik ${huvudvy === 'kalender' ? 'act' : ''}`} onClick={() => setHuvudvy('kalender')}>📆 Kalender</button>
           <button className={`tflik ${huvudvy === 'superteach' ? 'act' : ''}`} onClick={() => setHuvudvy('superteach')}>📊 SuperTeach</button>
+          <button className={`tflik ${huvudvy === 'rapporter' ? 'act' : ''}`} onClick={() => setHuvudvy('rapporter')}>📄 Rapporter</button>
         </nav>
         <span className="spacer" />
         <button className="btn sec" onClick={angra} title="Ångra senaste ändring (upp till 20 steg)">↩ Ångra</button>
@@ -125,9 +126,10 @@ export function App() {
           }} />
         </label>
       </header>
-      {huvudvy === 'kalender' || huvudvy === 'superteach' ? (
+      {huvudvy === 'kalender' || huvudvy === 'superteach' || huvudvy === 'rapporter' ? (
         <main className="panel full">
           {msg && <p className="status">{msg}</p>}
+          {huvudvy === 'rapporter' && <RapportVy s={s} />}
           {huvudvy === 'superteach' && <SuperTeachVy s={s} kor={kor} />}
           {huvudvy === 'kalender' && <KalenderVy s={s} onOppnaLektion={(amneId, i) => { setLektionsHopp({ amneId, i, n: Date.now() }); setHuvudvy('planering'); }} />}
         </main>
@@ -3652,6 +3654,134 @@ function ElevrapportVy({ s, elevId, amneId, period }: { s: Struktur; elevId: str
  * och BAM-kraven (läxförhör ≥ 90 %, exit ≥ 70 %). Varningar när
  * planeringens förhör saknar resultat.
  */
+/**
+ * 📄 Rapporter — en elev i taget: hur det går, vad eleven kan göra, och
+ * hela underlaget. Samma analys som Word-filen, fast på skärmen.
+ */
+function RapportVy({ s }: { s: Struktur }) {
+  const klasser = [...s.klasser].sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
+  const [klassId, setKlassId] = useState(klasser[0]?.id ?? '');
+  const klass = klasser.find((k) => k.id === klassId) ?? klasser[0];
+  const amnen = s.amnen.filter((a) => a.klassId === klass?.id);
+  const [amneId, setAmneId] = useState('');
+  const [periodText, setPeriodText] = useState('');
+  const [elevId, setElevId] = useState('');
+  const [sok, setSok] = useState('');
+  const [skriver, setSkriver] = useState('');
+
+  if (klass === undefined) return <div className="card"><h2>📄 Rapporter</h2><p className="muted">Skapa klasser och elever under 🗂 Struktur först.</p></div>;
+  const valtAmne = amneId !== '' ? amneId : amnen[0]?.id ?? '';
+  const period = tolkaVeckor(periodText);
+  const f: DashboardFilter = { klassId: klass.id, ...(valtAmne !== '' ? { amneId: valtAmne } : {}), ...(period ?? {}) };
+  const elever = sokElever(s, klass.id, sok);
+  const analyser = elever.map((e) => ({ elev: e, a: elevanalys(s, e.id, f) }));
+  const vald = analyser.find((x) => x.elev.id === elevId) ?? null;
+  const tillWord = (a: ReturnType<typeof elevanalys>, id: string) => {
+    setSkriver(id);
+    void import('./elevrapportWord.js')
+      .then(({ elevrapportTillWord }) => elevrapportTillWord(a))
+      .catch(() => window.alert('Rapporten kunde inte skapas.'))
+      .finally(() => setSkriver(''));
+  };
+  const kalla = (a: ReturnType<typeof elevanalys>, k: ResultatKalla) => a.kallor.find((x) => x.kalla === k)?.snittProcent ?? null;
+
+  return (
+    <div className="card superteach st-dash">
+      <div className="rad">
+        <h2>📄 Rapporter</h2>
+        <small className="muted">en läsbar rapport per elev — hur det går, vad eleven kan göra, och underlaget. Kan skrivas ut till Word.</small>
+      </div>
+      <div className="rad st-filterrad">
+        <label>Klass:{' '}
+          <select aria-label="Klass för rapport" value={klass.id} onChange={(e) => { setKlassId(e.target.value); setAmneId(''); setElevId(''); }}>
+            {klasser.map((k) => <option key={k.id} value={k.id}>{k.namn}</option>)}
+          </select></label>
+        <label>Ämne:{' '}
+          <select aria-label="Ämne för rapport" value={valtAmne} onChange={(e) => { setAmneId(e.target.value); setElevId(''); }}>
+            {amnen.map((a) => <option key={a.id} value={a.id}>{a.namn}</option>)}
+          </select></label>
+        <label>Period:{' '}
+          <input aria-label="Period för rapport" placeholder="v.35–43" value={periodText} onChange={(e) => setPeriodText(e.target.value)} style={{ width: 90 }} /></label>
+        <label>🔎 <input aria-label="Sök elev för rapport" placeholder="Sök elev…" value={sok} onChange={(e) => setSok(e.target.value)} /></label>
+        <span className="spacer" />
+        <small className="muted">{elever.length} elever</small>
+      </div>
+
+      {vald === null ? (
+        <div className="uppg-kort st-widget">
+          <b>Välj elev</b> <small className="muted">klicka på en rad för att öppna rapporten</small>
+          <div className="st-scroll" style={{ maxHeight: 560 }}>
+            <table className="tbl st-tabell">
+              <thead><tr><th>Elev</th><th>Läxförhör</th><th>Exit</th><th>Närvaro</th><th>Fastnat</th><th>Läget</th><th></th></tr></thead>
+              <tbody>{analyser.map(({ elev, a }) => {
+                const oro = a.laget.filter((r) => r.ton === 'oro').length;
+                return (
+                  <tr key={elev.id} className="st-rapportrad" onClick={() => setElevId(elev.id)}>
+                    <td><button className="linkbtn">{elev.namn}</button></td>
+                    <td>{kalla(a, 'socrative-laxforhor') ?? '—'} %</td>
+                    <td>{kalla(a, 'socrative-exit') ?? '—'} %</td>
+                    <td className={a.narvaroProcent !== null && a.narvaroProcent < 80 ? 'st-narv-lag' : undefined}>{a.narvaroProcent ?? '—'} %</td>
+                    <td className={a.fastnat.length > 0 ? 'st-diff ned' : 'muted'}>{a.fastnat.length}</td>
+                    <td>{oro === 0 ? <span className="st-krav ok">inget att oroa sig för</span> : <span className="st-krav ej">{oro} sak{oro > 1 ? 'er' : ''} att ta tag i</span>}</td>
+                    <td><button className="btn sm" disabled={skriver === elev.id} onClick={(ev) => { ev.stopPropagation(); tillWord(a, elev.id); }}>{skriver === elev.id ? '…' : '📝 Word'}</button></td>
+                  </tr>
+                );
+              })}</tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <div className="uppg-kort st-widget st-rapportvy">
+          <div className="rad">
+            <button className="btn sm" onClick={() => setElevId('')}>← Alla elever</button>
+            <b>{vald.elev.namn}</b> <small className="muted">{vald.a.amneNamn}{period !== null ? ` · v.${period.veckaFran}–${period.veckaTill}` : ''}</small>
+            <span className="spacer" />
+            <button className="btn" disabled={skriver === vald.elev.id} onClick={() => tillWord(vald.a, vald.elev.id)}>{skriver === vald.elev.id ? '… skapar' : '📝 Skriv ut till Word'}</button>
+          </div>
+          <p className="st-rapport-ingress">{vald.a.sammanfattning}</p>
+
+          <h3>Hur går det?</h3>
+          {vald.a.laget.length === 0 ? <p className="muted small">Inga resultat i perioden.</p> : (
+            <div className="st-punkter">{vald.a.laget.map((r, i) => (
+              <div key={i} className={`st-punkt-kort ${r.ton}`}><b>{r.rubrik}</b><p>{r.text}</p></div>
+            ))}</div>
+          )}
+
+          {vald.a.kurva.length > 0 && (<>
+            <h3>Resultat över tid</h3>
+            <LinjeDiagram hojd={280} visaVarden
+              tillfallen={vald.a.kurva.map((p, i) => ({ etikett: [`T${i + 1}`, p.datum.slice(5)], titel: `${p.prov} · ${p.datum}` }))}
+              serier={[{ namn: vald.elev.namn, varden: vald.a.kurva.map((p) => p.procent), farg: KORT_FARG['socrative-exit'] }]}
+              kravLinjer={[{ procent: 90, namn: 'läxförhör 90 %' }, { procent: 70, namn: 'exit 70 %' }]} />
+            <TestLista tillfallen={vald.a.tillfallen} />
+          </>)}
+
+          <h3>Vad kan du göra?</h3>
+          <div className="st-punkter">{vald.a.rad.map((r, i) => (
+            <div key={i} className={`st-punkt-kort ${r.ton}`}><b>{r.rubrik}</b><p>{r.text}</p></div>
+          ))}</div>
+
+          {vald.a.fastnat.length > 0 && (<>
+            <h3>Begrepp att träna på</h3>
+            <table className="tbl st-tabell">
+              <thead><tr><th>Begrepp</th><th>Del</th><th>Fel</th><th>Historik</th></tr></thead>
+              <tbody>{vald.a.fastnat.map((b) => (
+                <tr key={b.fraga}>
+                  <td><div className="st-provnamn" title={b.fraga}>{b.fraga}</div></td>
+                  <td>{b.kod}</td><td className="st-diff ned">{b.antalFel}</td>
+                  <td>{b.historik.map((h, i) => <span key={i} className={`st-tk-steg ${h.ratt ? 'upp' : 'ned'}`} title={`${h.prov} ${h.datum}`}>{h.ratt ? '✓' : '✗'}</span>)}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </>)}
+
+          {valtAmne !== '' && <ElevrapportVy s={s} elevId={vald.elev.id} amneId={valtAmne} period={period === null ? undefined : { fran: f.fran, till: f.till }} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: string) => void }) {
   const klasser = [...s.klasser].sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
   const [klassId, setKlassId] = useState(klasser[0]?.id ?? '');

@@ -705,3 +705,14 @@ input.fel { border-color: #B71C1C; }
 /* Del 81: frågematrisens verktygsrad */
 .st-fmverktyg { gap: 6px; flex-wrap: wrap; margin: 6px 0 4px; align-items: center; }
 .st-fmverktyg .chipbtn { font-size: 12px; }
+
+/* Del 83: rapportvyn */
+.st-rapportrad { cursor: pointer; }
+.st-rapportrad:hover { background: #F2F6FC; }
+.st-rapportvy h3 { margin: 16px 0 6px; font-size: 15px; }
+.st-punkter { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; }
+.st-punkt-kort { border-radius: 12px; padding: 10px 14px; border: 1px solid var(--ram); }
+.st-punkt-kort.bra { background: #E8F5E9; border-color: #A5D6A7; }
+.st-punkt-kort.okej { background: #FFF8E1; border-color: #FFE082; }
+.st-punkt-kort.oro { background: #FFEBEE; border-color: #EF9A9A; }
+.st-punkt-kort p { margin: 4px 0 0; font-size: 13px; }

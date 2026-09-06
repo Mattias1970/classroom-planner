@@ -1985,3 +1985,47 @@ describe('👥 Socrative-roster', () => {
     expect(host.querySelector('input[aria-label="Socrative-roster"]')).not.toBeNull();
   });
 });
+
+describe('📄 Rapporter', () => {
+  it('egen huvudflik: elevlista med nyckeltal → rapport med läget, råd och Word-knapp', () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    skriv(input(host, 'Tjänstens namn'), 'NO');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 NO').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    skriv(input(host, 'Elevens namn'), 'Anna Berg');
+    act(() => { knapp(host, '➕ Lägg till elev').click(); });
+    valj(select(host, 'Ämne'), 'Biologi');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+
+    // Resultat via SuperTeach
+    act(() => { knapp(host, '📊 SuperTeach').click(); });
+    valj(select(host, 'SuperTeach ämne'), lasStruktur().amnen[0].id);
+    valj(select(host, 'Källa'), 'socrative-exit');
+    skriv(input(host, 'Provnamn'), 'Quiz 4.1a');
+    skriv(input(host, 'Provdatum'), '2026-09-02');
+    skrivArea(host.querySelector('textarea[aria-label="Resultatrader"]')!, 'Anna Berg\t5\t10');
+    act(() => { knapp(host, '💾 Spara resultat').click(); });
+
+    act(() => { knapp(host, '📄 Rapporter').click(); });
+    expect(host.textContent).toContain('en läsbar rapport per elev');
+    const rad = host.querySelector('.st-rapportrad')!;
+    expect(rad.textContent).toContain('Anna Berg');
+    expect(rad.textContent).toContain('50 %'); // exit-snittet
+    expect(rad.textContent).toContain('att ta tag i');
+
+    act(() => { (rad as HTMLElement).click(); });
+    expect(host.textContent).toContain('Hur går det?');
+    expect(host.textContent).toContain('Vad kan du göra?');
+    expect(host.querySelectorAll('.st-punkt-kort').length).toBeGreaterThan(1);
+    expect(knapp(host, '📝 Skriv ut till Word')).not.toBeNull();
+    act(() => { knapp(host, '← Alla elever').click(); });
+    expect(host.querySelector('.st-rapportrad')).not.toBeNull();
+  });
+});
