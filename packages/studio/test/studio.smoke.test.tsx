@@ -1448,7 +1448,18 @@ describe('📊 SuperTeach', () => {
     expect(host.querySelector('.st-led')!.textContent).toContain('rumsnamn som Biologi41');
     expect(host.querySelector('.st-fastnat')!.textContent).toContain('Inga begrepp som fastnat');
 
-    expect(host.querySelector('.st-fragematris')!.textContent).toContain('Kräver förhör med frågedata');
+    const fmKort = host.querySelector('.st-fragematris')!;
+    expect(fmKort.textContent).toContain('Kräver förhör med frågedata');
+    // Typfilter och sorteringsordning finns även utan frågedata
+    expect([...fmKort.querySelectorAll('.st-fmverktyg .chipbtn')].map((b) => b.textContent))
+      .toEqual(['Alla', 'Läxförhör', 'Exit', 'Övning', '↑ Äldsta först']);
+    const ordning = [...fmKort.querySelectorAll('.st-fmverktyg .chipbtn')].pop() as HTMLButtonElement;
+    act(() => { ordning.click(); });
+    expect(fmKort.textContent).toContain('↓ Senaste först');
+    const laxKnapp = [...fmKort.querySelectorAll('.st-fmverktyg .chipbtn')].find((b) => b.textContent === 'Läxförhör')!;
+    act(() => { (laxKnapp as HTMLButtonElement).click(); });
+    expect(laxKnapp.getAttribute('aria-pressed')).toBe('true');
+    expect(fmKort.querySelector('.st-fmverktyg .chipbtn')!.getAttribute('aria-pressed')).toBe('false'); // 'Alla' släcks
 
     // Trendkoll: utan frågedata (inklistrade resultat) förklaras varför
     expect(host.querySelector('.st-trendkoll')!.textContent).toContain('kräver att samma fråga ställs igen');

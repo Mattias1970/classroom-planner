@@ -701,3 +701,7 @@ input.fel { border-color: #B71C1C; }
 .st-forklaring p { margin: 6px 0; }
 .st-forklaring ul { margin: 4px 0; padding-left: 20px; }
 .st-forklaring li { margin-bottom: 3px; }
+
+/* Del 81: frågematrisens verktygsrad */
+.st-fmverktyg { gap: 6px; flex-wrap: wrap; margin: 6px 0 4px; align-items: center; }
+.st-fmverktyg .chipbtn { font-size: 12px; }

@@ -2119,6 +2119,7 @@ const MANADSNAMN = ['januari','februari','mars','april','maj','juni','juli','aug
 const KALLNAMN: Record<ResultatKalla, string> = {
   'socrative-laxforhor': 'Läxförhör', 'socrative-exit': 'Exit tickets', 'socrative-ovning': 'Övning', magma: 'Magma test', digiexam: 'DigiExam prov',
 };
+const FM_TYPER: ResultatKalla[] = ['socrative-laxforhor', 'socrative-exit', 'socrative-ovning'];
 const ALLA_KALLOR: ResultatKalla[] = ['socrative-laxforhor', 'socrative-exit', 'socrative-ovning', 'magma', 'digiexam'];
 
 // ── SuperTeach-dashboard (Del 57) ─────────────────────────────
@@ -2813,6 +2814,8 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
   const [fMin, setFMin] = useState(0);
   const [fMax, setFMax] = useState(50);
   const [valdaTest, setValdaTest] = useState<string[]>([]);
+  const [fmTyper, setFmTyper] = useState<ResultatKalla[]>([]);
+  const [fmNyastForst, setFmNyastForst] = useState(false);
   const zKlass = useZoom();
   const zNorm = useZoom(ZOOM_NORM);
   const zVecko = useZoom();
@@ -2837,7 +2840,11 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
   const delFarger = new Map([...new Set(led.flatMap((t) => t.segment.map((x) => x.kod)))].sort((a, b) => a.localeCompare(b, 'sv', { numeric: true })).map((kod, i) => [kod, DEL_FARGER[i % DEL_FARGER.length]]));
   const klassFastnat = aterkommandeFelKlass(s, tkFilter);
   const fm = fragematris(s, ledElev === null ? tkFilter : { ...tkFilter, elevId: ledElev });
-  const traffar = filtreraFragor(fm, { min: fMin, max: fMax, ...(valdaTest.length > 0 ? { tillfallen: valdaTest } : {}) });
+  // Frågematrisens rader: typfilter (tomt = alla) och vald datumordning
+  const fmRader = fm.rader
+    .filter((r) => fmTyper.length === 0 || fmTyper.includes(r.kalla))
+    .sort((a, b) => (fmNyastForst ? b.datum.localeCompare(a.datum) || b.nyckel.localeCompare(a.nyckel) : a.datum.localeCompare(b.datum) || a.nyckel.localeCompare(b.nyckel)));
+  const traffar = filtreraFragor({ ...fm, rader: fmRader }, { min: fMin, max: fMax, ...(valdaTest.length > 0 ? { tillfallen: valdaTest } : {}) });
   const tk = trendkoll(s, { klassId, ...(amneId !== '' ? { amneId } : {}), ...(kallor !== undefined ? { kallor } : {}), ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) });
   const normerad = normeradSpridning(s, f);
   const klusterK = klusterKurvor(s, f);
@@ -3254,6 +3261,20 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
           <button className={`chipbtn ${ledElev === null ? 'act' : ''}`} onClick={() => setLedElev(null)}>Klassen</button>
           {ledElev !== null && <span className="small">{s.elever.find((e) => e.id === ledElev)?.namn}</span>}
         </div>
+        <div className="rad st-fmverktyg">
+          <small className="muted">Typ:</small>
+          <button className={`chipbtn ${fmTyper.length === 0 ? 'act' : ''}`} title="Visa alla typer" aria-pressed={fmTyper.length === 0}
+            onClick={() => setFmTyper([])}>Alla</button>
+          {FM_TYPER.map((k) => (
+            <button key={k} className={`chipbtn ${fmTyper.includes(k) ? 'act' : ''}`} aria-pressed={fmTyper.includes(k)}
+              onClick={() => setFmTyper(fmTyper.includes(k) ? fmTyper.filter((x) => x !== k) : [...fmTyper, k])}>{TYPNAMN[k]}</button>
+          ))}
+          <span className="spacer" />
+          <small className="muted">Ordning:</small>
+          <button className="chipbtn act" title="Byt sorteringsordning" onClick={() => setFmNyastForst(!fmNyastForst)}>
+            {fmNyastForst ? '↓ Senaste först' : '↑ Äldsta först'}
+          </button>
+        </div>
         {fm.fragor.length === 0 ? <p className="muted small">Kräver förhör med frågedata (filimport).</p> : (<>
           <div className="st-scroll">
             <table className="tbl st-fmtabell">
@@ -3268,7 +3289,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
                   <th key={fr.nr} className={`st-fmnr${fm.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}`} title={`${fr.kod} · ${fr.fraga}`}>{fr.nr}</th>
                 ))}</tr>
               </thead>
-              <tbody>{fm.rader.map((rad) => (
+              <tbody>{fmRader.map((rad) => (
                 <tr key={rad.nyckel}>
                   <td className="small muted">v{isoVeckaLbl(rad.datum)}</td>
                   <td className="small muted">{kortDatum(rad.datum)}</td>
@@ -3297,7 +3318,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
               <b>Fråga {vald.nr}</b> <span className="chip">{vald.kod}</span> <small className="muted">först ställd i {vald.ursprung}</small>
               <p>{vald.fraga}</p>
               <div className="small">
-                {fm.rader.map((rad, i) => { const c = rad.celler[fm.fragor.findIndex((x) => x.nr === vald.nr)]; return c === null ? null : (
+                {fmRader.map((rad, i) => { const c = rad.celler[fm.fragor.findIndex((x) => x.nr === vald.nr)]; return c === null ? null : (
                   <span key={i} className="st-fmhist" style={{ background: ratFarg(c.procent) }} title={`${rad.prov}: ${c.procent} %`}>{rad.prov}: {c.procent} %</span>
                 ); })}
               </div>
@@ -3315,7 +3336,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
             <div className="rad" style={{ gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
               <small className="muted">Tester:</small>
               <button className={`chipbtn ${valdaTest.length === 0 ? 'act' : ''}`} onClick={() => setValdaTest([])}>Alla</button>
-              {fm.rader.map((rad) => (
+              {fmRader.map((rad) => (
                 <button key={rad.nyckel} className={`chipbtn ${valdaTest.includes(rad.nyckel) ? 'act' : ''}`}
                   onClick={() => setValdaTest(valdaTest.includes(rad.nyckel) ? valdaTest.filter((x) => x !== rad.nyckel) : [...valdaTest, rad.nyckel])}>{rad.prov}</button>
               ))}
