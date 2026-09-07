@@ -598,7 +598,7 @@ input.fel { border-color: #B71C1C; }
 .st-diagram-yttre { width: 100%; min-width: 0; }
 .st-diagram-ram.bred { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
 .st-diagram-ram.bred .st-diagram { width: auto; max-width: none; flex: none; }
-.st-diagram-ram.gest { cursor: grab; touch-action: pan-x; }
+.st-diagram-ram.gest { cursor: grab; touch-action: pan-x pan-y; }
 .st-diagram-ram.gest.drar { cursor: grabbing; user-select: none; }
 .st-diagram-ram.gest .st-punkt { cursor: pointer; }
 /* Lugnare kort och paneler */

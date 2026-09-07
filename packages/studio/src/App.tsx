@@ -2426,14 +2426,8 @@ function useZoomGester(ref: React.RefObject<HTMLElement>, z: ReturnType<typeof u
   useEffect(() => {
     const el = ref.current;
     if (el === null) return;
-    const hjul = (ev: WheelEvent) => {
-      ev.preventDefault();
-      const zz = senaste.current;
-      if (ev.shiftKey || ev.ctrlKey || ev.metaKey) { zz.brdd(ev.deltaY < 0 ? 1.25 : 1 / 1.25); return; }
-      const box = el.getBoundingClientRect();
-      const ankare = Math.min(1, Math.max(0, (ev.clientY - box.top) / Math.max(1, box.height)));
-      zz.skala(ev.deltaY < 0 ? 1 / 1.2 : 1.2, ankare);
-    };
+    // Hjulet zoomar INTE: varje snurr gav en ny render av hela dashboarden och
+    // gjorde appen trög. Zoom sker via knapparna; hjulet får scrolla sidan.
     let drar = false; let senasteY = 0; let hojd = 1;
     const ned = (ev: PointerEvent) => {
       if (ev.button !== 0 || (ev.target as HTMLElement).closest('button,a,input,select') !== null) return;
@@ -2453,14 +2447,12 @@ function useZoomGester(ref: React.RefObject<HTMLElement>, z: ReturnType<typeof u
       if (el.hasPointerCapture(ev.pointerId)) el.releasePointerCapture(ev.pointerId);
     };
     const dubbel = () => senaste.current.aterstall();
-    el.addEventListener('wheel', hjul, { passive: false });
     el.addEventListener('pointerdown', ned);
     el.addEventListener('pointermove', ror);
     el.addEventListener('pointerup', upp);
     el.addEventListener('pointercancel', upp);
     el.addEventListener('dblclick', dubbel);
     return () => {
-      el.removeEventListener('wheel', hjul);
       el.removeEventListener('pointerdown', ned);
       el.removeEventListener('pointermove', ror);
       el.removeEventListener('pointerup', upp);
@@ -2494,12 +2486,12 @@ function ZoomKnappar({ z }: { z: ReturnType<typeof useZoom> }) {
   const bredd = zoom.yMax - zoom.yMin;
   return (
     <span className="st-zoom" role="group" aria-label="Zoom">
-      <button className="st-zoomknapp" title="Zooma in (hjulet gör samma sak)" aria-label="Zooma in" onClick={z.yIn} disabled={bredd <= MIN_SPANN + 0.5}>+</button>
+      <button className="st-zoomknapp" title="Zooma in" aria-label="Zooma in" onClick={z.yIn} disabled={bredd <= MIN_SPANN + 0.5}>+</button>
       <button className="st-zoomknapp" title="Zooma ut" aria-label="Zooma ut" onClick={z.yUt} disabled={bredd >= MAX_SPANN - 0.5}>−</button>
       <button className="st-zoomknapp" title="Panorera upp" aria-label="Panorera upp" onClick={() => z.panna(5)}>↑</button>
       <button className="st-zoomknapp" title="Panorera ner" aria-label="Panorera ner" onClick={() => z.panna(-5)}>↓</button>
       <span className="st-zoomspann">{Math.round(zoom.yMin)}–{Math.round(zoom.yMax)} %{zoom.xSkala > 1 ? ` · ${zoom.xSkala.toFixed(1)}×` : ''}</span>
-      <button className="st-zoomknapp" title="Bredda (Shift+hjul); scrolla sedan i sidled" aria-label="Bredda" onClick={() => z.brdd(1.5)} disabled={zoom.xSkala >= 4}>↔</button>
+      <button className="st-zoomknapp" title="Bredda; scrolla sedan i sidled" aria-label="Bredda" onClick={() => z.brdd(1.5)} disabled={zoom.xSkala >= 4}>↔</button>
       <button className="st-zoomknapp" title="Smalna" aria-label="Smalna" onClick={() => z.brdd(1 / 1.5)} disabled={zoom.xSkala <= 1}>↕</button>
       <button className="st-zoomknapp" title="Återställ (dubbelklick i diagrammet)" aria-label="Återställ zoom" onClick={z.aterstall}>⟲</button>
     </span>
@@ -3406,7 +3398,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
           <NormeradGraf z={zNorm} tillfallen={spridning} hojd={340} onKlick={(i) => onVisaProv(spridning[i].prov)}
             serier={[{ namn: klassNamn, farg: '#2f5aa8', band: normerad.map((t) => t.band), linje: normerad.map(() => 0), pa: true }]} />
           <TestLista tillfallen={spridning} />
-          <div className="st-zoomhjalp">Hjulet zoomar · Shift+hjul breddar · dra för att panorera · dubbelklick återställer</div>
+          <div className="st-zoomhjalp">Zooma med + och − · dra i diagrammet för att panorera · dubbelklick återställer</div>
           <div className="small muted">Snittet är 100 i varje tillfälle. Varje band är {NORM_BAND} procentenheter; tonen visar andelen elever i bandet (mörkast = flest). Yttersta kanten är ±{NORM_MAX}; elever utanför ligger i kantbandet.</div>
         </>) : klassLage === 'spridning' ? (<>
           <SpridningsGraf z={zKlass} tillfallen={spridning} hojd={320} onKlick={(i) => onVisaProv(spridning[i].prov)} />

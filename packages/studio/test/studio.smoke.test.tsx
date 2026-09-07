@@ -1403,10 +1403,12 @@ describe('📊 SuperTeach', () => {
     act(() => { zknapp('Smalna').click(); });
     expect(klasskort.querySelector('.st-diagram-ram.bred')).toBeNull();
     act(() => { zknapp('Bredda').click(); });
-    // Hjulet zoomar y, Shift+hjul breddar, dubbelklick återställer
+    // Hjulet ska INTE zooma (gjorde appen trög) — dubbelklick återställer
     const ram = klasskort.querySelector('.st-diagram-ram.gest')!;
+    act(() => { zknapp('Zooma in').click(); });
+    expect(spann()).not.toBe('70–130 %');
     act(() => { ram.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true, cancelable: true })); });
-    expect(spann()).not.toContain('70–130');
+    expect(spann()).not.toBe('70–130 %'); // oförändrat av hjulet
     act(() => { ram.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
     expect(spann()).toBe('70–130 %');
     act(() => { zknapp('Återställ zoom').click(); });
