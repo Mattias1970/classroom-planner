@@ -24,7 +24,7 @@ import {
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   arFilImporterad, arRatt, andraKalla, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
-  delkapitelSegment, fragematris, filtreraFragor, elevanalys, rapportOversikt, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
+  delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, rapportOversikt, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
@@ -2835,9 +2835,10 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
   const klassFastnat = aterkommandeFelKlass(s, tkFilter);
   const fm = fragematris(s, ledElev === null ? tkFilter : { ...tkFilter, elevId: ledElev });
   // Frågematrisens rader: typfilter (tomt = alla) och vald datumordning
-  const fmRader = fm.rader
+  const fmRader = [...fm.rader]
     .filter((r) => fmTyper.length === 0 || fmTyper.includes(r.kalla))
-    .sort((a, b) => (fmNyastForst ? b.datum.localeCompare(a.datum) || b.nyckel.localeCompare(a.nyckel) : a.datum.localeCompare(b.datum) || a.nyckel.localeCompare(b.nyckel)));
+    // Samma ordning som i kernel: datum → klockslag → läxförhör före exit före övning
+    .sort((a, b) => (fmNyastForst ? -jamforTillfalle(a, b) : jamforTillfalle(a, b)));
   const traffar = filtreraFragor({ ...fm, rader: fmRader }, { min: fMin, max: fMax, ...(valdaTest.length > 0 ? { tillfallen: valdaTest } : {}) });
   const tk = trendkoll(s, { klassId, ...(amneId !== '' ? { amneId } : {}), ...(kallor !== undefined ? { kallor } : {}), ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) });
   const normerad = normeradSpridning(s, f);

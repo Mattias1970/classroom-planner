@@ -204,3 +204,17 @@ describe('Del 86: klockslag och ordning inom en dag', async () => {
     expect(dagen[1].tid).toBe('09:50');
   });
 });
+
+describe('Del 87: klockslag styr ordningen inom dagen', async () => {
+  const { jamforTillfalle } = await import('../src/domain/delkapiteltrend.js');
+  const t = (tid: string, kalla: 'socrative-laxforhor' | 'socrative-exit', prov = 'p') =>
+    ({ datum: '2026-08-21', tid, kalla, prov });
+  it('tidigt före sent, oavsett typ', () => {
+    expect(jamforTillfalle(t('08:22', 'socrative-laxforhor'), t('09:27', 'socrative-exit'))).toBeLessThan(0);
+    expect(jamforTillfalle(t('09:27', 'socrative-exit'), t('08:22', 'socrative-laxforhor'))).toBeGreaterThan(0);
+    // Omvänd ordning = negerad jämförelse
+    const rader = [t('10:18', 'socrative-exit'), t('09:17', 'socrative-laxforhor'), t('08:31', 'socrative-exit')];
+    expect([...rader].sort(jamforTillfalle).map((x) => x.tid)).toEqual(['08:31', '09:17', '10:18']);
+    expect([...rader].sort((a, b) => -jamforTillfalle(a, b)).map((x) => x.tid)).toEqual(['10:18', '09:17', '08:31']);
+  });
+});

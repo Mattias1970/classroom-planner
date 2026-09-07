@@ -24,8 +24,11 @@ const TYP_ORDNING: Record<ResultatKalla, number> = {
   'socrative-laxforhor': 0, magma: 1, digiexam: 2, 'socrative-exit': 3, 'socrative-ovning': 4,
 };
 
+/** Det som behövs för att ordna ett tillfälle i tid. */
+export interface TidsNyckel { datum: string; tid?: string; kalla: ResultatKalla; prov: string }
+
 /** Kronologisk ordning: datum, sedan klockslag när det finns, annars lektionens rytm. */
-export function jamforTillfalle(a: Tillfalle, b: Tillfalle): number {
+export function jamforTillfalle(a: TidsNyckel, b: TidsNyckel): number {
   if (a.datum !== b.datum) return a.datum.localeCompare(b.datum);
   if (a.tid !== undefined && b.tid !== undefined && a.tid !== b.tid) return a.tid.localeCompare(b.tid);
   if (a.kalla !== b.kalla) return TYP_ORDNING[a.kalla] - TYP_ORDNING[b.kalla];
