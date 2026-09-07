@@ -153,3 +153,29 @@ describe('Del 67: etiketter, normerad spridning, klusterkurvor, borttagning', as
     expect(provTillfallen(rensaResultat(s, 'k'), { klassId: 'k' })).toEqual([]);
   });
 });
+
+describe('Del 89: kumulativa provnamn täcker alla delkapitel', async () => {
+  const { koderForProv } = await import('../src/domain/elevrapport.js');
+  it('intervall i quiznamnet expanderas', () => {
+    expect(koderForProv('Biologi 4.1 Begrepp')).toEqual(['4.1']);
+    expect(koderForProv('Bi 4.1-4.3 Begrepp')).toEqual(['4.1', '4.2', '4.3']);
+    expect(koderForProv('4.1 - 4.4 begrepp')).toEqual(['4.1', '4.2', '4.3', '4.4']);
+    expect(koderForProv('4.1–4.2 Begrepp')).toEqual(['4.1', '4.2']);
+    expect(koderForProv('Kap 4.2 och 4.4 blandat')).toEqual(['4.2', '4.4']);
+    // Rummet vinner när det bär koderna
+    expect(koderForProv('vad som helst', 'Biologi412')).toEqual(['4.1', '4.2']);
+    // Klassrummet säger inget → quiznamnet gäller
+    expect(koderForProv('Bi 4.1-4.3 Begrepp', 'BIOLOGI8BB')).toEqual(['4.1', '4.2', '4.3']);
+    expect(koderForProv('Fotosyntes')).toEqual([]);
+  });
+
+  it('ett kumulativt läxförhör räknas som test av alla ingående delkapitel', () => {
+    let s = bygg();
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-laxforhor', prov: 'Bi 4.1-4.3 Begrepp', datum: '2026-09-04', rum: 'BIOLOGI8BB',
+      rader: [{ namn: 'Anna Berg', poang: 10, maxPoang: 10 }] }).s;
+    const r = elevrapport(s, 'a', 'bi');
+    // 4.3 var 'ej-testat' innan; nu klarat via det kumulativa förhöret
+    expect(r.kapitel[0].delkapitel.map((d) => `${d.kod}:${d.status}`)).toEqual(['4.1:klarat', '4.2:klarat', '4.3:klarat']);
+    expect(r.kapitel[0].delkapitel[2].senaste.map((x) => x.prov)).toEqual(['Bi 4.1-4.3 Begrepp']);
+  });
+});

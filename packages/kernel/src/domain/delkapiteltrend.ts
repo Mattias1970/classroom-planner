@@ -12,7 +12,7 @@
 import type { Elev, Struktur } from './typer.js';
 import type { Resultat, ResultatKalla } from './resultat.js';
 import { fragenyckel } from './trendkoll.js';
-import { tolkaRumKoder } from './elevrapport.js';
+import { koderForProv } from './elevrapport.js';
 
 export interface DelkapitelFilter { klassId: string; amneId?: string; kallor?: ResultatKalla[]; fran?: string; till?: string; elevId?: string; }
 
@@ -64,25 +64,9 @@ function tillfallenFor(s: Struktur, f: DelkapitelFilter): Tillfalle[] {
  * jämfört med tidigare tillfällen är det delkapitel frågan hör till.
  * Frågor i ett förstagångsrum med flera delar får dess sista del.
  */
-/**
- * Delkapitelkoder för ett tillfälle. Rummet först ('Biologi412' → 4.1, 4.2);
- * när rummet är klassrummet ('BIOLOGI8BB') läses koderna ur quiznamnet i
- * stället: 'Biologi 4.1 Begrepp' → 4.1, '4.1-4.3 Begrepp' → 4.1, 4.2, 4.3.
- */
+/** Delkapitelkoder för ett tillfälle — rummet först, annars quiznamnet. */
 export function koderForTillfalle(t: { prov: string; rum?: string }): string[] {
-  const viaRum = t.rum === undefined ? null : tolkaRumKoder(t.rum);
-  if (viaRum !== null) return viaRum.delar.map((d) => `${viaRum.kapitel}.${d}`);
-  const koder: string[] = [];
-  // Intervall först: '4.1-4.3' eller '4.1–4.3'
-  for (const m of t.prov.matchAll(/(\d+)\.(\d+)\s*[-–]\s*(?:(\d+)\.)?(\d+)/g)) {
-    const kap = Number(m[1]); const fran = Number(m[2]); const till = Number(m[4]);
-    if (m[3] !== undefined && Number(m[3]) !== kap) continue;
-    for (let d = fran; d <= till && d - fran < 12; d++) koder.push(`${kap}.${d}`);
-  }
-  if (koder.length === 0) {
-    for (const m of t.prov.matchAll(/(\d+)\.(\d+)/g)) koder.push(`${Number(m[1])}.${Number(m[2])}`);
-  }
-  return [...new Set(koder)];
+  return koderForProv(t.prov, t.rum);
 }
 
 export function fragansDelkapitel(tillfallen: Tillfalle[]): Map<string, string> {
