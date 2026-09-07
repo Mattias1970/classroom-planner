@@ -246,3 +246,30 @@ describe('Del 90: nuläget — senaste svaret räknas', async () => {
     expect(nulage(s, 'c', f)).toMatchObject({ fragor: [], procent: null, senastProv: null });
   });
 });
+
+describe('Del 92: övningar som liknar läxförhör eller exit', async () => {
+  const { ovningsDubbletter } = await import('../src/domain/delkapiteltrend.js');
+  function medOvning(kalla: 'socrative-ovning' | 'socrative-exit', fragor: string[]) {
+    let s = bygg();
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla, prov: 'Extrapass', datum: '2026-09-10', rum: 'BIOLOGI8BB',
+      rader: [{ namn: 'Anna Berg', poang: fragor.length, maxPoang: fragor.length, svar: sv(fragor.map((q) => [q, true])) }] }).s;
+    return s;
+  }
+
+  it('identiska frågor flaggas med 100 % överlapp mot rätt tillfälle', () => {
+    const d = ovningsDubbletter(medOvning('socrative-ovning', [A, B]), f);
+    expect(d).toHaveLength(1);
+    expect(d[0]).toMatchObject({ overlapp: 100, gemensamma: 2, identiska: true });
+    expect(d[0].liknar).toMatchObject({ prov: 'Biologi 4.1 Begrepp', kalla: 'socrative-laxforhor' });
+    expect(d[0].ovning).toMatchObject({ prov: 'Extrapass', antalFragor: 2 });
+  });
+
+  it('delvis överlapp under gränsen ger ingen träff, och bara övningar granskas', () => {
+    // A finns i förhören, 'Ny fråga' gör det inte → 50 % överlapp
+    const s = medOvning('socrative-ovning', [A, 'En helt ny fråga om resiliens']);
+    expect(ovningsDubbletter(s, f)).toEqual([]);
+    expect(ovningsDubbletter(s, f, 40)[0]).toMatchObject({ overlapp: 50, identiska: false });
+    // Samma quiz men märkt som exit ticket granskas inte
+    expect(ovningsDubbletter(medOvning('socrative-exit', [A, B]), f)).toEqual([]);
+  });
+});

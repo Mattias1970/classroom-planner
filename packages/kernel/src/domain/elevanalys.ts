@@ -15,7 +15,7 @@ import {
   type DashboardFilter, type KurvPunkt, type ProvTillfalle, type Trend,
 } from './dashboard.js';
 import { trendkoll } from './trendkoll.js';
-import { aterkommandeFel, aterkommandeFelKlass, delkapitelSegment, nulage, type BegreppsFel, type Nulage, type SegmentTillfalle } from './delkapiteltrend.js';
+import { aterkommandeFel, aterkommandeFelKlass, delkapitelSegment, nulage, ovningsDubbletter, type BegreppsFel, type Nulage, type OvningsMatchning, type SegmentTillfalle } from './delkapiteltrend.js';
 import { elevrapport, socrativeElevLank, type Elevrapport } from './elevrapport.js';
 import { fragematris, type Fragematris } from './delkapiteltrend.js';
 
@@ -62,6 +62,8 @@ export interface Elevanalys {
   matris: Fragematris;
   /** Vad eleven kan NU — senaste svaret på varje fråga. */
   nu: Nulage;
+  /** Övningar som återanvänder läxförhörens eller exit ticketsens frågor. */
+  ovningsDubbletter: OvningsMatchning[];
   fastnat: BegreppsFel[];
   /** Socrative-rum att öva i, för de delkapitel som behöver repeteras. */
   ovningar: Array<{ kod: string; namn: string; rum: string; url: string }>;
@@ -114,6 +116,7 @@ export function elevanalys(s: Struktur, elevId: string, f: DashboardFilter & { a
   const delF = { klassId: f.klassId, ...(f.amneId !== undefined ? { amneId: f.amneId } : {}), ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) };
   const segment = delkapitelSegment(s, { ...delF, elevId });
   const nu = nulage(s, elevId, delF);
+  const dubblettOvningar = ovningsDubbletter(s, delF);
   const fastnat = aterkommandeFel(s, elevId, delF);
   const matris = fragematris(s, { ...delF, elevId });
   let rapport: Elevrapport | null = null;
@@ -183,6 +186,13 @@ export function elevanalys(s: Struktur, elevId: string, f: DashboardFilter & { a
       ton: tkElev.netto > 0 ? 'bra' : tkElev.netto < 0 ? 'oro' : 'okej',
       rubrik: tkElev.netto > 0 ? 'Du lär dig mer än du glömmer' : tkElev.netto < 0 ? 'Du glömmer mer än du lär dig' : 'Lika mycket lärt som glömt',
       text: `På frågor som återkommit har ${tkElev.lart} svar gått från fel till rätt och ${tkElev.glomt} från rätt till fel.`,
+    });
+  }
+  if (dubblettOvningar.length > 0) {
+    laget.push({
+      ton: 'okej', rubrik: 'Övningar med samma frågor',
+      text: `${dubblettOvningar.map((o) => `${o.ovning.prov} delar ${o.overlapp} % av frågorna med ${o.liknar.prov}`).join(', ')}. `
+        + 'Övningen mäter alltså samma sak som förhöret — bra som träning, men resultatet säger inget nytt om kunskapsläget.',
     });
   }
   const svaga = segment.length === 0 ? [] : (segment[segment.length - 1].segment ?? []).filter((x) => x.procent !== null && x.procent < 70);
@@ -293,7 +303,7 @@ export function elevanalys(s: Struktur, elevId: string, f: DashboardFilter & { a
     lektionsDiff: lekt?.diffSnitt ?? null,
     lart: tkElev?.lart ?? 0,
     glomt: tkElev?.glomt ?? 0,
-    segment, matris, nu, fastnat, ovningar, filmer, rapport, laget, rad, sammanfattning,
+    segment, matris, nu, ovningsDubbletter: dubblettOvningar, fastnat, ovningar, filmer, rapport, laget, rad, sammanfattning,
   };
 }
 

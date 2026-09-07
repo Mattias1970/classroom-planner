@@ -568,3 +568,21 @@ export function sattSocrativeQr(s: Struktur, rum: string, dataUrl: string | null
 export function socrativeQr(s: Struktur, rum: string): string | null {
   return (s.socrativeQr ?? {})[rum.trim().toUpperCase()] ?? null;
 }
+
+
+/** Sparar (eller tar bort) delningslänken till ett Socrative-rum. */
+export function sattSocrativeLank(s: Struktur, rum: string, lank: string | null): Struktur {
+  const nyckel = rum.trim().toUpperCase();
+  if (nyckel === '') return s;
+  const kartan = { ...(s.socrativeLankar ?? {}) };
+  if (lank === null || lank.trim() === '') delete kartan[nyckel];
+  else kartan[nyckel] = lank.trim();
+  return { ...s, socrativeLankar: kartan };
+}
+
+/** Delningslänken för ett rum, annars standardlänken till rummet. */
+export function socrativeLank(s: Struktur, rum: string): string {
+  const egen = (s.socrativeLankar ?? {})[rum.trim().toUpperCase()];
+  return egen ?? `https://b.socrative.com/student/#joinRoom/${encodeURIComponent(rum.trim().toUpperCase())}`;
+}
+

@@ -448,3 +448,59 @@ export function nulage(s: Struktur, elevId: string, f: DelkapitelFilter): Nulage
     senastProv: senasteRad?.prov ?? null, senastDatum: senasteRad?.datum ?? null,
   };
 }
+
+// ── Del 92: övningar som egentligen är läxförhör eller exit ──
+//
+// Ett quiz som märkts som Övning kan i själva verket vara samma frågor som
+// ett läxförhör eller en exit ticket — då bör det räknas dit i stället, och
+// inte ligga vid sidan om.
+
+export interface OvningsMatchning {
+  /** Övningen. */
+  ovning: { nyckel: string; prov: string; datum: string; rum?: string; antalFragor: number };
+  /** Tillfället den liknar mest. */
+  liknar: { nyckel: string; prov: string; datum: string; kalla: ResultatKalla };
+  /** Andel av övningens frågor som också finns i det andra provet (0–100). */
+  overlapp: number;
+  /** Antal gemensamma frågor. */
+  gemensamma: number;
+  /** Sant när frågorna är identiska åt båda håll. */
+  identiska: boolean;
+}
+
+/**
+ * Letar upp övningar vars frågor sammanfaller med ett läxförhör eller en
+ * exit ticket. `grans` är minsta överlapp i procent för att räknas som träff.
+ */
+export function ovningsDubbletter(s: Struktur, f: DelkapitelFilter, grans = 60): OvningsMatchning[] {
+  const tillfallen = tillfallenFor(s, { ...f, kallor: undefined });
+  const fragorFor = (t: Tillfalle): Set<string> => {
+    const ut = new Set<string>();
+    for (const r of t.resultat) for (const sv of r.svar ?? []) ut.add(fragenyckel(sv.fraga));
+    return ut;
+  };
+  const ovningar = tillfallen.filter((t) => t.kalla === 'socrative-ovning');
+  const ovriga = tillfallen.filter((t) => t.kalla === 'socrative-laxforhor' || t.kalla === 'socrative-exit');
+  const ut: OvningsMatchning[] = [];
+  for (const ov of ovningar) {
+    const mina = fragorFor(ov);
+    if (mina.size === 0) continue;
+    let bast: OvningsMatchning | null = null;
+    for (const annan of ovriga) {
+      const deras = fragorFor(annan);
+      if (deras.size === 0) continue;
+      const gemensamma = [...mina].filter((q) => deras.has(q)).length;
+      const overlapp = Math.round((gemensamma / mina.size) * 100);
+      if (overlapp < grans) continue;
+      if (bast === null || overlapp > bast.overlapp) {
+        bast = {
+          ovning: { nyckel: ov.nyckel, prov: ov.prov, datum: ov.datum, ...(ov.rum !== undefined ? { rum: ov.rum } : {}), antalFragor: mina.size },
+          liknar: { nyckel: annan.nyckel, prov: annan.prov, datum: annan.datum, kalla: annan.kalla },
+          overlapp, gemensamma, identiska: gemensamma === mina.size && gemensamma === deras.size,
+        };
+      }
+    }
+    if (bast !== null) ut.push(bast);
+  }
+  return ut.sort((a, b) => b.overlapp - a.overlapp);
+}

@@ -48,7 +48,7 @@ async function kurvBild(a: Elevanalys): Promise<ArrayBuffer> {
   for (const [krav, farg] of [[90, '#E65100'], [70, '#EF9A9A']] as const) {
     ctx.strokeStyle = farg; ctx.setLineDash([5, 4]); ctx.beginPath();
     ctx.moveTo(x0, py(krav)); ctx.lineTo(x0 + b, py(krav)); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = farg; ctx.textAlign = 'left'; ctx.fillText(`krav ${krav} %`, x0 + 4, py(krav) - 4);
+    ctx.fillStyle = farg; ctx.textAlign = 'left'; ctx.fillText('Godkänt', x0 + 4, py(krav) - 4);
   }
   if (n > 0) {
     ctx.strokeStyle = BLA; ctx.lineWidth = 2.2; ctx.beginPath();
@@ -131,7 +131,7 @@ async function kallBild(a: Elevanalys): Promise<ArrayBuffer | null> {
     ctx.fillStyle = '#333'; ctx.textAlign = 'center';
     ctx.fillText(k.namn, cx, y0 + h + 16);
     ctx.fillStyle = GRA;
-    ctx.fillText(k.krav !== null ? `krav ${k.krav} %` : `${k.antal} prov`, cx, y0 + h + 30);
+    ctx.fillText(k.krav !== null ? 'godkäntgräns' : `${k.antal} prov`, cx, y0 + h + 30);
   });
   return png(c);
 }
@@ -226,8 +226,8 @@ export async function elevrapportTillWord(a: Elevanalys): Promise<void> {
     barn.push(bild(await kurvBild(a), 560, 226));
     barn.push(new Paragraph({ children: [new TextRun({ text: 'Varje punkt är ett förhör. Streckade linjer är kraven: 90 % för läxförhör, 70 % för exit ticket.', size: 18, color: '777777' })] }));
     barn.push(tom());
-    barn.push(tabell(['Nr', 'Datum', 'Prov', 'Resultat', 'Krav'],
-      a.kurva.map((p, i) => [`T${i + 1}`, p.datum, p.prov, `${p.procent} %`, p.klarat === null ? '—' : p.klarat ? 'klarat' : 'under'])));
+    barn.push(tabell(['Nr', 'Datum', 'Prov', 'Resultat', 'Bedömning'],
+      a.kurva.map((p, i) => [`T${i + 1}`, p.datum, p.prov, `${p.procent} %`, p.klarat === null ? '—' : p.klarat ? 'Godkänt' : 'Ej godkänt'])));
     barn.push(tom());
   }
 

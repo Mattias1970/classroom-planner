@@ -1304,7 +1304,7 @@ describe('📊 SuperTeach', () => {
     valj(select(host, 'Visa prov'), 'Quiz 1.1a');
     const provTabell = [...host.querySelectorAll('.st-tabell')].find((t) => t.textContent?.includes('9/10'))!;
     expect(provTabell.textContent).toContain('9/10');
-    expect(provTabell.textContent).toContain('klarat ✓');
+    expect(provTabell.textContent).toContain('Godkänt');
   });
 
   it('dashboard: frågekort, klasskurva, elev × prov-matris och elevvy med period- och elevfilter', () => {
@@ -1356,8 +1356,8 @@ describe('📊 SuperTeach', () => {
     expect(host.querySelector('.st-narvarolista')!.textContent).toContain('67 %');
     expect(kort[1].textContent).toContain('% vs tidigare i perioden'); // periodDelta i kortet
     expect(kort[1].textContent).toContain('86 %');            // exit-snitt (9+6+10+8+10)/5
-    expect(kort[1].textContent).toContain('80 % klarar krav ≥ 70 %');
-    expect(kort[0].textContent).toContain('100 % klarar krav ≥ 90 %');
+    expect(kort[1].textContent).toContain('80 % godkända');
+    expect(kort[0].textContent).toContain('100 % godkända');
     expect(kort[2].textContent).toContain('Inga resultat ännu');
 
     // Veckodiagram 'Läxförhör vs Exit tickets' med värdeetiketter, insiktsruta, kluster, grupper och samband
@@ -1442,8 +1442,7 @@ describe('📊 SuperTeach', () => {
 
     // Klasskurvan: tre tillfällen, kravlinjer 70 och 90, punkter klickbara
     const diagram = [...host.querySelectorAll('.st-diagram')].find((d) => d.getAttribute('aria-label') === 'Utveckling över provtillfällen' && d.querySelector('.st-punkt') !== null)!;
-    expect(diagram.textContent).toContain('krav 70 %');
-    expect(diagram.textContent).toContain('krav 90 %');
+    expect(diagram.textContent).toContain('Godkänt'); // kravlinjerna heter Godkänt, inte 70/90 %
     expect(diagram.querySelectorAll('.st-punkt').length).toBeGreaterThanOrEqual(3);
 
     // Delkapitel som led + begrepp som fastnat: kräver frågedata, förklaras annars

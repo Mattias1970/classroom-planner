@@ -417,3 +417,9 @@ export function andraKalla(s: Struktur, val: { amneId: string; prov: string; dat
     filregister: (s.filregister ?? []).map((f) => (traff(f) ? { ...f, kalla: val.tillKalla } : f)),
   };
 }
+
+
+/** 'Godkänt' / 'Ej godkänt' / '—' — kravsiffran hör hemma i tooltip, inte i texten. */
+export function godkantText(klarat: boolean | null): string {
+  return klarat === null ? '—' : klarat ? 'Godkänt' : 'Ej godkänt';
+}

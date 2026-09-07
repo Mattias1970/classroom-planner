@@ -117,3 +117,18 @@ describe('Del 88: frågematris, övningsrum och filmer i analysen', () => {
     expect(rumUrLektion(['—'])).toBeNull();
   });
 });
+
+describe('Del 92: övning med samma frågor flaggas i analysen', () => {
+  it('en övning som återanvänder läxförhörets frågor nämns under Hur går det?', () => {
+    let s = bygg();
+    const svar = [{ fraga: A, svar: 'r', ratt: true }, { fraga: B, svar: 'r', ratt: true }];
+    // Läxförhöret 21/8 hade A och B; övningen har samma frågor
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-ovning', prov: 'Extraövning', datum: '2026-09-10', rum: 'BIOLOGI8BB',
+      rader: [{ namn: 'Anna Berg', poang: 2, maxPoang: 2, svar }] }).s;
+    const a = elevanalys(s, 'a', f);
+    expect(a.ovningsDubbletter).toHaveLength(1);
+    expect(a.ovningsDubbletter[0]).toMatchObject({ overlapp: 100, gemensamma: 2 });
+    expect(a.ovningsDubbletter[0].liknar.kalla).toBe('socrative-laxforhor');
+    expect(a.laget.map((r) => r.rubrik)).toContain('Övningar med samma frågor');
+  });
+});

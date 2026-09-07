@@ -19,7 +19,7 @@ import {
   laggTillSkolar, laggTillTjanst, larareSchema, normaliseraDagar, nyttId, parseKalendarium,
   ledigtStandardpass, passKonflikter, registreraPlanering, sattLarare, schemaKonflikter,
   skapaPlanering,
-  socrativeRum, sparaBok, lektionsNamn, sattSocrativeQr, socrativeQr,
+  socrativeRum, sparaBok, lektionsNamn, sattSocrativeQr, socrativeQr, sattSocrativeLank, socrativeLank, rumUrLektion,
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
@@ -183,10 +183,19 @@ function Start({ s }: { s: Struktur }) {
  * väljs som fil; den skalas ner till 320 px och sparas som data-URL i
  * strukturen, så den följer med backupen och funkar utan nät.
  */
+/** Skapar en QR-kod ur en länk lokalt (inget nät). */
+async function qrFranLank(lank: string): Promise<string> {
+  const { toDataURL } = await import('qrcode');
+  return toDataURL(lank, { width: 320, margin: 1 });
+}
+
 function SocrativeRumPanel({ s, rum, kor }: { s: Struktur; rum: string; kor: (fn: () => Struktur, m: string) => void }) {
   const [dra, setDra] = useState(false);
+  const [redigerar, setRedigerar] = useState(false);
+  const [utkast, setUtkast] = useState('');
   const bild = socrativeQr(s, rum);
-  const lank = `https://b.socrative.com/student/#joinRoom/${encodeURIComponent(rum.toUpperCase())}`;
+  const lank = socrativeLank(s, rum);
+  const egen = (s.socrativeLankar ?? {})[rum.trim().toUpperCase()] !== undefined;
   const spara = (fil: File | null | undefined) => {
     if (fil === undefined || fil === null || !fil.type.startsWith('image/')) return;
     const las = new FileReader();
@@ -214,6 +223,22 @@ function SocrativeRumPanel({ s, rum, kor }: { s: Struktur; rum: string; kor: (fn
         <div className="qr-rum">{rum}</div>
         <a className="btn sec sm" href={lank} target="_blank" rel="noreferrer">↗ Öppna rummet</a>
         <button className="btn sec sm" onClick={() => { void navigator.clipboard?.writeText(rum); }}>📋 Kopiera rumsnamn</button>
+        {redigerar ? (
+          <div className="rad" style={{ gap: 4 }}>
+            <input aria-label={`Delningslänk för ${rum}`} value={utkast} placeholder="https://api.socrative.com/rc/…"
+              onChange={(e) => setUtkast(e.target.value)} style={{ width: 210 }} />
+            <button className="btn sm" onClick={() => {
+              kor(() => sattSocrativeLank(lasStruktur(), rum, utkast), utkast.trim() === '' ? `Länken för ${rum} borttagen.` : `Länk sparad för ${rum}.`);
+              setRedigerar(false);
+              if (utkast.trim() !== '') void qrFranLank(utkast.trim()).then((d) => kor(() => sattSocrativeQr(lasStruktur(), rum, d), `QR-kod skapad för ${rum}.`));
+            }}>💾</button>
+          </div>
+        ) : (
+          <button className="btn sec sm" onClick={() => { setUtkast(egen ? lank : ''); setRedigerar(true); }}>
+            {egen ? '✎ Ändra delningslänk' : '＋ Delningslänk'}
+          </button>
+        )}
+        {egen && <small className="muted" title={lank}>delningslänk sparad</small>}
       </div>
       <div className={`qr-yta ${dra ? 'dra' : ''}`}
         onPaste={(e) => spara(e.clipboardData.files[0])}
@@ -228,10 +253,13 @@ function SocrativeRumPanel({ s, rum, kor }: { s: Struktur; rum: string; kor: (fn
         </>) : (
           <div className="qr-tom">
             <span>Klistra in QR-koden här (klicka först, sedan Ctrl+V) eller släpp en bildfil.</span>
-            <label className="btn sec sm file-btn">📂 Välj bild
-              <input type="file" accept="image/*" hidden aria-label={`Välj QR-bild för ${rum}`}
-                onChange={(e) => { spara(e.target.files?.[0]); e.currentTarget.value = ''; }} />
-            </label>
+            <div className="rad" style={{ gap: 6 }}>
+              <label className="btn sec sm file-btn">📂 Välj bild
+                <input type="file" accept="image/*" hidden aria-label={`Välj QR-bild för ${rum}`}
+                  onChange={(e) => { spara(e.target.files?.[0]); e.currentTarget.value = ''; }} />
+              </label>
+              <button className="btn sec sm" onClick={() => { void qrFranLank(lank).then((d) => kor(() => sattSocrativeQr(lasStruktur(), rum, d), `QR-kod skapad för ${rum}.`)); }}>⬛ Skapa QR ur länken</button>
+            </div>
           </div>
         )}
       </div>
@@ -1471,7 +1499,7 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
           {har(eff.niva3) && <div className={`uppg-niva ${farg ? 'niva-rod' : 'niva-neutral2'}`}><div className="un-rubrik">{N.niva3} – C/A-nivå</div><div className="un-uppg">Uppg. <b><input aria-label={`Uppgifter ${N.niva3}`} value={lp?.uppgNiva3 ?? ''} placeholder={rad.lektion.niva3} onChange={(e) => satt('uppgNiva3', e.target.value)} style={{ width: 80 }} /></b></div><div className="un-obl">Frivillig / vid lektionstid</div></div>}
         </div>
         {arNo
-          ? <div className="ls-inlamning">📷 <b>Inlämning via Google Classroom</b> — skriftliga svar på Testa dig själv (obligatoriskt). Görs klart hemma om de ej hunnits med. Läxförhören är kumulativa: alla begrepp hittills, krav ≥ 90 %.</div>
+          ? <div className="ls-inlamning">📷 <b>Inlämning via Google Classroom</b> — skriftliga svar på Testa dig själv (obligatoriskt). Görs klart hemma om de ej hunnits med. Läxförhören är kumulativa: alla begrepp hittills — godkänt krävs.</div>
           : <div className="ls-inlamning">📷 <b>Inlämning via Google Classroom</b> — foto på beräkningarna, minst <b>{N.niva1} + {N.niva2}</b> (obligatoriskt). {N.niva3} är frivillig. Görs klart hemma eller på stödtid om de ej hunnits med.</div>}
       </section>
 
@@ -1525,7 +1553,7 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
           placeholder={har(rad.lektion.exit) ? rad.lektion.exit : 'Quiz …'}
           onChange={(e) => satt('exitQuiz', e.target.value)} style={{ width: 110, border: 0, background: 'transparent', font: 'inherit', color: 'inherit' }} /></span></div>
         {arNo
-          ? <p className="muted small">5 minuter. Delkapitlets begrepp — krav ≥ 70 %. Logga in på Socrative och välj rummet <b>{rum}</b>. Nästa lektions läxförhör är kumulativt (alla begrepp hittills, krav ≥ 90 %).</p>
+          ? <p className="muted small">5 minuter. Delkapitlets begrepp — godkänt krävs. Logga in på Socrative och välj rummet <b>{rum}</b>. Nästa lektions läxförhör är kumulativt (alla begrepp hittills).</p>
           : <p className="muted small">5 minuter. Visa att du förstår grundläggande uppgifter från lektionen — logga in på Socrative och välj rummet <b>{rum}</b>. Exit ticket från denna lektion används som läxförhör nästa lektion.</p>}
       </section>
 
@@ -1578,7 +1606,7 @@ function UppgifterFlik({ plan, bok, s, amneId, oppnaLektion }: { plan: PlaneradL
         <h4>📌 Inlämning</h4>
         {nivaer
           ? <p>Foto på beräkningar laddas upp i klassens inlämningsyta (Teams, Classroom m.fl.). <b>{N.niva1} + {N.niva2} är obligatoriska.</b> {N.niva3} görs och lämnas in om lektionstid finns, annars frivillig fördjupning.</p>
-          : <p>Skriftliga <b>Testa dig själv-svar</b> laddas upp i klassens inlämningsyta (obligatoriskt). Läxförhören är kumulativa — alla begrepp hittills, krav ≥ 90 %; exit tickets kräver ≥ 70 %.</p>}
+          : <p>Skriftliga <b>Testa dig själv-svar</b> laddas upp i klassens inlämningsyta (obligatoriskt). Läxförhören är kumulativa — alla begrepp hittills; både läxförhör och exit ticket ska bli godkända.</p>}
         {stod.length > 0 && (
           <p>🧩 Inte klar på lektionen? Gör klart hemma eller på {stod.map((sp, i) => (
             <span key={sp.id}>{i > 0 ? ' eller ' : ''}<b>{sp.namn}</b> ({DAGNAMN[sp.dag]?.toLowerCase()} {sp.start}–{sp.slut})</span>
@@ -3015,7 +3043,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
   const kravLinjer = (() => {
     const set = new Set<number>();
     for (const t of kurva) if (t.krav !== null) set.add(t.krav);
-    return [...set].sort().map((p) => ({ procent: p, namn: `krav ${p} %` }));
+    return [...set].sort().map((p) => ({ procent: p, namn: 'Godkänt' }));
   })();
   const TREND = { upp: '↗', ned: '↘', jamn: '→' } as const;
   const kortKlass = (k: FrageKort) => `st-kort${k.antalProv === 0 ? ' tom' : ''}`;
@@ -3055,7 +3083,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
                 <div className="small">
                   {delta !== null && <span className={`st-delta ${delta > 0 ? 'upp' : delta < 0 ? 'ned' : 'jamn'}`}>{delta > 0 ? '+' : ''}{delta} % vs tidigare i perioden</span>}
                   {k.andelKlarade !== null
-                    ? <div><b>{k.andelKlarade} %</b> klarar krav ≥ {k.krav} %</div>
+                    ? <div><b>{k.andelKlarade} %</b> godkända</div>
                     : <div>{k.antalProv} prov · {k.antalElever} elever</div>}
                 </div>
               </>)}
@@ -3574,7 +3602,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
         {matris.tillfallen.length === 0 ? <p className="muted small">Inga provtillfällen i urvalet.</p> : (
           <div className="st-scroll">
             <table className="tbl st-matris">
-              <thead><tr><th>Elev</th><th>Snitt</th><th>Krav</th><th title="Närvaro (Socrative-svar / lektioner)">Närv.</th>
+              <thead><tr><th>Elev</th><th>Snitt</th><th title="Antal godkända av bedömda prov">Godkänt</th><th title="Närvaro (Socrative-svar / lektioner)">Närv.</th>
                 {matris.tillfallen.map((t) => <th key={t.nyckel} title={`${t.prov} · ${KALLNAMN[t.kalla]} · ${t.sessioner.join(' + ')}${t.sessioner.length > 1 ? ' (halvklass A+B)' : ''}`}><span className="st-kol">{tillfalleEtiketter(t)[0]} {t.prov}</span></th>)}
               </tr></thead>
               <tbody>{matris.rader.map((r) => (
@@ -3703,10 +3731,10 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
                 </table>
               ) : (
                 <table className="tbl st-tabell">
-                  <thead><tr><th>Datum</th><th>Källa</th><th>Prov</th><th>Resultat</th><th>Krav</th></tr></thead>
+                  <thead><tr><th>Datum</th><th>Typ</th><th>Prov</th><th>Resultat</th><th>Bedömning</th></tr></thead>
                   <tbody>{[...ek].reverse().map((p, i) => (
-                    <tr key={i}><td>{p.datum}</td><td>{KALLNAMN[p.kalla]}</td><td>{p.prov}</td><td>{p.procent} %</td>
-                      <td>{p.klarat === null ? '—' : <span className={`st-krav ${p.klarat ? 'ok' : 'ej'}`}>{p.klarat ? `≥ ${p.krav} ✓` : `< ${p.krav}`}</span>}</td></tr>
+                    <tr key={i}><td>{p.datum}</td><td><span className={`st-typ ${p.kalla}`}>{TYPNAMN[p.kalla]}</span></td><td>{p.prov}</td><td>{p.procent} %</td>
+                      <td>{p.klarat === null ? '—' : <span className={`st-krav ${p.klarat ? 'ok' : 'ej'}`}>{p.klarat ? 'Godkänt' : 'Ej godkänt'}</span>}</td></tr>
                   ))}</tbody>
                 </table>
               )}
@@ -4017,6 +4045,87 @@ function RapportVy({ s }: { s: Struktur }) {
   );
 }
 
+/**
+ * Alla Socrative-rum som planeringen använder, med delningslänk och QR.
+ * Länkarna klistras in i en klump (en per rad) och paras ihop med rummen —
+ * ordningen i listan gäller, och varje rad kan flyttas om innan man sparar.
+ */
+function SocrativeLankPanel({ s, klass, amnen, planFor, kor }: {
+  s: Struktur; klass: Klass; amnen: Amne[]; planFor: (a: Amne | undefined) => PlaneradLektion[];
+  kor: (fn: () => Struktur, m: string) => void;
+}) {
+  const [text, setText] = useState('');
+  const [par, setPar] = useState<Array<{ lank: string; rum: string }>>([]);
+  const [arbetar, setArbetar] = useState(false);
+  // Rummen: klassrummet per ämne + alla rum ur planeringens läxförhör och exit
+  const rum = [...new Set(amnen.flatMap((a) => [
+    socrativeRum(a.namn, klass.namn),
+    ...planFor(a).flatMap((r) => [r.lektion.socStart, r.lektion.exit]
+      .map((falt) => rumUrLektion([falt])).filter((x): x is string => x !== null)),
+  ]))].sort((a, b) => a.localeCompare(b, 'sv', { numeric: true }));
+  const lasIn = () => {
+    const lankar = text.split(/\s+/).map((x) => x.trim()).filter((x) => /^https?:\/\//.test(x));
+    setPar(lankar.map((lank, i) => ({ lank, rum: rum[i] ?? '' })));
+  };
+  const sparaAlla = () => {
+    const giltiga = par.filter((p) => p.rum !== '');
+    if (giltiga.length === 0) return;
+    setArbetar(true);
+    void Promise.all(giltiga.map(async (p) => ({ ...p, qr: await qrFranLank(p.lank) })))
+      .then((med) => {
+        kor(() => {
+          let st = lasStruktur();
+          for (const p of med) { st = sattSocrativeLank(st, p.rum, p.lank); st = sattSocrativeQr(st, p.rum, p.qr); }
+          return st;
+        }, `${med.length} Socrative-länkar sparade med QR-koder.`);
+        setPar([]); setText('');
+      })
+      .finally(() => setArbetar(false));
+  };
+  return (
+    <details className="uppg-kort st-lankar">
+      <summary><b>🔗 Socrative-rum</b> <small className="muted">delningslänkar och QR-koder · {rum.length} rum i planeringen</small></summary>
+      <p className="small muted">Klistra in länkarna (en per rad, t.ex. <code>https://api.socrative.com/rc/…</code>) och para ihop dem med rätt rum. QR-koden skapas automatiskt ur länken.</p>
+      <textarea aria-label="Socrative-länkar" rows={4} value={text} placeholder={'https://api.socrative.com/rc/vtZAah\nhttps://api.socrative.com/rc/GmqbUr'}
+        onChange={(e) => setText(e.target.value)} />
+      <div className="rad"><button className="btn sm" disabled={text.trim() === ''} onClick={lasIn}>↧ Läs in länkarna</button></div>
+      {par.length > 0 && (<>
+        <table className="tbl st-tabell">
+          <thead><tr><th>Länk</th><th>Rum</th></tr></thead>
+          <tbody>{par.map((p, i) => (
+            <tr key={p.lank}>
+              <td className="st-provnamn" title={p.lank}>{p.lank}</td>
+              <td>
+                <select aria-label={`Rum för ${p.lank}`} value={p.rum} onChange={(e) => setPar(par.map((x, j) => (j === i ? { ...x, rum: e.target.value } : x)))}>
+                  <option value="">— hoppa över —</option>
+                  {rum.map((r) => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </td>
+            </tr>
+          ))}</tbody>
+        </table>
+        <div className="rad"><span className="spacer" />
+          <button className="btn" disabled={arbetar} onClick={sparaAlla}>{arbetar ? '… skapar QR' : `💾 Spara ${par.filter((p) => p.rum !== '').length} länkar`}</button>
+        </div>
+      </>)}
+      <table className="tbl st-tabell">
+        <thead><tr><th>Rum</th><th>Länk</th><th>QR</th></tr></thead>
+        <tbody>{rum.map((r) => {
+          const egen = (s.socrativeLankar ?? {})[r.toUpperCase()];
+          const qr = socrativeQr(s, r);
+          return (
+            <tr key={r}>
+              <td><b>{r}</b></td>
+              <td className="small">{egen !== undefined ? <a href={egen} target="_blank" rel="noreferrer">{egen}</a> : <span className="muted">standardlänk</span>}</td>
+              <td>{qr !== null ? <img src={qr} alt={`QR för ${r}`} style={{ height: 46 }} /> : <span className="muted small">—</span>}</td>
+            </tr>
+          );
+        })}</tbody>
+      </table>
+    </details>
+  );
+}
+
 function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: string) => void }) {
   const klasser = [...s.klasser].sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
   const [klassId, setKlassId] = useState(klasser[0]?.id ?? '');
@@ -4186,6 +4295,9 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
       <SuperTeachDashboard s={s} klassId={klass.id} klassNamn={klass.namn} amneId={amne?.id ?? ''} kallor={kallor}
         onVisaProv={(p) => setVisaProv(p)} kor={kor} />
 
+      {/* ── Socrative-rum: delningslänkar och QR ── */}
+      <SocrativeLankPanel s={s} klass={klass} amnen={amnen} planFor={planFor} kor={kor} />
+
       {/* ── Elever: Socrative-roster ── */}
       <div className="uppg-kort">
         <b>👥 Elever i {klass.namn}</b> <small className="muted">{s.elever.filter((e) => e.klassId === klass.id).length} elever registrerade — resultat kan bara matchas mot registrerade elever. Importera Socratives roster för klassen så matchas rapporterna på namn och Student ID.</small>
@@ -4320,14 +4432,14 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
             </select></label>
           {visaProv !== '' && (
             <table className="tbl plan st-tabell">
-              <thead><tr><th>Elev</th><th>Poäng</th><th>%</th><th>Krav</th></tr></thead>
+              <thead><tr><th>Elev</th><th>Poäng</th><th>%</th><th>Bedömning</th></tr></thead>
               <tbody>{provSammanstallning(s, klass.id, visaProv).map(({ elev, resultat }) => (
                 <tr key={elev.id}>
                   <td>{elev.namn}</td>
                   <td>{resultat !== null ? `${resultat.poang}/${resultat.maxPoang}` : <span className="muted">saknas</span>}</td>
                   <td>{resultat !== null ? `${resultatProcent(resultat) ?? '—'} %` : ''}</td>
                   <td>{resultat !== null && klaratKrav(resultat) !== null
-                    ? <span className={`st-krav ${klaratKrav(resultat) === true ? 'ok' : 'ej'}`}>{klaratKrav(resultat) === true ? 'klarat ✓' : 'ej klarat'}</span>
+                    ? <span className={`st-krav ${klaratKrav(resultat) === true ? 'ok' : 'ej'}`}>{klaratKrav(resultat) === true ? 'Godkänt' : 'Ej godkänt'}</span>
                     : ''}</td>
                 </tr>
               ))}</tbody>

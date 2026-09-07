@@ -255,6 +255,8 @@ export interface LektionsPlan {
 export interface Struktur {
   /** QR-koder för Socrative-rum (rumsnamn → bild som data-URL). */
   socrativeQr?: Record<string, string>;
+  /** Delningslänkar till Socrative-rum (rumsnamn → https://api.socrative.com/rc/…). */
+  socrativeLankar?: Record<string, string>;
   /** Arkiverade planeringsversioner — skrivs aldrig över, kan återställas. */
   planeringsarkiv?: Planering[];
   /** SuperTeach: importerade provresultat (läxförhör, exit tickets, Magma, DigiExam). */
