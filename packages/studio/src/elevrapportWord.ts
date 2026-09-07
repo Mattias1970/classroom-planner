@@ -207,8 +207,13 @@ function lank(text: string, url: string): Paragraph {
   ] });
 }
 
-/** Bygger och laddar ner rapporten som .docx. */
-export async function elevrapportTillWord(a: Elevanalys): Promise<void> {
+/** Filnamn för en elevs rapport. */
+export function rapportFilnamn(a: Elevanalys): string {
+  return `${a.elev.namn} ${a.amneNamn} rapport.docx`.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '-');
+}
+
+/** Bygger rapporten som en .docx-blob (delas av enskild nedladdning och klassexporten). */
+export async function elevrapportDocx(a: Elevanalys): Promise<Blob> {
   const barn: Array<Paragraph | Table> = [
     new Paragraph({ text: `${a.elev.namn} — ${a.amneNamn}`, heading: HeadingLevel.HEADING_1 }),
     new Paragraph({ children: [new TextRun({ text: a.sammanfattning, italics: true })] }),
@@ -331,10 +336,41 @@ export async function elevrapportTillWord(a: Elevanalys): Promise<void> {
   }
 
   const doc = new Document({ sections: [{ children: barn }] });
-  const blob = await Packer.toBlob(doc);
-  const a2 = document.createElement('a');
-  a2.href = URL.createObjectURL(blob);
-  a2.download = `${a.elev.namn} ${a.amneNamn} rapport.docx`.replace(/\s+/g, '-');
-  a2.click();
-  URL.revokeObjectURL(a2.href);
+  return Packer.toBlob(doc);
+}
+
+function laddaNer(blob: Blob, filnamn: string): void {
+  const lank = document.createElement('a');
+  lank.href = URL.createObjectURL(blob);
+  lank.download = filnamn;
+  lank.click();
+  URL.revokeObjectURL(lank.href);
+}
+
+/** Bygger och laddar ner en elevs rapport. */
+export async function elevrapportTillWord(a: Elevanalys): Promise<void> {
+  laddaNer(await elevrapportDocx(a), rapportFilnamn(a));
+}
+
+/**
+ * En Word-fil per elev, packade i ett zip-arkiv — webbläsare blockerar
+ * dussintals nedladdningar i rad, och en zip är enklare att lägga i en mapp.
+ * `steg` anropas efter varje elev så gränssnittet kan visa hur långt det gått.
+ */
+export async function klassrapporterTillWord(
+  analyser: Elevanalys[], arkivNamn: string, steg?: (klar: number, av: number) => void,
+): Promise<void> {
+  if (analyser.length === 0) return;
+  const { default: JSZip } = await import('jszip');
+  const zip = new JSZip();
+  const anvanda = new Set<string>();
+  for (const [i, a] of analyser.entries()) {
+    let namn = rapportFilnamn(a);
+    // Två elever kan heta lika — numrera i så fall
+    if (anvanda.has(namn)) namn = namn.replace(/\.docx$/, `-${i + 1}.docx`);
+    anvanda.add(namn);
+    zip.file(namn, await elevrapportDocx(a));
+    steg?.(i + 1, analyser.length);
+  }
+  laddaNer(await zip.generateAsync({ type: 'blob' }), `${arkivNamn}.zip`.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '-'));
 }

@@ -3839,6 +3839,7 @@ function RapportVy({ s }: { s: Struktur }) {
   const [elevId, setElevId] = useState('');
   const [sok, setSok] = useState('');
   const [skriver, setSkriver] = useState('');
+  const [forlopp, setForlopp] = useState('');
 
   if (klass === undefined) return <div className="card"><h2>📄 Rapporter</h2><p className="muted">Skapa klasser och elever under 🗂 Struktur först.</p></div>;
   const valtAmne = amneId !== '' ? amneId : amnen[0]?.id ?? '';
@@ -3859,6 +3860,20 @@ function RapportVy({ s }: { s: Struktur }) {
       .then(({ elevrapportTillWord }) => elevrapportTillWord(a))
       .catch(() => window.alert('Rapporten kunde inte skapas.'))
       .finally(() => setSkriver(''));
+  };
+  /** En Word-fil per elev, packade i ett zip-arkiv. */
+  const allaTillWord = () => {
+    const medResultat = rader.filter((r) => r.antalProv > 0);
+    if (medResultat.length === 0) { window.alert('Ingen elev har resultat i urvalet.'); return; }
+    setSkriver('alla'); setForlopp(`0 av ${medResultat.length}`);
+    const arkiv = `${klass.namn} ${amnen.find((a) => a.id === valtAmne)?.namn ?? ''} rapporter`;
+    void import('./elevrapportWord.js')
+      .then(({ klassrapporterTillWord }) => klassrapporterTillWord(
+        medResultat.map((r) => elevanalys(s, r.elev.id, f)), arkiv,
+        (klar, av) => setForlopp(`${klar} av ${av}`),
+      ))
+      .catch(() => window.alert('Rapporterna kunde inte skapas.'))
+      .finally(() => { setSkriver(''); setForlopp(''); });
   };
 
   return (
@@ -3881,6 +3896,10 @@ function RapportVy({ s }: { s: Struktur }) {
         <label>🔎 <input aria-label="Sök elev för rapport" placeholder="Sök elev…" value={sok} onChange={(e) => setSok(e.target.value)} /></label>
         <span className="spacer" />
         <small className="muted">{rader.length} elever</small>
+        <button className="btn" disabled={skriver !== ''} onClick={allaTillWord}
+          title="En Word-fil per elev, packade i ett zip-arkiv">
+          {skriver === 'alla' ? `… skapar ${forlopp}` : '📝 Word för alla elever'}
+        </button>
       </div>
 
       {analys === null || valdElev === null ? (

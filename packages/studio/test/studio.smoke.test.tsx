@@ -2022,6 +2022,9 @@ describe('📄 Rapporter', () => {
     expect(rad.textContent).toContain('50 %'); // exit-snittet
     expect(rad.textContent).toContain('att ta tag i');
 
+    // Knappen som skapar en Word-fil per elev finns i filterraden
+    expect(knapp(host, '📝 Word för alla elever').disabled).toBe(false);
+
     act(() => { (rad as HTMLElement).click(); });
     expect(host.textContent).toContain('Hur går det?');
     expect(host.textContent).toContain('Vad kan du göra?');
