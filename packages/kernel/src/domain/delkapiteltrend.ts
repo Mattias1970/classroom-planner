@@ -374,6 +374,8 @@ export interface FragaNu {
   tidigareFel: number;
   /** Antal gånger frågan ställts. */
   antalGanger: number;
+  /** Begreppet frågan beskriver, när det gick att slå upp i boken. */
+  begrepp?: string;
 }
 
 export interface DelkapitelNu {

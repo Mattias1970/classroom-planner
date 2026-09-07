@@ -3994,16 +3994,24 @@ function RapportVy({ s }: { s: Struktur }) {
               <div className="st-nu-lista">
                 <div className="st-nu-rubrik kvar">Kvar att lära ({analys.nu.kvar.length})</div>
                 {analys.nu.kvar.length === 0 ? <p className="small muted">Inget — allt sitter just nu.</p> : (
-                  <ul className="small">{analys.nu.kvar.map((x) => (
-                    <li key={x.nr}><b>{x.kod}</b> {x.fraga} <small className="muted">senast fel i {x.senastProv}</small></li>
+                  <ul className="small st-begreppslista">{analys.nu.kvar.map((x) => (
+                    <li key={x.nr}>
+                      {x.begrepp !== undefined && <b className="st-begreppsord">{x.begrepp}</b>}
+                      <span className="st-begreppsdef">{x.fraga}</span>
+                      <small className="muted">{x.kod} · senast fel i {x.senastProv}</small>
+                    </li>
                   ))}</ul>
                 )}
               </div>
               <div className="st-nu-lista">
                 <div className="st-nu-rubrik fixat">Vänt till rätt ({analys.nu.fixat.length})</div>
                 {analys.nu.fixat.length === 0 ? <p className="small muted">—</p> : (
-                  <ul className="small">{analys.nu.fixat.map((x) => (
-                    <li key={x.nr}><b>{x.kod}</b> {x.fraga} <small className="muted">{x.tidigareFel} fel tidigare</small></li>
+                  <ul className="small st-begreppslista">{analys.nu.fixat.map((x) => (
+                    <li key={x.nr}>
+                      {x.begrepp !== undefined && <b className="st-begreppsord">{x.begrepp}</b>}
+                      <span className="st-begreppsdef">{x.fraga}</span>
+                      <small className="muted">{x.kod} · {x.tidigareFel} fel tidigare</small>
+                    </li>
                   ))}</ul>
                 )}
               </div>

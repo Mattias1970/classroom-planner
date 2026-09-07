@@ -101,6 +101,39 @@ export function socrativeElevLank(rum: string): string {
   return `https://b.socrative.com/student/#joinRoom/${encodeURIComponent(rum.trim().toUpperCase())}`;
 }
 
+function normFraga(t: string): string {
+  return t.toLowerCase().replace(/[.,;:!?"'()[\]{}…]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Slår upp vilket begrepp en frågetext beskriver. Socrative-frågan ÄR
+ * begreppsbeskrivningen ur boken ('En naturtyp med vissa typiska djur- och
+ * växtsamhällen' → biotop), så matchningen görs mot bokens förklaringar:
+ * exakt normaliserad text först, sedan gemensam början, sist tydlig
+ * ordöverlappning.
+ */
+export function begreppForFraga(forklaringar: Record<string, string>, fraga: string): string | null {
+  const f = normFraga(fraga);
+  if (f === '') return null;
+  const poster = Object.entries(forklaringar).map(([b, text]) => [b, normFraga(text)] as const);
+  const exakt = poster.find(([, text]) => text === f);
+  if (exakt !== undefined) return exakt[0];
+  const borjan = poster.find(([, text]) => text.startsWith(f.slice(0, Math.min(f.length, 40))) || f.startsWith(text.slice(0, Math.min(text.length, 40))));
+  if (borjan !== undefined) return borjan[0];
+  // Ordöverlappning: quizet kan sakna bokstäver eller vara nedkortat
+  const ord = new Set(f.split(' ').filter((o) => o.length > 3));
+  if (ord.size < 3) return null;
+  let bast: { begrepp: string; andel: number } | null = null;
+  for (const [b, text] of poster) {
+    const andra = new Set(text.split(' ').filter((o) => o.length > 3));
+    if (andra.size === 0) continue;
+    const gemensam = [...ord].filter((o) => andra.has(o)).length;
+    const andel = gemensam / Math.max(ord.size, andra.size);
+    if (bast === null || andel > bast.andel) bast = { begrepp: b, andel };
+  }
+  return bast !== null && bast.andel >= 0.6 ? bast.begrepp : null;
+}
+
 function forklaringFor(kap: Kapitel, begrepp: string): string | null {
   const f = kap.resurser.forklaringar ?? {};
   const direkt = f[begrepp];

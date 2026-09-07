@@ -179,3 +179,27 @@ describe('Del 89: kumulativa provnamn täcker alla delkapitel', async () => {
     expect(r.kapitel[0].delkapitel[2].senaste.map((x) => x.prov)).toEqual(['Bi 4.1-4.3 Begrepp']);
   });
 });
+
+describe('Del 94: begreppet bakom frågetexten', async () => {
+  const { begreppForFraga } = await import('../src/domain/elevrapport.js');
+  const F = {
+    biotop: 'En naturtyp med vissa typiska djur- och växtsamhällen.',
+    nisch: 'Det utrymme, exempelvis mellan höga och låga temperaturer, där en organism har de bästa förutsättningarna att överleva och utvecklas.',
+    ekologi: 'Vetenskapen om hur organismer samspelar med varandra och sin omgivning.',
+  };
+  it('exakt text, skiljetecken och skiftläge spelar ingen roll', () => {
+    expect(begreppForFraga(F, 'En naturtyp med vissa typiska djur- och växtsamhällen.')).toBe('biotop');
+    expect(begreppForFraga(F, 'EN NATURTYP MED VISSA TYPISKA DJUR- OCH VÄXTSAMHÄLLEN')).toBe('biotop');
+  });
+  it('nedkortad fråga matchar på början', () => {
+    expect(begreppForFraga(F, 'Det utrymme, exempelvis mellan höga och låga…')).toBe('nisch');
+  });
+  it('quiztext med tappade bokstäver matchar på ordöverlappning', () => {
+    expect(begreppForFraga(F, 'Vetenskapen om hur organismer samspelar med varandra och sin omgivning')).toBe('ekologi');
+  });
+  it('okänd text ger null', () => {
+    expect(begreppForFraga(F, 'Vad är summan av 2 och 3?')).toBeNull();
+    expect(begreppForFraga({}, 'vad som helst')).toBeNull();
+    expect(begreppForFraga(F, '')).toBeNull();
+  });
+});

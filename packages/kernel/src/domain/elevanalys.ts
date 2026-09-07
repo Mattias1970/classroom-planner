@@ -16,7 +16,7 @@ import {
 } from './dashboard.js';
 import { trendkoll } from './trendkoll.js';
 import { aterkommandeFel, aterkommandeFelKlass, delkapitelSegment, nulage, ovningsDubbletter, type BegreppsFel, type Nulage, type OvningsMatchning, type SegmentTillfalle } from './delkapiteltrend.js';
-import { elevrapport, socrativeElevLank, type Elevrapport } from './elevrapport.js';
+import { begreppForFraga, elevrapport, socrativeElevLank, type Elevrapport } from './elevrapport.js';
 import { fragematris, type Fragematris } from './delkapiteltrend.js';
 
 export interface KallaSammanfattning {
@@ -115,13 +115,34 @@ export function elevanalys(s: Struktur, elevId: string, f: DashboardFilter & { a
   const tkElev = tk.elever.find((e) => e.elev.id === elevId) ?? null;
   const delF = { klassId: f.klassId, ...(f.amneId !== undefined ? { amneId: f.amneId } : {}), ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) };
   const segment = delkapitelSegment(s, { ...delF, elevId });
-  const nu = nulage(s, elevId, delF);
+  let nu = nulage(s, elevId, delF);
   const dubblettOvningar = ovningsDubbletter(s, delF);
   const fastnat = aterkommandeFel(s, elevId, delF);
   const matris = fragematris(s, { ...delF, elevId });
   let rapport: Elevrapport | null = null;
   if (f.amneId !== undefined) {
     try { rapport = elevrapport(s, elevId, f.amneId, { ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) }); } catch { rapport = null; }
+  }
+
+  // Frågetexten är begreppsbeskrivningen ur boken — slå upp vilket begrepp den gäller
+  const forklaringar: Record<string, string> = {};
+  for (const k of rapport?.kapitel ?? []) {
+    for (const d of k.delkapitel) {
+      for (const b of d.begrepp) if (b.forklaring !== null) forklaringar[b.begrepp] = b.forklaring;
+    }
+  }
+  if (Object.keys(forklaringar).length > 0) {
+    const berika = (fr: typeof nu.fragor[number]) => {
+      const b = begreppForFraga(forklaringar, fr.fraga);
+      return b === null ? fr : { ...fr, begrepp: b };
+    };
+    const fragor = nu.fragor.map(berika);
+    nu = {
+      ...nu, fragor,
+      kan: fragor.filter((x) => x.ratt),
+      kvar: fragor.filter((x) => !x.ratt),
+      fixat: fragor.filter((x) => x.ratt && x.tidigareFel > 0),
+    };
   }
 
   // ── Läget ────────────────────────────────────────────────
@@ -204,11 +225,14 @@ export function elevanalys(s: Struktur, elevId: string, f: DashboardFilter & { a
   }
 
   // ── Råd ──────────────────────────────────────────────────
+  /** 'biotop — En naturtyp med …' när begreppet är känt, annars bara beskrivningen. */
+  const begreppRad = (x: { begrepp?: string; fraga: string }): string =>
+    (x.begrepp !== undefined ? `${x.begrepp} — ${x.fraga}` : x.fraga);
   const rad: Rad[] = [];
   if (nu.kvar.length > 0) {
     rad.push({
       ton: 'oro', rubrik: `${nu.kvar.length} begrepp kvar att lära`,
-      text: `Det här svarade du fel på senast: ${nu.kvar.slice(0, 6).map((x) => x.fraga).join(' · ')}`
+      text: `Det här svarade du fel på senast: ${nu.kvar.slice(0, 6).map(begreppRad).join(' · ')}`
         + `${nu.kvar.length > 6 ? ` (och ${nu.kvar.length - 6} till)` : ''}. `
         + 'Börja här — resten kan du redan. Skriv en egen förklaring till varje och testa dig själv i Socrative-rummet.',
     });
@@ -216,7 +240,7 @@ export function elevanalys(s: Struktur, elevId: string, f: DashboardFilter & { a
   if (nu.fixat.length > 0) {
     rad.push({
       ton: 'bra', rubrik: `${nu.fixat.length} begrepp har du redan vänt`,
-      text: `${nu.fixat.slice(0, 5).map((x) => x.fraga).join(' · ')} satt inte förut men sitter nu. Håll dem vid liv genom att svara på dem igen i nästa kumulativa läxförhör.`,
+      text: `${nu.fixat.slice(0, 5).map(begreppRad).join(' · ')} satt inte förut men sitter nu. Håll dem vid liv genom att svara på dem igen i nästa kumulativa läxförhör.`,
     });
   }
   if (fastnat.length > 0) {

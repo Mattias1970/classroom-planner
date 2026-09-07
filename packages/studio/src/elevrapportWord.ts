@@ -265,12 +265,24 @@ export async function elevrapportDocx(a: Elevanalys): Promise<Blob> {
     barn.push(tom());
     if (a.nu.kvar.length > 0) {
       barn.push(new Paragraph({ children: [new TextRun({ text: `Kvar att lära (${a.nu.kvar.length})`, bold: true })] }));
-      for (const x of a.nu.kvar) barn.push(new Paragraph({ bullet: { level: 0 }, text: `${x.kod} ${x.fraga} — senast fel i ${x.senastProv}` }));
+      for (const x of a.nu.kvar) {
+        barn.push(new Paragraph({ bullet: { level: 0 }, children: [
+          ...(x.begrepp !== undefined ? [new TextRun({ text: `${x.begrepp} — `, bold: true })] : []),
+          new TextRun(x.fraga),
+          new TextRun({ text: `  (${x.kod}, senast fel i ${x.senastProv})`, size: 18, color: '777777' }),
+        ] }));
+      }
       barn.push(tom());
     }
     if (a.nu.fixat.length > 0) {
       barn.push(new Paragraph({ children: [new TextRun({ text: `Vänt till rätt (${a.nu.fixat.length})`, bold: true })] }));
-      for (const x of a.nu.fixat) barn.push(new Paragraph({ bullet: { level: 0 }, text: `${x.kod} ${x.fraga} — ${x.tidigareFel} fel tidigare, rätt nu` }));
+      for (const x of a.nu.fixat) {
+        barn.push(new Paragraph({ bullet: { level: 0 }, children: [
+          ...(x.begrepp !== undefined ? [new TextRun({ text: `${x.begrepp} — `, bold: true })] : []),
+          new TextRun(x.fraga),
+          new TextRun({ text: `  (${x.kod}, ${x.tidigareFel} fel tidigare, rätt nu)`, size: 18, color: '777777' }),
+        ] }));
+      }
       barn.push(tom());
     }
   }
