@@ -21,6 +21,8 @@ export interface RapportDelkapitel {
   /** Elevens senaste resultat per källa (det som avgör status). */
   senaste: RapportResultat[];
   begrepp: RapportBegrepp[];
+  /** Socrative-rummet för delkapitlets begrepp, t.ex. 'Biologi41'. */
+  socrativeRum: string | null;
   mal: string | null;
   sammanfattning: string | null;
   filmer: Array<{ titel: string; url: string }>;
@@ -65,6 +67,20 @@ function tillRapport(r: Resultat): RapportResultat | null {
   if (procent === null) return null;
   const krav = kravFor(r.kalla);
   return { kalla: r.kalla, prov: r.prov, datum: r.datum, procent, krav, klarat: krav === null ? null : procent >= krav, ...(r.rum !== undefined ? { rum: r.rum } : {}) };
+}
+
+/** 'Biologi41 (krav ≥ 70 %)' → 'Biologi41'. */
+export function rumUrLektion(exitFalt: string[]): string | null {
+  for (const f of exitFalt) {
+    const m = /^\s*([A-Za-zÅÄÖåäö]+\d+)/.exec(f ?? '');
+    if (m !== null) return m[1];
+  }
+  return null;
+}
+
+/** Länk som eleven kan klicka på för att öva i ett Socrative-rum. */
+export function socrativeElevLank(rum: string): string {
+  return `https://b.socrative.com/student/#joinRoom/${encodeURIComponent(rum.trim().toUpperCase())}`;
 }
 
 function forklaringFor(kap: Kapitel, begrepp: string): string | null {
@@ -128,6 +144,7 @@ export function elevrapport(s: Struktur, elevId: string, amneId: string, period?
       return {
         kod: del.kod, namn: del.namn, status, resultat, senaste,
         begrepp: begreppNamn.map((b) => ({ begrepp: b, forklaring: forklaringFor(kap, b) })),
+        socrativeRum: rumUrLektion(del.lektioner.map((l) => l.exit)),
         mal: del.lektioner.map((l) => l.mal).find((m): m is string => m !== undefined && m.trim() !== '') ?? null,
         sammanfattning: planer.map((p) => p.sammanfattning).find((x): x is string => x !== undefined && x.trim() !== '') ?? null,
         filmer: filmerUr(planer, del),

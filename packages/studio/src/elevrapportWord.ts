@@ -5,7 +5,7 @@
  * går inte att lägga i ett Word-dokument. Texten kommer från elevanalys, så
  * utskriften säger samma sak som skärmen.
  */
-import { AlignmentType, Document, HeadingLevel, ImageRun, Packer, Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType } from 'docx';
+import { AlignmentType, Document, ExternalHyperlink, HeadingLevel, ImageRun, Packer, Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType } from 'docx';
 import type { Elevanalys } from '@planner/kernel';
 
 const BLA = '#2f5aa8'; const GRON = '#1B5E20'; const ROD = '#B71C1C'; const GRA = '#9AA3AE';
@@ -169,6 +169,44 @@ function tabell(rubriker: string[], rader: string[][]): Table {
 
 const tom = (): Paragraph => new Paragraph('');
 
+const RATT = 'C8E6C9'; const FEL = 'FFCDD2'; const EJ = 'F2F4F7';
+
+/** Frågematrisen: en rad per förhör, en ruta per fråga (grön rätt, röd fel, tom = ej gjord). */
+function matrisTabell(a: Elevanalys): Table[] {
+  const m = a.matris;
+  if (m.fragor.length === 0 || m.rader.length === 0) return [];
+  const rutcell = (fyll: string, text: string): TableCell => new TableCell({
+    shading: { type: ShadingType.CLEAR, fill: fyll },
+    margins: { top: 20, bottom: 20, left: 20, right: 20 },
+    children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text, size: 12 })] })],
+  });
+  const huvud = new TableRow({ children: [
+    new TableCell({ shading: { type: ShadingType.CLEAR, fill: 'EEF1F5' }, children: [new Paragraph({ children: [new TextRun({ text: 'Quiz', bold: true, size: 16 })] })] }),
+    ...m.fragor.map((fr) => new TableCell({
+      shading: { type: ShadingType.CLEAR, fill: 'EEF1F5' },
+      children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: String(fr.nr), size: 12 })] })],
+    })),
+  ] });
+  const rader = m.rader.map((rad) => new TableRow({ children: [
+    new TableCell({ children: [new Paragraph({ children: [
+      new TextRun({ text: `${rad.prov}`, size: 14 }),
+      new TextRun({ text: `  ${rad.datum.slice(5)}${rad.tid !== undefined ? ` ${rad.tid}` : ''}`, size: 12, color: '888888' }),
+    ] })] }),
+    ...m.fragor.map((_, i) => {
+      const svar = rad.elevCeller?.[i];
+      const fanns = rad.celler[i] !== null;
+      return rutcell(!fanns ? 'FFFFFF' : svar === true ? RATT : svar === false ? FEL : EJ, !fanns ? '' : svar === true ? '✓' : svar === false ? '✗' : '·');
+    }),
+  ] }));
+  return [new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [huvud, ...rader] })];
+}
+
+function lank(text: string, url: string): Paragraph {
+  return new Paragraph({ bullet: { level: 0 }, children: [
+    new ExternalHyperlink({ children: [new TextRun({ text, style: 'Hyperlink' })], link: url }),
+  ] });
+}
+
 /** Bygger och laddar ner rapporten som .docx. */
 export async function elevrapportTillWord(a: Elevanalys): Promise<void> {
   const barn: Array<Paragraph | Table> = [
@@ -212,6 +250,31 @@ export async function elevrapportTillWord(a: Elevanalys): Promise<void> {
   barn.push(new Paragraph({ text: 'Vad kan du göra?', heading: HeadingLevel.HEADING_2 }));
   for (const r of a.rad) { barn.push(punkt(r), tom()); }
 
+  const matris = matrisTabell(a);
+  if (matris.length > 0) {
+    barn.push(new Paragraph({ text: 'Fråga för fråga', heading: HeadingLevel.HEADING_2 }));
+    barn.push(...matris);
+    barn.push(new Paragraph({ children: [new TextRun({ text: 'Grön ruta = rätt, röd = fel, tom = frågan ingick inte i det quizet. Siffrorna är frågans nummer; samma fråga har samma nummer i alla quiz, så du kan följa den över tid.', size: 18, color: '777777' })] }));
+    barn.push(tom());
+    for (const g of a.matris.grupper) {
+      barn.push(new Paragraph({ children: [new TextRun({ text: `Fråga ${g.fran}–${g.till}: ${g.ursprung}${g.kod !== '—' ? ` (${g.kod})` : ''}`, size: 18, color: '777777' })] }));
+    }
+    barn.push(tom());
+  }
+
+  if (a.ovningar.length > 0 || a.filmer.length > 0) {
+    barn.push(new Paragraph({ text: 'Öva och se filmer', heading: HeadingLevel.HEADING_2 }));
+    if (a.ovningar.length > 0) {
+      barn.push(new Paragraph({ children: [new TextRun({ text: 'Öva i Socrative — logga in med ditt namn och kör quizet igen:', bold: true })] }));
+      for (const o of a.ovningar) barn.push(lank(`${o.rum} — ${o.kod} ${o.namn}`, o.url));
+    }
+    if (a.filmer.length > 0) {
+      barn.push(new Paragraph({ children: [new TextRun({ text: 'Filmer:', bold: true })] }));
+      for (const film of a.filmer) barn.push(lank(`${film.titel} (${film.for})`, film.url));
+    }
+    barn.push(tom());
+  }
+
   if (a.fastnat.length > 0) {
     barn.push(new Paragraph({ text: 'Begrepp att träna på', heading: HeadingLevel.HEADING_2 }));
     barn.push(tabell(['Begrepp', 'Delkapitel', 'Fel', 'Senast fel'],
@@ -241,7 +304,7 @@ export async function elevrapportTillWord(a: Elevanalys): Promise<void> {
       }
       if (k.filmer.length > 0) {
         barn.push(new Paragraph({ children: [new TextRun({ text: 'Filmer', bold: true })] }));
-        for (const film of k.filmer) barn.push(new Paragraph({ bullet: { level: 0 }, text: `${film.titel} (${film.for}) — ${film.url}` }));
+        for (const film of k.filmer) barn.push(lank(`${film.titel} (${film.for})`, film.url));
       }
       barn.push(tom());
     }

@@ -716,3 +716,12 @@ input.fel { border-color: #B71C1C; }
 .st-punkt-kort.okej { background: #FFF8E1; border-color: #FFE082; }
 .st-punkt-kort.oro { background: #FFEBEE; border-color: #EF9A9A; }
 .st-punkt-kort p { margin: 4px 0 0; font-size: 13px; }
+
+/* Del 88: länkar till övningsrum och filmer i rapporten */
+.st-lankar { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 4px; }
+.st-lank { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--ram); border-radius: 999px; padding: 5px 12px; text-decoration: none; font-size: 13px; font-weight: 600; background: #fff; }
+.st-lank small { font-weight: 400; color: var(--muted-varm); }
+.st-lank.ovning { border-color: #90CAF9; background: #E3F2FD; color: #1A2A6B; }
+.st-lank.film { border-color: #A5D6A7; background: #E8F5E9; color: #1B5E20; }
+.st-lank:hover { box-shadow: 0 1px 3px rgba(20,40,80,.15); }
+.st-rapportvy .st-fmruta { cursor: pointer; }

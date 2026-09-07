@@ -100,3 +100,19 @@ describe('rapportOversikt', () => {
     expect(rapportOversikt(s, f, 'omar').map((x) => x.elev.namn)).toEqual(['Omar Ali']);
   });
 });
+
+describe('Del 88: frågematris, övningsrum och filmer i analysen', () => {
+  it('matrisen följer med och råden pekar på Socrative-rummet', () => {
+    const o = elevanalys(bygg(), 'b', f);
+    expect(o.matris.rader.length).toBeGreaterThan(0);
+    expect(o.matris.rader[0].elevCeller).not.toBeUndefined();
+  });
+
+  it('socrativeElevLank bygger en klickbar länk och rumUrLektion plockar rummet', async () => {
+    const { socrativeElevLank, rumUrLektion } = await import('../src/domain/elevrapport.js');
+    expect(socrativeElevLank('Biologi41')).toBe('https://b.socrative.com/student/#joinRoom/BIOLOGI41');
+    expect(rumUrLektion(['Biologi41 (krav ≥ 70 %)'])).toBe('Biologi41');
+    expect(rumUrLektion(['—', 'Biologi412 (krav ≥ 90 %)'])).toBe('Biologi412');
+    expect(rumUrLektion(['—'])).toBeNull();
+  });
+});

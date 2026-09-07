@@ -16,7 +16,8 @@ import {
 } from './dashboard.js';
 import { trendkoll } from './trendkoll.js';
 import { aterkommandeFel, aterkommandeFelKlass, delkapitelSegment, type BegreppsFel, type SegmentTillfalle } from './delkapiteltrend.js';
-import { elevrapport, type Elevrapport } from './elevrapport.js';
+import { elevrapport, socrativeElevLank, type Elevrapport } from './elevrapport.js';
+import { fragematris, type Fragematris } from './delkapiteltrend.js';
 
 export interface KallaSammanfattning {
   kalla: ResultatKalla;
@@ -57,7 +58,13 @@ export interface Elevanalys {
   lart: number;
   glomt: number;
   segment: SegmentTillfalle[];
+  /** Fråga × testtillfälle för eleven — rätt, fel eller inte gjord. */
+  matris: Fragematris;
   fastnat: BegreppsFel[];
+  /** Socrative-rum att öva i, för de delkapitel som behöver repeteras. */
+  ovningar: Array<{ kod: string; namn: string; rum: string; url: string }>;
+  /** Filmer att se (Binogi m.fl.) för samma delkapitel. */
+  filmer: Array<{ titel: string; url: string; for: string }>;
   rapport: Elevrapport | null;
   /** Läget i punkter — det som ska stå under "Hur går det?". */
   laget: Rad[];
@@ -105,6 +112,7 @@ export function elevanalys(s: Struktur, elevId: string, f: DashboardFilter & { a
   const delF = { klassId: f.klassId, ...(f.amneId !== undefined ? { amneId: f.amneId } : {}), ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) };
   const segment = delkapitelSegment(s, { ...delF, elevId });
   const fastnat = aterkommandeFel(s, elevId, delF);
+  const matris = fragematris(s, { ...delF, elevId });
   let rapport: Elevrapport | null = null;
   if (f.amneId !== undefined) {
     try { rapport = elevrapport(s, elevId, f.amneId, { ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) }); } catch { rapport = null; }
@@ -185,9 +193,16 @@ export function elevanalys(s: Struktur, elevId: string, f: DashboardFilter & { a
         text: `${ova.map((d) => `${d.kod} ${d.namn}`).join(', ')}. Läs sammanfattningen och gå igenom begreppen innan nästa läxförhör.`,
       });
     }
-    const filmer = rapport.kapitel.flatMap((k) => k.filmer).slice(0, 4);
-    if (filmer.length > 0) {
-      rad.push({ ton: 'okej', rubrik: 'Se filmerna', text: filmer.map((x) => `${x.titel} (${x.for})`).join(' · ') });
+    const filmLista = rapport.kapitel.flatMap((k) => k.filmer).slice(0, 4);
+    if (filmLista.length > 0) {
+      rad.push({ ton: 'okej', rubrik: 'Se filmerna', text: filmLista.map((x) => `${x.titel} (${x.for})`).join(' · ') });
+    }
+    const rum = ova.filter((d) => d.socrativeRum !== null);
+    if (rum.length > 0) {
+      rad.push({
+        ton: 'okej', rubrik: 'Öva i Socrative',
+        text: `Kör quizet igen i ${rum.map((d) => d.socrativeRum!).join(' och ')} tills du har alla rätt. Länkarna finns under "Öva och se filmer".`,
+      });
     }
   }
   if (lax !== undefined && lax.krav !== null && lax.snittProcent !== null && lax.snittProcent < lax.krav) {
@@ -226,6 +241,11 @@ export function elevanalys(s: Struktur, elevId: string, f: DashboardFilter & { a
       + `${exit?.snittProcent !== undefined && exit.snittProcent !== null ? ` och exit tickets ${exit.snittProcent} %` : ''}`
       + `${narvaro?.narvaroProcent !== undefined && narvaro.narvaroProcent !== null ? `, med ${narvaro.narvaroProcent} % närvaro` : ''}.`;
 
+  const ovningar = (rapport?.kapitel ?? []).flatMap((k) => k.delkapitel
+    .filter((d) => d.status === 'ova' && d.socrativeRum !== null)
+    .map((d) => ({ kod: d.kod, namn: d.namn, rum: d.socrativeRum!, url: socrativeElevLank(d.socrativeRum!) })));
+  const filmer = (rapport?.kapitel ?? []).flatMap((k) => k.filmer);
+
   return {
     elev, amneNamn,
     period: { fran: f.fran ?? null, till: f.till ?? null },
@@ -238,7 +258,7 @@ export function elevanalys(s: Struktur, elevId: string, f: DashboardFilter & { a
     lektionsDiff: lekt?.diffSnitt ?? null,
     lart: tkElev?.lart ?? 0,
     glomt: tkElev?.glomt ?? 0,
-    segment, fastnat, rapport, laget, rad, sammanfattning,
+    segment, matris, fastnat, ovningar, filmer, rapport, laget, rad, sammanfattning,
   };
 }
 

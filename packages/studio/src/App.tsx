@@ -3773,6 +3773,58 @@ function RapportVy({ s }: { s: Struktur }) {
             </table>
           </>)}
 
+          {(analys.ovningar.length > 0 || analys.filmer.length > 0) && (<>
+            <h3>Öva och se filmer</h3>
+            <div className="st-lankar">
+              {analys.ovningar.map((o) => (
+                <a key={o.rum} className="st-lank ovning" href={o.url} target="_blank" rel="noreferrer" title={`Socrative-rum ${o.rum}`}>
+                  🎯 {o.rum} <small>{o.kod} {o.namn}</small>
+                </a>
+              ))}
+              {analys.filmer.map((film) => (
+                <a key={film.url} className="st-lank film" href={film.url} target="_blank" rel="noreferrer">
+                  ▶ {film.titel} <small>{film.for}</small>
+                </a>
+              ))}
+            </div>
+          </>)}
+
+          {analys.matris.fragor.length > 0 && (<>
+            <h3>Fråga för fråga</h3>
+            <p className="small muted">Grön ruta = rätt, röd = fel, tom = frågan ingick inte i det quizet. Klicka på en ruta för att se frågan.</p>
+            <div className="st-scroll" style={{ display: 'inline-block', maxWidth: '100%' }}>
+              <table className="tbl st-fmtabell">
+                <thead>
+                  <tr><th colSpan={2} className="st-fmhorn" />{analys.matris.grupper.map((g) => (
+                    <th key={g.kod} colSpan={g.till - g.fran + 1} className="st-fmgrupp" title={g.ursprung}>
+                      <span className="st-fmgruppnamn">{g.ursprung}</span>
+                      <small>{g.kod !== '—' ? `${g.kod} · ` : ''}{g.till - g.fran + 1} frågor</small>
+                    </th>
+                  ))}</tr>
+                  <tr><th>Quiz</th><th>Datum</th>{analys.matris.fragor.map((fr) => (
+                    <th key={fr.nr} className={`st-fmnr${analys.matris.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}`} title={fr.fraga}>{fr.nr}</th>
+                  ))}</tr>
+                </thead>
+                <tbody>{analys.matris.rader.map((rad) => (
+                  <tr key={rad.nyckel}>
+                    <td className="st-fmprov" title={rad.prov}>{rad.prov}</td>
+                    <td className="small muted">{kortDatum(rad.datum)}{rad.tid !== undefined && <> {rad.tid}</>}</td>
+                    {analys.matris.fragor.map((fr, i) => {
+                      const fanns = rad.celler[i] !== null;
+                      const svar = rad.elevCeller?.[i];
+                      return (
+                        <td key={fr.nr} className={`st-fmruta${analys.matris.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}`}
+                          style={{ background: !fanns ? '#F7F8FA' : svar === true ? '#4CAF50' : svar === false ? '#D32F2F' : '#E7EAEF' }}
+                          title={!fanns ? `Fråga ${fr.nr} ingick inte i ${rad.prov}` : `Fråga ${fr.nr}: ${svar === true ? 'rätt' : svar === false ? 'fel' : 'ej besvarad'} — ${fr.fraga}`}
+                          onClick={() => window.alert(`Fråga ${fr.nr} (${fr.kod})\n\n${fr.fraga}`)} />
+                      );
+                    })}
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          </>)}
+
           {valtAmne !== '' && <ElevrapportVy s={s} elevId={valdElev.id} amneId={valtAmne} period={period === null ? undefined : { fran: f.fran, till: f.till }} />}
         </div>
       )}
