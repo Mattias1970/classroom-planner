@@ -17,7 +17,20 @@ import { tolkaRumKoder } from './elevrapport.js';
 export interface DelkapitelFilter { klassId: string; amneId?: string; kallor?: ResultatKalla[]; fran?: string; till?: string; elevId?: string; }
 
 /** Ett tillfälle med frågor grupperade per delkapitel. */
-export interface Tillfalle { nyckel: string; prov: string; datum: string; kalla: ResultatKalla; rum?: string; resultat: Resultat[] }
+export interface Tillfalle { nyckel: string; prov: string; datum: string; tid?: string; kalla: ResultatKalla; rum?: string; resultat: Resultat[] }
+
+/** Läxförhöret inleder lektionen, exit ticket avslutar den; övningar hamnar sist. */
+const TYP_ORDNING: Record<ResultatKalla, number> = {
+  'socrative-laxforhor': 0, magma: 1, digiexam: 2, 'socrative-exit': 3, 'socrative-ovning': 4,
+};
+
+/** Kronologisk ordning: datum, sedan klockslag när det finns, annars lektionens rytm. */
+export function jamforTillfalle(a: Tillfalle, b: Tillfalle): number {
+  if (a.datum !== b.datum) return a.datum.localeCompare(b.datum);
+  if (a.tid !== undefined && b.tid !== undefined && a.tid !== b.tid) return a.tid.localeCompare(b.tid);
+  if (a.kalla !== b.kalla) return TYP_ORDNING[a.kalla] - TYP_ORDNING[b.kalla];
+  return a.prov.localeCompare(b.prov, 'sv');
+}
 
 function tillfallenFor(s: Struktur, f: DelkapitelFilter): Tillfalle[] {
   const elevIds = new Set(s.elever.filter((e) => e.klassId === f.klassId).map((e) => e.id));
@@ -31,10 +44,15 @@ function tillfallenFor(s: Struktur, f: DelkapitelFilter): Tillfalle[] {
     const n = `${r.datum}|${r.kalla}|${r.prov}`;
     grupper.set(n, [...(grupper.get(n) ?? []), r]);
   }
-  return [...grupper.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([nyckel, resultat]) => ({
-    nyckel, prov: resultat[0].prov, datum: resultat[0].datum, kalla: resultat[0].kalla,
-    ...(resultat[0].rum !== undefined ? { rum: resultat[0].rum } : {}), resultat,
-  }));
+  return [...grupper.values()].map((resultat) => {
+    // Klockslag: tidigaste kända bland resultaten (sätts vid filimport)
+    const tid = resultat.map((r) => r.tid).filter((t): t is string => t !== undefined).sort()[0];
+    return {
+      nyckel: `${resultat[0].datum}|${resultat[0].kalla}|${resultat[0].prov}`,
+      prov: resultat[0].prov, datum: resultat[0].datum, ...(tid !== undefined ? { tid } : {}),
+      kalla: resultat[0].kalla, ...(resultat[0].rum !== undefined ? { rum: resultat[0].rum } : {}), resultat,
+    };
+  }).sort(jamforTillfalle);
 }
 
 /**
@@ -94,7 +112,7 @@ export interface Segment {
 }
 
 export interface SegmentTillfalle {
-  nyckel: string; prov: string; datum: string; kalla: ResultatKalla; rum?: string;
+  nyckel: string; prov: string; datum: string; tid?: string; kalla: ResultatKalla; rum?: string;
   segment: Segment[];
   antalFragor: number;
   /** Andel rätt i hela tillfället. */
@@ -130,7 +148,8 @@ export function delkapitelSegment(s: Struktur, f: DelkapitelFilter): SegmentTill
     const bedomda = segment.reduce((n, x) => n + x.bedomda, 0);
     const ratt = segment.reduce((n, x) => n + x.ratt, 0);
     return {
-      nyckel: t.nyckel, prov: t.prov, datum: t.datum, kalla: t.kalla, ...(t.rum !== undefined ? { rum: t.rum } : {}),
+      nyckel: t.nyckel, prov: t.prov, datum: t.datum, ...(t.tid !== undefined ? { tid: t.tid } : {}),
+      kalla: t.kalla, ...(t.rum !== undefined ? { rum: t.rum } : {}),
       segment, antalFragor: segment.reduce((n, x) => n + x.antalFragor, 0),
       procent: bedomda === 0 ? null : Math.round((ratt / bedomda) * 100),
     };
@@ -234,7 +253,7 @@ export interface MatrisFraga {
 export interface FragaCell { bedomda: number; ratt: number; procent: number | null; }
 
 export interface FragaRad {
-  nyckel: string; prov: string; datum: string; kalla: ResultatKalla; rum?: string;
+  nyckel: string; prov: string; datum: string; tid?: string; kalla: ResultatKalla; rum?: string;
   /** Kort testnamn ur de delkapitel provet täcker: 'test41', 'test412'. */
   test: string;
   /** En cell per fråga i `fragor`; null = frågan ingick inte i provet. */
@@ -296,7 +315,8 @@ export function fragematris(s: Struktur, f: DelkapitelFilter): Fragematris {
     // Testnamnet byggs av de delkapitel provet faktiskt innehåller: 4.1 + 4.2 → test412
     const koder = fragor.filter((_, i) => celler[i] !== null).map((fr) => fr.kod).filter((k) => k !== '—');
     return {
-      nyckel: t.nyckel, prov: t.prov, datum: t.datum, kalla: t.kalla, ...(t.rum !== undefined ? { rum: t.rum } : {}),
+      nyckel: t.nyckel, prov: t.prov, datum: t.datum, ...(t.tid !== undefined ? { tid: t.tid } : {}),
+      kalla: t.kalla, ...(t.rum !== undefined ? { rum: t.rum } : {}),
       test: testEtikett(koder), celler, ...(f.elevId !== undefined ? { elevCeller } : {}),
     };
   });

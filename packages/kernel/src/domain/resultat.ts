@@ -402,3 +402,18 @@ export function amnesKallor(amnesNamn: string | undefined): ResultatKalla[] {
   if (amnesNamn === undefined || amnesNamn.trim() === '') return alla;
   return /matematik|matte/i.test(amnesNamn) ? alla : alla.filter((k) => k !== 'magma');
 }
+
+/**
+ * Byter testtyp på ett helt tillfälle — t.ex. märka ett quiz som Övning så
+ * att det inte blandas ihop med lektionens läxförhör och exit ticket.
+ * Matchar på ämne, provnamn och datum, och uppdaterar även filregistret.
+ */
+export function andraKalla(s: Struktur, val: { amneId: string; prov: string; datum: string; franKalla: ResultatKalla; tillKalla: ResultatKalla }): Struktur {
+  const traff = (r: { amneId?: string; prov: string; datum?: string; kalla: ResultatKalla }): boolean =>
+    r.amneId === val.amneId && r.prov === val.prov && r.kalla === val.franKalla && (r.datum === undefined || r.datum === val.datum);
+  return {
+    ...s,
+    resultat: (s.resultat ?? []).map((r) => (traff(r) ? { ...r, kalla: val.tillKalla } : r)),
+    filregister: (s.filregister ?? []).map((f) => (traff(f) ? { ...f, kalla: val.tillKalla } : f)),
+  };
+}

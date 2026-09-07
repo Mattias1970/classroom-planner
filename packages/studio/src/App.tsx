@@ -23,7 +23,7 @@ import {
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
-  arFilImporterad, arRatt, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
+  arFilImporterad, arRatt, andraKalla, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
   delkapitelSegment, fragematris, filtreraFragor, elevanalys, rapportOversikt, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
@@ -3286,7 +3286,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
               <tbody>{fmRader.map((rad) => (
                 <tr key={rad.nyckel}>
                   <td className="small muted">v{isoVeckaLbl(rad.datum)}</td>
-                  <td className="small muted">{kortDatum(rad.datum)}</td>
+                  <td className="small muted">{kortDatum(rad.datum)}{rad.tid !== undefined && <> <b>{rad.tid}</b></>}</td>
                   <td className="small"><span className={`st-typ ${rad.kalla}`}>{TYPNAMN[rad.kalla]}</span></td>
                   <td className="st-fmprov" title={`${rad.prov}${rad.rum !== undefined ? ` · rum ${rad.rum}` : ''} · ${rad.test} · ${kortDatum(rad.datum)}`}>{rad.prov}</td>
                   {fm.fragor.map((fr, i) => {
@@ -3968,15 +3968,22 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
           const filer = (s.filregister ?? []).filter((fp) => amnesIds.has(fp.amneId)).sort((a, b) => (b.datum ?? '').localeCompare(a.datum ?? ''));
           return filer.length === 0 ? null : (
             <details className="st-filer">
-              <summary>📁 {filer.length} importerade filer <small className="muted">· ta bort en fil tar bort dess resultat; graferna töms när sista filen är borta</small></summary>
+              <summary>📁 {filer.length} importerade filer <small className="muted">· ändra typ (t.ex. märk som Övning) eller ta bort filen och dess resultat</small></summary>
               <table className="tbl small">
-                <thead><tr><th>Datum</th><th>Ämne</th><th>Källa</th><th>Prov</th><th>Rum</th><th>Träffar</th><th></th></tr></thead>
+                <thead><tr><th>Datum</th><th>Ämne</th><th>Typ</th><th>Prov</th><th>Rum</th><th>Träffar</th><th>Ändra / ta bort</th></tr></thead>
                 <tbody>{filer.map((fp) => (
                   <tr key={fp.id}>
-                    <td>{fp.datum ?? '—'}</td><td>{amnen.find((a) => a.id === fp.amneId)?.namn ?? '—'}</td><td>{KALLNAMN[fp.kalla]}</td>
+                    <td>{fp.datum ?? '—'}</td><td>{amnen.find((a) => a.id === fp.amneId)?.namn ?? '—'}</td><td><span className={`st-typ ${fp.kalla}`}>{TYPNAMN[fp.kalla]}</span></td>
                     <td title={fp.filnamn}>{fp.prov}</td><td>{fp.rum ?? '—'}</td><td>{fp.traffar ?? '—'}</td>
-                    <td><button className="icon-btn" title={`Ta bort ${fp.filnamn} och dess resultat`} aria-label={`Ta bort fil ${fp.prov}`}
-                      onClick={() => kor(() => taBortFil(lasStruktur(), fp.id), `${fp.filnamn} borttagen — resultaten för ${fp.prov} är raderade.`)}>🗑</button></td>
+                    <td className="rad" style={{ gap: 4 }}>
+                      <select aria-label={`Ändra typ för ${fp.prov}`} value={fp.kalla}
+                        onChange={(e) => { const ny = e.target.value as ResultatKalla; if (ny !== fp.kalla) kor(() => andraKalla(lasStruktur(), { amneId: fp.amneId, prov: fp.prov, datum: fp.datum ?? '', franKalla: fp.kalla, tillKalla: ny }), `${fp.prov} är nu märkt som ${TYPNAMN[ny]}.`); }}>
+                        {FM_TYPER.map((k) => <option key={k} value={k}>{TYPNAMN[k]}</option>)}
+                        {!FM_TYPER.includes(fp.kalla) && <option value={fp.kalla}>{TYPNAMN[fp.kalla]}</option>}
+                      </select>
+                      <button className="icon-btn" title={`Ta bort ${fp.filnamn} och dess resultat`} aria-label={`Ta bort fil ${fp.prov}`}
+                        onClick={() => kor(() => taBortFil(lasStruktur(), fp.id), `${fp.filnamn} borttagen — resultaten för ${fp.prov} är raderade.`)}>🗑</button>
+                    </td>
                   </tr>
                 ))}</tbody>
               </table>
@@ -3991,13 +3998,21 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
         )}
         {filRader.length > 0 && (<>
           <table className="tbl plan st-tabell">
-            <thead><tr><th>Fil</th><th>Quiz</th><th>Ämne</th><th>Tolkning</th><th>Deltog</th><th>Matchade</th><th>Status</th></tr></thead>
+            <thead><tr><th>Fil</th><th>Quiz</th><th>Ämne</th><th>Tid</th><th>Typ</th><th>Tolkning</th><th>Deltog</th><th>Matchade</th><th>Status</th></tr></thead>
             <tbody>{filRader.map((f, i) => (
               <tr key={i}>
                 <td title={f.filnamn}>{f.filnamn.slice(0, 22)}…</td>
                 <td>{f.quiz}</td>
                 <td>{f.amnesNamn}</td>
-                <td>{f.kalla !== null ? <b>{f.kalla === 'socrative-laxforhor' ? '📱 Läxförhör' : '🎫 Exit'}</b> : '⚠'} <small className="muted">{f.beskrivning}</small></td>
+                <td className="small muted">{f.tid ?? '—'}</td>
+                <td>
+                  <select aria-label={`Typ för ${f.filnamn}`} value={f.kalla ?? ''} disabled={f.amneId === null}
+                    onChange={(e) => setFilRader(filRader.map((x, j) => (j === i ? { ...x, kalla: e.target.value === '' ? null : e.target.value as ResultatKalla } : x)))}>
+                    <option value="">— välj —</option>
+                    {FM_TYPER.map((k) => <option key={k} value={k}>{TYPNAMN[k]}</option>)}
+                  </select>
+                </td>
+                <td><small className="muted">{f.beskrivning}</small></td>
                 <td>{f.deltog}</td>
                 <td>{f.matchade}{f.omatchadeNamn.length > 0 && <small className="muted" title={f.omatchadeNamn.join(', ')}> · ⚠ {f.omatchadeNamn.length} omatchade</small>}</td>
                 <td>{f.redanInne ? <span className="muted">redan importerad</span>

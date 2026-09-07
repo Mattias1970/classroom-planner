@@ -261,3 +261,19 @@ describe('Del 76: Övning som testtyp', async () => {
     expect(kravFor('socrative-ovning')).toBeNull();
   });
 });
+
+describe('Del 86: märka ett tillfälle som övning', async () => {
+  const { andraKalla } = await import('../src/domain/resultat.js');
+  it('byter källa på resultat och filpost för just det provet', () => {
+    let s = laggTillAmne(bygg(), { id: 'ma', klassId: 'k', namn: 'Matematik', schema: [{ dag: 3, start: '09:00', slut: '10:00' }] });
+    s = importeraResultat(s, { klassId: 'k', amneId: 'ma', kalla: 'socrative-exit', prov: 'Extra 1.1', datum: '2026-09-02',
+      rader: [{ namn: 'Anna Berg', poang: 8, maxPoang: 10 }] }).s;
+    s = importeraResultat(s, { klassId: 'k', amneId: 'ma', kalla: 'socrative-exit', prov: 'Quiz 1.1a', datum: '2026-09-02',
+      rader: [{ namn: 'Anna Berg', poang: 9, maxPoang: 10 }] }).s;
+    s = registreraFil(s, { amneId: 'ma', filnamn: 'extra.xlsx', importerad: '2026-09-02T10:00:00Z', kalla: 'socrative-exit', prov: 'Extra 1.1', datum: '2026-09-02', traffar: 1 });
+    const ut = andraKalla(s, { amneId: 'ma', prov: 'Extra 1.1', datum: '2026-09-02', franKalla: 'socrative-exit', tillKalla: 'socrative-ovning' });
+    expect(ut.resultat!.map((r) => `${r.prov}:${r.kalla}`)).toEqual(['Extra 1.1:socrative-ovning', 'Quiz 1.1a:socrative-exit']);
+    expect(ut.filregister![0].kalla).toBe('socrative-ovning');
+    expect(s.resultat![0].kalla).toBe('socrative-exit'); // originalet orört
+  });
+});

@@ -181,3 +181,26 @@ describe('Del 80: delkapitel ur quiznamnet när rummet är klassrummet', async (
     expect(m.rader.map((r) => r.test)).toEqual(['test41', 'test412', 'test4123']);
   });
 });
+
+describe('Del 86: klockslag och ordning inom en dag', async () => {
+  const { fragematris, jamforTillfalle } = await import('../src/domain/delkapiteltrend.js');
+  it('läxförhör före exit ticket när klockslag saknas', () => {
+    const rad = (kalla: 'socrative-laxforhor' | 'socrative-exit' | 'socrative-ovning', tid?: string) =>
+      ({ nyckel: 'x', prov: 'p', datum: '2026-09-02', kalla, ...(tid !== undefined ? { tid } : {}), resultat: [] });
+    expect(jamforTillfalle(rad('socrative-exit'), rad('socrative-laxforhor'))).toBeGreaterThan(0);
+    expect(jamforTillfalle(rad('socrative-ovning'), rad('socrative-exit'))).toBeGreaterThan(0);
+    // Klockslag vinner över typordningen
+    expect(jamforTillfalle(rad('socrative-exit', '08:15'), rad('socrative-laxforhor', '09:50'))).toBeLessThan(0);
+    expect(jamforTillfalle({ ...rad('socrative-exit'), datum: '2026-09-01' }, rad('socrative-laxforhor'))).toBeLessThan(0);
+  });
+
+  it('matrisen sorterar läxförhöret först och tar med klockslaget', () => {
+    let s = bygg();
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-exit', prov: 'Exit 4.1', datum: '2026-08-21', tid: '09:50',
+      rader: [{ namn: 'Anna Berg', poang: 1, maxPoang: 1, svar: [{ fraga: A, svar: 'r', ratt: true }] }] }).s;
+    const m = fragematris(s, f);
+    const dagen = m.rader.filter((r) => r.datum === '2026-08-21');
+    expect(dagen.map((r) => r.kalla)).toEqual(['socrative-laxforhor', 'socrative-exit']);
+    expect(dagen[1].tid).toBe('09:50');
+  });
+});
