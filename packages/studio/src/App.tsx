@@ -3789,6 +3789,41 @@ function RapportVy({ s }: { s: Struktur }) {
             </div>
           </>)}
 
+          {analys.nu.fragor.length > 0 && (<>
+            <h3>Vad du kan nu</h3>
+            <p className="small muted">Räknat på ditt <b>senaste</b> svar på varje fråga — läxförhören är kumulativa, så samma begrepp kommer igen. Det du missade tidigare men kan nu räknas som kunnigt.</p>
+            <div className="st-nu">
+              <div className="st-nu-tal"><b>{analys.nu.procent} %</b><span>{analys.nu.kan.length} av {analys.nu.fragor.length} begrepp</span></div>
+              <div className="st-nu-lista">
+                <div className="st-nu-rubrik kvar">Kvar att lära ({analys.nu.kvar.length})</div>
+                {analys.nu.kvar.length === 0 ? <p className="small muted">Inget — allt sitter just nu.</p> : (
+                  <ul className="small">{analys.nu.kvar.map((x) => (
+                    <li key={x.nr}><b>{x.kod}</b> {x.fraga} <small className="muted">senast fel i {x.senastProv}</small></li>
+                  ))}</ul>
+                )}
+              </div>
+              <div className="st-nu-lista">
+                <div className="st-nu-rubrik fixat">Vänt till rätt ({analys.nu.fixat.length})</div>
+                {analys.nu.fixat.length === 0 ? <p className="small muted">—</p> : (
+                  <ul className="small">{analys.nu.fixat.map((x) => (
+                    <li key={x.nr}><b>{x.kod}</b> {x.fraga} <small className="muted">{x.tidigareFel} fel tidigare</small></li>
+                  ))}</ul>
+                )}
+              </div>
+            </div>
+            <table className="tbl st-tabell st-nu-del">
+              <thead><tr><th>Delkapitel</th><th>Kan</th><th>Kvar</th><th>Andel</th><th>Senast testat</th></tr></thead>
+              <tbody>{analys.nu.delkapitel.map((d) => (
+                <tr key={d.kod}>
+                  <td><b>{d.kod}</b></td><td className="st-diff upp">{d.ratt}</td>
+                  <td className={d.fel > 0 ? 'st-diff ned' : 'muted'}>{d.fel}</td>
+                  <td><span className="st-fmhist" style={{ background: ratFarg(d.procent) }}>{d.procent} %</span></td>
+                  <td className="small muted">{d.senastProv} · {d.senastDatum}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </>)}
+
           {analys.matris.fragor.length > 0 && (<>
             <h3>Fråga för fråga</h3>
             <p className="small muted">Grön ruta = rätt, röd = fel, tom = frågan ingick inte i det quizet. Klicka på en ruta för att se frågan.</p>

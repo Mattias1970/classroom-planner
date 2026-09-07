@@ -218,3 +218,31 @@ describe('Del 87: klockslag styr ordningen inom dagen', async () => {
     expect([...rader].sort((a, b) => -jamforTillfalle(a, b)).map((x) => x.tid)).toEqual(['10:18', '09:17', '08:31']);
   });
 });
+
+describe('Del 90: nuläget — senaste svaret räknas', async () => {
+  const { nulage } = await import('../src/domain/delkapiteltrend.js');
+  it('Anna: A gick fel sist, B rätt efter tidigare fel', () => {
+    const n = nulage(bygg(), 'a', f);
+    expect(n.fragor.map((x) => `${x.nr}:${x.ratt}`)).toEqual(['1:false', '2:false', '3:true', '4:true']);
+    expect(n.kvar.map((x) => x.nr)).toEqual([1, 2]);
+    expect(n.kan.map((x) => x.nr)).toEqual([3, 4]);
+    expect(n.procent).toBe(50);
+    expect(n.senastProv).toBe('4.1-4.3 Begrepp');
+    expect(n.delkapitel.map((d) => `${d.kod}:${d.procent}`)).toEqual(['4.1:0', '4.2:100', '4.3:100']);
+    expect(n.fragor[0]).toMatchObject({ tidigareFel: 0, antalGanger: 3 }); // rätt, rätt, fel
+  });
+
+  it('Omar: fråga 1 var fel två gånger men är rätt nu — räknas som kan, och som fixat', () => {
+    const n = nulage(bygg(), 'b', f);
+    expect(n.kan.map((x) => x.nr)).toEqual([1, 2, 3]);
+    expect(n.kvar.map((x) => x.nr)).toEqual([4]);
+    expect(n.fixat.map((x) => `${x.nr}:${x.tidigareFel}`)).toEqual(['1:1', '2:2']);
+    expect(n.procent).toBe(75);
+  });
+
+  it('elev utan svar ger tomt nuläge', () => {
+    let s = bygg();
+    s = laggTillElev(s, { id: 'c', klassId: 'k', namn: 'Pia Provlund', grupp: 'B' });
+    expect(nulage(s, 'c', f)).toMatchObject({ fragor: [], procent: null, senastProv: null });
+  });
+});

@@ -250,6 +250,26 @@ export async function elevrapportTillWord(a: Elevanalys): Promise<void> {
   barn.push(new Paragraph({ text: 'Vad kan du göra?', heading: HeadingLevel.HEADING_2 }));
   for (const r of a.rad) { barn.push(punkt(r), tom()); }
 
+  if (a.nu.fragor.length > 0) {
+    barn.push(new Paragraph({ text: 'Vad du kan nu', heading: HeadingLevel.HEADING_2 }));
+    barn.push(new Paragraph({ children: [new TextRun({
+      text: `${a.nu.kan.length} av ${a.nu.fragor.length} begrepp (${a.nu.procent} %) sitter, räknat på ditt senaste svar på varje fråga. `
+        + 'Läxförhören är kumulativa, så samma begrepp återkommer — det du missade tidigare men kan nu räknas som kunnigt.', bold: true })] }));
+    barn.push(tabell(['Delkapitel', 'Kan', 'Kvar', 'Andel', 'Senast testat'],
+      a.nu.delkapitel.map((d) => [d.kod, String(d.ratt), String(d.fel), `${d.procent} %`, `${d.senastProv ?? '—'} ${d.senastDatum ?? ''}`])));
+    barn.push(tom());
+    if (a.nu.kvar.length > 0) {
+      barn.push(new Paragraph({ children: [new TextRun({ text: `Kvar att lära (${a.nu.kvar.length})`, bold: true })] }));
+      for (const x of a.nu.kvar) barn.push(new Paragraph({ bullet: { level: 0 }, text: `${x.kod} ${x.fraga} — senast fel i ${x.senastProv}` }));
+      barn.push(tom());
+    }
+    if (a.nu.fixat.length > 0) {
+      barn.push(new Paragraph({ children: [new TextRun({ text: `Vänt till rätt (${a.nu.fixat.length})`, bold: true })] }));
+      for (const x of a.nu.fixat) barn.push(new Paragraph({ bullet: { level: 0 }, text: `${x.kod} ${x.fraga} — ${x.tidigareFel} fel tidigare, rätt nu` }));
+      barn.push(tom());
+    }
+  }
+
   const matris = matrisTabell(a);
   if (matris.length > 0) {
     barn.push(new Paragraph({ text: 'Fråga för fråga', heading: HeadingLevel.HEADING_2 }));

@@ -53,7 +53,8 @@ describe('elevanalys', () => {
     expect(a.laget.find((r) => r.rubrik === 'Läxförhören sitter')!.text).toContain('kumulativa');
     expect(a.fastnat).toEqual([]);
     expect(a.rad.map((r) => r.rubrik)).toContain('Fånga upp lektionens slut'); // exit strax under läxförhören
-    expect(a.sammanfattning).toContain('Anna Berg ligger på');
+    expect(a.sammanfattning).toContain('Anna Berg kan 2 av 2 begrepp i Biologi just nu (100 %)');
+    expect(a.laget[0].rubrik).toBe('Du kan 2 av 2 begrepp just nu'); // nuläget först
   });
 
   it('Omar: svaga läxförhör, frånvaro och begrepp som fastnat ger konkreta råd', () => {
@@ -63,7 +64,7 @@ describe('elevanalys', () => {
     expect(o.laget.map((r) => r.rubrik)).toEqual(expect.arrayContaining(['Läxförhören behöver mer tid', 'Frånvaron påverkar']));
     expect(o.fastnat.map((b) => b.fraga)).toEqual([A]);
     const rubriker = o.rad.map((r) => r.rubrik);
-    expect(rubriker[0]).toContain('Börja med 1 begrepp');
+    expect(rubriker[0]).toContain('begrepp kvar att lära'); // rådet utgår från senaste svaret
     expect(rubriker).toEqual(expect.arrayContaining(['Plugga begreppen i flera omgångar', 'Ta igen de missade lektionerna']));
     expect(o.rad.find((r) => r.rubrik === 'Ta igen de missade lektionerna')!.text).toContain('2026-09-04');
   });

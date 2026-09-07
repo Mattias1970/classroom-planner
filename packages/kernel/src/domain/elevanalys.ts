@@ -15,7 +15,7 @@ import {
   type DashboardFilter, type KurvPunkt, type ProvTillfalle, type Trend,
 } from './dashboard.js';
 import { trendkoll } from './trendkoll.js';
-import { aterkommandeFel, aterkommandeFelKlass, delkapitelSegment, type BegreppsFel, type SegmentTillfalle } from './delkapiteltrend.js';
+import { aterkommandeFel, aterkommandeFelKlass, delkapitelSegment, nulage, type BegreppsFel, type Nulage, type SegmentTillfalle } from './delkapiteltrend.js';
 import { elevrapport, socrativeElevLank, type Elevrapport } from './elevrapport.js';
 import { fragematris, type Fragematris } from './delkapiteltrend.js';
 
@@ -60,6 +60,8 @@ export interface Elevanalys {
   segment: SegmentTillfalle[];
   /** Fråga × testtillfälle för eleven — rätt, fel eller inte gjord. */
   matris: Fragematris;
+  /** Vad eleven kan NU — senaste svaret på varje fråga. */
+  nu: Nulage;
   fastnat: BegreppsFel[];
   /** Socrative-rum att öva i, för de delkapitel som behöver repeteras. */
   ovningar: Array<{ kod: string; namn: string; rum: string; url: string }>;
@@ -111,6 +113,7 @@ export function elevanalys(s: Struktur, elevId: string, f: DashboardFilter & { a
   const tkElev = tk.elever.find((e) => e.elev.id === elevId) ?? null;
   const delF = { klassId: f.klassId, ...(f.amneId !== undefined ? { amneId: f.amneId } : {}), ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) };
   const segment = delkapitelSegment(s, { ...delF, elevId });
+  const nu = nulage(s, elevId, delF);
   const fastnat = aterkommandeFel(s, elevId, delF);
   const matris = fragematris(s, { ...delF, elevId });
   let rapport: Elevrapport | null = null;
@@ -119,7 +122,21 @@ export function elevanalys(s: Struktur, elevId: string, f: DashboardFilter & { a
   }
 
   // ── Läget ────────────────────────────────────────────────
+  // Nuläget först: det intressanta är vad eleven kan nu, inte vad som missades
+  // för tre veckor sedan. Läxförhören är kumulativa, så senaste svaret gäller.
   const laget: Rad[] = [];
+  if (nu.fragor.length > 0) {
+    const svaga = nu.delkapitel.filter((d) => d.procent !== null && d.procent < 100);
+    laget.push({
+      ton: (nu.procent ?? 0) >= 90 ? 'bra' : (nu.procent ?? 0) >= 70 ? 'okej' : 'oro',
+      rubrik: `Du kan ${nu.kan.length} av ${nu.fragor.length} begrepp just nu`,
+      text: `Räknat på ditt senaste svar på varje fråga sitter ${nu.procent} % av begreppen`
+        + `${nu.senastProv !== null ? ` (färskast: ${nu.senastProv}, ${nu.senastDatum})` : ''}. `
+        + (nu.kvar.length === 0 ? 'Inget är kvar att lära in just nu.'
+          : `Kvar att lära: ${nu.kvar.length} begrepp${svaga.length > 0 ? `, mest i ${svaga.map((d) => d.kod).join(' och ')}` : ''}.`)
+        + (nu.fixat.length > 0 ? ` Du har vänt ${nu.fixat.length} begrepp från fel till rätt.` : ''),
+    });
+  }
   const lax = kallor.find((k) => k.kalla === 'socrative-laxforhor');
   const exit = kallor.find((k) => k.kalla === 'socrative-exit');
   if (lax !== undefined && lax.snittProcent !== null) {
@@ -178,6 +195,20 @@ export function elevanalys(s: Struktur, elevId: string, f: DashboardFilter & { a
 
   // ── Råd ──────────────────────────────────────────────────
   const rad: Rad[] = [];
+  if (nu.kvar.length > 0) {
+    rad.push({
+      ton: 'oro', rubrik: `${nu.kvar.length} begrepp kvar att lära`,
+      text: `Det här svarade du fel på senast: ${nu.kvar.slice(0, 6).map((x) => x.fraga).join(' · ')}`
+        + `${nu.kvar.length > 6 ? ` (och ${nu.kvar.length - 6} till)` : ''}. `
+        + 'Börja här — resten kan du redan. Skriv en egen förklaring till varje och testa dig själv i Socrative-rummet.',
+    });
+  }
+  if (nu.fixat.length > 0) {
+    rad.push({
+      ton: 'bra', rubrik: `${nu.fixat.length} begrepp har du redan vänt`,
+      text: `${nu.fixat.slice(0, 5).map((x) => x.fraga).join(' · ')} satt inte förut men sitter nu. Håll dem vid liv genom att svara på dem igen i nästa kumulativa läxförhör.`,
+    });
+  }
   if (fastnat.length > 0) {
     rad.push({
       ton: 'oro', rubrik: `Börja med ${Math.min(3, fastnat.length)} begrepp`,
@@ -236,7 +267,11 @@ export function elevanalys(s: Struktur, elevId: string, f: DashboardFilter & { a
   const helhet = snitt(egna.map(resultatProcent).filter((x): x is number => x !== null));
   const sammanfattning = kallor.length === 0
     ? `${elev.namn} har inga resultat i urvalet.`
-    : `${elev.namn} ligger på ${helhet ?? '—'} % sammantaget i ${amneNamn}`
+    : nu.fragor.length > 0
+      ? `${elev.namn} kan ${nu.kan.length} av ${nu.fragor.length} begrepp i ${amneNamn} just nu (${nu.procent} %)`
+        + `${nu.kvar.length > 0 ? `, med ${nu.kvar.length} kvar att lära` : ''}`
+        + `${narvaro?.narvaroProcent !== undefined && narvaro.narvaroProcent !== null ? `. Närvaro ${narvaro.narvaroProcent} %` : ''}.`
+      : `${elev.namn} ligger på ${helhet ?? '—'} % sammantaget i ${amneNamn}`
       + `${lax?.snittProcent !== undefined && lax.snittProcent !== null ? `, läxförhör ${lax.snittProcent} %` : ''}`
       + `${exit?.snittProcent !== undefined && exit.snittProcent !== null ? ` och exit tickets ${exit.snittProcent} %` : ''}`
       + `${narvaro?.narvaroProcent !== undefined && narvaro.narvaroProcent !== null ? `, med ${narvaro.narvaroProcent} % närvaro` : ''}.`;
@@ -258,7 +293,7 @@ export function elevanalys(s: Struktur, elevId: string, f: DashboardFilter & { a
     lektionsDiff: lekt?.diffSnitt ?? null,
     lart: tkElev?.lart ?? 0,
     glomt: tkElev?.glomt ?? 0,
-    segment, matris, fastnat, ovningar, filmer, rapport, laget, rad, sammanfattning,
+    segment, matris, nu, fastnat, ovningar, filmer, rapport, laget, rad, sammanfattning,
   };
 }
 

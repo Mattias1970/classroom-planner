@@ -354,3 +354,97 @@ export function filtreraFragor(m: Fragematris, val: FragefilterVal = {}): Fragef
   }).filter((r) => r.bedomda > 0 && r.procent >= min && r.procent <= max)
     .sort((a, b) => a.procent - b.procent || a.nr - b.nr);
 }
+
+// ── Del 90: nuläget — vad eleven kan NU ──────────────────────
+//
+// Läxförhören är kumulativa: samma fråga återkommer i varje nytt förhör.
+// Det som betyder något är därför det SENASTE svaret på varje fråga, inte
+// att eleven missade den för tre veckor sedan. Nuläget läser matrisen
+// bakifrån och tar första bedömda svaret per fråga.
+
+export interface FragaNu {
+  fraga: string;
+  kod: string;
+  nr: number;
+  /** Senaste bedömda svaret. */
+  ratt: boolean;
+  senastProv: string;
+  senastDatum: string;
+  /** Antal fel tidigare (före det senaste svaret). */
+  tidigareFel: number;
+  /** Antal gånger frågan ställts. */
+  antalGanger: number;
+}
+
+export interface DelkapitelNu {
+  kod: string;
+  ratt: number;
+  fel: number;
+  /** Andel rätt på det eleven senast svarat i delkapitlet (0–100). */
+  procent: number | null;
+  /** Senaste provet som testade delkapitlet. */
+  senastProv: string | null;
+  senastDatum: string | null;
+}
+
+export interface Nulage {
+  /** Alla frågor eleven svarat på, med sitt senaste svar. */
+  fragor: FragaNu[];
+  /** Delkapitlen, sammanräknade på senaste svaren. */
+  delkapitel: DelkapitelNu[];
+  /** Kan nu: senaste svaret rätt. */
+  kan: FragaNu[];
+  /** Kvar att lära: senaste svaret fel. */
+  kvar: FragaNu[];
+  /** Vände till rätt: tidigare fel men senaste svaret rätt. */
+  fixat: FragaNu[];
+  /** Andel rätt av de senaste svaren (0–100). */
+  procent: number | null;
+  /** Provet som ger den färskaste bilden. */
+  senastProv: string | null;
+  senastDatum: string | null;
+}
+
+/** Elevens aktuella kunskapsläge: senaste svaret på varje fråga. */
+export function nulage(s: Struktur, elevId: string, f: DelkapitelFilter): Nulage {
+  const m = fragematris(s, { ...f, elevId });
+  const fragor: FragaNu[] = [];
+  m.fragor.forEach((fr, i) => {
+    let senast: { ratt: boolean; prov: string; datum: string } | null = null;
+    let tidigareFel = 0; let antal = 0;
+    for (const rad of m.rader) { // kronologisk ordning
+      const svar = rad.elevCeller?.[i];
+      if (svar === null || svar === undefined) continue;
+      antal += 1;
+      if (senast !== null && !senast.ratt) tidigareFel += 1;
+      senast = { ratt: svar, prov: rad.prov, datum: rad.datum };
+    }
+    if (senast === null) return;
+    fragor.push({
+      fraga: fr.fraga, kod: fr.kod, nr: fr.nr, ratt: senast.ratt,
+      senastProv: senast.prov, senastDatum: senast.datum, tidigareFel, antalGanger: antal,
+    });
+  });
+  const perDel = new Map<string, FragaNu[]>();
+  for (const fr of fragor) perDel.set(fr.kod, [...(perDel.get(fr.kod) ?? []), fr]);
+  const delkapitel: DelkapitelNu[] = [...perDel.entries()]
+    .sort(([a], [b]) => a.localeCompare(b, 'sv', { numeric: true }))
+    .map(([kod, lista]) => {
+      const ratt = lista.filter((x) => x.ratt).length;
+      const senast = [...lista].sort((a, b) => a.senastDatum.localeCompare(b.senastDatum)).pop() ?? null;
+      return {
+        kod, ratt, fel: lista.length - ratt,
+        procent: lista.length === 0 ? null : Math.round((ratt / lista.length) * 100),
+        senastProv: senast?.senastProv ?? null, senastDatum: senast?.senastDatum ?? null,
+      };
+    });
+  const kan = fragor.filter((x) => x.ratt);
+  const senasteRad = [...m.rader].reverse().find((r) => (r.elevCeller ?? []).some((c) => c !== null)) ?? null;
+  return {
+    fragor, delkapitel, kan,
+    kvar: fragor.filter((x) => !x.ratt),
+    fixat: fragor.filter((x) => x.ratt && x.tidigareFel > 0),
+    procent: fragor.length === 0 ? null : Math.round((kan.length / fragor.length) * 100),
+    senastProv: senasteRad?.prov ?? null, senastDatum: senasteRad?.datum ?? null,
+  };
+}

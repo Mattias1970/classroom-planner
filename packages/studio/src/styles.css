@@ -725,3 +725,15 @@ input.fel { border-color: #B71C1C; }
 .st-lank.film { border-color: #A5D6A7; background: #E8F5E9; color: #1B5E20; }
 .st-lank:hover { box-shadow: 0 1px 3px rgba(20,40,80,.15); }
 .st-rapportvy .st-fmruta { cursor: pointer; }
+
+/* Del 90: nuläget i rapporten */
+.st-nu { display: grid; grid-template-columns: auto 1fr 1fr; gap: 16px; align-items: start; margin: 8px 0 12px; }
+@media (max-width: 900px) { .st-nu { grid-template-columns: 1fr; } }
+.st-nu-tal { background: #EEF3FB; border: 1px solid var(--ram); border-radius: 12px; padding: 12px 18px; text-align: center; }
+.st-nu-tal b { display: block; font-size: 34px; letter-spacing: -.02em; color: var(--bla); font-variant-numeric: tabular-nums; }
+.st-nu-tal span { font-size: 12px; color: var(--muted-varm); }
+.st-nu-rubrik { font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+.st-nu-rubrik.kvar { color: #B71C1C; } .st-nu-rubrik.fixat { color: #1B5E20; }
+.st-nu-lista ul { margin: 0; padding-left: 18px; }
+.st-nu-lista li { margin-bottom: 3px; }
+.st-nu-del { margin-bottom: 8px; }
