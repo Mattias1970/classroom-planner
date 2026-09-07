@@ -11,11 +11,11 @@
 import type { Elev, Struktur } from './typer.js';
 import { kravFor, resultatProcent, type ResultatKalla } from './resultat.js';
 import {
-  elevKurva, elevLektionstest, elevNarvaro, provTillfallen, trendFor,
+  elevKurva, elevLektionstest, elevNarvaro, provTillfallen, sokElever, trendFor,
   type DashboardFilter, type KurvPunkt, type ProvTillfalle, type Trend,
 } from './dashboard.js';
 import { trendkoll } from './trendkoll.js';
-import { aterkommandeFel, delkapitelSegment, type BegreppsFel, type SegmentTillfalle } from './delkapiteltrend.js';
+import { aterkommandeFel, aterkommandeFelKlass, delkapitelSegment, type BegreppsFel, type SegmentTillfalle } from './delkapiteltrend.js';
 import { elevrapport, type Elevrapport } from './elevrapport.js';
 
 export interface KallaSammanfattning {
@@ -240,4 +240,63 @@ export function elevanalys(s: Struktur, elevId: string, f: DashboardFilter & { a
     glomt: tkElev?.glomt ?? 0,
     segment, fastnat, rapport, laget, rad, sammanfattning,
   };
+}
+
+// ── Del 85: lätt översikt för rapportlistan ──────────────────
+//
+// elevanalys() gör om hela analysen per elev (trendkoll, delkapitel,
+// begrepp som fastnat, provtillfällen). Att köra den för 30 elever vid
+// varje omritning låser gränssnittet. Översikten räknar i stället EN gång
+// för klassen och delar ut siffrorna per elev.
+
+export interface RapportRad {
+  elev: Elev;
+  laxforhorProcent: number | null;
+  exitProcent: number | null;
+  helhetProcent: number | null;
+  narvaroProcent: number | null;
+  antalFastnat: number;
+  /** Antal saker som behöver tas tag i (låga snitt, frånvaro, glömska). */
+  oro: number;
+  antalProv: number;
+}
+
+/** Nyckeltal per elev för rapportlistan — en genomgång av data, inte en per elev. */
+export function rapportOversikt(s: Struktur, f: DashboardFilter, sok = ''): RapportRad[] {
+  const elever = sokElever(s, f.klassId, sok);
+  const ids = new Set(elever.map((e) => e.id));
+  const rs = (s.resultat ?? []).filter((r) => ids.has(r.elevId)
+    && (f.amneId === undefined || r.amneId === f.amneId)
+    && (f.fran === undefined || r.datum >= f.fran) && (f.till === undefined || r.datum <= f.till));
+  const perElev = new Map<string, typeof rs>();
+  for (const r of rs) perElev.set(r.elevId, [...(perElev.get(r.elevId) ?? []), r]);
+  const narvaro = new Map(elevNarvaro(s, f).map((n) => [n.elev.id, n]));
+  const fastnat = new Map<string, number>();
+  const delF = { klassId: f.klassId, ...(f.amneId !== undefined ? { amneId: f.amneId } : {}), ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) };
+  for (const b of aterkommandeFelKlass(s, delF)) {
+    for (const e of b.elever) fastnat.set(e.elev.id, (fastnat.get(e.elev.id) ?? 0) + 1);
+  }
+  const procentFor = (rader: typeof rs, kalla?: ResultatKalla) =>
+    snitt(rader.filter((r) => kalla === undefined || r.kalla === kalla).map(resultatProcent).filter((x): x is number => x !== null));
+
+  return elever.map((elev) => {
+    const egna = perElev.get(elev.id) ?? [];
+    const lax = procentFor(egna, 'socrative-laxforhor');
+    const exit = procentFor(egna, 'socrative-exit');
+    const n = narvaro.get(elev.id)?.narvaroProcent ?? null;
+    const antalFastnat = fastnat.get(elev.id) ?? 0;
+    const laxKrav = kravFor('socrative-laxforhor') ?? 90;
+    const exitKrav = kravFor('socrative-exit') ?? 70;
+    // Utan resultat vet vi ingenting — då är det inte "oro", det är saknad data
+    let oro = 0;
+    if (egna.length === 0) return { elev, laxforhorProcent: null, exitProcent: null, helhetProcent: null, narvaroProcent: n, antalFastnat, oro: 0, antalProv: 0 };
+    if (lax !== null && lax < laxKrav) oro += 1;
+    if (exit !== null && exit < exitKrav) oro += 1;
+    if (n !== null && n < 80) oro += 1;
+    if (antalFastnat > 0) oro += 1;
+    return {
+      elev, laxforhorProcent: lax, exitProcent: exit, helhetProcent: procentFor(egna),
+      narvaroProcent: n, antalFastnat, oro, antalProv: egna.length,
+    };
+  });
 }

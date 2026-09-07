@@ -24,7 +24,7 @@ import {
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   arFilImporterad, arRatt, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
-  delkapitelSegment, fragematris, filtreraFragor, elevanalys, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
+  delkapitelSegment, fragematris, filtreraFragor, elevanalys, rapportOversikt, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
@@ -3665,9 +3665,15 @@ function RapportVy({ s }: { s: Struktur }) {
   const valtAmne = amneId !== '' ? amneId : amnen[0]?.id ?? '';
   const period = tolkaVeckor(periodText);
   const f: DashboardFilter = { klassId: klass.id, ...(valtAmne !== '' ? { amneId: valtAmne } : {}), ...(period ?? {}) };
-  const elever = sokElever(s, klass.id, sok);
-  const analyser = elever.map((e) => ({ elev: e, a: elevanalys(s, e.id, f) }));
-  const vald = analyser.find((x) => x.elev.id === elevId) ?? null;
+  // Listan använder den lätta översikten (en genomgång av data). Den fulla analysen
+  // körs bara för den elev som är öppen — annars låser 30 elever × full analys sidan.
+  const nyckel = `${klass.id}|${valtAmne}|${periodText}|${sok}|${(s.resultat ?? []).length}`;
+  const rader = useMemo(() => rapportOversikt(s, f, sok), [nyckel]); // eslint-disable-line react-hooks/exhaustive-deps
+  const valdElev = rader.find((r) => r.elev.id === elevId)?.elev ?? null;
+  const analys = useMemo(
+    () => (valdElev === null ? null : elevanalys(s, valdElev.id, f)),
+    [nyckel, valdElev?.id], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const tillWord = (a: ReturnType<typeof elevanalys>, id: string) => {
     setSkriver(id);
     void import('./elevrapportWord.js')
@@ -3675,7 +3681,6 @@ function RapportVy({ s }: { s: Struktur }) {
       .catch(() => window.alert('Rapporten kunde inte skapas.'))
       .finally(() => setSkriver(''));
   };
-  const kalla = (a: ReturnType<typeof elevanalys>, k: ResultatKalla) => a.kallor.find((x) => x.kalla === k)?.snittProcent ?? null;
 
   return (
     <div className="card superteach st-dash">
@@ -3696,29 +3701,29 @@ function RapportVy({ s }: { s: Struktur }) {
           <input aria-label="Period för rapport" placeholder="v.35–43" value={periodText} onChange={(e) => setPeriodText(e.target.value)} style={{ width: 90 }} /></label>
         <label>🔎 <input aria-label="Sök elev för rapport" placeholder="Sök elev…" value={sok} onChange={(e) => setSok(e.target.value)} /></label>
         <span className="spacer" />
-        <small className="muted">{elever.length} elever</small>
+        <small className="muted">{rader.length} elever</small>
       </div>
 
-      {vald === null ? (
+      {analys === null || valdElev === null ? (
         <div className="uppg-kort st-widget">
           <b>Välj elev</b> <small className="muted">klicka på en rad för att öppna rapporten</small>
           <div className="st-scroll" style={{ maxHeight: 560 }}>
             <table className="tbl st-tabell">
               <thead><tr><th>Elev</th><th>Läxförhör</th><th>Exit</th><th>Närvaro</th><th>Fastnat</th><th>Läget</th><th></th></tr></thead>
-              <tbody>{analyser.map(({ elev, a }) => {
-                const oro = a.laget.filter((r) => r.ton === 'oro').length;
-                return (
-                  <tr key={elev.id} className="st-rapportrad" onClick={() => setElevId(elev.id)}>
-                    <td><button className="linkbtn">{elev.namn}</button></td>
-                    <td>{kalla(a, 'socrative-laxforhor') ?? '—'} %</td>
-                    <td>{kalla(a, 'socrative-exit') ?? '—'} %</td>
-                    <td className={a.narvaroProcent !== null && a.narvaroProcent < 80 ? 'st-narv-lag' : undefined}>{a.narvaroProcent ?? '—'} %</td>
-                    <td className={a.fastnat.length > 0 ? 'st-diff ned' : 'muted'}>{a.fastnat.length}</td>
-                    <td>{oro === 0 ? <span className="st-krav ok">inget att oroa sig för</span> : <span className="st-krav ej">{oro} sak{oro > 1 ? 'er' : ''} att ta tag i</span>}</td>
-                    <td><button className="btn sm" disabled={skriver === elev.id} onClick={(ev) => { ev.stopPropagation(); tillWord(a, elev.id); }}>{skriver === elev.id ? '…' : '📝 Word'}</button></td>
-                  </tr>
-                );
-              })}</tbody>
+              <tbody>{rader.map((r) => (
+                <tr key={r.elev.id} className="st-rapportrad" onClick={() => setElevId(r.elev.id)}>
+                  <td><button className="linkbtn">{r.elev.namn}</button></td>
+                  <td>{r.laxforhorProcent ?? '—'} %</td>
+                  <td>{r.exitProcent ?? '—'} %</td>
+                  <td className={r.narvaroProcent !== null && r.narvaroProcent < 80 ? 'st-narv-lag' : undefined}>{r.narvaroProcent ?? '—'} %</td>
+                  <td className={r.antalFastnat > 0 ? 'st-diff ned' : 'muted'}>{r.antalFastnat}</td>
+                  <td>{r.antalProv === 0 ? <span className="muted">inga resultat</span>
+                    : r.oro === 0 ? <span className="st-krav ok">inget att oroa sig för</span>
+                      : <span className="st-krav ej">{r.oro} sak{r.oro > 1 ? 'er' : ''} att ta tag i</span>}</td>
+                  <td><button className="btn sm" disabled={skriver === r.elev.id || r.antalProv === 0}
+                    onClick={(ev) => { ev.stopPropagation(); setSkriver(r.elev.id); tillWord(elevanalys(s, r.elev.id, f), r.elev.id); }}>{skriver === r.elev.id ? '…' : '📝 Word'}</button></td>
+                </tr>
+              ))}</tbody>
             </table>
           </div>
         </div>
@@ -3726,38 +3731,38 @@ function RapportVy({ s }: { s: Struktur }) {
         <div className="uppg-kort st-widget st-rapportvy">
           <div className="rad">
             <button className="btn sm" onClick={() => setElevId('')}>← Alla elever</button>
-            <b>{vald.elev.namn}</b> <small className="muted">{vald.a.amneNamn}{period !== null ? ` · v.${period.veckaFran}–${period.veckaTill}` : ''}</small>
+            <b>{valdElev.namn}</b> <small className="muted">{analys.amneNamn}{period !== null ? ` · v.${period.veckaFran}–${period.veckaTill}` : ''}</small>
             <span className="spacer" />
-            <button className="btn" disabled={skriver === vald.elev.id} onClick={() => tillWord(vald.a, vald.elev.id)}>{skriver === vald.elev.id ? '… skapar' : '📝 Skriv ut till Word'}</button>
+            <button className="btn" disabled={skriver === valdElev.id} onClick={() => tillWord(analys, valdElev.id)}>{skriver === valdElev.id ? '… skapar' : '📝 Skriv ut till Word'}</button>
           </div>
-          <p className="st-rapport-ingress">{vald.a.sammanfattning}</p>
+          <p className="st-rapport-ingress">{analys.sammanfattning}</p>
 
           <h3>Hur går det?</h3>
-          {vald.a.laget.length === 0 ? <p className="muted small">Inga resultat i perioden.</p> : (
-            <div className="st-punkter">{vald.a.laget.map((r, i) => (
+          {analys.laget.length === 0 ? <p className="muted small">Inga resultat i perioden.</p> : (
+            <div className="st-punkter">{analys.laget.map((r, i) => (
               <div key={i} className={`st-punkt-kort ${r.ton}`}><b>{r.rubrik}</b><p>{r.text}</p></div>
             ))}</div>
           )}
 
-          {vald.a.kurva.length > 0 && (<>
+          {analys.kurva.length > 0 && (<>
             <h3>Resultat över tid</h3>
             <LinjeDiagram hojd={280} visaVarden
-              tillfallen={vald.a.kurva.map((p, i) => ({ etikett: [`T${i + 1}`, p.datum.slice(5)], titel: `${p.prov} · ${p.datum}` }))}
-              serier={[{ namn: vald.elev.namn, varden: vald.a.kurva.map((p) => p.procent), farg: KORT_FARG['socrative-exit'] }]}
+              tillfallen={analys.kurva.map((p, i) => ({ etikett: [`T${i + 1}`, p.datum.slice(5)], titel: `${p.prov} · ${p.datum}` }))}
+              serier={[{ namn: valdElev.namn, varden: analys.kurva.map((p) => p.procent), farg: KORT_FARG['socrative-exit'] }]}
               kravLinjer={[{ procent: 90, namn: 'läxförhör 90 %' }, { procent: 70, namn: 'exit 70 %' }]} />
-            <TestLista tillfallen={vald.a.tillfallen} />
+            <TestLista tillfallen={analys.tillfallen} />
           </>)}
 
           <h3>Vad kan du göra?</h3>
-          <div className="st-punkter">{vald.a.rad.map((r, i) => (
+          <div className="st-punkter">{analys.rad.map((r, i) => (
             <div key={i} className={`st-punkt-kort ${r.ton}`}><b>{r.rubrik}</b><p>{r.text}</p></div>
           ))}</div>
 
-          {vald.a.fastnat.length > 0 && (<>
+          {analys.fastnat.length > 0 && (<>
             <h3>Begrepp att träna på</h3>
             <table className="tbl st-tabell">
               <thead><tr><th>Begrepp</th><th>Del</th><th>Fel</th><th>Historik</th></tr></thead>
-              <tbody>{vald.a.fastnat.map((b) => (
+              <tbody>{analys.fastnat.map((b) => (
                 <tr key={b.fraga}>
                   <td><div className="st-provnamn" title={b.fraga}>{b.fraga}</div></td>
                   <td>{b.kod}</td><td className="st-diff ned">{b.antalFel}</td>
@@ -3767,7 +3772,7 @@ function RapportVy({ s }: { s: Struktur }) {
             </table>
           </>)}
 
-          {valtAmne !== '' && <ElevrapportVy s={s} elevId={vald.elev.id} amneId={valtAmne} period={period === null ? undefined : { fran: f.fran, till: f.till }} />}
+          {valtAmne !== '' && <ElevrapportVy s={s} elevId={valdElev.id} amneId={valtAmne} period={period === null ? undefined : { fran: f.fran, till: f.till }} />}
         </div>
       )}
     </div>

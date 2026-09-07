@@ -78,3 +78,25 @@ describe('elevanalys', () => {
     expect(() => elevanalys(s, 'finns-ej', f)).toThrow('Okänd elev');
   });
 });
+
+describe('rapportOversikt', () => {
+  it('ger nyckeltal per elev utan att köra hela analysen', async () => {
+    const { rapportOversikt } = await import('../src/domain/elevanalys.js');
+    const r = rapportOversikt(bygg(), f);
+    const anna = r.find((x) => x.elev.id === 'a')!;
+    expect(anna).toMatchObject({ laxforhorProcent: 100, narvaroProcent: 100, antalFastnat: 0, oro: 0 });
+    const omar = r.find((x) => x.elev.id === 'b')!;
+    expect(omar.laxforhorProcent).toBeLessThan(90);
+    expect(omar.antalFastnat).toBe(1);
+    expect(omar.oro).toBeGreaterThanOrEqual(3); // låga läxförhör + låga exit + frånvaro + fastnat
+  });
+
+  it('elev utan resultat får noll prov och ingen oro; sökningen filtrerar', async () => {
+    const { rapportOversikt } = await import('../src/domain/elevanalys.js');
+    let s = bygg();
+    s = laggTillElev(s, { id: 'c', klassId: 'k', namn: 'Pia Provlund', grupp: 'B' });
+    const pia = rapportOversikt(s, f).find((x) => x.elev.id === 'c')!;
+    expect(pia).toMatchObject({ antalProv: 0, oro: 0, laxforhorProcent: null });
+    expect(rapportOversikt(s, f, 'omar').map((x) => x.elev.namn)).toEqual(['Omar Ali']);
+  });
+});
