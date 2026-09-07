@@ -20,6 +20,17 @@ function lsSet(k: string, v: string): void {
   try { window.localStorage.setItem(k, v); } catch { /* minnesfallback räcker */ }
 }
 
+/** Liten JSON-inställning vid sidan av strukturen, t.ex. vilka trädnoder som är öppna. */
+export function lasInstallning<T>(nyckel: string, standard: T): T {
+  const raw = lsGet(nyckel);
+  if (raw === null) return standard;
+  try { return JSON.parse(raw) as T; } catch { return standard; }
+}
+
+export function sparaInstallning(nyckel: string, varde: unknown): void {
+  lsSet(nyckel, JSON.stringify(varde));
+}
+
 export function lasStruktur(): Struktur {
   const raw = lsGet(KEY);
   if (raw === null) return tomStruktur();

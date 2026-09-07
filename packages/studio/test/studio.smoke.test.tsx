@@ -1747,8 +1747,9 @@ describe('Stabila id:n, ingen blank skärm, NO+Tk-nod i trädet', () => {
     const forsta = lasStruktur();
     const andra = lasStruktur();
     expect(andra.amnen.map((a) => a.id)).toEqual(forsta.amnen.map((a) => a.id)); // stabila
-    // Trädet: klick på Biologi öppnar Biologi (inte Matematik)
+    // Trädet: fäll ut allt, klick på Biologi öppnar Biologi (inte Matematik)
     const host = render();
+    act(() => { knapp(host, '⊞ fäll ut').click(); });
     act(() => { treeKnapp(host, '📖 Biologi').click(); });
     const rubrik = host.querySelector('.panel h2')!;
     expect(rubrik.textContent).toContain('Biologi');
@@ -2029,5 +2030,34 @@ describe('📄 Rapporter', () => {
     expect(knapp(host, '📝 Skriv ut till Word')).not.toBeNull();
     act(() => { knapp(host, '← Alla elever').click(); });
     expect(host.querySelector('.st-rapportrad')).not.toBeNull();
+  });
+});
+
+describe('🌳 Trädet och lektionsnamn', () => {
+  it('noderna är hopfällda tills man fäller ut, och vägen till vald nod hålls öppen', () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    skriv(input(host, 'Tjänstens namn'), 'NO');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    // Tjänsten är vald → skolåret hålls öppet och tjänsten syns
+    expect(treeKnapp(host, '💼 NO')).not.toBeNull();
+    act(() => { treeKnapp(host, '💼 NO').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    expect(treeKnapp(host, '👥 8B')).not.toBeNull();
+
+    // Fäll ut allt → knappen byter till fäll ihop; fäll ihop och välj skolåret:
+    // då är bara skolårets väg öppen och klassen syns inte längre
+    act(() => { knapp(host, '⊞ fäll ut').click(); });
+    act(() => { knapp(host, '⊟ fäll ihop').click(); });
+    act(() => { treeKnapp(host, '📅 2026/2027').click(); });
+    expect([...host.querySelectorAll('.node')].some((n) => n.textContent?.includes('8B'))).toBe(false);
+    act(() => { knapp(host, '⊞ fäll ut').click(); });
+    expect(treeKnapp(host, '👥 8B')).not.toBeNull();
+  });
+
+  it('lektionens namn går att rätta i detaljplaneringen och kan återställas', async () => {
+    const { lektionsNamn } = await import('@planner/kernel');
+    expect(lektionsNamn({ avsnitt: '1.1 Negativa tal' }, { avsnittText: '1.1 Negativa tal (rättad)' })).toBe('1.1 Negativa tal (rättad)');
   });
 });

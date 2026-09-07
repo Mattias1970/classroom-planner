@@ -546,3 +546,25 @@ export function skapaFriPlanering(s: Struktur, amneId: string, skapad: string): 
   ut = uppdateraAmne(ut, amneId, { bokId });
   return registreraPlanering(ut, { id: `pl-${amneId}`, amneId, bokId, skapad });
 }
+
+
+/** Lektionens namn: planens överstyrning om den finns, annars bokens avsnitt. */
+export function lektionsNamn(lektion: { avsnitt: string }, lp?: { avsnittText?: string } | null): string {
+  const eget = lp?.avsnittText?.trim() ?? '';
+  return eget !== '' ? eget : lektion.avsnitt;
+}
+
+/** Sparar (eller tar bort, med null) QR-bilden för ett Socrative-rum. */
+export function sattSocrativeQr(s: Struktur, rum: string, dataUrl: string | null): Struktur {
+  const nyckel = rum.trim().toUpperCase();
+  if (nyckel === '') return s;
+  const qr = { ...(s.socrativeQr ?? {}) };
+  if (dataUrl === null || dataUrl.trim() === '') delete qr[nyckel];
+  else qr[nyckel] = dataUrl;
+  return { ...s, socrativeQr: qr };
+}
+
+/** QR-bilden för ett rum, om någon sparats. */
+export function socrativeQr(s: Struktur, rum: string): string | null {
+  return (s.socrativeQr ?? {})[rum.trim().toUpperCase()] ?? null;
+}

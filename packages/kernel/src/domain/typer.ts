@@ -248,9 +248,13 @@ export interface LektionsPlan {
   bokExempel?: string;
   /** Överstyr lektionens begrepp (kommaseparerade) — kort, läxchips och quiz. */
   begreppText?: string;
+  /** Överstyr lektionens namn (avsnitt) — för att rätta stavfel utan att röra boken. */
+  avsnittText?: string;
 }
 
 export interface Struktur {
+  /** QR-koder för Socrative-rum (rumsnamn → bild som data-URL). */
+  socrativeQr?: Record<string, string>;
   /** Arkiverade planeringsversioner — skrivs aldrig över, kan återställas. */
   planeringsarkiv?: Planering[];
   /** SuperTeach: importerade provresultat (läxförhör, exit tickets, Magma, DigiExam). */

@@ -526,3 +526,23 @@ describe('versionerade planeringar', () => {
     expect(() => aterstallPlanering(s, 'finns-ej')).toThrow('Okänd arkiverad planering.');
   });
 });
+
+describe('Del 91: lektionsnamn och Socrative-QR', async () => {
+  const { lektionsNamn, sattSocrativeQr, socrativeQr } = await import('../src/domain/struktur.js');
+  it('planens namn vinner över bokens, tomt faller tillbaka', () => {
+    expect(lektionsNamn({ avsnitt: '4.1 Liv i samspel' })).toBe('4.1 Liv i samspel');
+    expect(lektionsNamn({ avsnitt: '4.1 Liv i samspel' }, { avsnittText: '4.1 Liv i samspel (rättad)' })).toBe('4.1 Liv i samspel (rättad)');
+    expect(lektionsNamn({ avsnitt: '4.1 Liv i samspel' }, { avsnittText: '   ' })).toBe('4.1 Liv i samspel');
+    expect(lektionsNamn({ avsnitt: '4.1' }, null)).toBe('4.1');
+  });
+
+  it('QR sparas per rum, skiftlägesokänsligt, och kan tas bort', () => {
+    const bild = 'data:image/png;base64,AAA';
+    let s = sattSocrativeQr(tomStruktur(), 'biologi41', bild);
+    expect(socrativeQr(s, 'BIOLOGI41')).toBe(bild);
+    expect(socrativeQr(s, 'Matte8B')).toBeNull();
+    s = sattSocrativeQr(s, 'BIOLOGI41', null);
+    expect(socrativeQr(s, 'biologi41')).toBeNull();
+    expect(sattSocrativeQr(s, '  ', bild)).toBe(s); // tomt rum ignoreras
+  });
+});

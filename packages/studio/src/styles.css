@@ -737,3 +737,25 @@ input.fel { border-color: #B71C1C; }
 .st-nu-lista ul { margin: 0; padding-left: 18px; }
 .st-nu-lista li { margin-bottom: 3px; }
 .st-nu-del { margin-bottom: 8px; }
+
+/* Del 91: ihopfällbart träd */
+.node-rad { display: flex; align-items: center; gap: 0; }
+.node-rad > .node { flex: 1; min-width: 0; text-align: left; }
+.node-pil { width: 18px; flex: none; border: none; background: transparent; color: var(--muted-varm); font-size: 11px; line-height: 1; cursor: pointer; padding: 4px 0; border-radius: 4px; }
+.node-pil:hover { background: rgba(0,0,0,.06); color: var(--bla); }
+.node-pil.tom { cursor: default; }
+.tree-h.rad { display: flex; align-items: center; }
+.tree-vaxla { border: none; background: transparent; color: var(--muted-varm); font: inherit; font-size: 10px; text-transform: none; letter-spacing: 0; cursor: pointer; padding: 0 4px; }
+.tree-vaxla:hover { color: var(--bla); text-decoration: underline; }
+
+/* Del 91: Socrative-rum med QR */
+.qr-panel { display: flex; gap: 14px; align-items: flex-start; background: #fff; border: 1px solid var(--ram); border-radius: 12px; padding: 10px 12px; margin-top: 8px; }
+.qr-info { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
+.qr-rum { font-weight: 800; font-size: 15px; letter-spacing: .02em; }
+.qr-yta { flex: 1; min-height: 96px; border: 2px dashed var(--ram); border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px; }
+.qr-yta:focus-visible { outline: 2px solid var(--bla); }
+.qr-yta.dra { border-color: var(--bla); background: #EEF3FB; }
+.qr-yta img { max-height: 150px; max-width: 150px; }
+.qr-tom { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: var(--muted-varm); text-align: center; }
+.ls-titel-in { font: inherit; font-weight: 700; border: 1px dashed transparent; background: transparent; padding: 1px 4px; border-radius: 6px; min-width: 260px; }
+.ls-titel-in:hover, .ls-titel-in:focus { border-color: var(--ram); background: #fff; }

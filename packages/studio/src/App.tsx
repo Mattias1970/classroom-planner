@@ -19,7 +19,7 @@ import {
   laggTillSkolar, laggTillTjanst, larareSchema, normaliseraDagar, nyttId, parseKalendarium,
   ledigtStandardpass, passKonflikter, registreraPlanering, sattLarare, schemaKonflikter,
   skapaPlanering,
-  socrativeRum, sparaBok,
+  socrativeRum, sparaBok, lektionsNamn, sattSocrativeQr, socrativeQr,
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
@@ -37,7 +37,7 @@ import {
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
 } from '@planner/kernel';
-import { exportJson, importJson, lasStruktur, sparaStruktur } from './store.js';
+import { exportJson, importJson, lasInstallning, lasStruktur, sparaInstallning, sparaStruktur } from './store.js';
 import {
   hamtaBockerFranGitHub, konfigKomplett, laddaFranGitHub, lasGitHubConfig, sparaGitHubConfig, sparaTillGitHub,
   type GitHubConfig,
@@ -178,43 +178,183 @@ function Start({ s }: { s: Struktur }) {
   );
 }
 
+/**
+ * Socrative-rum med länk och QR-kod. QR-bilden klistras in (Ctrl+V) eller
+ * väljs som fil; den skalas ner till 320 px och sparas som data-URL i
+ * strukturen, så den följer med backupen och funkar utan nät.
+ */
+function SocrativeRumPanel({ s, rum, kor }: { s: Struktur; rum: string; kor: (fn: () => Struktur, m: string) => void }) {
+  const [dra, setDra] = useState(false);
+  const bild = socrativeQr(s, rum);
+  const lank = `https://b.socrative.com/student/#joinRoom/${encodeURIComponent(rum.toUpperCase())}`;
+  const spara = (fil: File | null | undefined) => {
+    if (fil === undefined || fil === null || !fil.type.startsWith('image/')) return;
+    const las = new FileReader();
+    las.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        // Skala ner: en QR-kod behöver inte mer än 320 px, och localStorage är litet
+        const max = 320;
+        const skala = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * skala); c.height = Math.round(img.height * skala);
+        const ctx = c.getContext('2d');
+        if (ctx === null) return;
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        kor(() => sattSocrativeQr(lasStruktur(), rum, c.toDataURL('image/png')), `QR-kod sparad för ${rum}.`);
+      };
+      img.src = String(las.result);
+    };
+    las.readAsDataURL(fil);
+  };
+  return (
+    <div className="qr-panel">
+      <div className="qr-info">
+        <b>📱 Socrative</b>
+        <div className="qr-rum">{rum}</div>
+        <a className="btn sec sm" href={lank} target="_blank" rel="noreferrer">↗ Öppna rummet</a>
+        <button className="btn sec sm" onClick={() => { void navigator.clipboard?.writeText(rum); }}>📋 Kopiera rumsnamn</button>
+      </div>
+      <div className={`qr-yta ${dra ? 'dra' : ''}`}
+        onPaste={(e) => spara(e.clipboardData.files[0])}
+        onDragOver={(e) => { e.preventDefault(); setDra(true); }}
+        onDragLeave={() => setDra(false)}
+        onDrop={(e) => { e.preventDefault(); setDra(false); spara(e.dataTransfer.files[0]); }}
+        tabIndex={0} aria-label={`QR-kod för ${rum}`}>
+        {bild !== null ? (<>
+          <img src={bild} alt={`QR-kod för Socrative-rummet ${rum}`} />
+          <button className="icon-btn" title="Ta bort QR-koden"
+            onClick={() => kor(() => sattSocrativeQr(lasStruktur(), rum, null), `QR-koden för ${rum} borttagen.`)}>🗑</button>
+        </>) : (
+          <div className="qr-tom">
+            <span>Klistra in QR-koden här (klicka först, sedan Ctrl+V) eller släpp en bildfil.</span>
+            <label className="btn sec sm file-btn">📂 Välj bild
+              <input type="file" accept="image/*" hidden aria-label={`Välj QR-bild för ${rum}`}
+                onChange={(e) => { spara(e.target.files?.[0]); e.currentTarget.value = ''; }} />
+            </label>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Trädet ───────────────────────────────────────────────────
+
+/** Ihopfällbar nod: pilen fäller, resten av knappen väljer. */
+function TradNod({ id, oppen, vaxla, act, barn, children }: {
+  id: string; oppen: boolean; vaxla: (id: string) => void; act: boolean; barn: boolean; children: React.ReactNode;
+}) {
+  return (
+    <span className={`node-rad ${act ? 'act' : ''}`}>
+      {barn
+        ? <button className="node-pil" aria-label={oppen ? `Fäll ihop ${id}` : `Fäll ut ${id}`} aria-expanded={oppen}
+          onClick={(e) => { e.stopPropagation(); vaxla(id); }}>{oppen ? '▾' : '▸'}</button>
+        : <span className="node-pil tom" />}
+      {children}
+    </span>
+  );
+}
+
 function Trad(props: { s: Struktur; vald: Vald; setVald: (v: Vald) => void; kor: (fn: () => Struktur, m: string) => void }) {
   const { s, vald, setVald, kor } = props;
   const ar = (v: Vald) => JSON.stringify(v) === JSON.stringify(vald);
+  // Öppna noder sparas mellan besök; allt är hopfällt tills man öppnar något
+  const [oppna, setOppna] = useState<Set<string>>(() => new Set(lasInstallning<string[]>('cp2.tradOppna', [])));
+  const vaxla = (id: string) => setOppna((f) => {
+    const n = new Set(f);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    sparaInstallning('cp2.tradOppna', [...n]);
+    return n;
+  });
+  // Vägen till den valda noden hålls alltid öppen — annars försvinner det man
+  // just skapat eller klickat på ur trädet.
+  const vagen = new Set<string>();
+  const laggVag = (v: Vald): void => {
+    if (v === null) return;
+    if (v.typ === 'amne') {
+      const a = s.amnen.find((x) => x.id === v.id);
+      if (a === undefined) return;
+      if (a.noGrupp !== undefined) vagen.add(`${a.klassId}|${a.noGrupp}`);
+      laggVag({ typ: 'klass', id: a.klassId });
+    } else if (v.typ === 'klass') {
+      const k = s.klasser.find((x) => x.id === v.id);
+      if (k === undefined) return;
+      vagen.add(k.id);
+      laggVag({ typ: 'tjanst', id: k.tjanstId });
+    } else if (v.typ === 'tjanst') {
+      const t = s.tjanster.find((x) => x.id === v.id);
+      if (t === undefined) return;
+      vagen.add(t.id);
+      vagen.add(t.skolarId);
+    } else if (v.typ === 'skolar') {
+      vagen.add(v.id);
+    }
+  };
+  laggVag(vald);
+  const ar_oppen = (id: string) => oppna.has(id) || vagen.has(id);
+  const allaIder = [
+    ...s.skolar.map((x) => x.id), ...s.tjanster.map((x) => x.id), ...s.klasser.map((x) => x.id),
+    ...s.klasser.flatMap((k) => [...new Set(s.amnen.filter((a) => a.klassId === k.id && a.noGrupp !== undefined).map((a) => `${k.id}|${a.noGrupp!}`))]),
+  ];
+  const alltOppet = allaIder.length > 0 && allaIder.every((id) => oppna.has(id));
   return (
     <>
-      <div className="tree-h">SKOLÅR</div>
-      {s.skolar.map((la) => (
+      <div className="tree-h rad">
+        <span>SKOLÅR</span>
+        <span className="spacer" />
+        <button className="tree-vaxla" title={alltOppet ? 'Fäll ihop allt' : 'Fäll ut allt'}
+          onClick={() => { const n = alltOppet ? new Set<string>() : new Set(allaIder); setOppna(n); sparaInstallning('cp2.tradOppna', [...n]); }}>
+          {alltOppet ? '⊟ fäll ihop' : '⊞ fäll ut'}
+        </button>
+      </div>
+      {s.skolar.map((la) => {
+        const tjanster = s.tjanster.filter((t) => t.skolarId === la.id);
+        return (
         <div key={la.id}>
-          <button className={`node ${ar({ typ: 'skolar', id: la.id }) ? 'act' : ''}`} onClick={() => setVald({ typ: 'skolar', id: la.id })}>📅 {la.namn}</button>
-          {s.tjanster.filter((t) => t.skolarId === la.id).map((t) => (
+          <TradNod id={la.id} oppen={ar_oppen(la.id)} vaxla={vaxla} act={ar({ typ: 'skolar', id: la.id })} barn={tjanster.length > 0}>
+            <button className={`node ${ar({ typ: 'skolar', id: la.id }) ? 'act' : ''}`} onClick={() => setVald({ typ: 'skolar', id: la.id })}>📅 {la.namn}</button>
+          </TradNod>
+          {ar_oppen(la.id) && tjanster.map((t) => {
+            const klasser = s.klasser.filter((k) => k.tjanstId === t.id);
+            return (
             <div key={t.id} className="ind">
-              <button className={`node ${ar({ typ: 'tjanst', id: t.id }) ? 'act' : ''}`} onClick={() => setVald({ typ: 'tjanst', id: t.id })}>
-                💼 {t.namn}{t.larareId ? ` · ${s.larare.find((l) => l.id === t.larareId)?.signatur ?? ''}` : ''}
-              </button>
-              {s.klasser.filter((k) => k.tjanstId === t.id).map((k) => {
+              <TradNod id={t.id} oppen={ar_oppen(t.id)} vaxla={vaxla} act={ar({ typ: 'tjanst', id: t.id })} barn={klasser.length > 0}>
+                <button className={`node ${ar({ typ: 'tjanst', id: t.id }) ? 'act' : ''}`} onClick={() => setVald({ typ: 'tjanst', id: t.id })}>
+                  💼 {t.namn}{t.larareId ? ` · ${s.larare.find((l) => l.id === t.larareId)?.signatur ?? ''}` : ''}
+                </button>
+              </TradNod>
+              {ar_oppen(t.id) && klasser.map((k) => {
                 const klassAmnen = s.amnen.filter((a) => a.klassId === k.id);
                 const vanliga = klassAmnen.filter((a) => a.noGrupp === undefined);
                 const noGrupper = [...new Set(klassAmnen.filter((a) => a.noGrupp !== undefined).map((a) => a.noGrupp!))];
                 const amnesNod = (a: Amne) => (
                   <div key={a.id} className="ind">
-                    <button className={`node ${ar({ typ: 'amne', id: a.id }) ? 'act' : ''}`} onClick={() => setVald({ typ: 'amne', id: a.id })}>
-                      📖 {a.namn}{a.bokId ? '' : ' · (ingen bok)'}
-                    </button>
+                    <TradNod id={a.id} oppen={false} vaxla={vaxla} act={ar({ typ: 'amne', id: a.id })} barn={false}>
+                      <button className={`node ${ar({ typ: 'amne', id: a.id }) ? 'act' : ''}`} onClick={() => setVald({ typ: 'amne', id: a.id })}>
+                        📖 {a.namn}{a.bokId ? '' : ' · (ingen bok)'}
+                      </button>
+                    </TradNod>
                   </div>
                 );
                 return (
                   <div key={k.id} className="ind">
-                    <button className={`node ${ar({ typ: 'klass', id: k.id }) ? 'act' : ''}`} onClick={() => setVald({ typ: 'klass', id: k.id })}>👥 {k.namn}</button>
-                    {vanliga.map(amnesNod)}
-                    {noGrupper.map((g) => {
+                    <TradNod id={k.id} oppen={ar_oppen(k.id)} vaxla={vaxla} act={ar({ typ: 'klass', id: k.id })} barn={klassAmnen.length > 0}>
+                      <button className={`node ${ar({ typ: 'klass', id: k.id }) ? 'act' : ''}`} onClick={() => setVald({ typ: 'klass', id: k.id })}>
+                        👥 {k.namn} <small className="muted">{klassAmnen.length} ämnen</small>
+                      </button>
+                    </TradNod>
+                    {ar_oppen(k.id) && vanliga.map(amnesNod)}
+                    {ar_oppen(k.id) && noGrupper.map((g) => {
                       const delamnen = klassAmnen.filter((a) => a.noGrupp === g)
                         .sort((x, y) => (x.noOrder ?? 0) - (y.noOrder ?? 0));
+                      const gid = `${k.id}|${g}`;
                       return (
                         <div key={g} className="ind">
-                          <button className="node no-nod" onClick={() => { if (delamnen[0]) setVald({ typ: 'amne', id: delamnen[0].id }); }}>🧪 NO+Tk</button>
-                          {delamnen.map(amnesNod)}
+                          <TradNod id={gid} oppen={ar_oppen(gid)} vaxla={vaxla} act={false} barn={delamnen.length > 0}>
+                            <button className="node no-nod" onClick={() => { if (delamnen[0]) setVald({ typ: 'amne', id: delamnen[0].id }); }}>🧪 NO+Tk <small className="muted">{delamnen.length}</small></button>
+                          </TradNod>
+                          {ar_oppen(gid) && delamnen.map(amnesNod)}
                         </div>
                       );
                     })}
@@ -222,9 +362,11 @@ function Trad(props: { s: Struktur; vald: Vald; setVald: (v: Vald) => void; kor:
                 );
               })}
             </div>
-          ))}
+            );
+          })}
         </div>
-      ))}
+        );
+      })}
       <button className="node add" onClick={() => setVald({ typ: 'nyttSkolar' })}>➕ Lägg till skolår</button>
 
       <div className="tree-h">TJÄNSTER</div>
@@ -1211,7 +1353,7 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
       <div className="rad" style={{ gap: 8 }}>
         <span>Välj lektion:</span>
         <select aria-label="Välj lektion" value={i} onChange={(e) => setIdx(Number(e.target.value))} style={{ flex: 1 }}>
-          {plan.map((r, ri) => <option key={ri} value={ri}>Lektion {ri + 1} — {r.lektion.avsnitt} · Del {r.lektion.del}</option>)}
+          {plan.map((r, ri) => <option key={ri} value={ri}>Lektion {ri + 1} — {lektionsNamn(r.lektion, hamtaLektionsplan(s, amneId, ri))} · Del {r.lektion.del}</option>)}
         </select>
         <button className="btn sec sm" disabled={i === 0} onClick={() => setIdx(i - 1)}>◀</button>
         <button className="btn sec sm" disabled={i === plan.length - 1} onClick={() => setIdx(i + 1)}>▶</button>
@@ -1220,8 +1362,15 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
       {/* ── Lektionshuvud ── */}
       <div className="ls-huvud" style={{ borderTopColor: kapFarg }}>
         <div className="rad">
-          <h3 className="ls-titel">Lektion {i + 1} – {rad.lektion.avsnitt}</h3>
+          <span className="ls-titel">Lektion {i + 1} –{' '}
+            <input className="ls-titel-in" aria-label="Lektionens namn" value={lp?.avsnittText ?? ''}
+              placeholder={rad.lektion.avsnitt} title="Rätta namnet här — boken lämnas orörd"
+              onChange={(e) => satt('avsnittText', e.target.value)} />
+          </span>
           <span className="spacer" />
+          {(lp?.avsnittText ?? '') !== '' && (
+            <button className="btn sec sm" title="Återgå till bokens namn" onClick={() => satt('avsnittText', '')}>↺ bokens namn</button>
+          )}
           <span className="ls-nr">Lektion {i + 1} av {plan.length}</span>
         </div>
         <p className="muted small">📖 Teorisidor: <input aria-label="Teorisidor" value={lp?.sidorTeori ?? ''}
@@ -1243,6 +1392,7 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
             {exitTid !== null && <div className="ls-tid"><span className="ls-tid-t">{exitTid}–{rad.slutTid}</span><b>📱 Exit ticket</b><span className="muted small">{rum}</span></div>}
           </div>
         )}
+        <SocrativeRumPanel s={s} rum={rum} kor={kor} />
         <div className="ls-trekort">
           <div className="ls-kort ls-gora"><b>VAD SKA VI GÖRA</b>
             <textarea aria-label="Vad ska vi göra" rows={3} value={lp?.vadGora ?? ''}
@@ -1313,8 +1463,8 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
       <section className="ls-sektion ls-arbete">
         <div className="ls-sek-rubrik">✏ {rad.start !== null ? `${genomSlut}–${exitTid ?? rad.slutTid} · ` : ''}ARBETE</div>
         {arNo
-          ? <p className="small"><b>Kap {rad.kapitel} · {rad.lektion.avsnitt}</b> — läs {lp?.sidorTeori !== undefined && lp.sidorTeori !== '' ? lp.sidorTeori : rad.lektion.sidorTeori} och besvara skriftligt: <b>{har(rad.lektion.ex) ? rad.lektion.ex : 'Testa dig själv'}</b>.</p>
-          : <p className="small"><b>Lektion {rad.lektion.del} av 2 – {rad.lektion.avsnitt}</b> · minimum: <b>{minimum === 1 ? N.niva1 : N.niva2}</b> klar och inlämnad.</p>}
+          ? <p className="small"><b>Kap {rad.kapitel} · {lektionsNamn(rad.lektion, lp)}</b> — läs {lp?.sidorTeori !== undefined && lp.sidorTeori !== '' ? lp.sidorTeori : rad.lektion.sidorTeori} och besvara skriftligt: <b>{har(rad.lektion.ex) ? rad.lektion.ex : 'Testa dig själv'}</b>.</p>
+          : <p className="small"><b>Lektion {rad.lektion.del} av 2 – {lektionsNamn(rad.lektion, lp)}</b> · minimum: <b>{minimum === 1 ? N.niva1 : N.niva2}</b> klar och inlämnad.</p>}
         <div className="uppg-rad">
           {har(eff.niva1) && <div className={`uppg-niva ${farg ? 'niva-gron' : 'niva-neutral'}`}><div className="un-rubrik">{N.niva1} – introduktion</div><div className="un-uppg">Uppg. <b><input aria-label={`Uppgifter ${N.niva1}`} value={lp?.uppgNiva1 ?? ''} placeholder={rad.lektion.niva1} onChange={(e) => satt('uppgNiva1', e.target.value)} style={{ width: 80 }} /></b></div><div className="un-obl">Obligatorisk</div></div>}
           {har(eff.niva2) && <div className={`uppg-niva ${farg ? 'niva-bla' : 'niva-neutral'}`}><div className="un-rubrik">{N.niva2} – E-nivå</div><div className="un-uppg">Uppg. <b><input aria-label={`Uppgifter ${N.niva2}`} value={lp?.uppgNiva2 ?? ''} placeholder={rad.lektion.niva2} onChange={(e) => satt('uppgNiva2', e.target.value)} style={{ width: 80 }} /></b></div><div className="un-obl">Obligatorisk</div></div>}
@@ -2097,7 +2247,7 @@ function NoPlanering({ s, amneId, lektionsIndex, kor, amnesNamn, rad, bok, allti
             <div className="flipp-preview">
               <div className="fp-rubrik">📨 Det här skickas till eleven (flippad lektion)</div>
               <div className="fp-kropp">
-                <p><b>{amnesNamn} · {rad.lektion.avsnitt}</b>{rad.datum !== null ? ` · inför ${rad.datum}` : ''}</p>
+                <p><b>{amnesNamn} · {lektionsNamn(rad.lektion, hamtaLektionsplan(s, amneId, lektionsIndex))}</b>{rad.datum !== null ? ` · inför ${rad.datum}` : ''}</p>
                 {plan.flippTeori !== '' && <p>{plan.flippTeori}</p>}
                 {plan.flippFilm !== '' && <p>🎬 Se filmen: <span className="fp-lank">{plan.flippFilm}</span></p>}
                 {plan.flippQuiz !== '' && <p>✅ Gör quizet <b>{plan.flippQuiz}</b> på socrative.com{forslag !== null ? <> · rum <b>{forslag.exit}</b></> : null}</p>}
