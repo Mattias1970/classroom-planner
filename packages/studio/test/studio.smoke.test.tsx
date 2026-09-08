@@ -1462,6 +1462,17 @@ describe('📊 SuperTeach', () => {
     expect(laxKnapp.getAttribute('aria-pressed')).toBe('true');
     expect(fmKort.querySelector('.st-fmverktyg .chipbtn')!.getAttribute('aria-pressed')).toBe('false'); // 'Alla' släcks
 
+    // Ordning: frågematris och trendkoll före de fällbara sektionerna; import högst upp
+    const stVy = host.querySelector('.superteach')!;
+    const pos = (sel: string) => [...stVy.querySelectorAll('*')].findIndex((el) => el.matches(sel));
+    expect(pos('.st-import')).toBeLessThan(pos('.st-fragematris'));
+    expect(pos('.st-fragematris')).toBeLessThan(pos('.st-trendkoll'));
+    expect(pos('.st-trendkoll')).toBeLessThan(pos('.st-lektionstest'));
+    const fall = [...stVy.querySelectorAll('details.st-fall > summary')].map((x) => x.textContent ?? '');
+    expect(fall.some((t) => t.includes('Lektionstest'))).toBe(true);
+    expect(fall.some((t) => t.includes('Närvaro'))).toBe(true);
+    expect(fall.some((t) => t.includes('Läxförhör vs Exit tickets'))).toBe(true);
+
     // Trendkoll: utan frågedata (inklistrade resultat) förklaras varför
     expect(host.querySelector('.st-trendkoll')!.textContent).toContain('kräver att samma fråga ställs igen');
 

@@ -776,3 +776,15 @@ input.fel { border-color: #B71C1C; }
 .st-tk-steg.klick.vald { outline: 2px solid var(--bla); }
 .st-tk-detalj { background: #fff; border: 1px solid var(--ram); border-radius: 10px; padding: 8px 10px; margin-top: 6px; max-width: 620px; }
 .st-tk-detalj ul { margin: 2px 0 6px; }
+
+/* Del 97: fällbara sektioner i SuperTeach */
+.st-fall { border: 1px solid var(--ram); border-radius: 14px; background: #fff; margin: 0 0 12px; padding: 0 14px; }
+.st-fall > summary { cursor: pointer; padding: 12px 0; list-style: none; display: flex; align-items: center; gap: 8px; }
+.st-fall > summary::-webkit-details-marker { display: none; }
+.st-fall > summary::before { content: '▸'; color: var(--muted-varm); font-size: 12px; width: 12px; }
+.st-fall[open] > summary::before { content: '▾'; }
+.st-fall > summary > b { font-size: 15px; }
+.st-fall > summary:hover { color: var(--bla); }
+.st-fall[open] > summary { border-bottom: 1px solid var(--ram); margin-bottom: 12px; }
+.st-fall > .uppg-kort, .st-fall > .st-grid2 { margin-bottom: 12px; }
+.st-import { background: #F7F9FC; }

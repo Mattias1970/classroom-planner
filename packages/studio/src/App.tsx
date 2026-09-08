@@ -3135,197 +3135,113 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
         </div>
       </div>
 
-      {/* Jämförelse + kluster */}
-      <div className="st-grid2">
-        <div className="uppg-kort st-widget">
-          <div className="rad"><b>Läxförhör vs Exit tickets</b> <small className="muted">snitt per vecka · streckad = klassmedel</small><span className="spacer" /><ZoomKnappar z={zVecko} /></div>
-          <LinjeDiagram
-            z={zVecko}
-            hojd={280}
-            tillfallen={veckor.veckor.map((v) => ({ etikett: `v.${v}`, titel: `Vecka ${v}` }))}
-            serier={[
-              { namn: 'Läxförhör', varden: veckor.serier['socrative-laxforhor'], farg: KORT_FARG['socrative-laxforhor'] },
-              { namn: 'Exit tickets', varden: veckor.serier['socrative-exit'], farg: KORT_FARG['socrative-exit'] },
-              { namn: 'Klassmedel', varden: veckor.serier.helhet, farg: '#9AA3AE', streckad: true },
-            ]}
-            kravLinjer={kravLinjer}
-            visaVarden
-          />
-          <div className="st-legend">
-            <span><i style={{ background: KORT_FARG['socrative-laxforhor'] }} /> Läxförhör</span>
-            <span><i style={{ background: KORT_FARG['socrative-exit'] }} /> Exit tickets</span>
-            <span><i className="streck" /> Klassmedel</span>
-          </div>
-          {insikt !== null && <div className="st-insikt">{insikt}</div>}
-        </div>
-
-        <div className="uppg-kort st-widget">
-          <b>Trendkluster</b> <small className="muted">elever som trendar tillsammans · baserat på alla tillfällen i urvalet</small>
-          <div className="st-klusterrad">
-            {kluster.map((g) => (
-              <div key={g.kluster} className={`st-klusterkort ${g.kluster}${g.elever.length > 0 ? ' klickbar' : ''}`} role={g.elever.length > 0 ? 'button' : undefined}
-                tabIndex={g.elever.length > 0 ? 0 : undefined} title={g.elever.length > 0 ? 'Öppna gruppens graf' : undefined}
-                onClick={() => { if (g.elever.length > 0) fokuseraGrupp(g.elever.map((e) => e.id), KLUSTER_NAMN[g.kluster]); }}
-                onKeyDown={(ev) => { if ((ev.key === 'Enter' || ev.key === ' ') && g.elever.length > 0) { ev.preventDefault(); fokuseraGrupp(g.elever.map((e) => e.id), KLUSTER_NAMN[g.kluster]); } }}>
-                <div className="rad">
-                  <button className="linkbtn st-klusterknapp" disabled={g.elever.length === 0} title="Visa hela gruppen i fokusvyn"
-                    onClick={(ev) => { ev.stopPropagation(); fokuseraGrupp(g.elever.map((e) => e.id), KLUSTER_NAMN[g.kluster]); }}><b>{KLUSTER_NAMN[g.kluster]}</b></button>
-                  <span className="spacer" /><small>{g.elever.length} elever</small></div>
-                <Sparkline serie={g.serie} farg={KLUSTER_FARG[g.kluster]} krav={null} />
-                <div className="st-chips">{g.elever.map((e) => (
-                  <button key={e.id} className="st-chip" title={e.namn} onClick={(ev) => { ev.stopPropagation(); setElevId(e.id); }}>{initialer(e.namn)}</button>
-                ))}</div>
-              </div>
-            ))}
-          </div>
-          {/* Klustrens kurvor relativt klassens snitt — på-knappar aktiverar linje + tonade band i klustrets färg */}
-          <div className="rad st-klusterfilter">
-            {klusterK.map((k) => (
-              <FilterKnapp key={k.kluster} pa={klusterPa.includes(k.kluster)} farg={KLUSTER_FARG[k.kluster]}
-                onClick={() => setKlusterPa(klusterPa.includes(k.kluster) ? klusterPa.filter((x) => x !== k.kluster) : [...klusterPa, k.kluster])}
-                title={`${k.antal} elever`}>{KLUSTER_NAMN[k.kluster]} <small>{k.antal}</small></FilterKnapp>
-            ))}
-          </div>
-          <NormeradGraf z={zNorm} tillfallen={spridning} hojd={300} onKlick={(i) => onVisaProv(spridning[i].prov)}
-            serier={klusterK.map((k) => ({
-              namn: KLUSTER_NAMN[k.kluster], farg: KLUSTER_FARG[k.kluster], band: k.band, pa: klusterPa.includes(k.kluster) && k.antal > 0,
-              linje: k.procent.map((p, i) => (p === null || spridning[i].snittProcent === null ? null : Math.round(p - (spridning[i].snittProcent ?? 0)))),
-            }))} />
-          <TestLista tillfallen={spridning} />
-          <details className="st-forklaring">
-            <summary>❓ Vad visar trendklustren?</summary>
-            <p><b>Grupperna.</b> Varje elev placeras i en av fyra grupper utifrån sina resultat i urvalet:</p>
-            <ul>
-              <li><b>Stigande</b> — resultaten går uppåt över tid.</li>
-              <li><b>Stabil</b> — jämna resultat utan tydlig riktning.</li>
-              <li><b>Riskzon</b> — snittet ligger under det lägsta kravet i urvalet (90 % för läxförhör, 70 % för exit tickets). En elev vars aggregerande läxförhör ligger på minst 90 % och inte faller hamnar aldrig här, även om exit tickets drar ner snittet.</li>
-              <li><b>Ojämn utveckling</b> — stora hopp mellan tillfällena, i genomsnitt mer än 25 procentenheter.</li>
-            </ul>
-            <p><b>Diagrammet.</b> Den vågräta linjen i mitten är <b>klassens snitt vid varje enskilt tillfälle</b>, satt till 100. Ett prov där alla gick dåligt sänker alltså linjen för alla — kurvorna visar avstånd till klassen, inte absoluta resultat. Skalan går ±30 procentenheter i band om 3.</p>
-            <p>En färgad linje är gruppens snitt jämfört med klassen: ligger <i>Riskzon</i> på 85 betyder det att gruppen presterade 15 procentenheter under klassen det tillfället. De tonade banden bakom linjen visar hur gruppens elever fördelar sig — brett band = eleverna i gruppen skiljer sig mycket åt, smalt band = de följs åt.</p>
-            <p><b>Att läsa av:</b> närmar sig Riskzon-linjen 100 håller stödet på att verka. Går den nedåt medan Stigande går uppåt ökar spridningen i klassen. Ett tillfälle där alla grupper faller mot 100 handlar oftare om provet än om eleverna.</p>
-            <p>Knapparna tänder och släcker grupperna, staplarna i rutorna ovanför är gruppens snitt över tid, och klick på en ruta öppnar hela gruppen i fokusvyn.</p>
-          </details>
-        </div>
-      </div>
-
-      {/* Närvaro & tid på dagen */}
-      <div className="st-grid2">
-        <div className="uppg-kort st-widget st-narvaro">
-          <div className="rad"><b>Närvaro & tid på dagen</b> <small className="muted">närvaro = svarat på läxförhör eller exit ticket den lektionen</small><span className="spacer" /><ZoomKnappar z={zNarv} /></div>
-          {narvaro.antalLektioner === 0 ? <p className="muted small">Inga lektioner med Socrative-resultat i urvalet.</p> : (
-            <div className="st-narvaro-grid">
-              <div>
-                <LinjeDiagram
-                  z={zNarv}
-                  hojd={240}
-                  tillfallen={narvaro.perVecka.map((v) => ({ etikett: `v.${v.vecka}`, titel: `Vecka ${v.vecka}` }))}
-                  serier={[{ namn: 'Närvaro', varden: narvaro.perVecka.map((v) => v.procent), farg: '#00838F' }]}
-                  kravLinjer={[{ procent: 80, namn: 'mål 80 %' }]}
-                  visaVarden
-                />
-                {narvaro.riskElever.length > 0 && (
-                  <div className="small" style={{ marginTop: 4 }}>⚠ Under 80 %: {narvaro.riskElever.map((e) => (
-                    <button key={e.id} className="st-chip" title={e.namn} onClick={() => setElevId(e.id)}>{e.namn} {narvaroPerElev.get(e.id)?.narvaroProcent ?? '—'} %</button>
-                  ))}</div>
-                )}
-              </div>
-              <div>
-                <div className="small muted" style={{ marginBottom: 4 }}>Tid på dagen — snittresultat per veckodag och pass{tidHarData ? '' : ' (kräver klockslag, importeras från Socrative-filer)'}</div>
-                <table className="tbl st-tid">
-                  <thead><tr><th></th>{TID_PASS.map((p) => <th key={p}>{p}</th>)}</tr></thead>
-                  <tbody>{['Mån', 'Tis', 'Ons', 'Tor', 'Fre'].map((namn, i) => (
-                    <tr key={namn}><td><b>{namn}</b></td>
-                      {TID_PASS.map((p) => { const c = tid.find((x) => x.veckodag === i + 1 && x.pass === p)!; return (
-                        <td key={p} className="st-cell" style={{ background: c.antal === 0 ? '#F1F3F6' : procentFarg(c.snittProcent, null) }}
-                          title={c.antal === 0 ? 'inga lektioner' : `${c.antal} lektioner · närvaro ${c.narvaroProcent ?? '—'} %`}>{c.antal === 0 ? '·' : `${c.snittProcent ?? '—'} %`}</td>); })}
-                    </tr>
-                  ))}</tbody>
-                </table>
-              </div>
-            </div>
-          )}
-          {narvaroSamband !== null && (
-            <div className={`st-insikt${narvaroSamband.r < 0.3 ? ' neutral' : ''}`}>
-              {narvaroSamband.r >= 0.3
-                ? `✅ Närvaro hänger ihop med resultat: elever med högre närvaro har högre helhetssnitt (r = +${narvaroSamband.r.toFixed(2)}, ${narvaroSamband.n} elever).`
-                : `➖ Inget tydligt samband mellan närvaro och resultat i urvalet (r = ${narvaroSamband.r > 0 ? '+' : ''}${narvaroSamband.r.toFixed(2)}).`}
-            </div>
-          )}
-        </div>
-        <div className="uppg-kort st-widget">
-          <b>Närvaro per elev</b> <small className="muted">andel lektioner med inlämnat Socrative-svar</small>
-          <div className="st-scroll" style={{ maxHeight: 300 }}>
-            <table className="tbl st-narvarolista"><tbody>
-              {[...narvaroPerElev.values()].sort((a, b) => (a.narvaroProcent ?? 101) - (b.narvaroProcent ?? 101)).map((e) => (
-                <tr key={e.elev.id}>
-                  <td><button className="linkbtn" onClick={() => setElevId(e.elev.id)}>{e.elev.namn}</button></td>
-                  <td>{e.narvaroProcent === null ? <span className="muted">—</span> : (
-                    <span className="st-bar"><i style={{ width: `${e.narvaroProcent}%`, background: e.narvaroProcent >= 80 ? '#00838F' : '#B71C1C' }} /><b>{e.narvaroProcent} %</b> <small className="muted">{e.narvarande}/{e.lektioner}</small></span>)}</td>
-                </tr>
-              ))}
-            </tbody></table>
-          </div>
-        </div>
-      </div>
-
-      {/* Lektionstest: läxförhör vs exit ticket per lektion */}
-      <div className="uppg-kort st-widget st-lektionstest">
+      {/* Frågematris */}
+      <div className="uppg-kort st-widget st-fragematris">
         <div className="rad">
-          <b>🎯 Lektionstest</b> <small className="muted">läxförhöret i början (aggregerande) och exit ticket i slutet hålls isär · <b>Δ</b> = exit − läxförhör i procentenheter</small>
+          <b>🔢 Frågematris</b> <small className="muted">en rad per förhör, en kolumn per fråga · klicka på en ruta för att se frågan</small>
           <span className="spacer" />
-          <label className="small"><input type="checkbox" checked={visaElevDiff} onChange={(e) => setVisaElevDiff(e.target.checked)} /> per elev</label>
+          <button className={`chipbtn ${ledElev === null ? 'act' : ''}`} onClick={() => setLedElev(null)}>Klassen</button>
+          {ledElev !== null && <span className="small">{s.elever.find((e) => e.id === ledElev)?.namn}</span>}
         </div>
-        {lekt.length === 0 ? <p className="muted small">Inga lektioner med både läxförhör och exit ticket i urvalet.</p> : !visaElevDiff ? (
+        <div className="rad st-fmverktyg">
+          <small className="muted">Typ:</small>
+          <button className={`chipbtn ${fmTyper.length === 0 ? 'act' : ''}`} title="Visa alla typer" aria-pressed={fmTyper.length === 0}
+            onClick={() => setFmTyper([])}>Alla</button>
+          {FM_TYPER.map((k) => (
+            <button key={k} className={`chipbtn ${fmTyper.includes(k) ? 'act' : ''}`} aria-pressed={fmTyper.includes(k)}
+              onClick={() => setFmTyper(fmTyper.includes(k) ? fmTyper.filter((x) => x !== k) : [...fmTyper, k])}>{TYPNAMN[k]}</button>
+          ))}
+          <span className="spacer" />
+          <small className="muted">Ordning:</small>
+          <button className="chipbtn act" title="Byt sorteringsordning" onClick={() => setFmNyastForst(!fmNyastForst)}>
+            {fmNyastForst ? '↓ Senaste först' : '↑ Äldsta först'}
+          </button>
+        </div>
+        {fm.fragor.length === 0 ? <p className="muted small">Kräver förhör med frågedata (filimport).</p> : (<>
           <div className="st-scroll">
-            <table className="tbl st-tabell">
-              <thead><tr>
-                <th>Lektion</th><th>Läxförhör</th><th>Exit ticket</th>
-                <th title="Snitt av elevernas exit − läxförhör">Δ snitt</th><th>Δ median</th><th>Elever</th>
-              </tr></thead>
-              <tbody>{lekt.map((l) => (
-                <tr key={l.datum}>
-                  <td><b>v{l.vecka}</b> {kortDatum(l.datum)}{l.datumTill !== l.datum && <small className="muted"> +{kortDatum(l.datumTill)}</small>}</td>
-                  <td>{l.laxforhorProv === null ? <span className="muted">—</span> : (<>
-                    <div className="st-provnamn" title={`${l.laxforhorProv}${l.laxforhorRum !== undefined ? ` (${l.laxforhorRum})` : ''}`}>{l.laxforhorProv}</div>
-                    <span className="st-bar"><i style={{ width: `${l.laxforhorSnitt ?? 0}%`, background: KORT_FARG['socrative-laxforhor'] }} /><b>{l.laxforhorSnitt ?? '—'} %</b> <small className="muted">md {l.laxforhorMedian ?? '—'}</small></span></>)}</td>
-                  <td>{l.exitProv === null ? <span className="muted">—</span> : (<>
-                    <div className="st-provnamn" title={`${l.exitProv}${l.exitRum !== undefined ? ` (${l.exitRum})` : ''}`}>{l.exitProv}</div>
-                    <span className="st-bar"><i style={{ width: `${l.exitSnitt ?? 0}%`, background: KORT_FARG['socrative-exit'] }} /><b>{l.exitSnitt ?? '—'} %</b> <small className="muted">md {l.exitMedian ?? '—'}</small></span></>)}</td>
-                  <td className={`st-diff ${(l.diffSnitt ?? 0) > 0 ? 'upp' : (l.diffSnitt ?? 0) < 0 ? 'ned' : ''}`}>{l.diffSnitt === null ? '—' : `${l.diffSnitt > 0 ? '+' : ''}${l.diffSnitt}`}</td>
-                  <td className={`st-diff ${(l.diffMedian ?? 0) > 0 ? 'upp' : (l.diffMedian ?? 0) < 0 ? 'ned' : ''}`}>{l.diffMedian === null ? '—' : `${l.diffMedian > 0 ? '+' : ''}${l.diffMedian}`}</td>
-                  <td className="small muted">{l.antalBada} av {l.elever.length}</td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="st-scroll" style={{ maxHeight: 420 }}>
-            <table className="tbl st-tabell st-matris">
-              <thead><tr><th>Elev</th><th>Läxförhör</th><th>Exit</th><th>Δ snitt</th><th>Δ median</th>
-                {lekt.map((l) => <th key={l.datum} title={`${l.laxforhorProv ?? '—'} → ${l.exitProv ?? '—'}`}><span className="st-kol">v{l.vecka} {kortDatum(l.datum)}</span></th>)}
-              </tr></thead>
-              <tbody>{elevLekt.map((e) => (
-                <tr key={e.elev.id}>
-                  <td><button className="linkbtn" onClick={() => setElevId(e.elev.id)}>{e.elev.namn}</button></td>
-                  <td>{e.laxforhorSnitt ?? '—'} %</td><td>{e.exitSnitt ?? '—'} %</td>
-                  <td className={`st-diff ${(e.diffSnitt ?? 0) > 0 ? 'upp' : (e.diffSnitt ?? 0) < 0 ? 'ned' : ''}`}>{e.diffSnitt === null ? '—' : `${e.diffSnitt > 0 ? '+' : ''}${e.diffSnitt}`}</td>
-                  <td className={`st-diff ${(e.diffMedian ?? 0) > 0 ? 'upp' : (e.diffMedian ?? 0) < 0 ? 'ned' : ''}`}>{e.diffMedian === null ? '—' : `${e.diffMedian > 0 ? '+' : ''}${e.diffMedian}`}</td>
-                  {lekt.map((l) => {
-                    const r = l.elever.find((x) => x.elev.id === e.elev.id);
+            <table className="tbl st-fmtabell">
+              <thead>
+                <tr><th colSpan={4} className="st-fmhorn" /> {fm.grupper.map((g) => (
+                  <th key={g.kod} colSpan={g.till - g.fran + 1} className="st-fmgrupp" title={`${g.ursprung} · ${g.etikett} · frågorna ${g.fran}–${g.till}`}>
+                    <span className="st-fmgruppnamn">{g.ursprung}</span>
+                    <small>{g.kod !== '—' ? `${g.kod} · ` : ''}{g.till - g.fran + 1} frågor</small>
+                  </th>
+                ))}</tr>
+                <tr><th>Vecka</th><th>Datum</th><th>Typ</th><th>Quiz</th>{fm.fragor.map((fr) => (
+                  <th key={fr.nr} className={`st-fmnr${fm.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}`} title={`${fr.kod} · ${fr.fraga}`}>{fr.nr}</th>
+                ))}</tr>
+              </thead>
+              <tbody>{fmRader.map((rad) => (
+                <tr key={rad.nyckel}>
+                  <td className="small muted">v{isoVeckaLbl(rad.datum)}</td>
+                  <td className="small muted">{kortDatum(rad.datum)}{rad.tid !== undefined && <> <b>{rad.tid}</b></>}</td>
+                  <td className="small"><span className={`st-typ ${rad.kalla}`}>{TYPNAMN[rad.kalla]}</span></td>
+                  <td className="st-fmprov" title={`${rad.prov}${rad.rum !== undefined ? ` · rum ${rad.rum}` : ''} · ${rad.test} · ${kortDatum(rad.datum)}`}>{rad.prov}</td>
+                  {fm.fragor.map((fr, i) => {
+                    const c = rad.celler[i];
+                    const elevSvar = rad.elevCeller?.[i];
+                    const bg = c === null ? '#F7F8FA'
+                      : ledElev !== null ? (elevSvar === true ? '#4CAF50' : elevSvar === false ? '#D32F2F' : '#F7F8FA')
+                        : ratFarg(c.procent);
+                    const titel = c === null ? `Fråga ${fr.nr} ingick inte i ${rad.prov}`
+                      : ledElev !== null ? `Fråga ${fr.nr}: ${elevSvar === true ? 'rätt' : elevSvar === false ? 'fel' : 'ej gjord'}`
+                        : `Fråga ${fr.nr}: ${c.procent} % rätt (${c.ratt}/${c.bedomda})`;
                     return (
-                      <td key={l.datum} className="st-cell st-cell-diff" title={r === undefined ? 'saknas' : `läxförhör ${r.laxforhor ?? '—'} % → exit ${r.exit ?? '—'} %`}>
-                        {r === undefined || r.diff === null
-                          ? <span className="muted">{r === undefined ? '·' : `${r.laxforhor ?? '—'}/${r.exit ?? '—'}`}</span>
-                          : <span className={`st-diff ${r.diff > 0 ? 'upp' : r.diff < 0 ? 'ned' : ''}`}>{r.diff > 0 ? '+' : ''}{r.diff}</span>}
-                      </td>
+                      <td key={fr.nr} className={`st-fmruta${vald?.nr === fr.nr ? ' vald' : ''}${fm.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}`} style={{ background: bg }} title={titel}
+                        onClick={() => setVald(vald?.nr === fr.nr ? null : fr)} />
                     );
                   })}
                 </tr>
               ))}</tbody>
             </table>
           </div>
-        )}
+          {vald !== null && (
+            <div className="st-fmvald">
+              <b>Fråga {vald.nr}</b> <span className="chip">{vald.kod}</span> <small className="muted">först ställd i {vald.ursprung}</small>
+              <p>{vald.fraga}</p>
+              <div className="small">
+                {fmRader.map((rad, i) => { const c = rad.celler[fm.fragor.findIndex((x) => x.nr === vald.nr)]; return c === null ? null : (
+                  <span key={i} className="st-fmhist" style={{ background: ratFarg(c.procent) }} title={`${rad.prov}: ${c.procent} %`}>{rad.prov}: {c.procent} %</span>
+                ); })}
+              </div>
+              <button className="btn sm" onClick={() => setVald(null)}>✕ stäng</button>
+            </div>
+          )}
+          <details className="st-fmfilter">
+            <summary>🔍 Filtrera frågor</summary>
+            <div className="rad" style={{ gap: 8, flexWrap: 'wrap' }}>
+              <label className="small">Andel rätt i klassen från{' '}
+                <input type="number" min={0} max={100} step={5} aria-label="Andel rätt från" value={fMin} onChange={(e) => setFMin(Number(e.target.value))} style={{ width: 64 }} /> %</label>
+              <label className="small">till{' '}
+                <input type="number" min={0} max={100} step={5} aria-label="Andel rätt till" value={fMax} onChange={(e) => setFMax(Number(e.target.value))} style={{ width: 64 }} /> %</label>
+            </div>
+            <div className="rad" style={{ gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+              <small className="muted">Tester:</small>
+              <button className={`chipbtn ${valdaTest.length === 0 ? 'act' : ''}`} onClick={() => setValdaTest([])}>Alla</button>
+              {fmRader.map((rad) => (
+                <button key={rad.nyckel} className={`chipbtn ${valdaTest.includes(rad.nyckel) ? 'act' : ''}`}
+                  onClick={() => setValdaTest(valdaTest.includes(rad.nyckel) ? valdaTest.filter((x) => x !== rad.nyckel) : [...valdaTest, rad.nyckel])}>{rad.prov}</button>
+              ))}
+            </div>
+            <p className="small"><b>{traffar.length}</b> frågor mellan {fMin} och {fMax} % rätt{valdaTest.length > 0 ? ` i ${valdaTest.length} valda tester` : ''}.</p>
+            {traffar.length > 0 && (
+              <div className="st-scroll" style={{ maxHeight: 300 }}>
+                <table className="tbl st-tabell">
+                  <thead><tr><th>Fråga</th><th>Nr</th><th>Del</th><th>Rätt</th><th>Svar</th><th>Tillfällen</th></tr></thead>
+                  <tbody>{traffar.map((t) => (
+                    <tr key={t.nr}>
+                      <td><button className="linkbtn st-provnamn" title={t.fraga} onClick={() => setVald(t)}>{t.fraga}</button></td>
+                      <td>{t.nr}</td><td>{t.kod}</td>
+                      <td><span className="st-fmhist" style={{ background: ratFarg(t.procent) }}>{t.procent} %</span></td>
+                      <td className="small muted">{t.ratt}/{t.bedomda}</td>
+                      <td className="small muted">{t.antalTillfallen}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            )}
+          </details>
+        </>)}
       </div>
 
       {/* Trendkoll: lär eller glömmer eleverna? */}
@@ -3475,141 +3391,210 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
         </div>
       </div>
 
-      {/* Frågematris */}
-      <div className="uppg-kort st-widget st-fragematris">
+      <details className="st-fall">
+        <summary><b>🎯 Lektionstest</b> <small className="muted">läxförhör och exit ticket per lektion, Δ per elev</small></summary>
+      {/* Lektionstest: läxförhör vs exit ticket per lektion */}
+      <div className="uppg-kort st-widget st-lektionstest">
         <div className="rad">
-          <b>🔢 Frågematris</b> <small className="muted">en rad per förhör, en kolumn per fråga · klicka på en ruta för att se frågan</small>
+          <b>🎯 Lektionstest</b> <small className="muted">läxförhöret i början (aggregerande) och exit ticket i slutet hålls isär · <b>Δ</b> = exit − läxförhör i procentenheter</small>
           <span className="spacer" />
-          <button className={`chipbtn ${ledElev === null ? 'act' : ''}`} onClick={() => setLedElev(null)}>Klassen</button>
-          {ledElev !== null && <span className="small">{s.elever.find((e) => e.id === ledElev)?.namn}</span>}
+          <label className="small"><input type="checkbox" checked={visaElevDiff} onChange={(e) => setVisaElevDiff(e.target.checked)} /> per elev</label>
         </div>
-        <div className="rad st-fmverktyg">
-          <small className="muted">Typ:</small>
-          <button className={`chipbtn ${fmTyper.length === 0 ? 'act' : ''}`} title="Visa alla typer" aria-pressed={fmTyper.length === 0}
-            onClick={() => setFmTyper([])}>Alla</button>
-          {FM_TYPER.map((k) => (
-            <button key={k} className={`chipbtn ${fmTyper.includes(k) ? 'act' : ''}`} aria-pressed={fmTyper.includes(k)}
-              onClick={() => setFmTyper(fmTyper.includes(k) ? fmTyper.filter((x) => x !== k) : [...fmTyper, k])}>{TYPNAMN[k]}</button>
-          ))}
-          <span className="spacer" />
-          <small className="muted">Ordning:</small>
-          <button className="chipbtn act" title="Byt sorteringsordning" onClick={() => setFmNyastForst(!fmNyastForst)}>
-            {fmNyastForst ? '↓ Senaste först' : '↑ Äldsta först'}
-          </button>
-        </div>
-        {fm.fragor.length === 0 ? <p className="muted small">Kräver förhör med frågedata (filimport).</p> : (<>
+        {lekt.length === 0 ? <p className="muted small">Inga lektioner med både läxförhör och exit ticket i urvalet.</p> : !visaElevDiff ? (
           <div className="st-scroll">
-            <table className="tbl st-fmtabell">
-              <thead>
-                <tr><th colSpan={4} className="st-fmhorn" /> {fm.grupper.map((g) => (
-                  <th key={g.kod} colSpan={g.till - g.fran + 1} className="st-fmgrupp" title={`${g.ursprung} · ${g.etikett} · frågorna ${g.fran}–${g.till}`}>
-                    <span className="st-fmgruppnamn">{g.ursprung}</span>
-                    <small>{g.kod !== '—' ? `${g.kod} · ` : ''}{g.till - g.fran + 1} frågor</small>
-                  </th>
-                ))}</tr>
-                <tr><th>Vecka</th><th>Datum</th><th>Typ</th><th>Quiz</th>{fm.fragor.map((fr) => (
-                  <th key={fr.nr} className={`st-fmnr${fm.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}`} title={`${fr.kod} · ${fr.fraga}`}>{fr.nr}</th>
-                ))}</tr>
-              </thead>
-              <tbody>{fmRader.map((rad) => (
-                <tr key={rad.nyckel}>
-                  <td className="small muted">v{isoVeckaLbl(rad.datum)}</td>
-                  <td className="small muted">{kortDatum(rad.datum)}{rad.tid !== undefined && <> <b>{rad.tid}</b></>}</td>
-                  <td className="small"><span className={`st-typ ${rad.kalla}`}>{TYPNAMN[rad.kalla]}</span></td>
-                  <td className="st-fmprov" title={`${rad.prov}${rad.rum !== undefined ? ` · rum ${rad.rum}` : ''} · ${rad.test} · ${kortDatum(rad.datum)}`}>{rad.prov}</td>
-                  {fm.fragor.map((fr, i) => {
-                    const c = rad.celler[i];
-                    const elevSvar = rad.elevCeller?.[i];
-                    const bg = c === null ? '#F7F8FA'
-                      : ledElev !== null ? (elevSvar === true ? '#4CAF50' : elevSvar === false ? '#D32F2F' : '#F7F8FA')
-                        : ratFarg(c.procent);
-                    const titel = c === null ? `Fråga ${fr.nr} ingick inte i ${rad.prov}`
-                      : ledElev !== null ? `Fråga ${fr.nr}: ${elevSvar === true ? 'rätt' : elevSvar === false ? 'fel' : 'ej gjord'}`
-                        : `Fråga ${fr.nr}: ${c.procent} % rätt (${c.ratt}/${c.bedomda})`;
+            <table className="tbl st-tabell">
+              <thead><tr>
+                <th>Lektion</th><th>Läxförhör</th><th>Exit ticket</th>
+                <th title="Snitt av elevernas exit − läxförhör">Δ snitt</th><th>Δ median</th><th>Elever</th>
+              </tr></thead>
+              <tbody>{lekt.map((l) => (
+                <tr key={l.datum}>
+                  <td><b>v{l.vecka}</b> {kortDatum(l.datum)}{l.datumTill !== l.datum && <small className="muted"> +{kortDatum(l.datumTill)}</small>}</td>
+                  <td>{l.laxforhorProv === null ? <span className="muted">—</span> : (<>
+                    <div className="st-provnamn" title={`${l.laxforhorProv}${l.laxforhorRum !== undefined ? ` (${l.laxforhorRum})` : ''}`}>{l.laxforhorProv}</div>
+                    <span className="st-bar"><i style={{ width: `${l.laxforhorSnitt ?? 0}%`, background: KORT_FARG['socrative-laxforhor'] }} /><b>{l.laxforhorSnitt ?? '—'} %</b> <small className="muted">md {l.laxforhorMedian ?? '—'}</small></span></>)}</td>
+                  <td>{l.exitProv === null ? <span className="muted">—</span> : (<>
+                    <div className="st-provnamn" title={`${l.exitProv}${l.exitRum !== undefined ? ` (${l.exitRum})` : ''}`}>{l.exitProv}</div>
+                    <span className="st-bar"><i style={{ width: `${l.exitSnitt ?? 0}%`, background: KORT_FARG['socrative-exit'] }} /><b>{l.exitSnitt ?? '—'} %</b> <small className="muted">md {l.exitMedian ?? '—'}</small></span></>)}</td>
+                  <td className={`st-diff ${(l.diffSnitt ?? 0) > 0 ? 'upp' : (l.diffSnitt ?? 0) < 0 ? 'ned' : ''}`}>{l.diffSnitt === null ? '—' : `${l.diffSnitt > 0 ? '+' : ''}${l.diffSnitt}`}</td>
+                  <td className={`st-diff ${(l.diffMedian ?? 0) > 0 ? 'upp' : (l.diffMedian ?? 0) < 0 ? 'ned' : ''}`}>{l.diffMedian === null ? '—' : `${l.diffMedian > 0 ? '+' : ''}${l.diffMedian}`}</td>
+                  <td className="small muted">{l.antalBada} av {l.elever.length}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="st-scroll" style={{ maxHeight: 420 }}>
+            <table className="tbl st-tabell st-matris">
+              <thead><tr><th>Elev</th><th>Läxförhör</th><th>Exit</th><th>Δ snitt</th><th>Δ median</th>
+                {lekt.map((l) => <th key={l.datum} title={`${l.laxforhorProv ?? '—'} → ${l.exitProv ?? '—'}`}><span className="st-kol">v{l.vecka} {kortDatum(l.datum)}</span></th>)}
+              </tr></thead>
+              <tbody>{elevLekt.map((e) => (
+                <tr key={e.elev.id}>
+                  <td><button className="linkbtn" onClick={() => setElevId(e.elev.id)}>{e.elev.namn}</button></td>
+                  <td>{e.laxforhorSnitt ?? '—'} %</td><td>{e.exitSnitt ?? '—'} %</td>
+                  <td className={`st-diff ${(e.diffSnitt ?? 0) > 0 ? 'upp' : (e.diffSnitt ?? 0) < 0 ? 'ned' : ''}`}>{e.diffSnitt === null ? '—' : `${e.diffSnitt > 0 ? '+' : ''}${e.diffSnitt}`}</td>
+                  <td className={`st-diff ${(e.diffMedian ?? 0) > 0 ? 'upp' : (e.diffMedian ?? 0) < 0 ? 'ned' : ''}`}>{e.diffMedian === null ? '—' : `${e.diffMedian > 0 ? '+' : ''}${e.diffMedian}`}</td>
+                  {lekt.map((l) => {
+                    const r = l.elever.find((x) => x.elev.id === e.elev.id);
                     return (
-                      <td key={fr.nr} className={`st-fmruta${vald?.nr === fr.nr ? ' vald' : ''}${fm.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}`} style={{ background: bg }} title={titel}
-                        onClick={() => setVald(vald?.nr === fr.nr ? null : fr)} />
+                      <td key={l.datum} className="st-cell st-cell-diff" title={r === undefined ? 'saknas' : `läxförhör ${r.laxforhor ?? '—'} % → exit ${r.exit ?? '—'} %`}>
+                        {r === undefined || r.diff === null
+                          ? <span className="muted">{r === undefined ? '·' : `${r.laxforhor ?? '—'}/${r.exit ?? '—'}`}</span>
+                          : <span className={`st-diff ${r.diff > 0 ? 'upp' : r.diff < 0 ? 'ned' : ''}`}>{r.diff > 0 ? '+' : ''}{r.diff}</span>}
+                      </td>
                     );
                   })}
                 </tr>
               ))}</tbody>
             </table>
           </div>
-          {vald !== null && (
-            <div className="st-fmvald">
-              <b>Fråga {vald.nr}</b> <span className="chip">{vald.kod}</span> <small className="muted">först ställd i {vald.ursprung}</small>
-              <p>{vald.fraga}</p>
-              <div className="small">
-                {fmRader.map((rad, i) => { const c = rad.celler[fm.fragor.findIndex((x) => x.nr === vald.nr)]; return c === null ? null : (
-                  <span key={i} className="st-fmhist" style={{ background: ratFarg(c.procent) }} title={`${rad.prov}: ${c.procent} %`}>{rad.prov}: {c.procent} %</span>
-                ); })}
+        )}
+      </div>
+
+      </details>
+
+      <details className="st-fall">
+        <summary><b>🙋 Närvaro & tid på dagen</b> <small className="muted">härledd ur Socrative-svaren</small></summary>
+      {/* Närvaro & tid på dagen */}
+      <div className="st-grid2">
+        <div className="uppg-kort st-widget st-narvaro">
+          <div className="rad"><b>Närvaro & tid på dagen</b> <small className="muted">närvaro = svarat på läxförhör eller exit ticket den lektionen</small><span className="spacer" /><ZoomKnappar z={zNarv} /></div>
+          {narvaro.antalLektioner === 0 ? <p className="muted small">Inga lektioner med Socrative-resultat i urvalet.</p> : (
+            <div className="st-narvaro-grid">
+              <div>
+                <LinjeDiagram
+                  z={zNarv}
+                  hojd={240}
+                  tillfallen={narvaro.perVecka.map((v) => ({ etikett: `v.${v.vecka}`, titel: `Vecka ${v.vecka}` }))}
+                  serier={[{ namn: 'Närvaro', varden: narvaro.perVecka.map((v) => v.procent), farg: '#00838F' }]}
+                  kravLinjer={[{ procent: 80, namn: 'mål 80 %' }]}
+                  visaVarden
+                />
+                {narvaro.riskElever.length > 0 && (
+                  <div className="small" style={{ marginTop: 4 }}>⚠ Under 80 %: {narvaro.riskElever.map((e) => (
+                    <button key={e.id} className="st-chip" title={e.namn} onClick={() => setElevId(e.id)}>{e.namn} {narvaroPerElev.get(e.id)?.narvaroProcent ?? '—'} %</button>
+                  ))}</div>
+                )}
               </div>
-              <button className="btn sm" onClick={() => setVald(null)}>✕ stäng</button>
-            </div>
-          )}
-          <details className="st-fmfilter">
-            <summary>🔍 Filtrera frågor</summary>
-            <div className="rad" style={{ gap: 8, flexWrap: 'wrap' }}>
-              <label className="small">Andel rätt i klassen från{' '}
-                <input type="number" min={0} max={100} step={5} aria-label="Andel rätt från" value={fMin} onChange={(e) => setFMin(Number(e.target.value))} style={{ width: 64 }} /> %</label>
-              <label className="small">till{' '}
-                <input type="number" min={0} max={100} step={5} aria-label="Andel rätt till" value={fMax} onChange={(e) => setFMax(Number(e.target.value))} style={{ width: 64 }} /> %</label>
-            </div>
-            <div className="rad" style={{ gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-              <small className="muted">Tester:</small>
-              <button className={`chipbtn ${valdaTest.length === 0 ? 'act' : ''}`} onClick={() => setValdaTest([])}>Alla</button>
-              {fmRader.map((rad) => (
-                <button key={rad.nyckel} className={`chipbtn ${valdaTest.includes(rad.nyckel) ? 'act' : ''}`}
-                  onClick={() => setValdaTest(valdaTest.includes(rad.nyckel) ? valdaTest.filter((x) => x !== rad.nyckel) : [...valdaTest, rad.nyckel])}>{rad.prov}</button>
-              ))}
-            </div>
-            <p className="small"><b>{traffar.length}</b> frågor mellan {fMin} och {fMax} % rätt{valdaTest.length > 0 ? ` i ${valdaTest.length} valda tester` : ''}.</p>
-            {traffar.length > 0 && (
-              <div className="st-scroll" style={{ maxHeight: 300 }}>
-                <table className="tbl st-tabell">
-                  <thead><tr><th>Fråga</th><th>Nr</th><th>Del</th><th>Rätt</th><th>Svar</th><th>Tillfällen</th></tr></thead>
-                  <tbody>{traffar.map((t) => (
-                    <tr key={t.nr}>
-                      <td><button className="linkbtn st-provnamn" title={t.fraga} onClick={() => setVald(t)}>{t.fraga}</button></td>
-                      <td>{t.nr}</td><td>{t.kod}</td>
-                      <td><span className="st-fmhist" style={{ background: ratFarg(t.procent) }}>{t.procent} %</span></td>
-                      <td className="small muted">{t.ratt}/{t.bedomda}</td>
-                      <td className="small muted">{t.antalTillfallen}</td>
+              <div>
+                <div className="small muted" style={{ marginBottom: 4 }}>Tid på dagen — snittresultat per veckodag och pass{tidHarData ? '' : ' (kräver klockslag, importeras från Socrative-filer)'}</div>
+                <table className="tbl st-tid">
+                  <thead><tr><th></th>{TID_PASS.map((p) => <th key={p}>{p}</th>)}</tr></thead>
+                  <tbody>{['Mån', 'Tis', 'Ons', 'Tor', 'Fre'].map((namn, i) => (
+                    <tr key={namn}><td><b>{namn}</b></td>
+                      {TID_PASS.map((p) => { const c = tid.find((x) => x.veckodag === i + 1 && x.pass === p)!; return (
+                        <td key={p} className="st-cell" style={{ background: c.antal === 0 ? '#F1F3F6' : procentFarg(c.snittProcent, null) }}
+                          title={c.antal === 0 ? 'inga lektioner' : `${c.antal} lektioner · närvaro ${c.narvaroProcent ?? '—'} %`}>{c.antal === 0 ? '·' : `${c.snittProcent ?? '—'} %`}</td>); })}
                     </tr>
                   ))}</tbody>
                 </table>
               </div>
-            )}
-          </details>
-        </>)}
-      </div>
-
-      {/* Grupper + samband */}
-      <div className="st-grid2 smal">
-        <div className="uppg-kort st-widget">
-          <b>Grupp A vs B</b> <small className="muted">snitt per källa</small>
-          <table className="tbl st-grupper">
-            <thead><tr><th>Källa</th><th>Grupp A <small className="muted">({grupper[0].antalElever})</small></th><th>Grupp B <small className="muted">({grupper[1].antalElever})</small></th></tr></thead>
-            <tbody>{(['socrative-laxforhor', 'socrative-exit', 'magma', 'digiexam', 'helhet'] as KortKalla[]).filter((k) => k === 'helhet' || kallor === undefined || kallor.includes(k)).map((k) => (
-              <tr key={k}><td>{KORT_RUBRIK[k]}</td>
-                {grupper.map((g) => { const v = g.perKalla[k]; return (
-                  <td key={g.grupp}>{v === null ? <span className="muted">—</span> : (
-                    <span className="st-bar"><i style={{ width: `${v}%`, background: KORT_FARG[k] }} /><b>{v} %</b></span>)}</td>); })}
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
-
-        <div className="uppg-kort st-widget">
-          <b>Sambandsanalys</b> <small className="muted">korrelation (Pearson r) mellan elevernas snitt i två källor</small>
-          {samband.length === 0 && narvaroSamband === null ? <p className="muted small">Kräver minst tre elever med resultat i båda källorna.</p> : (
-            <table className="tbl st-samband"><tbody>{[...samband, ...(narvaroSamband !== null ? [{ a: 'narvaro', b: 'helhet', r: narvaroSamband.r, n: narvaroSamband.n, text: 'Närvaro ↔ helhetsresultat' }] : [])].map((sb) => (
-              <tr key={`${sb.a}|${sb.b}`}><td>{sb.text} <small className="muted">({sb.n} elever)</small></td>
-                <td className={`st-r ${sb.r >= 0.3 ? 'pos' : sb.r <= -0.3 ? 'neg' : ''}`}>{sb.r > 0 ? '+' : ''}{sb.r.toFixed(2)} {sb.r >= 0.3 ? '↑' : sb.r <= -0.3 ? '↓' : '→'}</td></tr>
-            ))}</tbody></table>
+            </div>
+          )}
+          {narvaroSamband !== null && (
+            <div className={`st-insikt${narvaroSamband.r < 0.3 ? ' neutral' : ''}`}>
+              {narvaroSamband.r >= 0.3
+                ? `✅ Närvaro hänger ihop med resultat: elever med högre närvaro har högre helhetssnitt (r = +${narvaroSamband.r.toFixed(2)}, ${narvaroSamband.n} elever).`
+                : `➖ Inget tydligt samband mellan närvaro och resultat i urvalet (r = ${narvaroSamband.r > 0 ? '+' : ''}${narvaroSamband.r.toFixed(2)}).`}
+            </div>
           )}
         </div>
+        <div className="uppg-kort st-widget">
+          <b>Närvaro per elev</b> <small className="muted">andel lektioner med inlämnat Socrative-svar</small>
+          <div className="st-scroll" style={{ maxHeight: 300 }}>
+            <table className="tbl st-narvarolista"><tbody>
+              {[...narvaroPerElev.values()].sort((a, b) => (a.narvaroProcent ?? 101) - (b.narvaroProcent ?? 101)).map((e) => (
+                <tr key={e.elev.id}>
+                  <td><button className="linkbtn" onClick={() => setElevId(e.elev.id)}>{e.elev.namn}</button></td>
+                  <td>{e.narvaroProcent === null ? <span className="muted">—</span> : (
+                    <span className="st-bar"><i style={{ width: `${e.narvaroProcent}%`, background: e.narvaroProcent >= 80 ? '#00838F' : '#B71C1C' }} /><b>{e.narvaroProcent} %</b> <small className="muted">{e.narvarande}/{e.lektioner}</small></span>)}</td>
+                </tr>
+              ))}
+            </tbody></table>
+          </div>
+        </div>
       </div>
+
+      </details>
+
+      <details className="st-fall">
+        <summary><b>📈 Läxförhör vs Exit tickets & trendkluster</b> <small className="muted">veckokurvor, kluster, normerad graf</small></summary>
+      {/* Jämförelse + kluster */}
+      <div className="st-grid2">
+        <div className="uppg-kort st-widget">
+          <div className="rad"><b>Läxförhör vs Exit tickets</b> <small className="muted">snitt per vecka · streckad = klassmedel</small><span className="spacer" /><ZoomKnappar z={zVecko} /></div>
+          <LinjeDiagram
+            z={zVecko}
+            hojd={280}
+            tillfallen={veckor.veckor.map((v) => ({ etikett: `v.${v}`, titel: `Vecka ${v}` }))}
+            serier={[
+              { namn: 'Läxförhör', varden: veckor.serier['socrative-laxforhor'], farg: KORT_FARG['socrative-laxforhor'] },
+              { namn: 'Exit tickets', varden: veckor.serier['socrative-exit'], farg: KORT_FARG['socrative-exit'] },
+              { namn: 'Klassmedel', varden: veckor.serier.helhet, farg: '#9AA3AE', streckad: true },
+            ]}
+            kravLinjer={kravLinjer}
+            visaVarden
+          />
+          <div className="st-legend">
+            <span><i style={{ background: KORT_FARG['socrative-laxforhor'] }} /> Läxförhör</span>
+            <span><i style={{ background: KORT_FARG['socrative-exit'] }} /> Exit tickets</span>
+            <span><i className="streck" /> Klassmedel</span>
+          </div>
+          {insikt !== null && <div className="st-insikt">{insikt}</div>}
+        </div>
+
+        <div className="uppg-kort st-widget">
+          <b>Trendkluster</b> <small className="muted">elever som trendar tillsammans · baserat på alla tillfällen i urvalet</small>
+          <div className="st-klusterrad">
+            {kluster.map((g) => (
+              <div key={g.kluster} className={`st-klusterkort ${g.kluster}${g.elever.length > 0 ? ' klickbar' : ''}`} role={g.elever.length > 0 ? 'button' : undefined}
+                tabIndex={g.elever.length > 0 ? 0 : undefined} title={g.elever.length > 0 ? 'Öppna gruppens graf' : undefined}
+                onClick={() => { if (g.elever.length > 0) fokuseraGrupp(g.elever.map((e) => e.id), KLUSTER_NAMN[g.kluster]); }}
+                onKeyDown={(ev) => { if ((ev.key === 'Enter' || ev.key === ' ') && g.elever.length > 0) { ev.preventDefault(); fokuseraGrupp(g.elever.map((e) => e.id), KLUSTER_NAMN[g.kluster]); } }}>
+                <div className="rad">
+                  <button className="linkbtn st-klusterknapp" disabled={g.elever.length === 0} title="Visa hela gruppen i fokusvyn"
+                    onClick={(ev) => { ev.stopPropagation(); fokuseraGrupp(g.elever.map((e) => e.id), KLUSTER_NAMN[g.kluster]); }}><b>{KLUSTER_NAMN[g.kluster]}</b></button>
+                  <span className="spacer" /><small>{g.elever.length} elever</small></div>
+                <Sparkline serie={g.serie} farg={KLUSTER_FARG[g.kluster]} krav={null} />
+                <div className="st-chips">{g.elever.map((e) => (
+                  <button key={e.id} className="st-chip" title={e.namn} onClick={(ev) => { ev.stopPropagation(); setElevId(e.id); }}>{initialer(e.namn)}</button>
+                ))}</div>
+              </div>
+            ))}
+          </div>
+          {/* Klustrens kurvor relativt klassens snitt — på-knappar aktiverar linje + tonade band i klustrets färg */}
+          <div className="rad st-klusterfilter">
+            {klusterK.map((k) => (
+              <FilterKnapp key={k.kluster} pa={klusterPa.includes(k.kluster)} farg={KLUSTER_FARG[k.kluster]}
+                onClick={() => setKlusterPa(klusterPa.includes(k.kluster) ? klusterPa.filter((x) => x !== k.kluster) : [...klusterPa, k.kluster])}
+                title={`${k.antal} elever`}>{KLUSTER_NAMN[k.kluster]} <small>{k.antal}</small></FilterKnapp>
+            ))}
+          </div>
+          <NormeradGraf z={zNorm} tillfallen={spridning} hojd={300} onKlick={(i) => onVisaProv(spridning[i].prov)}
+            serier={klusterK.map((k) => ({
+              namn: KLUSTER_NAMN[k.kluster], farg: KLUSTER_FARG[k.kluster], band: k.band, pa: klusterPa.includes(k.kluster) && k.antal > 0,
+              linje: k.procent.map((p, i) => (p === null || spridning[i].snittProcent === null ? null : Math.round(p - (spridning[i].snittProcent ?? 0)))),
+            }))} />
+          <TestLista tillfallen={spridning} />
+          <details className="st-forklaring">
+            <summary>❓ Vad visar trendklustren?</summary>
+            <p><b>Grupperna.</b> Varje elev placeras i en av fyra grupper utifrån sina resultat i urvalet:</p>
+            <ul>
+              <li><b>Stigande</b> — resultaten går uppåt över tid.</li>
+              <li><b>Stabil</b> — jämna resultat utan tydlig riktning.</li>
+              <li><b>Riskzon</b> — snittet ligger under det lägsta kravet i urvalet (90 % för läxförhör, 70 % för exit tickets). En elev vars aggregerande läxförhör ligger på minst 90 % och inte faller hamnar aldrig här, även om exit tickets drar ner snittet.</li>
+              <li><b>Ojämn utveckling</b> — stora hopp mellan tillfällena, i genomsnitt mer än 25 procentenheter.</li>
+            </ul>
+            <p><b>Diagrammet.</b> Den vågräta linjen i mitten är <b>klassens snitt vid varje enskilt tillfälle</b>, satt till 100. Ett prov där alla gick dåligt sänker alltså linjen för alla — kurvorna visar avstånd till klassen, inte absoluta resultat. Skalan går ±30 procentenheter i band om 3.</p>
+            <p>En färgad linje är gruppens snitt jämfört med klassen: ligger <i>Riskzon</i> på 85 betyder det att gruppen presterade 15 procentenheter under klassen det tillfället. De tonade banden bakom linjen visar hur gruppens elever fördelar sig — brett band = eleverna i gruppen skiljer sig mycket åt, smalt band = de följs åt.</p>
+            <p><b>Att läsa av:</b> närmar sig Riskzon-linjen 100 håller stödet på att verka. Går den nedåt medan Stigande går uppåt ökar spridningen i klassen. Ett tillfälle där alla grupper faller mot 100 handlar oftare om provet än om eleverna.</p>
+            <p>Knapparna tänder och släcker grupperna, staplarna i rutorna ovanför är gruppens snitt över tid, och klick på en ruta öppnar hela gruppen i fokusvyn.</p>
+          </details>
+        </div>
+      </div>
+
+      </details>
 
       {/* Klassens utveckling */}
       <div className="uppg-kort">
@@ -3643,6 +3628,33 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
           z={zKlass}
         />
         )}
+      </div>
+
+      {/* Grupper + samband */}
+      <div className="st-grid2 smal">
+        <div className="uppg-kort st-widget">
+          <b>Grupp A vs B</b> <small className="muted">snitt per källa</small>
+          <table className="tbl st-grupper">
+            <thead><tr><th>Källa</th><th>Grupp A <small className="muted">({grupper[0].antalElever})</small></th><th>Grupp B <small className="muted">({grupper[1].antalElever})</small></th></tr></thead>
+            <tbody>{(['socrative-laxforhor', 'socrative-exit', 'magma', 'digiexam', 'helhet'] as KortKalla[]).filter((k) => k === 'helhet' || kallor === undefined || kallor.includes(k)).map((k) => (
+              <tr key={k}><td>{KORT_RUBRIK[k]}</td>
+                {grupper.map((g) => { const v = g.perKalla[k]; return (
+                  <td key={g.grupp}>{v === null ? <span className="muted">—</span> : (
+                    <span className="st-bar"><i style={{ width: `${v}%`, background: KORT_FARG[k] }} /><b>{v} %</b></span>)}</td>); })}
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+
+        <div className="uppg-kort st-widget">
+          <b>Sambandsanalys</b> <small className="muted">korrelation (Pearson r) mellan elevernas snitt i två källor</small>
+          {samband.length === 0 && narvaroSamband === null ? <p className="muted small">Kräver minst tre elever med resultat i båda källorna.</p> : (
+            <table className="tbl st-samband"><tbody>{[...samband, ...(narvaroSamband !== null ? [{ a: 'narvaro', b: 'helhet', r: narvaroSamband.r, n: narvaroSamband.n, text: 'Närvaro ↔ helhetsresultat' }] : [])].map((sb) => (
+              <tr key={`${sb.a}|${sb.b}`}><td>{sb.text} <small className="muted">({sb.n} elever)</small></td>
+                <td className={`st-r ${sb.r >= 0.3 ? 'pos' : sb.r <= -0.3 ? 'neg' : ''}`}>{sb.r > 0 ? '+' : ''}{sb.r.toFixed(2)} {sb.r >= 0.3 ? '↑' : sb.r <= -0.3 ? '↓' : '→'}</td></tr>
+            ))}</tbody></table>
+          )}
+        </div>
       </div>
 
       {/* Elev × prov */}
@@ -4368,9 +4380,9 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
           {varningar.map((v) => `${v.prov} (${v.datum})`).join(' · ')}</div>
       )}
 
-      <SuperTeachDashboard s={s} klassId={klass.id} klassNamn={klass.namn} amneId={amne?.id ?? ''} kallor={kallor}
-        onVisaProv={(p) => setVisaProv(p)} kor={kor} />
-
+      {/* ── Importera: filer, roster, quizlänkar — högst upp så man ser vad som är inläst ── */}
+      <details className="st-fall st-import" open={s.elever.filter((e) => e.klassId === klass.id).length === 0 || (s.resultat ?? []).length === 0}>
+        <summary><b>📥 Importera</b> <small className="muted">Socrative-filer, klistra in resultat, elevlista, quizlänkar och QR</small></summary>
       {/* ── Socrative-rum: delningslänkar och QR ── */}
       <SocrativeLankPanel s={s} klass={klass} amnen={amnen} planFor={planFor} kor={kor} />
 
@@ -4475,6 +4487,11 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
           <button className="btn" disabled={!kanSpara} title={amne === undefined ? 'Välj ämne — resultat samlas ämnesvis' : ''} onClick={spara}>💾 Spara resultat</button>
         </div>
       </div>
+
+      </details>
+
+      <SuperTeachDashboard s={s} klassId={klass.id} klassNamn={klass.namn} amneId={amne?.id ?? ''} kallor={kallor}
+        onVisaProv={(p) => setVisaProv(p)} kor={kor} />
 
       {/* ── Översikt ── */}
       <h3>{amne !== undefined ? `${klass.namn} · ${amne.namn}` : `${klass.namn} · alla ämnen`} <small className="muted">— snitt och BAM-krav per källa</small></h3>
