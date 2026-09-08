@@ -117,3 +117,22 @@ describe('trendkoll', () => {
     expect(t.sammanfattning).toContain('kräver att samma fråga ställs igen');
   });
 });
+
+describe('Del 95: steg med datum och vilka begrepp som vändes', () => {
+  it('varje jämförelse bär provnamn, datum och frågorna som gick åt vardera hållet', () => {
+    const t = trendkoll(bygg(), { klassId: 'k', amneId: 'bi' });
+    const anna = t.elever.find((e) => e.elev.id === 'a')!;
+    expect(anna.steg).toHaveLength(1);
+    expect(anna.steg[0]).toMatchObject({
+      netto: 0, lart: 1, glomt: 1,
+      foreProv: 'Biologi 4.1 Begrepp', foreDatum: '2026-08-21',
+      prov: '4.1-4.2 Begrepp', datum: '2026-08-28',
+    });
+    expect(anna.steg[0].glomtFragor).toEqual([F1]);
+    expect(anna.steg[0].lartFragor).toEqual([F2]);
+    const omar = t.elever.find((e) => e.elev.id === 'b')!;
+    expect(omar.steg[0]).toMatchObject({ lart: 1, glomt: 0 });
+    expect(omar.steg[0].lartFragor).toEqual([F1]);
+    expect(omar.serie).toEqual(omar.steg.map((x) => x.netto));
+  });
+});

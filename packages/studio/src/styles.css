@@ -766,3 +766,13 @@ input.fel { border-color: #B71C1C; }
 .st-begreppsord::after { content: ' —'; font-weight: 400; color: var(--muted-varm); }
 .st-begreppsdef { }
 .st-begreppslista small { display: block; }
+
+/* Del 95: klickbara trendsteg med datum */
+.st-tk-serie { display: flex; gap: 4px; flex-wrap: wrap; }
+.st-tk-steg.klick { display: inline-flex; flex-direction: column; align-items: center; gap: 0; min-width: 52px; padding: 2px 6px; border: 1px solid transparent; cursor: pointer; font: inherit; }
+.st-tk-steg.klick small { font-size: 9px; font-weight: 600; opacity: .75; white-space: nowrap; }
+.st-tk-steg.klick b { font-size: 13px; }
+.st-tk-steg.klick:hover { border-color: currentColor; }
+.st-tk-steg.klick.vald { outline: 2px solid var(--bla); }
+.st-tk-detalj { background: #fff; border: 1px solid var(--ram); border-radius: 10px; padding: 8px 10px; margin-top: 6px; max-width: 620px; }
+.st-tk-detalj ul { margin: 2px 0 6px; }

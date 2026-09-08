@@ -24,7 +24,7 @@ import {
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   arFilImporterad, arRatt, andraKalla, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
-  delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, rapportOversikt, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
+  delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, rapportOversikt, begreppForFraga, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
@@ -2981,6 +2981,7 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
   const [visaAndel, setVisaAndel] = useState(true);
   const [visaElevDiff, setVisaElevDiff] = useState(false);
   const [visaTkPar, setVisaTkPar] = useState(false);
+  const [tkSteg, setTkSteg] = useState<{ elevId: string; index: number } | null>(null);
   const [ledElev, setLedElev] = useState<string | null>(null);
   const [vald, setVald] = useState<{ nr: number; fraga: string; kod: string; ursprung: string } | null>(null);
   const [fMin, setFMin] = useState(0);
@@ -3018,6 +3019,14 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
     // Samma ordning som i kernel: datum → klockslag → läxförhör före exit före övning
     .sort((a, b) => (fmNyastForst ? -jamforTillfalle(a, b) : jamforTillfalle(a, b)));
   const traffar = filtreraFragor({ ...fm, rader: fmRader }, { min: fMin, max: fMax, ...(valdaTest.length > 0 ? { tillfallen: valdaTest } : {}) });
+  // Frågetexten är begreppsbeskrivningen — slå upp begreppet ur ämnets bok
+  const tkForklaringar = useMemo(() => {
+    const bok = s.bocker.find((b) => b.id === s.amnen.find((a) => a.id === amneId)?.bokId);
+    const ut: Record<string, string> = {};
+    for (const kap of bok?.kapitel ?? []) Object.assign(ut, kap.resurser.forklaringar ?? {});
+    return ut;
+  }, [s.bocker, s.amnen, amneId]);
+  const tkBegrepp = (fraga: string) => (Object.keys(tkForklaringar).length === 0 ? null : begreppForFraga(tkForklaringar, fraga));
   const tk = trendkoll(s, { klassId, ...(amneId !== '' ? { amneId } : {}), ...(kallor !== undefined ? { kallor } : {}), ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) });
   const normerad = normeradSpridning(s, f);
   const klusterK = klusterKurvor(s, f);
@@ -3335,7 +3344,37 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
                     <td className="st-diff upp">{e.lart}</td>
                     <td className="st-diff ned">{e.glomt}</td>
                     <td className={`st-diff ${e.netto > 0 ? 'upp' : e.netto < 0 ? 'ned' : ''}`}>{e.netto > 0 ? '+' : ''}{e.netto}</td>
-                    <td>{e.serie.map((v, i) => <span key={i} className={`st-tk-steg ${v > 0 ? 'upp' : v < 0 ? 'ned' : ''}`} title={`Jämförelse ${i + 1}: ${v > 0 ? '+' : ''}${v}`}>{v > 0 ? '+' : ''}{v}</span>)}</td>
+                    <td>
+                      <div className="st-tk-serie">{e.steg.map((st, i) => (
+                        <button key={i} className={`st-tk-steg klick ${st.netto > 0 ? 'upp' : st.netto < 0 ? 'ned' : ''}${tkSteg?.elevId === e.elev.id && tkSteg.index === i ? ' vald' : ''}`}
+                          title={`${st.foreProv} → ${st.prov}: ${st.lart} lärt, ${st.glomt} glömt — klicka för att se vilka begrepp`}
+                          onClick={() => setTkSteg(tkSteg?.elevId === e.elev.id && tkSteg.index === i ? null : { elevId: e.elev.id, index: i })}>
+                          <small>{kortDatum(st.datum)}</small>
+                          <b>{st.netto > 0 ? '+' : ''}{st.netto}</b>
+                        </button>
+                      ))}</div>
+                      {tkSteg?.elevId === e.elev.id && e.steg[tkSteg.index] !== undefined && (() => {
+                        const st = e.steg[tkSteg.index];
+                        const rad = (fraga: string) => { const b = tkBegrepp(fraga); return b === null ? fraga : `${b} — ${fraga}`; };
+                        return (
+                          <div className="st-tk-detalj">
+                            <div className="rad"><b>{st.foreProv} → {st.prov}</b>
+                              <small className="muted">{kortDatum(st.foreDatum)} → {kortDatum(st.datum)}</small>
+                              <span className="spacer" />
+                              <button className="btn sec sm" onClick={() => setTkSteg(null)}>✕</button></div>
+                            {st.glomtFragor.length > 0 && (<>
+                              <div className="st-nu-rubrik kvar">Glömt ({st.glomtFragor.length})</div>
+                              <ul className="small st-begreppslista">{st.glomtFragor.map((q) => <li key={q}>{rad(q)}</li>)}</ul>
+                            </>)}
+                            {st.lartFragor.length > 0 && (<>
+                              <div className="st-nu-rubrik fixat">Lärt ({st.lartFragor.length})</div>
+                              <ul className="small st-begreppslista">{st.lartFragor.map((q) => <li key={q}>{rad(q)}</li>)}</ul>
+                            </>)}
+                            {st.glomtFragor.length === 0 && st.lartFragor.length === 0 && <p className="small muted">Inga svar ändrades mellan proven.</p>}
+                          </div>
+                        );
+                      })()}
+                    </td>
                     <td>{e.omdome === 'glommer' ? <span className="st-krav ej">glömmer mer</span> : e.omdome === 'lar' ? <span className="st-krav ok">lär mer</span> : <span className="muted">jämnt</span>}</td>
                   </tr>
                 ))}</tbody>

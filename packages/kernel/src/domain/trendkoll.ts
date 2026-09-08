@@ -124,6 +124,23 @@ export function jamforProv(
   };
 }
 
+/** Ett steg i elevens utveckling: en jämförelse mellan två prov. */
+export interface TrendSteg {
+  netto: number;
+  lart: number;
+  glomt: number;
+  /** Provet som jämförs mot (det senare av de två). */
+  prov: string;
+  datum: string;
+  /** Det tidigare provet. */
+  foreProv: string;
+  foreDatum: string;
+  /** Frågorna som gick från fel till rätt. */
+  lartFragor: string[];
+  /** Frågorna som gick från rätt till fel. */
+  glomtFragor: string[];
+}
+
 export interface TrendkollElev {
   elev: Elev;
   lart: number;
@@ -131,6 +148,8 @@ export interface TrendkollElev {
   netto: number;
   /** Netto per jämförelse, kronologiskt — visar om glömskan ökar. */
   serie: number[];
+  /** Samma jämförelser med datum och vilka begrepp som vändes. */
+  steg: TrendSteg[];
   /** 'lar' = lär mer än glömmer, 'glommer' = tvärtom, 'jamn' = lika. */
   omdome: 'lar' | 'glommer' | 'jamn';
 }
@@ -180,8 +199,18 @@ export function trendkoll(s: Struktur, f: TrendkollFilter): Trendkoll {
     const rader = par.map((p) => p.elever.find((e) => e.elev.id === elev.id)).filter((r): r is ElevJamforelse => r !== undefined);
     const lart = rader.reduce((n, r) => n + r.lart, 0);
     const glomt = rader.reduce((n, r) => n + r.glomt, 0);
+    // Bygg ur paren direkt — rader är filtrerad och har inte samma index
+    const steg: TrendSteg[] = par
+      .map((p) => ({ p, r: p.elever.find((e) => e.elev.id === elev.id) }))
+      .filter((x): x is { p: ParJamforelse; r: ElevJamforelse } => x.r !== undefined)
+      .map(({ p, r }) => ({
+        netto: r.netto, lart: r.lart, glomt: r.glomt,
+        prov: p.efter.prov, datum: p.efter.datum, foreProv: p.fore.prov, foreDatum: p.fore.datum,
+        lartFragor: r.fragor.filter((f) => f.overgang === 'lart').map((f) => f.fraga),
+        glomtFragor: r.fragor.filter((f) => f.overgang === 'glomt').map((f) => f.fraga),
+      }));
     return {
-      elev, lart, glomt, netto: lart - glomt, serie: rader.map((r) => r.netto),
+      elev, lart, glomt, netto: lart - glomt, serie: rader.map((r) => r.netto), steg,
       omdome: (lart > glomt ? 'lar' : glomt > lart ? 'glommer' : 'jamn') as TrendkollElev['omdome'],
     };
   }).filter((r) => r.serie.length > 0);
