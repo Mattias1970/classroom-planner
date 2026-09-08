@@ -2999,26 +2999,53 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
   const period = tolkaVeckor(periodText);
   const [dag, setDag] = useState('');
   const grundF: DashboardFilter = { klassId, ...(amneId !== '' ? { amneId } : {}), ...(kallor !== undefined ? { kallor } : {}), ...(period ?? {}) };
-  const dagar = lektionsDagar(s, grundF);
+  const dagar = useMemo(() => lektionsDagar(s, grundF), [s, klassId, amneId, kallor, periodText]); // eslint-disable-line react-hooks/exhaustive-deps
   const valdDag = dagar.find((d) => d.datum === dag) ?? null;
   // Dagfilter: läxförhör + exit ticket samma lektionsdag; vid halvklass täcker intervallet båda sessionerna
   const f: DashboardFilter = valdDag === null ? grundF : { ...grundF, fran: valdDag.datum, till: valdDag.datumTill };
-  const kort = frageKort(s, f);
-  const kurva = klassKurva(s, f);
-  const spridning = klassSpridning(s, f);
-  const lekt = lektionstester(s, f);
-  const elevLekt = elevLektionstest(s, f);
   const tkFilter = { klassId, ...(amneId !== '' ? { amneId } : {}), ...(kallor !== undefined ? { kallor } : {}), ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) };
-  const led = delkapitelSegment(s, ledElev === null ? tkFilter : { ...tkFilter, elevId: ledElev });
-  const delFarger = new Map([...new Set(led.flatMap((t) => t.segment.map((x) => x.kod)))].sort((a, b) => a.localeCompare(b, 'sv', { numeric: true })).map((kod, i) => [kod, DEL_FARGER[i % DEL_FARGER.length]]));
-  const klassFastnat = aterkommandeFelKlass(s, tkFilter);
-  const fm = fragematris(s, ledElev === null ? tkFilter : { ...tkFilter, elevId: ledElev });
-  // Frågematrisens rader: typfilter (tomt = alla) och vald datumordning
+
+  // ── Klassnivå: räknas om bara när struktur eller filter ändras ──
+  // Tidigare kördes ett tjugotal kernel-funktioner vid varje omritning, även när
+  // man bara skrev i sökrutan eller klickade en knapp. Nu ligger de i ett memo.
+  const filterNyckel = `${klassId}|${amneId}|${(kallor ?? []).join(',')}|${periodText}|${dag}`;
+  const klassData = useMemo(() => {
+    const kurva = klassKurva(s, f);
+    const samband = sambandsanalys(s, f);
+    return {
+      kort: frageKort(s, f), kurva, spridning: klassSpridning(s, f),
+      lekt: lektionstester(s, f), elevLekt: elevLektionstest(s, f),
+      klassFastnat: aterkommandeFelKlass(s, tkFilter),
+      tk: trendkoll(s, tkFilter),
+      normerad: normeradSpridning(s, f), klusterK: klusterKurvor(s, f), veckor: veckoSerier(s, f),
+      kluster: trendKluster(s, f), grupper: gruppSnitt(s, f), samband,
+      narvaro: narvaroKort(s, f),
+      narvaroPerElev: new Map(elevNarvaro(s, f).map((e) => [e.elev.id, e])),
+      tid: tidPaDagen(s, f), narvaroSamband: sambandNarvaro(s, f),
+      kravLinjer: [...new Set(kurva.map((t) => t.krav).filter((k): k is number => k !== null))].sort().map((p) => ({ procent: p, namn: 'Godkänt' })),
+    };
+  }, [s, filterNyckel]); // eslint-disable-line react-hooks/exhaustive-deps
+  const { kort, kurva, spridning, lekt, elevLekt, klassFastnat, tk, normerad, klusterK, veckor, kluster, grupper, samband, narvaro, narvaroPerElev, tid, narvaroSamband, kravLinjer } = klassData;
+  const tidHarData = tid.some((c) => c.antal > 0);
+
+  // ── Elevberoende: bara när vald elev i led/matris ändras ──
+  const elevData = useMemo(() => {
+    const led = delkapitelSegment(s, ledElev === null ? tkFilter : { ...tkFilter, elevId: ledElev });
+    return {
+      led,
+      delFarger: new Map([...new Set(led.flatMap((t) => t.segment.map((x) => x.kod)))].sort((a, b) => a.localeCompare(b, 'sv', { numeric: true })).map((kod, i) => [kod, DEL_FARGER[i % DEL_FARGER.length]])),
+      fm: fragematris(s, ledElev === null ? tkFilter : { ...tkFilter, elevId: ledElev }),
+    };
+  }, [s, filterNyckel, ledElev]); // eslint-disable-line react-hooks/exhaustive-deps
+  const { led, delFarger, fm } = elevData;
+  // Frågematrisens rader: typfilter (tomt = alla) och vald datumordning — billigt, kan köras varje gång
   const fmRader = [...fm.rader]
     .filter((r) => fmTyper.length === 0 || fmTyper.includes(r.kalla))
-    // Samma ordning som i kernel: datum → klockslag → läxförhör före exit före övning
     .sort((a, b) => (fmNyastForst ? -jamforTillfalle(a, b) : jamforTillfalle(a, b)));
-  const traffar = filtreraFragor({ ...fm, rader: fmRader }, { min: fMin, max: fMax, ...(valdaTest.length > 0 ? { tillfallen: valdaTest } : {}) });
+  const traffar = useMemo(
+    () => filtreraFragor({ ...fm, rader: fmRader }, { min: fMin, max: fMax, ...(valdaTest.length > 0 ? { tillfallen: valdaTest } : {}) }),
+    [fm, fmTyper, fmNyastForst, fMin, fMax, valdaTest], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   // Frågetexten är begreppsbeskrivningen — slå upp begreppet ur ämnets bok
   const tkForklaringar = useMemo(() => {
     const bok = s.bocker.find((b) => b.id === s.amnen.find((a) => a.id === amneId)?.bokId);
@@ -3027,18 +3054,6 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
     return ut;
   }, [s.bocker, s.amnen, amneId]);
   const tkBegrepp = (fraga: string) => (Object.keys(tkForklaringar).length === 0 ? null : begreppForFraga(tkForklaringar, fraga));
-  const tk = trendkoll(s, { klassId, ...(amneId !== '' ? { amneId } : {}), ...(kallor !== undefined ? { kallor } : {}), ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) });
-  const normerad = normeradSpridning(s, f);
-  const klusterK = klusterKurvor(s, f);
-  const veckor = veckoSerier(s, f);
-  const kluster = trendKluster(s, f);
-  const grupper = gruppSnitt(s, f);
-  const samband = sambandsanalys(s, f);
-  const narvaro = narvaroKort(s, f);
-  const narvaroPerElev = new Map(elevNarvaro(s, f).map((e) => [e.elev.id, e]));
-  const tid = tidPaDagen(s, f);
-  const tidHarData = tid.some((c) => c.antal > 0);
-  const narvaroSamband = sambandNarvaro(s, f);
   const insikt = (() => {
     const sb = samband.find((x) => x.a === 'socrative-laxforhor' && x.b === 'socrative-exit');
     if (sb === undefined) return null;
@@ -3046,14 +3061,9 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
     if (sb.r <= -0.3) return `⚠ Läxförhör och exit tickets går åt olika håll (r = ${sb.r.toFixed(2)}) — kontrollera vad som testas.`;
     return `➖ Inget tydligt samband mellan läxförhör och exit tickets (r = ${sb.r > 0 ? '+' : ''}${sb.r.toFixed(2)}).`;
   })();
-  const matris = elevMatris(s, f, sok);
+  const matris = useMemo(() => elevMatris(s, f, sok), [s, filterNyckel, sok]); // eslint-disable-line react-hooks/exhaustive-deps
   const elev = elevId === null ? null : s.elever.find((e) => e.id === elevId) ?? null;
-  const ek = elev === null ? [] : elevKurva(s, elev.id, f);
-  const kravLinjer = (() => {
-    const set = new Set<number>();
-    for (const t of kurva) if (t.krav !== null) set.add(t.krav);
-    return [...set].sort().map((p) => ({ procent: p, namn: 'Godkänt' }));
-  })();
+  const ek = useMemo(() => (elev === null ? [] : elevKurva(s, elev.id, f)), [s, filterNyckel, elev?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const TREND = { upp: '↗', ned: '↘', jamn: '→' } as const;
   const kortKlass = (k: FrageKort) => `st-kort${k.antalProv === 0 ? ' tom' : ''}`;
   return (

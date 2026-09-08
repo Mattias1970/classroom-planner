@@ -400,3 +400,27 @@ describe('Del 69: aggregerande läxförhör ≥ 90 % och stigande → aldrig ris
     expect(namn('stigande')).toEqual(['Anna Berg']);
   });
 });
+
+describe('Del 96: memoisering per struktur-instans', async () => {
+  const { dashboardResultat, tillfalleIndex } = await import('../src/domain/dashboard.js');
+  const { laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst } = await import('../src/domain/struktur.js');
+  const { tomStruktur } = await import('../src/domain/typer.js');
+  const { importeraResultat } = await import('../src/domain/resultat.js');
+  it('samma struktur + samma filter ger samma array; ny struktur ger ny', () => {
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillElev(s, { id: 'a', klassId: 'k', namn: 'Anna Berg', grupp: 'A' });
+    s = importeraResultat(s, { klassId: 'k', kalla: 'socrative-exit', prov: 'Q1', datum: '2026-09-01', rader: [{ namn: 'Anna Berg', poang: 8, maxPoang: 10 }] }).s;
+    const a = dashboardResultat(s, { klassId: 'k' });
+    const b = dashboardResultat(s, { klassId: 'k' });
+    expect(b).toBe(a); // cachad, ingen ny filtrering
+    expect(tillfalleIndex(a)).toBe(tillfalleIndex(b));
+    expect(dashboardResultat(s, { klassId: 'k', kallor: ['magma'] })).not.toBe(a); // annat filter
+    const s2 = importeraResultat(s, { klassId: 'k', kalla: 'socrative-exit', prov: 'Q2', datum: '2026-09-02', rader: [{ namn: 'Anna Berg', poang: 9, maxPoang: 10 }] }).s;
+    const c = dashboardResultat(s2, { klassId: 'k' });
+    expect(c).not.toBe(a);
+    expect(c).toHaveLength(2);
+    expect(dashboardResultat(s, { klassId: 'k' })).toBe(a); // gamla instansen opåverkad
+  });
+});

@@ -35,7 +35,23 @@ export function jamforTillfalle(a: TidsNyckel, b: TidsNyckel): number {
   return a.prov.localeCompare(b.prov, 'sv');
 }
 
+// Samma memoisering som i dashboard.ts: tillfällena räknas om bara när strukturen
+// eller filtret ändras, inte vid varje omritning av gränssnittet.
+const tillfallenCache = new WeakMap<Struktur, Map<string, Tillfalle[]>>();
+
 function tillfallenFor(s: Struktur, f: DelkapitelFilter): Tillfalle[] {
+  let per = tillfallenCache.get(s);
+  if (per === undefined) { per = new Map(); tillfallenCache.set(s, per); }
+  // elevId påverkar inte urvalet av tillfällen — bara hur de sedan läses
+  const nyckel = JSON.stringify([f.klassId, f.amneId ?? '', f.kallor ?? null, f.fran ?? null, f.till ?? null]);
+  const cachad = per.get(nyckel);
+  if (cachad !== undefined) return cachad;
+  const ut = tillfallenForRaknad(s, f);
+  per.set(nyckel, ut);
+  return ut;
+}
+
+function tillfallenForRaknad(s: Struktur, f: DelkapitelFilter): Tillfalle[] {
   const elevIds = new Set(s.elever.filter((e) => e.klassId === f.klassId).map((e) => e.id));
   const rs = (s.resultat ?? []).filter((r) => elevIds.has(r.elevId)
     && (f.amneId === undefined || r.amneId === f.amneId)
@@ -69,7 +85,17 @@ export function koderForTillfalle(t: { prov: string; rum?: string }): string[] {
   return koderForProv(t.prov, t.rum);
 }
 
+const hemvistCache = new WeakMap<Tillfalle[], Map<string, string>>();
+
 export function fragansDelkapitel(tillfallen: Tillfalle[]): Map<string, string> {
+  const c = hemvistCache.get(tillfallen);
+  if (c !== undefined) return c;
+  const karta = fragansDelkapitelRaknad(tillfallen);
+  hemvistCache.set(tillfallen, karta);
+  return karta;
+}
+
+function fragansDelkapitelRaknad(tillfallen: Tillfalle[]): Map<string, string> {
   const karta = new Map<string, string>();
   const sedda = new Set<string>();
   for (const t of tillfallen) {
@@ -163,10 +189,16 @@ export interface BegreppsFel {
  */
 export function aterkommandeFel(s: Struktur, elevId: string, f: DelkapitelFilter, gransFel = 2, gransRatt = 2): BegreppsFel[] {
   const tillfallen = tillfallenFor(s, f);
-  const hemvist = fragansDelkapitel(tillfallen);
+  return aterkommandeFelUr(elevId, tillfallen, fragansDelkapitel(tillfallen), null, gransFel, gransRatt);
+}
+
+function aterkommandeFelUr(
+  elevId: string, tillfallen: Tillfalle[], hemvist: Map<string, string>,
+  perElevTillfalle: Array<Map<string, Resultat>> | null, gransFel = 2, gransRatt = 2,
+): BegreppsFel[] {
   const per = new Map<string, { fraga: string; historik: BegreppsFel['historik'] }>();
-  for (const t of tillfallen) {
-    const r = t.resultat.find((x) => x.elevId === elevId);
+  for (const [ti, t] of tillfallen.entries()) {
+    const r = perElevTillfalle !== null ? perElevTillfalle[ti].get(elevId) : t.resultat.find((x) => x.elevId === elevId);
     if (r === undefined) continue;
     for (const sv of r.svar ?? []) {
       if (sv.ratt === null) continue;
@@ -199,8 +231,13 @@ export interface KlassBegreppsFel { fraga: string; kod: string; elever: Array<{ 
 /** Samma lista för hela klassen: vilka begrepp som fastnar för flest elever. */
 export function aterkommandeFelKlass(s: Struktur, f: DelkapitelFilter): KlassBegreppsFel[] {
   const per = new Map<string, KlassBegreppsFel>();
+  // Indexera varje tillfälles resultat per elev EN gång; aterkommandeFel per elev
+  // gjorde annars 30 × (filtrera alla resultat + räkna hemvist)
+  const tillfallen = tillfallenFor(s, f);
+  const hemvist = fragansDelkapitel(tillfallen);
+  const perElevTillfalle = tillfallen.map((t) => new Map(t.resultat.map((r) => [r.elevId, r])));
   for (const elev of s.elever.filter((e) => e.klassId === f.klassId)) {
-    for (const b of aterkommandeFel(s, elev.id, f)) {
+    for (const b of aterkommandeFelUr(elev.id, tillfallen, hemvist, perElevTillfalle)) {
       const n = fragenyckel(b.fraga);
       const post = per.get(n) ?? { fraga: b.fraga, kod: b.kod, elever: [], antalElever: 0 };
       post.elever.push({ elev, antalFel: b.antalFel });

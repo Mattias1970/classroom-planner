@@ -18,8 +18,15 @@ import type { Elev, Struktur } from './typer.js';
 import type { Resultat, ResultatKalla } from './resultat.js';
 
 /** Normaliserad frågetext — skiljetecken, mellanslag och skiftläge ignoreras. */
+// Samma frågetexter normaliseras tusentals gånger per omritning — cacha resultatet
+const nyckelCache = new Map<string, string>();
 export function fragenyckel(fraga: string): string {
-  return fraga.toLowerCase().replace(/[.,;:!?"'()[\]{}…]/g, ' ').replace(/\s+/g, ' ').trim();
+  const c = nyckelCache.get(fraga);
+  if (c !== undefined) return c;
+  const n = fraga.toLowerCase().replace(/[.,;:!?"'()[\]{}…]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (nyckelCache.size > 20000) nyckelCache.clear();
+  nyckelCache.set(fraga, n);
+  return n;
 }
 
 function svarNyckel(svar: string): string {
@@ -85,13 +92,14 @@ export function jamforProv(
   if (fore.length === 0 || efter.length === 0) return null;
   const forePerElev = new Map(fore.map((r) => [r.elevId, r]));
   const efterPerElev = new Map(efter.map((r) => [r.elevId, r]));
+  // Gemensamma frågor = snittet av frågemängderna, byggt en gång per prov (inte per elevpar)
+  const efterFragor = new Set<string>();
+  for (const r of efter) for (const f of r.svar ?? []) efterFragor.add(fragenyckel(f.fraga));
   const gemensammaFragor = new Map<string, string>();
   for (const r of fore) {
-    const e = efter.find((x) => (x.svar ?? []).some((f) => (r.svar ?? []).some((g) => fragenyckel(g.fraga) === fragenyckel(f.fraga))));
-    if (e === undefined) continue;
     for (const f of r.svar ?? []) {
       const n = fragenyckel(f.fraga);
-      if ((e.svar ?? []).some((g) => fragenyckel(g.fraga) === n)) gemensammaFragor.set(n, f.fraga);
+      if (efterFragor.has(n) && !gemensammaFragor.has(n)) gemensammaFragor.set(n, f.fraga);
     }
   }
   if (gemensammaFragor.size === 0) return null;

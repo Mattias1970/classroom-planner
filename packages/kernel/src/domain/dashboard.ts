@@ -40,7 +40,32 @@ function inomVeckor(datum: string, f: DashboardFilter): boolean {
 }
 
 /** Klassens resultat som matchar filtret, äldsta datum först. */
+/**
+ * Memoisering per struktur-instans. Strukturen är oföränderlig (varje ändring ger
+ * ett nytt objekt), så en WeakMap på objektet är säker: gammal cache försvinner
+ * med det gamla objektet. Nyckeln inom instansen är filtret som text.
+ * Dashboarden anropar dashboardResultat ett tjugotal gånger per omritning med
+ * samma filter — utan cache filtreras och sorteras alla resultat varje gång.
+ */
+const resultatCache = new WeakMap<Struktur, Map<string, Resultat[]>>();
+const indexCache = new WeakMap<Resultat[], ReturnType<typeof tillfalleIndex>>();
+
+function filterNyckel(f: DashboardFilter): string {
+  return JSON.stringify([f.klassId, f.amneId ?? '', f.kallor ?? null, f.veckaFran ?? null, f.veckaTill ?? null, f.fran ?? null, f.till ?? null]);
+}
+
 export function dashboardResultat(s: Struktur, f: DashboardFilter): Resultat[] {
+  let per = resultatCache.get(s);
+  if (per === undefined) { per = new Map(); resultatCache.set(s, per); }
+  const nyckel = filterNyckel(f);
+  const cachad = per.get(nyckel);
+  if (cachad !== undefined) return cachad;
+  const ut = dashboardResultatRaknad(s, f);
+  per.set(nyckel, ut);
+  return ut;
+}
+
+function dashboardResultatRaknad(s: Struktur, f: DashboardFilter): Resultat[] {
   const elevIds = new Set(s.elever.filter((e) => e.klassId === f.klassId).map((e) => e.id));
   return (s.resultat ?? [])
     .filter((r) => elevIds.has(r.elevId))
@@ -89,6 +114,15 @@ function normProv(r: Resultat): string { return (r.rum ?? r.prov).replace(/\s+/g
  * resultat-id → tillfällenyckel som alla andra vyer använder.
  */
 export function tillfalleIndex(rs: Resultat[]): { tillfallen: Array<{ nyckel: string; resultat: Resultat[] }>; avResultat: Map<string, string> } {
+  // Samma array-instans kommer tillbaka ur dashboardResultat-cachen, så indexet kan cachas på den
+  const cachad = indexCache.get(rs);
+  if (cachad !== undefined) return cachad;
+  const ut = tillfalleIndexRaknad(rs);
+  indexCache.set(rs, ut);
+  return ut;
+}
+
+function tillfalleIndexRaknad(rs: Resultat[]): { tillfallen: Array<{ nyckel: string; resultat: Resultat[] }>; avResultat: Map<string, string> } {
   const perProv = new Map<string, Resultat[]>();
   for (const r of rs) { const n = `${r.kalla}|${normProv(r)}`; perProv.set(n, [...(perProv.get(n) ?? []), r]); }
   const tillfallen: Array<{ nyckel: string; resultat: Resultat[] }> = [];
