@@ -78,7 +78,7 @@ const TOM = { niva1: '—', niva2: '—', niva3: '—' } as const;
 
 function delkapitelLektion(d: RawDelkapitel, index1: number, prefix: string, kapNr: number): Lektion {
   const laxforhor = index1 === 1 ? '—'
-    : `${socrativeLaxforhorRum(prefix, kapNr, index1 - 1)} (krav ≥ ${NO_KRAV_LAXFORHOR} %)`;
+    : `${socrativeLaxforhorRum(prefix, kapNr, index1 - 1)} (läxförhör)`;
   return {
     id: index1, typ: 'regular', avsnitt: `${d.nummer} ${d.titel}`, del: 1, ...TOM,
     sidorTeori: d.sidor,
@@ -88,7 +88,7 @@ function delkapitelLektion(d: RawDelkapitel, index1: number, prefix: string, kap
     laxa: `Alla begrepp t.o.m. ${d.nummer} – ${socrativeLaxforhorRum(prefix, kapNr, index1)} ≥ ${NO_KRAV_LAXFORHOR} %`,
     ex: d.testaFragor > 0 ? `Testa dig själv ${d.nummer} · uppgift 1–${d.testaFragor}` : '—',
     socStart: laxforhor,
-    exit: `${socrativeExitRum(prefix, kapNr, index1)} (krav ≥ ${NO_KRAV_EXIT} %)`,
+    exit: `${socrativeExitRum(prefix, kapNr, index1)} (exit ticket)`,
     ...(d.mal.length > 0 ? { mal: d.mal.join('\n') } : {}),
   };
 }
@@ -103,7 +103,7 @@ function lasKapitel(raw: unknown, index: number, prefix: string): Kapitel {
   if (!Array.isArray(delkapitelRaw) || delkapitelRaw.length === 0) throw new Error(`Kapitel ${nummer}: "delkapitel" saknas eller är tom.`);
 
   const delkapitel = delkapitelRaw.map((d, i) => lasDelkapitel(d, nummer, i));
-  const alla = `${socrativeLaxforhorRum(prefix, nummer, delkapitel.length)} (krav ≥ ${NO_KRAV_LAXFORHOR} %)`;
+  const alla = `${socrativeLaxforhorRum(prefix, nummer, delkapitel.length)} (läxförhör, hela kapitlet)`;
   const lektioner: Lektion[] = delkapitel.map((d, i) => delkapitelLektion(d, i + 1, prefix, nummer));
   let id = lektioner.length;
 
@@ -128,7 +128,7 @@ function lasKapitel(raw: unknown, index: number, prefix: string): Kapitel {
       genomgang: 'FINALEN – blandade uppgifter',
       laxa: 'Gör klart FINALEN',
       ex: Number.isFinite(antal) ? `${antal} uppgifter` : '—',
-      socStart: `${socrativeLaxforhorRum(prefix, nummer, delkapitel.length)} (omtag, krav ≥ ${NO_KRAV_LAXFORHOR} %)`, exit: '—',
+      socStart: `${socrativeLaxforhorRum(prefix, nummer, delkapitel.length)} (omtag)`, exit: '—',
     });
   }
   const samm = r.sammanfattning as Record<string, unknown> | undefined;

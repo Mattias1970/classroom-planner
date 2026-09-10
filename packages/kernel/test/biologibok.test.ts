@@ -47,9 +47,9 @@ describe('bokFromBiologiImport', () => {
     const kap = bokFromBiologiImport(NOBOK).kapitel[0];
     const [l1, l2, l3] = kap.delkapitel.map((d) => d.lektioner[0]);
     expect(l1.socStart).toBe('—');
-    expect(l2.socStart).toBe('Biologi61 (krav ≥ 90 %)');
-    expect(l3.socStart).toBe('Biologi612 (krav ≥ 90 %)');
-    expect(l1.exit).toBe('Biologi61 (krav ≥ 70 %)');
+    expect(l2.socStart).toBe('Biologi61 (läxförhör)');
+    expect(l3.socStart).toBe('Biologi612 (läxförhör)');
+    expect(l1.exit).toBe('Biologi61 (exit ticket)');
     expect(l1.ex).toBe('Testa dig själv 6.1 · uppgift 1–2');
     expect(l1.laxa).toContain('Biologi61 ≥ 90 %');
   });

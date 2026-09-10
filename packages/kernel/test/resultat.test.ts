@@ -277,3 +277,28 @@ describe('Del 86: märka ett tillfälle som övning', async () => {
     expect(s.resultat![0].kalla).toBe('socrative-exit'); // originalet orört
   });
 });
+
+describe('Del 98: förväntat prov täcks av övning med samma delkapitel', () => {
+  it("planens 'Biologi41234 (omtag)' täcks av ett quiz märkt övning med 4.1–4.4 inom en vecka", () => {
+    const plan = [
+      { datum: '2026-09-10', lektion: { socStart: 'Biologi41234 (omtag)', exit: '—', avsnitt: 'Repetition' } },
+    ] as unknown as Parameters<typeof saknadeResultat>[2];
+    let s = laggTillAmne(bygg(), { id: 'bi', klassId: 'k', namn: 'Biologi', schema: [{ dag: 4, start: '09:00', slut: '10:00' }] });
+    expect(saknadeResultat(s, 'bi', plan, '2026-09-10')).toHaveLength(1);
+    // Rummet är klassrummet; delkapitlen läses ur quiznamnet, typen är övning
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-ovning', prov: '4.1 - 4.4 begrepp', datum: '2026-09-07', rum: 'BIOLOGI8BB',
+      rader: [{ namn: 'Anna Berg', poang: 30, maxPoang: 33 }] }).s;
+    expect(saknadeResultat(s, 'bi', plan, '2026-09-10')).toEqual([]);
+  });
+
+  it('en exit ticket täcker inte ett förväntat läxförhör, och tvärtom', () => {
+    const plan = [
+      { datum: '2026-08-21', lektion: { socStart: 'Biologi41 (läxförhör)', exit: 'Biologi42 (exit ticket)', avsnitt: '4.2' } },
+    ] as unknown as Parameters<typeof saknadeResultat>[2];
+    let s = laggTillAmne(bygg(), { id: 'bi', klassId: 'k', namn: 'Biologi', schema: [{ dag: 4, start: '09:00', slut: '10:00' }] });
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-exit', prov: 'Biologi 4.1 Begrepp', datum: '2026-08-21', rum: 'BIOLOGI8BB',
+      rader: [{ namn: 'Anna Berg', poang: 9, maxPoang: 10 }] }).s;
+    // exit samma dag täcker exit-förväntningen (samma typ samma dag) men inte läxförhöret
+    expect(saknadeResultat(s, 'bi', plan, '2026-09-01').map((p) => p.kalla)).toEqual(['socrative-laxforhor']);
+  });
+});

@@ -11,6 +11,7 @@
  */
 import type { Elev, PlaneradLektion, Struktur } from './typer.js';
 import { nyttId } from './struktur.js';
+import { koderForProv } from './delkapitelkoder.js';
 
 /**
  * Källa/testtyp. Socrative-testerna delas i tre typer: läxförhör (början av
@@ -351,19 +352,36 @@ export function forvantadeProv(plan: PlaneradLektion[], idag: string): Forvantat
 export function saknadeResultat(s: Struktur, amneId: string, plan: PlaneradLektion[], idag: string): ForvantatProv[] {
   const rs = (s.resultat ?? []).filter((r) => r.amneId === amneId);
   const norm = (x: string) => x.replace(/\s+/g, '').toUpperCase();
-  // Planens 'prov' är Socrative-RUMMET (Biologi41); rapportens rum matchar det direkt
-  const harResultat = new Set(rs.flatMap((r) => [`${r.kalla}|${norm(r.prov)}`, ...(r.rum !== undefined ? [`${r.kalla}|${norm(r.rum)}`] : [])]));
-  // Datum + källa täcker också: Socrative-quizet heter sällan exakt som planen ('Biologi41' vs 'Biologi 4.1 Begrepp')
-  const harResultatDag = new Set(rs.map((r) => `${r.kalla}|${r.datum}`));
+  // Planens fält ser ut som 'Biologi41234 (omtag)' — bara rumsnamnet ska matchas
+  const rumMonster = /^\s*([A-Za-zÅÄÖåäö]+\d+)/;
+  const rumAv = (falt: string): string => norm(rumMonster.exec(falt)?.[1] ?? falt);
+  const koderAv = (prov: string, rum?: string): string => koderForProv(prov, rum).join(',');
+  const dagDiff = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) / 86_400_000;
   const filer = (s.filregister ?? []).filter((f) => f.amneId === amneId && (f.traffar === undefined || f.traffar > 0));
-  const harFil = new Set(filer.flatMap((f) => [`${f.kalla}|${norm(f.prov)}`, ...(f.rum !== undefined ? [`${f.kalla}|${norm(f.rum)}`] : [])]));
-  const harFilDag = new Set(filer.filter((f) => f.datum !== undefined).map((f) => `${f.kalla}|${f.datum}`));
+  // En övning kan ersätta ett förväntat läxförhör eller exit ticket (samma begrepp
+  // testade, bara i annan form); läxförhör och exit ticket ersätter inte varandra
+  const poster = [
+    ...rs.map((r) => ({ kalla: r.kalla, datum: r.datum, rum: r.rum !== undefined ? norm(r.rum) : null, prov: norm(r.prov), koder: koderAv(r.prov, r.rum) })),
+    ...filer.map((f) => ({ kalla: f.kalla, datum: f.datum ?? '', rum: f.rum !== undefined ? norm(f.rum) : null, prov: norm(f.prov), koder: koderAv(f.prov, f.rum) })),
+  ];
+  const tacker = (p: ForvantatProv): boolean => {
+    const rum = rumAv(p.prov);
+    const koder = koderForProv(rum, rum).join(','); // rummet bär koderna (Biologi41234 → 4.1–4.4)
+    const arRum = rumMonster.test(p.prov);
+    return poster.some((x) => {
+      const typOk = x.kalla === p.kalla || x.kalla === 'socrative-ovning';
+      if (!typOk) return false;
+      if (x.rum === rum || x.prov === rum) return true;                      // rummet stämmer
+      if (x.kalla === p.kalla && x.datum === p.datum) return true;           // samma typ samma dag
+      // Rumsnamn i planen (Biologi41234): samma delkapitel inom en vecka räcker —
+      // quizet heter sällan som rummet och omtaget kan köras en annan dag
+      return arRum && koder !== '' && x.koder === koder && x.datum !== '' && dagDiff(x.datum, p.datum) <= 7;
+    });
+  };
   const sedda = new Set<string>();
   return forvantadeProv(plan, idag).filter((p) => {
-    const nyckel = `${p.kalla}|${norm(p.prov)}`; const dag = `${p.kalla}|${p.datum}`;
-    if (harResultat.has(nyckel) || harFil.has(nyckel) || harResultatDag.has(dag) || harFilDag.has(dag)) return false;
-    // Samma prov samma dag (t.ex. grupp A och B i planen) visas en gång
-    const dubbel = `${dag}|${p.prov}`;
+    if (tacker(p)) return false;
+    const dubbel = `${p.kalla}|${p.datum}|${rumAv(p.prov)}`;
     if (sedda.has(dubbel)) return false;
     sedda.add(dubbel);
     return true;
