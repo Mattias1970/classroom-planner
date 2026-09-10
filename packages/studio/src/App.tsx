@@ -24,7 +24,7 @@ import {
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   arFilImporterad, arRatt, andraKalla, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
-  delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, rapportOversikt, begreppForFraga, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
+  delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, rapportOversikt, begreppForFraga, harmoniseraOvningar, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
@@ -2957,12 +2957,16 @@ function SittplatsWidget({ s, f, klassId, klassNamn, kor, onElev }: {
 }
 
 /** Dashboarden: frågekort → klassens utveckling → elev × prov-heatmap → elevvy. */
-function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv, kor }: {
+function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVisaProv, kor }: {
   s: Struktur; klassId: string; klassNamn: string; amneId: string; kallor: ResultatKalla[] | undefined;
   onVisaProv: (prov: string) => void; kor: (fn: () => Struktur, m: string) => void;
 }) {
   const [periodText, setPeriodText] = useState('');
   const [sok, setSok] = useState('');
+  // Övningar som kör samma quiz som ett läxförhör/exit ticket räknas in i huvudsviten
+  const [inkluderaOvn, setInkluderaOvn] = useState(true);
+  const harm = useMemo(() => harmoniseraOvningar(sIn, { klassId, ...(amneId !== '' ? { amneId } : {}) }), [sIn, klassId, amneId]);
+  const s = inkluderaOvn ? harm.s : sIn;
   // Fokus: en eller flera elever i den stora vyn. Första eleven är 'huvudelev'.
   const [fokus, setFokus] = useState<string[]>([]);
   const [fokusRubrik, setFokusRubrik] = useState<string>('');
@@ -3078,6 +3082,12 @@ function SuperTeachDashboard({ s, klassId, klassNamn, amneId, kallor, onVisaProv
             {dagar.map((d) => <option key={d.datum} value={d.datum}>{d.etikett}</option>)}
           </select></label>
         <label>🔎 <input aria-label="Sök elev" placeholder="Sök elev, ID, e-post…" value={sok} onChange={(e) => setSok(e.target.value)} /></label>
+        {harm.inkluderade.length > 0 && (
+          <label className="small st-ovnval" title={harm.inkluderade.map((x) => `${x.prov} (${kortDatum(x.datum)}) räknas som ${TYPNAMN[x.som]} — samma quiz som ${x.liknar}, ${x.overlapp} % gemensamma frågor`).join('\n')}>
+            <input type="checkbox" checked={inkluderaOvn} onChange={(e) => setInkluderaOvn(e.target.checked)} />
+            {' '}räkna in {harm.inkluderade.length} övning{harm.inkluderade.length > 1 ? 'ar' : ''} som kör samma quiz
+          </label>
+        )}
         {valdDag !== null && <button className="btn sm" onClick={() => setDag('')}>✕ visa alla dagar</button>}
         <span className="spacer" />
         <small className="muted">{klassNamn}{amneId !== '' ? ` · ${s.amnen.find((a) => a.id === amneId)?.namn ?? ''}` : ' · alla ämnen'}{period !== null ? ` · v.${period.veckaFran}–${period.veckaTill}` : ''}{valdDag !== null ? ` · ${kortDatum(valdDag.datum)}${valdDag.datumTill !== valdDag.datum ? `–${kortDatum(valdDag.datumTill)}` : ''}` : ''}</small>
@@ -3995,6 +4005,9 @@ function RapportVy({ s }: { s: Struktur }) {
             <button className="btn" disabled={skriver === valdElev.id} onClick={() => tillWord(analys, valdElev.id)}>{skriver === valdElev.id ? '… skapar' : '📝 Skriv ut till Word'}</button>
           </div>
           <p className="st-rapport-ingress">{analys.sammanfattning}</p>
+          {analys.inkluderadeOvningar.length > 0 && (
+            <p className="small muted">Räknas in som förhör eftersom samma quiz kördes: {analys.inkluderadeOvningar.map((x) => `${x.prov} (${kortDatum(x.datum)} → ${TYPNAMN[x.som]})`).join(' · ')}.</p>
+          )}
 
           <h3>Hur går det?</h3>
           {analys.laget.length === 0 ? <p className="muted small">Inga resultat i perioden.</p> : (

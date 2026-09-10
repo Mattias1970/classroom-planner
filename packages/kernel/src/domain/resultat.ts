@@ -43,6 +43,8 @@ export interface Resultat {
   rum?: string;
   /** Svar per fråga när rapporten innehåller frågekolumner. */
   svar?: FragaSvar[];
+  /** Satt av harmoniseraOvningar: var en övning, räknas som denna typ i analysen. */
+  inkluderadSom?: ResultatKalla;
   poang: number;
   maxPoang: number;
 }

@@ -543,3 +543,62 @@ export function ovningsDubbletter(s: Struktur, f: DelkapitelFilter, grans = 60):
   }
   return ut.sort((a, b) => b.overlapp - a.overlapp);
 }
+
+
+// ── Del 99: övningar som använder samma quiz räknas in i huvudsviten ──
+//
+// En övning som ställer samma frågor som ett läxförhör eller en exit ticket
+// är i praktiken samma test kört igen. Den ska då räknas som den typen i
+// analysen (trendkoll, nuläge, matris, kurvor), inte ligga vid sidan av.
+// Övningar med egna frågor lämnas som separata tester.
+
+export interface Inkluderad {
+  resultatIds: string[];
+  prov: string;
+  datum: string;
+  /** Typen övningen räknas som. */
+  som: ResultatKalla;
+  /** Provet den matchade. */
+  liknar: string;
+  overlapp: number;
+}
+
+export interface HarmoniseradStruktur {
+  s: Struktur;
+  inkluderade: Inkluderad[];
+}
+
+const harmoniseraCache = new WeakMap<Struktur, Map<string, HarmoniseradStruktur>>();
+
+/**
+ * Returnerar en struktur där övningar med gemensamma frågor (≥ `grans` % av
+ * övningens frågor) har fått den matchade typen. Originalet rörs inte; resultatet
+ * bär `inkluderadSom` så gränssnittet kan visa att det ursprungligen var en övning.
+ */
+export function harmoniseraOvningar(s: Struktur, f: DelkapitelFilter, grans = 60): HarmoniseradStruktur {
+  let per = harmoniseraCache.get(s);
+  if (per === undefined) { per = new Map(); harmoniseraCache.set(s, per); }
+  const nyckel = `${f.klassId}|${f.amneId ?? ''}|${grans}`;
+  const cachad = per.get(nyckel);
+  if (cachad !== undefined) return cachad;
+
+  const matchningar = ovningsDubbletter(s, { klassId: f.klassId, ...(f.amneId !== undefined ? { amneId: f.amneId } : {}) }, grans);
+  if (matchningar.length === 0) { const ut = { s, inkluderade: [] }; per.set(nyckel, ut); return ut; }
+  const somTyp = new Map(matchningar.map((m) => [m.ovning.nyckel, m]));
+  const inkluderade: Inkluderad[] = [];
+  const resultat = (s.resultat ?? []).map((r) => {
+    if (r.kalla !== 'socrative-ovning') return r;
+    const m = somTyp.get(`${r.datum}|${r.kalla}|${r.prov}`);
+    if (m === undefined) return r;
+    let post = inkluderade.find((x) => x.prov === r.prov && x.datum === r.datum);
+    if (post === undefined) {
+      post = { resultatIds: [], prov: r.prov, datum: r.datum, som: m.liknar.kalla, liknar: m.liknar.prov, overlapp: m.overlapp };
+      inkluderade.push(post);
+    }
+    post.resultatIds.push(r.id);
+    return { ...r, kalla: m.liknar.kalla, inkluderadSom: m.liknar.kalla };
+  });
+  const ut = { s: { ...s, resultat }, inkluderade };
+  per.set(nyckel, ut);
+  return ut;
+}

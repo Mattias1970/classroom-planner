@@ -126,9 +126,11 @@ describe('Del 92: övning med samma frågor flaggas i analysen', () => {
     s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-ovning', prov: 'Extraövning', datum: '2026-09-10', rum: 'BIOLOGI8BB',
       rader: [{ namn: 'Anna Berg', poang: 2, maxPoang: 2, svar }] }).s;
     const a = elevanalys(s, 'a', f);
-    expect(a.ovningsDubbletter).toHaveLength(1);
-    expect(a.ovningsDubbletter[0]).toMatchObject({ overlapp: 100, gemensamma: 2 });
-    expect(a.ovningsDubbletter[0].liknar.kalla).toBe('socrative-laxforhor');
-    expect(a.laget.map((r) => r.rubrik)).toContain('Övningar med samma frågor');
+    // Samma quiz → räknas in som läxförhör i analysen, inte som separat övning
+    expect(a.inkluderadeOvningar).toHaveLength(1);
+    expect(a.inkluderadeOvningar[0]).toMatchObject({ prov: 'Extraövning', som: 'socrative-laxforhor', overlapp: 100 });
+    expect(a.ovningsDubbletter).toEqual([]);
+    expect(a.laget.map((r) => r.rubrik)).toContain('Övningar som räknas som förhör');
+    expect(a.kallor.find((k) => k.kalla === 'socrative-laxforhor')!.antal).toBe(4); // 3 förhör + övningen
   });
 });

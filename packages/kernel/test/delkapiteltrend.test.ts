@@ -273,3 +273,42 @@ describe('Del 92: övningar som liknar läxförhör eller exit', async () => {
     expect(ovningsDubbletter(medOvning('socrative-exit', [A, B]), f)).toEqual([]);
   });
 });
+
+describe('Del 99: övningar med samma quiz räknas in i huvudsviten', async () => {
+  const { harmoniseraOvningar, nulage } = await import('../src/domain/delkapiteltrend.js');
+  const { trendkoll } = await import('../src/domain/trendkoll.js');
+
+  it('övning med samma frågor som läxförhöret räknas som läxförhör; övning med egna frågor lämnas', () => {
+    let s = bygg();
+    // Samma quiz som 4.1-4.2 (A, B, C) kört som övning en vecka senare — Anna vänder B
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-ovning', prov: 'Extra 4.1-4.2', datum: '2026-09-11', rum: 'BIOLOGI8BB',
+      rader: [{ namn: 'Anna Berg', poang: 3, maxPoang: 3, svar: sv([[A, true], [B, true], [C, true]]) }] }).s;
+    // Övning med helt egna frågor
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-ovning', prov: 'Kahoot-lek', datum: '2026-09-12', rum: 'BIOLOGI8BB',
+      rader: [{ namn: 'Anna Berg', poang: 1, maxPoang: 2, svar: sv([['Vad heter Sveriges landskapsdjur?', true], ['Hur många ben har en spindel?', false]]) }] }).s;
+    const h = harmoniseraOvningar(s, f);
+    expect(h.inkluderade).toHaveLength(1);
+    expect(h.inkluderade[0]).toMatchObject({ prov: 'Extra 4.1-4.2', som: 'socrative-laxforhor', liknar: '4.1-4.2 Begrepp', overlapp: 100 });
+    const extra = h.s.resultat!.find((r) => r.prov === 'Extra 4.1-4.2')!;
+    expect(extra.kalla).toBe('socrative-laxforhor');
+    expect(extra.inkluderadSom).toBe('socrative-laxforhor');
+    expect(h.s.resultat!.find((r) => r.prov === 'Kahoot-lek')!.kalla).toBe('socrative-ovning');
+    // Originalet orört
+    expect(s.resultat!.find((r) => r.prov === 'Extra 4.1-4.2')!.kalla).toBe('socrative-ovning');
+    // Samma struktur + filter ger samma svar (cache)
+    expect(harmoniseraOvningar(s, f)).toBe(h);
+  });
+
+  it('efter harmonisering syns övningen i nuläget och trendkollen', () => {
+    let s = bygg();
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-ovning', prov: 'Extra 4.1-4.2', datum: '2026-09-11', rum: 'BIOLOGI8BB',
+      rader: [{ namn: 'Anna Berg', poang: 3, maxPoang: 3, svar: sv([[A, true], [B, true], [C, true]]) }] }).s;
+    // Utan harmonisering: filtret på läxförhör ser inte övningen → B är fortfarande fel för Anna
+    const fLax = { ...f, kallor: ['socrative-laxforhor'] as ('socrative-laxforhor')[] };
+    expect(nulage(s, 'a', fLax).kvar.map((x) => x.nr)).toEqual([1, 2]);
+    const h = harmoniseraOvningar(s, f).s;
+    expect(nulage(h, 'a', fLax).kvar.map((x) => x.nr)).toEqual([]); // A och B rätt i övningen
+    const tk = trendkoll(h, { klassId: 'k', amneId: 'bi' });
+    expect(tk.elever.find((e) => e.elev.id === 'a')!.steg.map((x) => x.prov)).toContain('Extra 4.1-4.2');
+  });
+});

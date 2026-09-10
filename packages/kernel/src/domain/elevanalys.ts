@@ -15,7 +15,7 @@ import {
   type DashboardFilter, type KurvPunkt, type ProvTillfalle, type Trend,
 } from './dashboard.js';
 import { trendkoll } from './trendkoll.js';
-import { aterkommandeFel, aterkommandeFelKlass, delkapitelSegment, nulage, ovningsDubbletter, type BegreppsFel, type Nulage, type OvningsMatchning, type SegmentTillfalle } from './delkapiteltrend.js';
+import { aterkommandeFel, aterkommandeFelKlass, delkapitelSegment, harmoniseraOvningar, nulage, ovningsDubbletter, type BegreppsFel, type Inkluderad, type Nulage, type OvningsMatchning, type SegmentTillfalle } from './delkapiteltrend.js';
 import { begreppForFraga, elevrapport, socrativeElevLank, type Elevrapport } from './elevrapport.js';
 import { fragematris, type Fragematris } from './delkapiteltrend.js';
 
@@ -64,6 +64,8 @@ export interface Elevanalys {
   nu: Nulage;
   /** Övningar som återanvänder läxförhörens eller exit ticketsens frågor. */
   ovningsDubbletter: OvningsMatchning[];
+  /** Övningar som räknats in som läxförhör/exit därför att de använder samma quiz. */
+  inkluderadeOvningar: Inkluderad[];
   fastnat: BegreppsFel[];
   /** Socrative-rum att öva i, för de delkapitel som behöver repeteras. */
   ovningar: Array<{ kod: string; namn: string; rum: string; url: string }>;
@@ -87,7 +89,10 @@ function snitt(v: number[]): number | null {
 }
 
 /** Hela analysen för en elev i ett ämne. */
-export function elevanalys(s: Struktur, elevId: string, f: DashboardFilter & { amneId?: string }): Elevanalys {
+export function elevanalys(sIn: Struktur, elevId: string, f: DashboardFilter & { amneId?: string }): Elevanalys {
+  // Övningar som kör samma quiz som ett läxförhör/exit räknas som det testet
+  const harm = harmoniseraOvningar(sIn, { klassId: f.klassId, ...(f.amneId !== undefined ? { amneId: f.amneId } : {}) });
+  const s = harm.s;
   const elev = s.elever.find((e) => e.id === elevId);
   if (elev === undefined) throw new Error('Okänd elev.');
   const amneNamn = s.amnen.find((a) => a.id === f.amneId)?.namn ?? 'Alla ämnen';
@@ -209,11 +214,18 @@ export function elevanalys(s: Struktur, elevId: string, f: DashboardFilter & { a
       text: `På frågor som återkommit har ${tkElev.lart} svar gått från fel till rätt och ${tkElev.glomt} från rätt till fel.`,
     });
   }
+  if (harm.inkluderade.length > 0) {
+    laget.push({
+      ton: 'bra', rubrik: 'Övningar som räknas som förhör',
+      text: `${harm.inkluderade.map((o) => `${o.prov} (${o.datum}) kör samma quiz som ${o.liknar} och räknas därför som ${KALLNAMN[o.som].toLowerCase()}`).join('; ')}. `
+        + 'Det senaste svaret på varje fråga gäller, så en övning där du fick rätt räknas dig till godo.',
+    });
+  }
   if (dubblettOvningar.length > 0) {
     laget.push({
-      ton: 'okej', rubrik: 'Övningar med samma frågor',
+      ton: 'okej', rubrik: 'Övningar med delvis samma frågor',
       text: `${dubblettOvningar.map((o) => `${o.ovning.prov} delar ${o.overlapp} % av frågorna med ${o.liknar.prov}`).join(', ')}. `
-        + 'Övningen mäter alltså samma sak som förhöret — bra som träning, men resultatet säger inget nytt om kunskapsläget.',
+        + 'Under gränsen för att räknas som samma test — ligger som separat övning.',
     });
   }
   const svaga = segment.length === 0 ? [] : (segment[segment.length - 1].segment ?? []).filter((x) => x.procent !== null && x.procent < 70);
@@ -327,7 +339,7 @@ export function elevanalys(s: Struktur, elevId: string, f: DashboardFilter & { a
     lektionsDiff: lekt?.diffSnitt ?? null,
     lart: tkElev?.lart ?? 0,
     glomt: tkElev?.glomt ?? 0,
-    segment, matris, nu, ovningsDubbletter: dubblettOvningar, fastnat, ovningar, filmer, rapport, laget, rad, sammanfattning,
+    segment, matris, nu, ovningsDubbletter: dubblettOvningar, inkluderadeOvningar: harm.inkluderade, fastnat, ovningar, filmer, rapport, laget, rad, sammanfattning,
   };
 }
 
@@ -351,7 +363,8 @@ export interface RapportRad {
 }
 
 /** Nyckeltal per elev för rapportlistan — en genomgång av data, inte en per elev. */
-export function rapportOversikt(s: Struktur, f: DashboardFilter, sok = ''): RapportRad[] {
+export function rapportOversikt(sIn: Struktur, f: DashboardFilter, sok = ''): RapportRad[] {
+  const s = harmoniseraOvningar(sIn, { klassId: f.klassId, ...(f.amneId !== undefined ? { amneId: f.amneId } : {}) }).s;
   const elever = sokElever(s, f.klassId, sok);
   const ids = new Set(elever.map((e) => e.id));
   const rs = (s.resultat ?? []).filter((r) => ids.has(r.elevId)
