@@ -1473,6 +1473,18 @@ describe('📊 SuperTeach', () => {
     expect(fall.some((t) => t.includes('Närvaro'))).toBe(true);
     expect(fall.some((t) => t.includes('Läxförhör vs Exit tickets'))).toBe(true);
 
+    // KPI-korten öppnar sina sektioner: Närvaro → närvarosektionen, Trendkluster → jämförelsesektionen
+    Element.prototype.scrollIntoView = Element.prototype.scrollIntoView ?? (() => {});
+    const narvSekt = host.querySelector('#st-sekt-narv') as HTMLDetailsElement;
+    expect(narvSekt.open).toBe(false);
+    const narvKort = [...host.querySelectorAll('.st-kort.klick')].find((k) => k.textContent?.includes('Närvaro'))!;
+    act(() => { (narvKort as HTMLElement).click(); });
+    expect(narvSekt.open).toBe(true);
+    const jamfSekt = host.querySelector('#st-sekt-jamf') as HTMLDetailsElement;
+    expect(jamfSekt.open).toBe(false);
+    act(() => { ([...host.querySelectorAll('.st-kort.klick')].find((k) => k.textContent?.includes('Trendkluster')) as HTMLElement).click(); });
+    expect(jamfSekt.open).toBe(true);
+
     // Trendkoll: utan frågedata (inklistrade resultat) förklaras varför
     expect(host.querySelector('.st-trendkoll')!.textContent).toContain('kräver att samma fråga ställs igen');
 

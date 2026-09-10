@@ -2965,6 +2965,27 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
   const [sok, setSok] = useState('');
   // Övningar som kör samma quiz som ett läxförhör/exit ticket räknas in i huvudsviten
   const [inkluderaOvn, setInkluderaOvn] = useState(true);
+  // Fällbara sektioner styrs härifrån så att KPI-korten kan öppna dem
+  type Sektion = 'lekt' | 'narv' | 'jamf';
+  const [oppnaSekt, setOppnaSekt] = useState<Set<Sektion>>(() => new Set());
+  const [lyst, setLyst] = useState<string | null>(null);
+  const vaxlaSekt = (id: Sektion, oppen: boolean) => setOppnaSekt((f) => { const n = new Set(f); if (oppen) n.add(id); else n.delete(id); return n; });
+  /** KPI-kort → hoppa till (och öppna) den sektion som förklarar siffran. */
+  const gaTill = (mal: string, sektion?: Sektion) => {
+    if (sektion !== undefined) vaxlaSekt(sektion, true);
+    // Låt sektionen fällas ut innan vi scrollar
+    window.setTimeout(() => {
+      document.getElementById(mal)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setLyst(mal);
+      window.setTimeout(() => setLyst((l) => (l === mal ? null : l)), 1600);
+    }, 30);
+  };
+  const KORT_MAL: Record<KortKalla, { id: string; sektion?: Sektion }> = {
+    'socrative-laxforhor': { id: 'st-sekt-jamf', sektion: 'jamf' },
+    'socrative-exit': { id: 'st-sekt-jamf', sektion: 'jamf' },
+    'socrative-ovning': { id: 'st-fragematris' },
+    magma: { id: 'st-kurva' }, digiexam: { id: 'st-kurva' }, helhet: { id: 'st-kurva' },
+  };
   const harm = useMemo(() => harmoniseraOvningar(sIn, { klassId, ...(amneId !== '' ? { amneId } : {}) }), [sIn, klassId, amneId]);
   const s = inkluderaOvn ? harm.s : sIn;
   // Fokus: en eller flera elever i den stora vyn. Första eleven är 'huvudelev'.
@@ -3099,7 +3120,10 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
           && !(k.kalla === 'socrative-ovning' && k.antalProv === 0)).map((k) => {
           const delta = periodDelta(k.serie);
           return (
-            <div key={k.kalla} className={kortKlass(k)} style={{ '--kort': KORT_FARG[k.kalla] } as React.CSSProperties}>
+            <div key={k.kalla} className={`${kortKlass(k)} klick`} style={{ '--kort': KORT_FARG[k.kalla] } as React.CSSProperties}
+              role="button" tabIndex={0} title="Klicka för att öppna detaljerna"
+              onClick={() => { if (k.kalla === 'socrative-ovning') setFmTyper(['socrative-ovning']); gaTill(KORT_MAL[k.kalla].id, KORT_MAL[k.kalla].sektion); }}
+              onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); gaTill(KORT_MAL[k.kalla].id, KORT_MAL[k.kalla].sektion); } }}>
               <div className="st-kort-topp">
                 <span className="st-ikon" aria-hidden="true">{KORT_IKON[k.kalla]}</span>
                 <div><div className="st-kort-rubrik">{k.rubrik}</div><div className="st-kort-fraga">{k.fraga}</div></div>
@@ -3119,7 +3143,9 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
             </div>
           );
         })}
-        <div className={`st-kort st-kort-narvaro${narvaro.antalLektioner === 0 ? ' tom' : ''}`} style={{ '--kort': '#00838F' } as React.CSSProperties}>
+        <div className={`st-kort st-kort-narvaro klick${narvaro.antalLektioner === 0 ? ' tom' : ''}`} style={{ '--kort': '#00838F' } as React.CSSProperties}
+          role="button" tabIndex={0} title="Klicka för att öppna närvaron" onClick={() => gaTill('st-sekt-narv', 'narv')}
+          onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); gaTill('st-sekt-narv', 'narv'); } }}>
           <div className="st-kort-topp">
             <span className="st-ikon" aria-hidden="true">🙋</span>
             <div><div className="st-kort-rubrik">{narvaro.rubrik}</div><div className="st-kort-fraga">{narvaro.fraga}</div></div>
@@ -3135,7 +3161,9 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
             </div>
           </>)}
         </div>
-        <div className="st-kort st-kort-kluster" style={{ '--kort': '#E65100' } as React.CSSProperties}>
+        <div className="st-kort st-kort-kluster klick" style={{ '--kort': '#E65100' } as React.CSSProperties}
+          role="button" tabIndex={0} title="Klicka för att öppna trendklustren" onClick={() => gaTill('st-sekt-jamf', 'jamf')}
+          onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); gaTill('st-sekt-jamf', 'jamf'); } }}>
           <div className="st-kort-topp">
             <span className="st-ikon" aria-hidden="true">✨</span>
             <div><div className="st-kort-rubrik">Trendkluster</div><div className="st-kort-fraga">Elever som trendar tillsammans</div></div>
@@ -3146,7 +3174,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
       </div>
 
       {/* Frågematris */}
-      <div className="uppg-kort st-widget st-fragematris">
+      <div className={`uppg-kort st-widget st-fragematris${lyst === 'st-fragematris' ? ' lyst' : ''}`} id="st-fragematris">
         <div className="rad">
           <b>🔢 Frågematris</b> <small className="muted">en rad per förhör, en kolumn per fråga · klicka på en ruta för att se frågan</small>
           <span className="spacer" />
@@ -3401,7 +3429,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
         </div>
       </div>
 
-      <details className="st-fall">
+      <details className={`st-fall${lyst === 'st-sekt-lekt' ? ' lyst' : ''}`} id="st-sekt-lekt" open={oppnaSekt.has('lekt')} onToggle={(e) => vaxlaSekt('lekt', (e.target as HTMLDetailsElement).open)}>
         <summary><b>🎯 Lektionstest</b> <small className="muted">läxförhör och exit ticket per lektion, Δ per elev</small></summary>
       {/* Lektionstest: läxförhör vs exit ticket per lektion */}
       <div className="uppg-kort st-widget st-lektionstest">
@@ -3464,7 +3492,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
 
       </details>
 
-      <details className="st-fall">
+      <details className={`st-fall${lyst === 'st-sekt-narv' ? ' lyst' : ''}`} id="st-sekt-narv" open={oppnaSekt.has('narv')} onToggle={(e) => vaxlaSekt('narv', (e.target as HTMLDetailsElement).open)}>
         <summary><b>🙋 Närvaro & tid på dagen</b> <small className="muted">härledd ur Socrative-svaren</small></summary>
       {/* Närvaro & tid på dagen */}
       <div className="st-grid2">
@@ -3528,7 +3556,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
 
       </details>
 
-      <details className="st-fall">
+      <details className={`st-fall${lyst === 'st-sekt-jamf' ? ' lyst' : ''}`} id="st-sekt-jamf" open={oppnaSekt.has('jamf')} onToggle={(e) => vaxlaSekt('jamf', (e.target as HTMLDetailsElement).open)}>
         <summary><b>📈 Läxförhör vs Exit tickets & trendkluster</b> <small className="muted">veckokurvor, kluster, normerad graf</small></summary>
       {/* Jämförelse + kluster */}
       <div className="st-grid2">
@@ -3607,7 +3635,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
       </details>
 
       {/* Klassens utveckling */}
-      <div className="uppg-kort">
+      <div className={`uppg-kort${lyst === 'st-kurva' ? ' lyst' : ''}`} id="st-kurva">
         <div className="rad">
           <b>📈 {klassNamn} över tid</b> <small className="muted">snitt per provtillfälle · klicka på en punkt för provets elevlista</small>
           <span className="spacer" />
