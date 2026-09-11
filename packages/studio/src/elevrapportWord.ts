@@ -6,7 +6,7 @@
  * utskriften säger samma sak som skärmen.
  */
 import { AlignmentType, Document, ExternalHyperlink, HeadingLevel, ImageRun, Packer, Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType } from 'docx';
-import type { Elevanalys, EnkelRapport } from '@planner/kernel';
+import type { Elevanalys, EnkelRapport, Studieguide } from '@planner/kernel';
 
 const BLA = '#2f5aa8'; const GRON = '#1B5E20'; const ROD = '#B71C1C'; const GRA = '#9AA3AE';
 const TON_FARG = { bra: 'E8F5E9', okej: 'FFF8E1', oro: 'FFEBEE' } as const;
@@ -387,8 +387,7 @@ export async function klassrapporterTillWord(
   laddaNer(await zip.generateAsync({ type: 'blob' }), `${arkivNamn}.zip`.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '-'));
 }
 
-/** Den enkla rapporten som ett kort Word-dokument — en sida, ingen grafik. */
-export async function enkelRapportTillWord(r: EnkelRapport): Promise<void> {
+function enkelBarn(r: EnkelRapport): Array<Paragraph | Table> {
   const barn: Array<Paragraph | Table> = [
     new Paragraph({ text: `${r.elev.namn} — ${r.amneNamn}`, heading: HeadingLevel.HEADING_1 }),
     punkt({ rubrik: r.rubrik, text: r.text.join(' '), ton: r.ton }),
@@ -420,6 +419,62 @@ export async function enkelRapportTillWord(r: EnkelRapport): Promise<void> {
       ...(x.begrepp !== undefined ? [new TextRun({ text: `${x.begrepp} — `, bold: true })] : []), new TextRun(x.fraga),
     ] }));
   }
-  const doc = new Document({ sections: [{ children: barn }] });
+  return barn;
+}
+
+/** Den enkla rapporten som ett kort Word-dokument — en sida, ingen grafik. */
+export async function enkelRapportTillWord(r: EnkelRapport): Promise<void> {
+  const doc = new Document({ sections: [{ children: enkelBarn(r) }] });
   laddaNer(await Packer.toBlob(doc), `${r.elev.namn} ${r.amneNamn} enkel rapport.docx`.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '-'));
+}
+
+/** En enkel rapport per elev i ett zip-arkiv. */
+export async function enklaRapporterTillWord(rapporter: EnkelRapport[], arkivNamn: string, steg?: (klar: number, av: number) => void): Promise<void> {
+  if (rapporter.length === 0) return;
+  const { default: JSZip } = await import('jszip');
+  const zip = new JSZip();
+  const anvanda = new Set<string>();
+  for (const [i, r] of rapporter.entries()) {
+    let namn = `${r.elev.namn} ${r.amneNamn} enkel rapport.docx`.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '-');
+    if (anvanda.has(namn)) namn = namn.replace(/\.docx$/, `-${i + 1}.docx`);
+    anvanda.add(namn);
+    zip.file(namn, await Packer.toBlob(new Document({ sections: [{ children: enkelBarn(r) }] })));
+    steg?.(i + 1, rapporter.length);
+  }
+  laddaNer(await zip.generateAsync({ type: 'blob' }), `${arkivNamn}.zip`.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '-'));
+}
+
+/** Studieguiden inför prov: plan per dag, begrepp med förklaring, rum och filmer. */
+export async function studieguideTillWord(g: Studieguide): Promise<void> {
+  const barn: Array<Paragraph | Table> = [
+    new Paragraph({ text: `${g.elev.namn} — plugga inför provet i ${g.amneNamn}`, heading: HeadingLevel.HEADING_1 }),
+    punkt({ rubrik: g.rubrik, text: g.text.join(' '), ton: g.dagarKvar !== null && g.dagarKvar <= 2 ? 'oro' : 'okej' }),
+    tom(),
+  ];
+  if (g.plan.length > 0) {
+    barn.push(new Paragraph({ text: 'Din plan', heading: HeadingLevel.HEADING_2 }));
+    barn.push(tabell(['Dag', 'Datum', 'Plugga', 'Tid'],
+      g.plan.map((d) => [`Dag ${d.dag}`, d.datum ?? '—', d.delar.map((k) => (k === 'repetition' ? 'Repetera allt' : `${k} ${g.delar.find((x) => x.kod === k)?.namn ?? ''}`)).join(', ') || '—', `${d.minuter} min`])));
+    barn.push(tom());
+  }
+  for (const d of g.delar) {
+    barn.push(new Paragraph({ text: `${d.kod} ${d.namn}${d.procent !== null ? ` — ${d.procent} % rätt just nu` : ' — inte testat än'}`, heading: HeadingLevel.HEADING_2 }));
+    if (d.sammanfattning !== null) barn.push(new Paragraph({ children: [new TextRun({ text: d.sammanfattning, italics: true })] }));
+    if (d.plugga.length > 0) {
+      barn.push(new Paragraph({ children: [new TextRun({ text: `Plugga (${d.plugga.length})`, bold: true })] }));
+      for (const b of d.plugga) barn.push(new Paragraph({ bullet: { level: 0 }, children: [
+        new TextRun({ text: b.begrepp, bold: true }),
+        ...(b.forklaring !== null ? [new TextRun(` — ${b.forklaring}`)] : []),
+        new TextRun({ text: b.status === 'otestat' ? '  (inte testad än)' : '  (fel senast)', size: 18, color: '777777' }),
+      ] }));
+    }
+    if (d.sitter.length > 0) barn.push(new Paragraph({ children: [new TextRun({ text: 'Sitter redan: ', bold: true }), new TextRun(d.sitter.join(', '))] }));
+    if (d.rum !== null && d.rumUrl !== null) barn.push(lank(`Öva i Socrative-rummet ${d.rum}`, d.rumUrl));
+    for (const film of d.filmer) barn.push(lank(`Se: ${film.titel}`, film.url));
+    barn.push(tom());
+  }
+  barn.push(new Paragraph({ text: 'Så pluggar du bäst', heading: HeadingLevel.HEADING_2 }));
+  for (const t of g.tips) barn.push(new Paragraph({ bullet: { level: 0 }, text: t }));
+  const doc = new Document({ sections: [{ children: barn }] });
+  laddaNer(await Packer.toBlob(doc), `${g.elev.namn} ${g.amneNamn} studieguide.docx`.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '-'));
 }

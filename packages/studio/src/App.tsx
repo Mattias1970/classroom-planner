@@ -24,7 +24,7 @@ import {
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   arFilImporterad, arRatt, andraKalla, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
-  delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, enkelRapport, rapportOversikt, begreppForFraga, harmoniseraOvningar, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
+  delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, enkelRapport, studieguide, rapportOversikt, begreppForFraga, harmoniseraOvningar, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
@@ -3924,9 +3924,79 @@ function ElevrapportVy({ s, elevId, amneId, period }: { s: Struktur; elevId: str
  * och BAM-kraven (läxförhör ≥ 90 %, exit ≥ 70 %). Varningar när
  * planeringens förhör saknar resultat.
  */
+/** Studieguide inför provet: plan per dag, begrepp att plugga, rum och filmer. */
+function StudieguideVy({ s, elev, f, onTillbaka, onLage }: {
+  s: Struktur; elev: Elev; f: DashboardFilter & { amneId: string }; onTillbaka: () => void; onLage: (l: 'enkel' | 'full' | 'studie') => void;
+}) {
+  const [skriver, setSkriver] = useState(false);
+  const idag = new Date().toISOString().slice(0, 10);
+  const g = useMemo(() => studieguide(s, elev.id, f, idag), [s, elev.id, f.amneId, idag]); // eslint-disable-line react-hooks/exhaustive-deps
+  const namnFor = (kod: string) => (kod === 'repetition' ? 'Repetera allt' : `${kod} ${g.delar.find((d) => d.kod === kod)?.namn ?? ''}`);
+  return (
+    <div className="uppg-kort st-widget st-rapportvy st-studie">
+      <div className="rad">
+        <button className="btn sm" onClick={onTillbaka}>← Alla elever</button>
+        <b>{elev.namn}</b> <small className="muted">{g.amneNamn}</small>
+        <span className="spacer" />
+        <button className="btn sec sm" onClick={() => onLage('enkel')}>Enkel rapport</button>
+        <button className="btn sec sm" onClick={() => onLage('full')}>Fullständig rapport</button>
+        <button className="btn" disabled={skriver} onClick={() => {
+          setSkriver(true);
+          void import('./elevrapportWord.js').then(({ studieguideTillWord }) => studieguideTillWord(g))
+            .catch(() => window.alert('Guiden kunde inte skapas.')).finally(() => setSkriver(false));
+        }}>{skriver ? '… skapar' : '📝 Word'}</button>
+      </div>
+
+      <div className={`st-punkt-kort ${g.dagarKvar !== null && g.dagarKvar <= 2 ? 'oro' : 'okej'} st-enkel-rubrik`}>
+        <b>📚 {g.rubrik}</b>
+        {g.text.map((t, i) => <p key={i}>{t}</p>)}
+      </div>
+
+      {g.plan.length > 0 && (<>
+        <h3>Din plan</h3>
+        <div className="st-enkel-steg">{g.plan.map((d) => (
+          <div key={d.dag} className="st-enkel-ruta ok st-plandag">
+            <small>Dag {d.dag}{d.datum !== null ? ` · ${kortDatum(d.datum)}` : ''}</small>
+            <b>{d.delar.length === 0 ? '—' : d.delar.map(namnFor).join(' + ')}</b>
+            <small className="muted">≈ {d.minuter} min</small>
+          </div>
+        ))}</div>
+      </>)}
+
+      {g.delar.map((d) => (
+        <div key={d.kod} className="st-studie-del">
+          <h3>{d.kod} {d.namn} <span className="st-fmhist" style={{ background: ratFarg(d.procent) }}>{d.procent === null ? 'inte testat' : `${d.procent} % nu`}</span></h3>
+          {d.sammanfattning !== null && <p className="small muted">{d.sammanfattning}</p>}
+          <div className="st-studie-grid">
+            <div>
+              <div className="st-nu-rubrik kvar">Plugga ({d.plugga.length})</div>
+              {d.plugga.length === 0 ? <p className="small muted">Inget — allt sitter.</p> : (
+                <ul className="small st-begreppslista">{d.plugga.map((b) => (
+                  <li key={b.begrepp}><b className="st-begreppsord">{b.begrepp}</b>{b.forklaring !== null && <span className="st-begreppsdef">{b.forklaring}</span>}
+                    <small className="muted">{b.status === 'otestat' ? 'inte testad än' : 'fel senast'}</small></li>
+                ))}</ul>
+              )}
+              {d.sitter.length > 0 && <p className="small"><b>Sitter redan:</b> {d.sitter.join(', ')}</p>}
+            </div>
+            <div className="st-studie-lankar">
+              {d.rum !== null && d.rumUrl !== null && (
+                <a className="btn sec sm" href={d.rumUrl} target="_blank" rel="noreferrer">📱 Öva i {d.rum}</a>
+              )}
+              {d.filmer.map((film) => <a key={film.url} className="btn sec sm" href={film.url} target="_blank" rel="noreferrer">▶ {film.titel}</a>)}
+            </div>
+          </div>
+        </div>
+      ))}
+
+      <h3>Så pluggar du bäst</h3>
+      <ul className="small">{g.tips.map((t, i) => <li key={i}>{t}</li>)}</ul>
+    </div>
+  );
+}
+
 /** Den enkla rapporten: trend, utveckling mellan förhör och begreppen med problem. */
-function EnkelRapportVy({ s, elev, f, periodText, onTillbaka, onFull }: {
-  s: Struktur; elev: Elev; f: DashboardFilter; periodText: string; onTillbaka: () => void; onFull: () => void;
+function EnkelRapportVy({ s, elev, f, periodText, onTillbaka, onFull, onStudie }: {
+  s: Struktur; elev: Elev; f: DashboardFilter; periodText: string; onTillbaka: () => void; onFull: () => void; onStudie?: () => void;
 }) {
   const [skriver, setSkriver] = useState(false);
   const r = useMemo(() => enkelRapport(s, elev.id, f), [s, elev.id, f.amneId, f.veckaFran, f.veckaTill, f.fran, f.till]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -3940,6 +4010,7 @@ function EnkelRapportVy({ s, elev, f, periodText, onTillbaka, onFull }: {
         <button className="btn sm" onClick={onTillbaka}>← Alla elever</button>
         <b>{elev.namn}</b> <small className="muted">{r.amneNamn}{periodText !== '' ? ` · ${periodText}` : ''}</small>
         <span className="spacer" />
+        {onStudie !== undefined && <button className="btn sec sm" onClick={onStudie}>📚 Inför provet</button>}
         <button className="btn sec sm" onClick={onFull}>Fullständig rapport</button>
         <button className="btn" disabled={skriver} onClick={() => {
           setSkriver(true);
@@ -4015,7 +4086,7 @@ function RapportVy({ s }: { s: Struktur }) {
   const [amneId, setAmneId] = useState('');
   const [periodText, setPeriodText] = useState('');
   const [elevId, setElevId] = useState('');
-  const [enkel, setEnkel] = useState(true);
+  const [lage, setLage] = useState<'enkel' | 'full' | 'studie'>('enkel');
   const [sok, setSok] = useState('');
   const [skriver, setSkriver] = useState('');
   const [forlopp, setForlopp] = useState('');
@@ -4039,6 +4110,19 @@ function RapportVy({ s }: { s: Struktur }) {
       .then(({ elevrapportTillWord }) => elevrapportTillWord(a))
       .catch(() => window.alert('Rapporten kunde inte skapas.'))
       .finally(() => setSkriver(''));
+  };
+  /** En enkel Word-rapport per elev i ett zip-arkiv — snabbt, ingen grafik. */
+  const allaEnklaTillWord = () => {
+    const medResultat = rader.filter((r) => r.antalProv > 0);
+    if (medResultat.length === 0) { window.alert('Ingen elev har resultat i urvalet.'); return; }
+    setSkriver('enkla'); setForlopp(`0 av ${medResultat.length}`);
+    const arkiv = `${klass.namn} ${amnen.find((a) => a.id === valtAmne)?.namn ?? ''} enkla rapporter`;
+    void import('./elevrapportWord.js')
+      .then(({ enklaRapporterTillWord }) => enklaRapporterTillWord(
+        medResultat.map((r) => enkelRapport(s, r.elev.id, f)), arkiv, (klar, av) => setForlopp(`${klar} av ${av}`),
+      ))
+      .catch(() => window.alert('Rapporterna kunde inte skapas.'))
+      .finally(() => { setSkriver(''); setForlopp(''); });
   };
   /** En Word-fil per elev, packade i ett zip-arkiv. */
   const allaTillWord = () => {
@@ -4075,9 +4159,13 @@ function RapportVy({ s }: { s: Struktur }) {
         <label>🔎 <input aria-label="Sök elev för rapport" placeholder="Sök elev…" value={sok} onChange={(e) => setSok(e.target.value)} /></label>
         <span className="spacer" />
         <small className="muted">{rader.length} elever</small>
+        <button className="btn sec" disabled={skriver !== ''} onClick={allaEnklaTillWord}
+          title="En enkel Word-rapport per elev, packade i ett zip-arkiv">
+          {skriver === 'enkla' ? `… skapar ${forlopp}` : '📝 Enkla rapporter (zip)'}
+        </button>
         <button className="btn" disabled={skriver !== ''} onClick={allaTillWord}
-          title="En Word-fil per elev, packade i ett zip-arkiv">
-          {skriver === 'alla' ? `… skapar ${forlopp}` : '📝 Word för alla elever'}
+          title="En fullständig Word-fil per elev, packade i ett zip-arkiv">
+          {skriver === 'alla' ? `… skapar ${forlopp}` : '📝 Fullständiga (zip)'}
         </button>
       </div>
 
@@ -4104,16 +4192,19 @@ function RapportVy({ s }: { s: Struktur }) {
             </table>
           </div>
         </div>
-      ) : enkel ? (
+      ) : lage === 'studie' && valtAmne !== '' ? (
+        <StudieguideVy s={s} elev={valdElev} f={{ ...f, amneId: valtAmne }} onTillbaka={() => setElevId('')} onLage={setLage} />
+      ) : lage === 'enkel' ? (
         <EnkelRapportVy s={s} elev={valdElev} f={f} periodText={period === null ? '' : `v.${period.veckaFran}–${period.veckaTill}`}
-          onTillbaka={() => setElevId('')} onFull={() => setEnkel(false)} />
+          onTillbaka={() => setElevId('')} onFull={() => setLage('full')} onStudie={valtAmne !== '' ? () => setLage('studie') : undefined} />
       ) : (
         <div className="uppg-kort st-widget st-rapportvy">
           <div className="rad">
             <button className="btn sm" onClick={() => setElevId('')}>← Alla elever</button>
             <b>{valdElev.namn}</b> <small className="muted">{analys.amneNamn}{period !== null ? ` · v.${period.veckaFran}–${period.veckaTill}` : ''}</small>
             <span className="spacer" />
-            <button className="btn sec sm" onClick={() => setEnkel(true)}>Enkel rapport</button>
+            <button className="btn sec sm" onClick={() => setLage('enkel')}>Enkel rapport</button>
+            {valtAmne !== '' && <button className="btn sec sm" onClick={() => setLage('studie')}>📚 Inför provet</button>}
             <button className="btn" disabled={skriver === valdElev.id} onClick={() => tillWord(analys, valdElev.id)}>{skriver === valdElev.id ? '… skapar' : '📝 Skriv ut till Word'}</button>
           </div>
           <p className="st-rapport-ingress">{analys.sammanfattning}</p>

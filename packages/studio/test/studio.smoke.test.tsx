@@ -2045,8 +2045,9 @@ describe('📄 Rapporter', () => {
     expect(rad.textContent).toContain('50 %'); // exit-snittet
     expect(rad.textContent).toContain('att ta tag i');
 
-    // Knappen som skapar en Word-fil per elev finns i filterraden
-    expect(knapp(host, '📝 Word för alla elever').disabled).toBe(false);
+    // Knapparna som skapar en Word-fil per elev (enkel och fullständig) finns i filterraden
+    expect(knapp(host, '📝 Enkla rapporter (zip)').disabled).toBe(false);
+    expect(knapp(host, '📝 Fullständiga (zip)').disabled).toBe(false);
 
     act(() => { (rad as HTMLElement).click(); });
     // Enkel rapport öppnas först: rubrik, begrepp med problem och Word-knapp
@@ -2054,6 +2055,11 @@ describe('📄 Rapporter', () => {
     expect(host.textContent).toContain('Begrepp du haft problem med');
     expect(host.textContent).toContain('har inga läxförhör i perioden'); // bara en exit ticket i testet
     expect(knapp(host, '📝 Word')).not.toBeNull();
+    // Studieguiden inför provet
+    act(() => { knapp(host, '📚 Inför provet').click(); });
+    expect(host.querySelector('.st-studie')).not.toBeNull();
+    expect(host.textContent).toContain('Så pluggar du bäst');
+    expect(host.textContent).toContain('Din plan');
     act(() => { knapp(host, 'Fullständig rapport').click(); });
     expect(host.textContent).toContain('Hur går det?');
     expect(host.textContent).toContain('Vad kan du göra?');

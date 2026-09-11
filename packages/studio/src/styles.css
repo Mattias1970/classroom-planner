@@ -807,3 +807,12 @@ input.fel { border-color: #B71C1C; }
 .st-enkel-ruta.ok { background: #F1F8E9; } .st-enkel-ruta.ej { background: #FFEBEE; }
 .st-enkel-ruta b { font-size: 22px; font-variant-numeric: tabular-nums; }
 .st-enkel .st-nu { grid-template-columns: 1fr 1fr; }
+
+/* Del 102: studieguide */
+.st-plandag { min-width: 150px; max-width: 240px; }
+.st-plandag b { font-size: 13px; text-align: center; }
+.st-studie-del { border: 1px solid var(--ram); border-radius: 12px; padding: 8px 14px; margin: 8px 0; background: #fff; }
+.st-studie-del h3 { margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+.st-studie-grid { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: start; }
+@media (max-width: 900px) { .st-studie-grid { grid-template-columns: 1fr; } }
+.st-studie-lankar { display: flex; flex-direction: column; gap: 6px; }
