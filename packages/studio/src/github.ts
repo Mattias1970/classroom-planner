@@ -134,3 +134,30 @@ export async function hamtaBockerFranGitHub(cfg: GitHubConfig): Promise<Array<{ 
   if (ut.length === 0) throw new Error("Inga book.json hittades under books/ (valfritt djup: books/ma/…, books/no/biologi/… fungerar).");
   return ut;
 }
+
+
+/** Sparar valfri fil i datarepot (skapar eller uppdaterar) — t.ex. rapportmallar/<id>.json. */
+export async function sparaFilTillGitHub(cfg: GitHubConfig, sokvag: string, innehall: string): Promise<void> {
+  if (!konfigKomplett(cfg)) throw new Error('GitHub-konfigurationen är ofullständig.');
+  const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${sokvag}`;
+  const info = await fetch(`${url}?ref=${encodeURIComponent(cfg.branch)}`, { headers: headers(cfg) });
+  const sha = info.status === 404 ? null : ((await info.json()) as { sha?: string }).sha ?? null;
+  const body = { message: `Studio: ${sokvag} (${new Date().toISOString()})`, content: toBase64(innehall), branch: cfg.branch, ...(sha !== null ? { sha } : {}) };
+  const r = await fetch(url, { method: 'PUT', headers: headers(cfg), body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(`GitHub ${r.status}: ${(await r.text()).slice(0, 120)}`);
+}
+
+/** Hämtar alla filer i datarepot vars sökväg matchar mönstret. */
+export async function hamtaFilerFranGitHub(cfg: GitHubConfig, monster: RegExp): Promise<Array<{ sokvag: string; json: string }>> {
+  if (!konfigKomplett(cfg)) throw new Error('GitHub-konfigurationen är ofullständig — fyll i ☁ GitHub först.');
+  const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/git/trees/${encodeURIComponent(cfg.branch)}?recursive=1`;
+  const r = await fetch(url, { headers: headers(cfg) });
+  if (!r.ok) throw new Error(`GitHub ${r.status}: kunde inte läsa repots filträd.`);
+  const trad = (await r.json()) as { tree?: Array<{ path: string; type: string }> };
+  const ut: Array<{ sokvag: string; json: string }> = [];
+  for (const t of (trad.tree ?? []).filter((x) => x.type === 'blob' && monster.test(x.path))) {
+    const json = await hamtaFilInnehall(cfg, t.path);
+    if (json !== null) ut.push({ sokvag: t.path, json });
+  }
+  return ut;
+}

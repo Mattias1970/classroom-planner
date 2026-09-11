@@ -38,6 +38,7 @@ import {
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
 } from '@planner/kernel';
 import { exportJson, importJson, lasInstallning, lasStruktur, sparaInstallning, sparaStruktur } from './store.js';
+import { RapportdesignVy, MallRendering } from './rapportdesign.js';
 import {
   hamtaBockerFranGitHub, konfigKomplett, laddaFranGitHub, lasGitHubConfig, sparaGitHubConfig, sparaTillGitHub,
   type GitHubConfig,
@@ -67,7 +68,7 @@ function valdFinns(s: Struktur, v: Vald): boolean {
 export function App() {
   const [s, setS] = useState<Struktur>(() => lasStruktur());
   const [vald, setVald] = useState<Vald>(null);
-  const [huvudvy, setHuvudvy] = useState<'struktur' | 'planering' | 'kalender' | 'superteach' | 'rapporter'>('struktur');
+  const [huvudvy, setHuvudvy] = useState<'struktur' | 'planering' | 'kalender' | 'superteach' | 'rapporter' | 'design'>('struktur');
   const [lektionsHopp, setLektionsHopp] = useState<{ amneId: string; i: number; n: number } | null>(null);
   const [tema, setTema] = useState<string>(() => {
     try { return window.localStorage.getItem('classroom-planner.studio.tema') ?? 'varm'; } catch { return 'varm'; }
@@ -103,6 +104,7 @@ export function App() {
           <button className={`tflik ${huvudvy === 'kalender' ? 'act' : ''}`} onClick={() => setHuvudvy('kalender')}>📆 Kalender</button>
           <button className={`tflik ${huvudvy === 'superteach' ? 'act' : ''}`} onClick={() => setHuvudvy('superteach')}>📊 SuperTeach</button>
           <button className={`tflik ${huvudvy === 'rapporter' ? 'act' : ''}`} onClick={() => setHuvudvy('rapporter')}>📄 Rapporter</button>
+          <button className={`tflik ${huvudvy === 'design' ? 'act' : ''}`} onClick={() => setHuvudvy('design')}>🎨 Rapportdesign</button>
         </nav>
         <span className="spacer" />
         <button className="btn sec" onClick={angra} title="Ångra senaste ändring (upp till 20 steg)">↩ Ångra</button>
@@ -126,9 +128,10 @@ export function App() {
           }} />
         </label>
       </header>
-      {huvudvy === 'kalender' || huvudvy === 'superteach' || huvudvy === 'rapporter' ? (
+      {huvudvy === 'kalender' || huvudvy === 'superteach' || huvudvy === 'rapporter' || huvudvy === 'design' ? (
         <main className="panel full">
           {msg && <p className="status">{msg}</p>}
+          {huvudvy === 'design' && <RapportdesignVy s={s} kor={kor} meddela={setMsg} />}
           {huvudvy === 'rapporter' && <RapportVy s={s} />}
           {huvudvy === 'superteach' && <SuperTeachVy s={s} kor={kor} />}
           {huvudvy === 'kalender' && <KalenderVy s={s} onOppnaLektion={(amneId, i) => { setLektionsHopp({ amneId, i, n: Date.now() }); setHuvudvy('planering'); }} />}
@@ -4033,7 +4036,22 @@ function EnkelRapportVy({ s, elev, f, periodText, onTillbaka, onFull, onStudie }
   s: Struktur; elev: Elev; f: DashboardFilter; periodText: string; onTillbaka: () => void; onFull: () => void; onStudie?: () => void;
 }) {
   const [skriver, setSkriver] = useState(false);
+  const [mallUtskrift, setMallUtskrift] = useState<string | null>(null);
+  const mallen = mallUtskrift === null ? null : (s.rapportmallar ?? []).find((m) => m.id === mallUtskrift) ?? null;
   const r = useMemo(() => enkelRapport(s, elev.id, f), [s, elev.id, f.amneId, f.veckaFran, f.veckaTill, f.fran, f.till]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (mallen !== null) {
+    return (
+      <div className="uppg-kort st-widget rd-utskriftsvy">
+        <div className="rad no-print">
+          <button className="btn sm" onClick={() => setMallUtskrift(null)}>← Tillbaka</button>
+          <b>{elev.namn}</b> <small className="muted">mall: {mallen.namn}</small>
+          <span className="spacer" />
+          <button className="btn" onClick={() => window.print()}>🖨 Skriv ut / PDF</button>
+        </div>
+        <MallRendering s={s} mall={mallen} elevId={elev.id} klassId={elev.klassId} amneId={f.amneId ?? ''} />
+      </div>
+    );
+  }
   const begreppRad = (x: { begrepp?: string; fraga: string }) => (
     <><b className="st-begreppsord">{x.begrepp ?? x.fraga}</b>{x.begrepp !== undefined && <span className="st-begreppsdef">{x.fraga}</span>}</>
   );
@@ -4046,6 +4064,12 @@ function EnkelRapportVy({ s, elev, f, periodText, onTillbaka, onFull, onStudie }
         <span className="spacer" />
         {onStudie !== undefined && <button className="btn sec sm" onClick={onStudie}>📚 Inför provet</button>}
         <button className="btn sec sm" onClick={onFull}>Fullständig rapport</button>
+        {(s.rapportmallar ?? []).length > 0 && (
+          <select aria-label="Skriv ut med mall" className="rd-mallval" value="" onChange={(e) => { if (e.target.value !== '') setMallUtskrift(e.target.value); }}>
+            <option value="">🎨 Skriv ut med mall…</option>
+            {(s.rapportmallar ?? []).map((m) => <option key={m.id} value={m.id}>{m.namn}</option>)}
+          </select>
+        )}
         <button className="btn" disabled={skriver} onClick={() => {
           setSkriver(true);
           void import('./elevrapportWord.js').then(({ enkelRapportTillWord }) => enkelRapportTillWord(r))

@@ -253,6 +253,8 @@ export interface LektionsPlan {
 }
 
 export interface Struktur {
+  /** Rapportmallar för rapportdesignern — sparas också som rapportmallar/<id>.json i datarepot. */
+  rapportmallar?: import('./rapportmall.js').Rapportmall[];
   /** QR-koder för Socrative-rum (rumsnamn → bild som data-URL). */
   socrativeQr?: Record<string, string>;
   /** Delningslänkar till Socrative-rum (rumsnamn → https://api.socrative.com/rc/…). */

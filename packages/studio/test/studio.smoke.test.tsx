@@ -2100,3 +2100,49 @@ describe('🌳 Trädet och lektionsnamn', () => {
     expect(lektionsNamn({ avsnitt: '1.1 Negativa tal' }, { avsnittText: '1.1 Negativa tal (rättad)' })).toBe('1.1 Negativa tal (rättad)');
   });
 });
+
+describe('🎨 Rapportdesign', () => {
+  it('startmall → block läggs till, markeras, flyttas med tangent och sparas; utskrift med mall i Rapporter', () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    skriv(input(host, 'Tjänstens namn'), 'NO');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 NO').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    skriv(input(host, 'Elevens namn'), 'Anna Berg');
+    act(() => { knapp(host, '➕ Lägg till elev').click(); });
+
+    act(() => { knapp(host, '🎨 Rapportdesign').click(); });
+    expect(host.textContent).toContain('Välj en mall till vänster');
+    act(() => { knapp(host, '✨ Börja med startmallen').click(); });
+    expect(host.querySelectorAll('.rd-block').length).toBeGreaterThan(8);
+    expect(host.querySelector('.rd-block.rubrik')!.textContent).toContain('Rapport — Anna Berg'); // {elev} ifylld
+
+    // Lägg till ett textblock via paletten, markera det, flytta med piltangent
+    const antal = host.querySelectorAll('.rd-block').length;
+    act(() => { knapp(host, 'Text').click(); });
+    expect(host.querySelectorAll('.rd-block').length).toBe(antal + 1);
+    const vald = host.querySelector('.rd-block.vald') as HTMLElement;
+    expect(vald).not.toBeNull();
+    const fore = vald.style.left;
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+    expect((host.querySelector('.rd-block.vald') as HTMLElement).style.left).not.toBe(fore);
+
+    // Spara mallen → finns i strukturen; syns sedan som utskriftsval i Rapporter
+    act(() => { knapp(host, '💾 Spara mall *').click(); });
+    expect(lasStruktur().rapportmallar).toHaveLength(1);
+    expect(lasStruktur().rapportmallar![0].block.some((b) => b.typ === 'text')).toBe(true);
+
+    act(() => { knapp(host, '📄 Rapporter').click(); });
+    // Utan resultat visar listan eleven men rapporten går ändå att öppna
+    const rad = host.querySelector('.st-rapportrad') as HTMLElement;
+    act(() => { rad.click(); });
+    const val = host.querySelector('select[aria-label="Skriv ut med mall"]') as HTMLSelectElement;
+    expect(val).not.toBeNull();
+    valj(val, lasStruktur().rapportmallar![0].id);
+    expect(host.querySelector('.rd-utskrift')).not.toBeNull();
+    expect(knapp(host, '🖨 Skriv ut / PDF')).not.toBeNull();
+  });
+});

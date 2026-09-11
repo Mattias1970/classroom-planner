@@ -15,6 +15,7 @@ export * from './domain/delkapiteltrend.js';
 export * from './domain/elevanalys.js';
 export * from './domain/enkelrapport.js';
 export * from './domain/studieguide.js';
+export * from './domain/rapportmall.js';
 export * from './domain/sittplatser.js';
 export * from './domain/dashboard.js';
 export * from './domain/kalender.js';
