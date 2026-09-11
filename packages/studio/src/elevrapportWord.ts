@@ -387,7 +387,53 @@ export async function klassrapporterTillWord(
   laddaNer(await zip.generateAsync({ type: 'blob' }), `${arkivNamn}.zip`.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '-'));
 }
 
-function enkelBarn(r: EnkelRapport): Array<Paragraph | Table> {
+/** Läxförhör till läxförhör: linje med punkter och linjen för godkänt. */
+async function laxBild(r: EnkelRapport): Promise<ArrayBuffer | null> {
+  if (r.laxforhor.length === 0) return null;
+  const B = 620; const H = 220; const x0 = 34; const y0 = 14; const b = B - x0 - 12; const h = H - y0 - 52;
+  const { c, ctx } = canvas(B, H);
+  rutnat(ctx, x0, y0, b, h);
+  const n = r.laxforhor.length;
+  const px = (i: number) => (n <= 1 ? x0 + b / 2 : x0 + (i / (n - 1)) * b);
+  const py = (p: number) => y0 + h - (p / 100) * h;
+  ctx.strokeStyle = '#E65100'; ctx.setLineDash([5, 4]); ctx.beginPath(); ctx.moveTo(x0, py(90)); ctx.lineTo(x0 + b, py(90)); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = '#E65100'; ctx.textAlign = 'left'; ctx.fillText('Godkänt', x0 + 4, py(90) - 4);
+  ctx.strokeStyle = BLA; ctx.lineWidth = 2.2; ctx.beginPath();
+  r.laxforhor.forEach((p, i) => (i === 0 ? ctx.moveTo(px(i), py(p.procent)) : ctx.lineTo(px(i), py(p.procent))));
+  ctx.stroke();
+  ctx.textAlign = 'center';
+  r.laxforhor.forEach((p, i) => {
+    ctx.fillStyle = p.godkant === false ? ROD : GRON;
+    ctx.beginPath(); ctx.arc(px(i), py(p.procent), 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#333'; ctx.fillText(`${p.procent} %`, px(i), py(p.procent) - 9);
+    ctx.fillStyle = GRA; ctx.fillText(p.datum.slice(5).replace('-', '/'), px(i), y0 + h + 16);
+    if (p.delta !== null) { ctx.fillStyle = p.delta > 0 ? GRON : p.delta < 0 ? ROD : GRA; ctx.fillText(`${p.delta > 0 ? '+' : ''}${p.delta}`, px(i), y0 + h + 30); }
+  });
+  return png(c);
+}
+
+/** Exit ticket → nästa läxförhör per delkapitel som parvisa staplar. */
+async function exitLaxBild(r: EnkelRapport): Promise<ArrayBuffer | null> {
+  if (r.exitTillLax.length === 0) return null;
+  const B = 620; const H = 200; const x0 = 34; const y0 = 14; const b = B - x0 - 12; const h = H - y0 - 46;
+  const { c, ctx } = canvas(B, H);
+  rutnat(ctx, x0, y0, b, h);
+  const band = b / r.exitTillLax.length;
+  const bar = Math.min(30, band * 0.28);
+  const py = (p: number) => y0 + h - (p / 100) * h;
+  r.exitTillLax.forEach((x, i) => {
+    const cx = x0 + band * (i + 0.5);
+    ctx.fillStyle = '#C7CEDB'; ctx.fillRect(cx - bar - 2, py(x.exitProcent), bar, y0 + h - py(x.exitProcent));
+    ctx.fillStyle = x.delta >= 0 ? GRON : ROD; ctx.fillRect(cx + 2, py(x.laxProcent), bar, y0 + h - py(x.laxProcent));
+    ctx.textAlign = 'center'; ctx.fillStyle = GRA; ctx.fillText(`${x.exitProcent}`, cx - bar / 2 - 2, py(x.exitProcent) - 4);
+    ctx.fillStyle = '#333'; ctx.fillText(`${x.laxProcent}`, cx + bar / 2 + 2, py(x.laxProcent) - 4);
+    ctx.fillText(x.kod, cx, y0 + h + 16);
+    ctx.fillStyle = x.delta >= 0 ? GRON : ROD; ctx.fillText(`${x.delta > 0 ? '+' : ''}${x.delta}`, cx, y0 + h + 30);
+  });
+  return png(c);
+}
+
+async function enkelBarn(r: EnkelRapport): Promise<Array<Paragraph | Table>> {
   const barn: Array<Paragraph | Table> = [
     new Paragraph({ text: `${r.elev.namn} — ${r.amneNamn}`, heading: HeadingLevel.HEADING_1 }),
     punkt({ rubrik: r.rubrik, text: r.text.join(' '), ton: r.ton }),
@@ -395,12 +441,22 @@ function enkelBarn(r: EnkelRapport): Array<Paragraph | Table> {
   ];
   if (r.laxforhor.length > 0) {
     barn.push(new Paragraph({ text: 'Läxförhör till läxförhör', heading: HeadingLevel.HEADING_2 }));
+    const lb = await laxBild(r);
+    if (lb !== null) {
+      barn.push(bild(lb, 560, 199));
+      barn.push(new Paragraph({ children: [new TextRun({ text: 'Grön punkt = godkänt, röd = under. Siffran under datumet är förändringen mot förra förhöret.', size: 18, color: '777777' })] }));
+    }
     barn.push(tabell(['Datum', 'Prov', 'Resultat', 'Förändring', 'Godkänt'],
       r.laxforhor.map((x) => [x.datum, x.prov, `${x.procent} %`, x.delta === null ? '—' : `${x.delta > 0 ? '+' : ''}${x.delta}`, x.godkant === null ? '—' : x.godkant ? 'ja' : 'nej'])));
     barn.push(tom());
   }
   if (r.exitTillLax.length > 0) {
     barn.push(new Paragraph({ text: 'Från exit ticket till läxförhör', heading: HeadingLevel.HEADING_2 }));
+    const eb = await exitLaxBild(r);
+    if (eb !== null) {
+      barn.push(bild(eb, 560, 181));
+      barn.push(new Paragraph({ children: [new TextRun({ text: 'Grå stapel = exit ticket i slutet av lektionen, färgad = samma delkapitel i nästa läxförhör.', size: 18, color: '777777' })] }));
+    }
     barn.push(tabell(['Delkapitel', 'Exit ticket', 'Läxförhör', 'Förändring'],
       r.exitTillLax.map((x) => [x.kod, `${x.exitProcent} % (${x.exitDatum})`, `${x.laxProcent} % (${x.laxDatum})`, `${x.delta > 0 ? '+' : ''}${x.delta}`])));
     barn.push(tom());
@@ -424,7 +480,7 @@ function enkelBarn(r: EnkelRapport): Array<Paragraph | Table> {
 
 /** Den enkla rapporten som ett kort Word-dokument — en sida, ingen grafik. */
 export async function enkelRapportTillWord(r: EnkelRapport): Promise<void> {
-  const doc = new Document({ sections: [{ children: enkelBarn(r) }] });
+  const doc = new Document({ sections: [{ children: await enkelBarn(r) }] });
   laddaNer(await Packer.toBlob(doc), `${r.elev.namn} ${r.amneNamn} enkel rapport.docx`.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '-'));
 }
 
@@ -438,7 +494,7 @@ export async function enklaRapporterTillWord(rapporter: EnkelRapport[], arkivNam
     let namn = `${r.elev.namn} ${r.amneNamn} enkel rapport.docx`.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '-');
     if (anvanda.has(namn)) namn = namn.replace(/\.docx$/, `-${i + 1}.docx`);
     anvanda.add(namn);
-    zip.file(namn, await Packer.toBlob(new Document({ sections: [{ children: enkelBarn(r) }] })));
+    zip.file(namn, await Packer.toBlob(new Document({ sections: [{ children: await enkelBarn(r) }] })));
     steg?.(i + 1, rapporter.length);
   }
   laddaNer(await zip.generateAsync({ type: 'blob' }), `${arkivNamn}.zip`.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '-'));

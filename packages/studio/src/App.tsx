@@ -3924,6 +3924,40 @@ function ElevrapportVy({ s, elevId, amneId, period }: { s: Struktur; elevId: str
  * och BAM-kraven (läxförhör ≥ 90 %, exit ≥ 70 %). Varningar när
  * planeringens förhör saknar resultat.
  */
+/** Parvisa staplar: exit ticket (grå) mot nästa läxförhör (grön/röd) per delkapitel. */
+function ExitLaxStaplar({ rader }: { rader: Array<{ kod: string; exitProcent: number; laxProcent: number; delta: number }> }) {
+  const [ref, bredd] = useBredd(600);
+  const w = bredd; const h = 190; const x0 = 36; const y0 = 12; const b = w - x0 - 12; const hh = h - y0 - 44;
+  const band = b / Math.max(1, rader.length);
+  const bar = Math.min(34, band * 0.3);
+  const py = (p: number) => y0 + hh - (p / 100) * hh;
+  return (
+    <div ref={ref} className="st-diagram-ram">
+      <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h} className="st-diagram" role="img" aria-label="Exit ticket mot nästa läxförhör per delkapitel">
+        {[0, 25, 50, 75, 100].map((p) => (
+          <g key={p}><line x1={x0} x2={w - 12} y1={py(p)} y2={py(p)} stroke="#EDF0F5" />
+            <text x={x0 - 8} y={py(p) + 4} fontSize={10.5} textAnchor="end" fill="#9AA3AE">{p} %</text></g>
+        ))}
+        {rader.map((r, i) => {
+          const cx = x0 + band * (i + 0.5);
+          const farg = r.delta >= 0 ? '#1B5E20' : '#B71C1C';
+          return (
+            <g key={r.kod}>
+              <rect x={cx - bar - 2} y={py(r.exitProcent)} width={bar} height={y0 + hh - py(r.exitProcent)} fill="#C7CEDB" rx={3}><title>{`${r.kod} exit ticket: ${r.exitProcent} %`}</title></rect>
+              <rect x={cx + 2} y={py(r.laxProcent)} width={bar} height={y0 + hh - py(r.laxProcent)} fill={farg} opacity={0.85} rx={3}><title>{`${r.kod} läxförhör: ${r.laxProcent} %`}</title></rect>
+              <text x={cx - bar / 2 - 2} y={py(r.exitProcent) - 4} fontSize={10} textAnchor="middle" fill="#7a8494">{r.exitProcent}</text>
+              <text x={cx + bar / 2 + 2} y={py(r.laxProcent) - 4} fontSize={10} fontWeight={700} textAnchor="middle" fill={farg}>{r.laxProcent}</text>
+              <text x={cx} y={y0 + hh + 16} fontSize={11} fontWeight={700} textAnchor="middle" fill="#333">{r.kod}</text>
+              <text x={cx} y={y0 + hh + 30} fontSize={11} fontWeight={700} textAnchor="middle" fill={farg}>{r.delta > 0 ? '+' : ''}{r.delta}</text>
+            </g>
+          );
+        })}
+      </svg>
+      <div className="st-legend"><span><i style={{ background: '#C7CEDB' }} /> exit ticket</span><span><i style={{ background: '#1B5E20' }} /> nästa läxförhör (rött om sämre)</span></div>
+    </div>
+  );
+}
+
 /** Studieguide inför provet: plan per dag, begrepp att plugga, rum och filmer. */
 function StudieguideVy({ s, elev, f, onTillbaka, onLage }: {
   s: Struktur; elev: Elev; f: DashboardFilter & { amneId: string }; onTillbaka: () => void; onLage: (l: 'enkel' | 'full' | 'studie') => void;
@@ -4026,6 +4060,10 @@ function EnkelRapportVy({ s, elev, f, periodText, onTillbaka, onFull, onStudie }
 
       {r.laxforhor.length > 0 && (<>
         <h3>Läxförhör till läxförhör {r.trend !== null && <small className={`st-trendtag ${r.trend}`}>{TREND[r.trend]}</small>}</h3>
+        <LinjeDiagram hojd={230} visaVarden
+          tillfallen={r.laxforhor.map((x, i) => ({ etikett: [`T${i + 1}`, kortDatum(x.datum)], titel: `${x.prov} · ${x.datum}` }))}
+          serier={[{ namn: 'Läxförhör', varden: r.laxforhor.map((x) => x.procent), farg: KORT_FARG['socrative-laxforhor'] }]}
+          kravLinjer={[{ procent: 90, namn: 'Godkänt' }]} />
         <div className="st-enkel-steg">{r.laxforhor.map((x, i) => (
           <div key={i} className={`st-enkel-ruta ${x.godkant === false ? 'ej' : 'ok'}`} title={x.prov}>
             <small>{kortDatum(x.datum)}</small>
@@ -4039,6 +4077,7 @@ function EnkelRapportVy({ s, elev, f, periodText, onTillbaka, onFull, onStudie }
       {r.exitTillLax.length > 0 && (<>
         <h3>Från exit ticket till läxförhör</h3>
         <p className="small muted">Exit ticket görs i slutet av lektionen; samma delkapitel testas igen i nästa läxförhör. Pilen visar om det satt bättre eller sämre då.</p>
+        <ExitLaxStaplar rader={r.exitTillLax} />
         <table className="tbl st-tabell">
           <thead><tr><th>Delkapitel</th><th>Exit ticket</th><th>→</th><th>Läxförhör</th><th>Δ</th></tr></thead>
           <tbody>{r.exitTillLax.map((x, i) => (
