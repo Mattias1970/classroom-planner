@@ -795,3 +795,15 @@ input.fel { border-color: #B71C1C; }
 .st-kort.klick:focus-visible { box-shadow: 0 0 0 2px var(--bla); }
 .lyst { animation: st-lys 1.6s ease-out; }
 @keyframes st-lys { 0% { box-shadow: 0 0 0 3px var(--bla); } 100% { box-shadow: 0 0 0 0 transparent; } }
+
+/* Del 101: enkel rapport */
+.st-enkel-rubrik { margin: 8px 0 14px; }
+.st-enkel-rubrik b { font-size: 18px; }
+.st-enkel-rubrik p { margin: 6px 0 0; font-size: 14px; }
+.st-trendtag { font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 999px; margin-left: 8px; }
+.st-trendtag.upp { background: #E8F5E9; color: #1B5E20; } .st-trendtag.ned { background: #FFEBEE; color: #B71C1C; } .st-trendtag.jamn { background: #EEF1F5; color: #556; }
+.st-enkel-steg { display: flex; gap: 10px; flex-wrap: wrap; margin: 6px 0 10px; }
+.st-enkel-ruta { border: 1px solid var(--ram); border-radius: 12px; padding: 8px 14px; min-width: 96px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.st-enkel-ruta.ok { background: #F1F8E9; } .st-enkel-ruta.ej { background: #FFEBEE; }
+.st-enkel-ruta b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.st-enkel .st-nu { grid-template-columns: 1fr 1fr; }

@@ -24,7 +24,7 @@ import {
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   arFilImporterad, arRatt, andraKalla, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
-  delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, rapportOversikt, begreppForFraga, harmoniseraOvningar, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
+  delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, enkelRapport, rapportOversikt, begreppForFraga, harmoniseraOvningar, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
@@ -3924,6 +3924,85 @@ function ElevrapportVy({ s, elevId, amneId, period }: { s: Struktur; elevId: str
  * och BAM-kraven (läxförhör ≥ 90 %, exit ≥ 70 %). Varningar när
  * planeringens förhör saknar resultat.
  */
+/** Den enkla rapporten: trend, utveckling mellan förhör och begreppen med problem. */
+function EnkelRapportVy({ s, elev, f, periodText, onTillbaka, onFull }: {
+  s: Struktur; elev: Elev; f: DashboardFilter; periodText: string; onTillbaka: () => void; onFull: () => void;
+}) {
+  const [skriver, setSkriver] = useState(false);
+  const r = useMemo(() => enkelRapport(s, elev.id, f), [s, elev.id, f.amneId, f.veckaFran, f.veckaTill, f.fran, f.till]); // eslint-disable-line react-hooks/exhaustive-deps
+  const begreppRad = (x: { begrepp?: string; fraga: string }) => (
+    <><b className="st-begreppsord">{x.begrepp ?? x.fraga}</b>{x.begrepp !== undefined && <span className="st-begreppsdef">{x.fraga}</span>}</>
+  );
+  const TREND = { upp: '↗ uppåt', ned: '↘ nedåt', jamn: '→ jämnt' } as const;
+  return (
+    <div className="uppg-kort st-widget st-rapportvy st-enkel">
+      <div className="rad">
+        <button className="btn sm" onClick={onTillbaka}>← Alla elever</button>
+        <b>{elev.namn}</b> <small className="muted">{r.amneNamn}{periodText !== '' ? ` · ${periodText}` : ''}</small>
+        <span className="spacer" />
+        <button className="btn sec sm" onClick={onFull}>Fullständig rapport</button>
+        <button className="btn" disabled={skriver} onClick={() => {
+          setSkriver(true);
+          void import('./elevrapportWord.js').then(({ enkelRapportTillWord }) => enkelRapportTillWord(r))
+            .catch(() => window.alert('Rapporten kunde inte skapas.')).finally(() => setSkriver(false));
+        }}>{skriver ? '… skapar' : '📝 Word'}</button>
+      </div>
+
+      <div className={`st-punkt-kort ${r.ton} st-enkel-rubrik`}>
+        <b>{r.rubrik}</b>
+        {r.text.map((t, i) => <p key={i}>{t}</p>)}
+      </div>
+
+      {r.laxforhor.length > 0 && (<>
+        <h3>Läxförhör till läxförhör {r.trend !== null && <small className={`st-trendtag ${r.trend}`}>{TREND[r.trend]}</small>}</h3>
+        <div className="st-enkel-steg">{r.laxforhor.map((x, i) => (
+          <div key={i} className={`st-enkel-ruta ${x.godkant === false ? 'ej' : 'ok'}`} title={x.prov}>
+            <small>{kortDatum(x.datum)}</small>
+            <b>{x.procent} %</b>
+            {x.delta !== null && <span className={`st-diff ${x.delta > 0 ? 'upp' : x.delta < 0 ? 'ned' : ''}`}>{x.delta > 0 ? '+' : ''}{x.delta}</span>}
+            <small className="muted">{x.godkant === null ? '' : x.godkant ? 'godkänt' : 'ej godkänt'}</small>
+          </div>
+        ))}</div>
+      </>)}
+
+      {r.exitTillLax.length > 0 && (<>
+        <h3>Från exit ticket till läxförhör</h3>
+        <p className="small muted">Exit ticket görs i slutet av lektionen; samma delkapitel testas igen i nästa läxförhör. Pilen visar om det satt bättre eller sämre då.</p>
+        <table className="tbl st-tabell">
+          <thead><tr><th>Delkapitel</th><th>Exit ticket</th><th>→</th><th>Läxförhör</th><th>Δ</th></tr></thead>
+          <tbody>{r.exitTillLax.map((x, i) => (
+            <tr key={i}>
+              <td><b>{x.kod}</b></td>
+              <td>{x.exitProcent} % <small className="muted">{kortDatum(x.exitDatum)}</small></td>
+              <td className="muted">→</td>
+              <td>{x.laxProcent} % <small className="muted">{kortDatum(x.laxDatum)}</small></td>
+              <td className={`st-diff ${x.delta > 0 ? 'upp' : x.delta < 0 ? 'ned' : ''}`}>{x.delta > 0 ? '+' : ''}{x.delta}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </>)}
+
+      <h3>Begrepp du haft problem med</h3>
+      {r.kvar.length === 0 && r.vant.length === 0 ? <p className="small muted">Inga — antingen allt rätt hela vägen, eller inga frågedata ännu.</p> : (
+        <div className="st-nu">
+          <div className="st-nu-lista">
+            <div className="st-nu-rubrik kvar">Kvar att lära ({r.kvar.length})</div>
+            {r.kvar.length === 0 ? <p className="small muted">Inget — allt sitter just nu.</p> : (
+              <ul className="small st-begreppslista">{r.kvar.map((x) => <li key={x.nr}>{begreppRad(x)}<small className="muted">{x.kod} · senast fel i {x.senastProv}</small></li>)}</ul>
+            )}
+          </div>
+          <div className="st-nu-lista">
+            <div className="st-nu-rubrik fixat">Var fel, sitter nu ({r.vant.length})</div>
+            {r.vant.length === 0 ? <p className="small muted">—</p> : (
+              <ul className="small st-begreppslista">{r.vant.map((x) => <li key={x.nr}>{begreppRad(x)}<small className="muted">{x.kod} · {x.tidigareFel} fel tidigare</small></li>)}</ul>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * 📄 Rapporter — en elev i taget: hur det går, vad eleven kan göra, och
  * hela underlaget. Samma analys som Word-filen, fast på skärmen.
@@ -3936,6 +4015,7 @@ function RapportVy({ s }: { s: Struktur }) {
   const [amneId, setAmneId] = useState('');
   const [periodText, setPeriodText] = useState('');
   const [elevId, setElevId] = useState('');
+  const [enkel, setEnkel] = useState(true);
   const [sok, setSok] = useState('');
   const [skriver, setSkriver] = useState('');
   const [forlopp, setForlopp] = useState('');
@@ -4024,12 +4104,16 @@ function RapportVy({ s }: { s: Struktur }) {
             </table>
           </div>
         </div>
+      ) : enkel ? (
+        <EnkelRapportVy s={s} elev={valdElev} f={f} periodText={period === null ? '' : `v.${period.veckaFran}–${period.veckaTill}`}
+          onTillbaka={() => setElevId('')} onFull={() => setEnkel(false)} />
       ) : (
         <div className="uppg-kort st-widget st-rapportvy">
           <div className="rad">
             <button className="btn sm" onClick={() => setElevId('')}>← Alla elever</button>
             <b>{valdElev.namn}</b> <small className="muted">{analys.amneNamn}{period !== null ? ` · v.${period.veckaFran}–${period.veckaTill}` : ''}</small>
             <span className="spacer" />
+            <button className="btn sec sm" onClick={() => setEnkel(true)}>Enkel rapport</button>
             <button className="btn" disabled={skriver === valdElev.id} onClick={() => tillWord(analys, valdElev.id)}>{skriver === valdElev.id ? '… skapar' : '📝 Skriv ut till Word'}</button>
           </div>
           <p className="st-rapport-ingress">{analys.sammanfattning}</p>

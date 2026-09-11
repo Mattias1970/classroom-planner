@@ -2049,10 +2049,18 @@ describe('📄 Rapporter', () => {
     expect(knapp(host, '📝 Word för alla elever').disabled).toBe(false);
 
     act(() => { (rad as HTMLElement).click(); });
+    // Enkel rapport öppnas först: rubrik, begrepp med problem och Word-knapp
+    expect(host.querySelector('.st-enkel')).not.toBeNull();
+    expect(host.textContent).toContain('Begrepp du haft problem med');
+    expect(host.textContent).toContain('har inga läxförhör i perioden'); // bara en exit ticket i testet
+    expect(knapp(host, '📝 Word')).not.toBeNull();
+    act(() => { knapp(host, 'Fullständig rapport').click(); });
     expect(host.textContent).toContain('Hur går det?');
     expect(host.textContent).toContain('Vad kan du göra?');
     expect(host.querySelectorAll('.st-punkt-kort').length).toBeGreaterThan(1);
     expect(knapp(host, '📝 Skriv ut till Word')).not.toBeNull();
+    act(() => { knapp(host, 'Enkel rapport').click(); });
+    expect(host.querySelector('.st-enkel')).not.toBeNull();
     act(() => { knapp(host, '← Alla elever').click(); });
     expect(host.querySelector('.st-rapportrad')).not.toBeNull();
   });

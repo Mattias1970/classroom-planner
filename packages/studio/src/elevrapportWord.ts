@@ -6,7 +6,7 @@
  * utskriften säger samma sak som skärmen.
  */
 import { AlignmentType, Document, ExternalHyperlink, HeadingLevel, ImageRun, Packer, Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType } from 'docx';
-import type { Elevanalys } from '@planner/kernel';
+import type { Elevanalys, EnkelRapport } from '@planner/kernel';
 
 const BLA = '#2f5aa8'; const GRON = '#1B5E20'; const ROD = '#B71C1C'; const GRA = '#9AA3AE';
 const TON_FARG = { bra: 'E8F5E9', okej: 'FFF8E1', oro: 'FFEBEE' } as const;
@@ -385,4 +385,41 @@ export async function klassrapporterTillWord(
     steg?.(i + 1, analyser.length);
   }
   laddaNer(await zip.generateAsync({ type: 'blob' }), `${arkivNamn}.zip`.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '-'));
+}
+
+/** Den enkla rapporten som ett kort Word-dokument — en sida, ingen grafik. */
+export async function enkelRapportTillWord(r: EnkelRapport): Promise<void> {
+  const barn: Array<Paragraph | Table> = [
+    new Paragraph({ text: `${r.elev.namn} — ${r.amneNamn}`, heading: HeadingLevel.HEADING_1 }),
+    punkt({ rubrik: r.rubrik, text: r.text.join(' '), ton: r.ton }),
+    tom(),
+  ];
+  if (r.laxforhor.length > 0) {
+    barn.push(new Paragraph({ text: 'Läxförhör till läxförhör', heading: HeadingLevel.HEADING_2 }));
+    barn.push(tabell(['Datum', 'Prov', 'Resultat', 'Förändring', 'Godkänt'],
+      r.laxforhor.map((x) => [x.datum, x.prov, `${x.procent} %`, x.delta === null ? '—' : `${x.delta > 0 ? '+' : ''}${x.delta}`, x.godkant === null ? '—' : x.godkant ? 'ja' : 'nej'])));
+    barn.push(tom());
+  }
+  if (r.exitTillLax.length > 0) {
+    barn.push(new Paragraph({ text: 'Från exit ticket till läxförhör', heading: HeadingLevel.HEADING_2 }));
+    barn.push(tabell(['Delkapitel', 'Exit ticket', 'Läxförhör', 'Förändring'],
+      r.exitTillLax.map((x) => [x.kod, `${x.exitProcent} % (${x.exitDatum})`, `${x.laxProcent} % (${x.laxDatum})`, `${x.delta > 0 ? '+' : ''}${x.delta}`])));
+    barn.push(tom());
+  }
+  barn.push(new Paragraph({ text: 'Begrepp du haft problem med', heading: HeadingLevel.HEADING_2 }));
+  if (r.kvar.length === 0 && r.vant.length === 0) barn.push(new Paragraph('Inga.'));
+  if (r.kvar.length > 0) {
+    barn.push(new Paragraph({ children: [new TextRun({ text: `Kvar att lära (${r.kvar.length})`, bold: true })] }));
+    for (const x of r.kvar) barn.push(new Paragraph({ bullet: { level: 0 }, children: [
+      ...(x.begrepp !== undefined ? [new TextRun({ text: `${x.begrepp} — `, bold: true })] : []), new TextRun(x.fraga),
+    ] }));
+  }
+  if (r.vant.length > 0) {
+    barn.push(new Paragraph({ children: [new TextRun({ text: `Var fel, sitter nu (${r.vant.length})`, bold: true })] }));
+    for (const x of r.vant) barn.push(new Paragraph({ bullet: { level: 0 }, children: [
+      ...(x.begrepp !== undefined ? [new TextRun({ text: `${x.begrepp} — `, bold: true })] : []), new TextRun(x.fraga),
+    ] }));
+  }
+  const doc = new Document({ sections: [{ children: barn }] });
+  laddaNer(await Packer.toBlob(doc), `${r.elev.namn} ${r.amneNamn} enkel rapport.docx`.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '-'));
 }
