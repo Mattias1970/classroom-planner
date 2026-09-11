@@ -2455,12 +2455,12 @@ function NormeradDiagram({ tillfallen, serier, w, hojd = 320, onKlick, zoom = ZO
           </rect>
         ));
       }))}
-      {aktiva.map((se) => {
+      {aktiva.map((se, si) => {
         const pts = se.linje.map((v, i) => (v === null ? null : { x: x(i), y: y(Math.max(-NORM_MAX, Math.min(NORM_MAX, v))) }));
         let d = ''; let pen = false;
         pts.forEach((pt) => { if (pt === null) { pen = false; return; } d += `${pen ? 'L' : 'M'}${pt.x.toFixed(1)},${pt.y.toFixed(1)} `; pen = true; });
         return (
-          <g key={se.namn}>
+          <g key={`${si}-${se.namn}`}>
             <path d={d} fill="none" stroke={se.farg} strokeWidth={1.9} strokeLinejoin="round" strokeLinecap="round" />
             {pts.map((pt, i) => pt !== null && (
               <circle key={i} cx={pt.x} cy={pt.y} r={4.2} fill="#fff" stroke={se.farg} strokeWidth={2.2} className={onKlick ? 'st-punkt' : undefined} onClick={onKlick ? () => onKlick(i) : undefined}>
@@ -2734,15 +2734,15 @@ function LinjeDiagramSvg({ tillfallen, serier, kravLinjer, onKlick, hojd = 220, 
           <text x={ml - 8} y={y(p) + 4} fontSize={10.5} textAnchor="end" fill="#9AA3AE">{p} %</text></g>
       ))}
       {kravLinjer.map((k) => (
-        <g key={k.namn}><line x1={ml} x2={w - mr} y1={y(k.procent)} y2={y(k.procent)} stroke="#E65100" strokeDasharray="5 4" strokeWidth={1.2} />
+        <g key={`${k.namn}-${k.procent}`}><line x1={ml} x2={w - mr} y1={y(k.procent)} y2={y(k.procent)} stroke="#E65100" strokeDasharray="5 4" strokeWidth={1.2} />
           <text x={w - mr} y={y(k.procent) - 3} fontSize={11} textAnchor="end" fill="#E65100">{k.namn}</text></g>
       ))}
-      {serier.map((se) => {
+      {serier.map((se, si) => {
         const pts = se.varden.map((v, i) => (v === null ? null : { x: x(i), y: y(v) }));
         let d = ''; let pen = false;
         pts.forEach((pt) => { if (pt === null) { pen = false; return; } d += `${pen ? 'L' : 'M'}${pt.x.toFixed(1)},${pt.y.toFixed(1)} `; pen = true; });
         return (
-          <g key={se.namn}>
+          <g key={`${si}-${se.namn}`}>
             <path d={d} fill="none" stroke={se.farg} strokeWidth={2.2} strokeDasharray={se.streckad ? '6 4' : undefined} />
             {pts.map((pt, i) => pt !== null && (
               <circle key={i} cx={pt.x} cy={pt.y} r={2.8} fill={se.farg} className={onKlick ? 'st-punkt' : undefined}
@@ -2759,7 +2759,7 @@ function LinjeDiagramSvg({ tillfallen, serier, kravLinjer, onKlick, hojd = 220, 
       {tillfallen.map((t, i) => <AxelText key={i} x={x(i)} y={h - mb + 16} rader={rader(t.etikett)} rotera={rotera} titel={t.titel} />)}
       <g transform={`translate(${ml},${h - 8 - (legendRader - 1) * 16})`}>
         {serier.map((se, i) => (
-          <g key={se.namn} transform={`translate(${(i % Math.max(1, Math.floor((w - 60) / 160))) * 160},${Math.floor(i / Math.max(1, Math.floor((w - 60) / 160))) * 16})`}>
+          <g key={`${i}-${se.namn}`} transform={`translate(${(i % Math.max(1, Math.floor((w - 60) / 160))) * 160},${Math.floor(i / Math.max(1, Math.floor((w - 60) / 160))) * 16})`}>
             <line x1={0} x2={22} y1={-4} y2={-4} stroke={se.farg} strokeWidth={2.2} strokeDasharray={se.streckad ? '6 4' : undefined} />
             <text x={28} y={0} fontSize={11} fill="#333">{se.namn}</text>
           </g>
