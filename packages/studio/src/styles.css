@@ -877,3 +877,35 @@ input.fel { border-color: #B71C1C; }
   .rd-block { outline: none !important; }
   @page { size: A4 portrait; margin: 0; }
 }
+
+/* Del 106: sidor, linjering, frågematris i mallen */
+.rd-verktyg2 { gap: 10px; margin-bottom: 8px; flex-wrap: wrap; align-items: center; }
+.rd-sep { width: 1px; height: 22px; background: var(--ram); }
+.rd-sidflikar { display: flex; gap: 3px; }
+.rd-sidflik { border: 1px solid var(--ram); background: #fff; border-radius: 8px; padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+.rd-sidflik small { color: var(--muted-varm); margin-left: 3px; }
+.rd-sidflik.act { background: var(--bla); color: #fff; border-color: var(--bla); }
+.rd-sidflik.act small { color: #dfe8f7; }
+.rd-linjera { display: flex; gap: 2px; }
+.rd-linj { width: 28px; height: 26px; border: 1px solid var(--ram); background: #fff; border-radius: 6px; font-size: 14px; cursor: pointer; }
+.rd-linj:hover:not(:disabled) { background: #EEF3FB; border-color: var(--bla); }
+.rd-linj:disabled { opacity: .35; cursor: default; }
+.rd-block.vald { outline: 2px solid var(--bla); outline-offset: 1px; }
+.rd-sidor { display: flex; flex-direction: column; gap: 24px; align-items: center; }
+/* Frågematris som på skärmen */
+.rd-fm { display: grid; gap: calc(var(--mm) * 0.5); align-items: stretch; font-size: calc(var(--mm) * 2.6); }
+.rd-fm-horn { }
+.rd-fm-grupp { background: #E8ECF3; border-bottom: calc(var(--mm) * 0.5) solid #C9D2E0; border-radius: calc(var(--mm) * 1) calc(var(--mm) * 1) 0 0; padding: calc(var(--mm) * 0.6) calc(var(--mm) * 1); text-align: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; margin-left: calc(var(--mm) * 0.5); }
+.rd-fm-grupp b { display: block; font-size: calc(var(--mm) * 2.6); color: #465060; overflow: hidden; text-overflow: ellipsis; }
+.rd-fm-grupp small { display: block; font-size: calc(var(--mm) * 2.2); color: #7a8494; }
+.rd-fm-h { font-weight: 700; color: #465060; font-size: calc(var(--mm) * 2.4); padding-right: calc(var(--mm) * 1.5); white-space: nowrap; }
+.rd-fm-nr { text-align: center; color: #9AA3AE; font-size: calc(var(--mm) * 2.2); }
+.rd-fm-c { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: calc(var(--mm) * 1.5); align-self: center; }
+.rd-fm-typ { font-weight: 700; border-radius: calc(var(--mm) * 1); padding: 0 calc(var(--mm) * 1); text-align: center; font-size: calc(var(--mm) * 2.2); }
+.rd-fm-typ.socrative-laxforhor { background: #E8EAF6; color: #1A2A6B; } .rd-fm-typ.socrative-exit { background: #E3F2FD; color: #2f5aa8; }
+.rd-fm-typ.socrative-ovning { background: #E0F2F1; color: #00838F; } .rd-fm-typ.magma { background: #F3E5F5; color: #6A1B9A; } .rd-fm-typ.digiexam { background: #FBE9E7; color: #BF360C; }
+.rd-fm-quiz { font-weight: 600; max-width: calc(var(--mm) * 36); }
+.rd-fm-ruta { display: block; aspect-ratio: 1; min-width: 0; border-radius: calc(var(--mm) * 0.6); background: #F1F3F6; }
+.rd-fm-ruta.ok { background: #4CAF50; } .rd-fm-ruta.ej { background: #D32F2F; } .rd-fm-ruta.tom { background: #F7F8FA; } .rd-fm-ruta.ejgjord { background: #E4E8EF; }
+.rd-fm .gstart { box-shadow: calc(var(--mm) * -0.5) 0 0 0 #C9D2E0; }
+@media print { .rd-sidor { display: block; } .rd-utskrift { page-break-after: always; break-after: page; } .rd-utskrift:last-child { page-break-after: auto; break-after: auto; } }

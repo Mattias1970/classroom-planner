@@ -2130,6 +2130,22 @@ describe('🎨 Rapportdesign', () => {
     act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
     expect((host.querySelector('.rd-block.vald') as HTMLElement).style.left).not.toBe(fore);
 
+    // Sida 2: läggs till, block hamnar där, utskriften får två ark
+    act(() => { knapp(host, '＋').click(); });
+    expect(host.querySelectorAll('.rd-sidflik').length).toBeGreaterThanOrEqual(3); // Sida 1, Sida 2, ＋(, 🗑)
+    expect(host.querySelectorAll('.rd-block').length).toBe(0); // tom sida 2
+    act(() => { knapp(host, 'KPI-kort').click(); });
+    act(() => { knapp(host, 'KPI-kort').click(); });
+    expect(host.querySelectorAll('.rd-block').length).toBe(2);
+    // Markera båda (Ctrl+A) och linjera överkanter
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', ctrlKey: true })); });
+    expect(host.querySelectorAll('.rd-block.vald').length).toBe(2);
+    const topp = host.querySelector('button[aria-label="Överkanter"]') as HTMLButtonElement;
+    expect(topp.disabled).toBe(false);
+    act(() => { topp.click(); });
+    const tops = [...host.querySelectorAll('.rd-block')].map((b) => (b as HTMLElement).style.top);
+    expect(tops[0]).toBe(tops[1]);
+
     // Spara mallen → finns i strukturen; syns sedan som utskriftsval i Rapporter
     act(() => { knapp(host, '💾 Spara mall *').click(); });
     expect(lasStruktur().rapportmallar).toHaveLength(1);
@@ -2142,7 +2158,7 @@ describe('🎨 Rapportdesign', () => {
     const val = host.querySelector('select[aria-label="Skriv ut med mall"]') as HTMLSelectElement;
     expect(val).not.toBeNull();
     valj(val, lasStruktur().rapportmallar![0].id);
-    expect(host.querySelector('.rd-utskrift')).not.toBeNull();
+    expect(host.querySelectorAll('.rd-utskrift')).toHaveLength(2); // två sidor
     expect(knapp(host, '🖨 Skriv ut / PDF')).not.toBeNull();
   });
 });

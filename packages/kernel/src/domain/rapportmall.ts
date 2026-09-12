@@ -40,6 +40,8 @@ export interface BlockStil {
 export interface Block {
   id: string;
   typ: BlockTyp;
+  /** Sidnummer 1..antalSidor. Saknas = sida 1. */
+  sida?: number;
   /** Position och storlek i mm. */
   x: number; y: number; b: number; h: number;
   /** Ritordning — lägre bakom. Plattor bör ligga lägst. */
@@ -63,6 +65,10 @@ export interface Rapportmall {
   beskrivning?: string;
   /** Sidmarginal i mm. */
   marginal: number;
+  /** Antal sidor (minst 1). */
+  antalSidor?: number;
+  /** Rutnät för snapp i mm (0 = av). */
+  rutnat?: number;
   block: Block[];
   skapad: string;
   andrad: string;
@@ -90,9 +96,16 @@ export function arDatablock(typ: BlockTyp): boolean {
   return !['platta', 'rubrik', 'text', 'bild', 'qr'].includes(typ);
 }
 
-export function snappa(v: number): number {
-  return Math.round(v / RUTNAT) * RUTNAT;
+export function snappa(v: number, rutnat: number = RUTNAT): number {
+  if (rutnat <= 0) return Math.round(v * 10) / 10;
+  return Math.round(v / rutnat) * rutnat;
 }
+
+/** Tillåtna rutnät i designern (mm); 0 = fritt. */
+export const RUTNAT_VAL = [0, 1, 2.5, 5, 10] as const;
+
+export function antalSidor(m: Rapportmall): number { return Math.max(1, m.antalSidor ?? 1); }
+export function blockSida(b: Block): number { return Math.max(1, b.sida ?? 1); }
 
 function klamma(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
@@ -102,10 +115,11 @@ export function nyMall(id: string, namn: string, idag: string): Rapportmall {
   return { id, namn, marginal: 15, block: [], skapad: idag, andrad: idag, version: 1 };
 }
 
-export function laggTillBlock(m: Rapportmall, id: string, typ: BlockTyp, x = 20, y = 20, idag = m.andrad): Rapportmall {
+export function laggTillBlock(m: Rapportmall, id: string, typ: BlockTyp, x = 20, y = 20, idag = m.andrad, sida = 1): Rapportmall {
   const std = BLOCK_STANDARD[typ];
+  const g = m.rutnat ?? RUTNAT;
   const z = m.block.length === 0 ? 0 : Math.max(...m.block.map((b) => b.z)) + 1;
-  const block: Block = { id, typ, x: snappa(x), y: snappa(y), b: std.b, h: std.h, z: typ === 'platta' ? -1 : z };
+  const block: Block = { id, typ, sida, x: snappa(x, g), y: snappa(y, g), b: std.b, h: std.h, z: typ === 'platta' ? -1 : z };
   if (typ === 'rubrik') { block.text = 'Rapport — {elev}'; block.stil = { storlek: 20, fet: true }; }
   if (typ === 'text') { block.text = 'Skriv text här. {elev}, {amne} och {datum} byts ut.'; block.stil = { storlek: 11 }; }
   if (typ === 'platta') block.stil = { bakgrund: '#EEF3FB', radie: 3 };
@@ -113,22 +127,93 @@ export function laggTillBlock(m: Rapportmall, id: string, typ: BlockTyp, x = 20,
   return { ...m, block: [...m.block, block] };
 }
 
-export function flyttaBlock(m: Rapportmall, id: string, x: number, y: number): Rapportmall {
+export function flyttaBlock(m: Rapportmall, id: string, x: number, y: number, snapp = true): Rapportmall {
+  const g = snapp ? (m.rutnat ?? RUTNAT) : 0;
   return {
     ...m,
     block: m.block.map((b) => (b.id !== id ? b : {
-      ...b, x: klamma(snappa(x), 0, A4.bredd - b.b), y: klamma(snappa(y), 0, A4.hojd - b.h),
+      ...b, x: klamma(snappa(x, g), 0, A4.bredd - b.b), y: klamma(snappa(y, g), 0, A4.hojd - b.h),
     })),
   };
 }
 
-export function andraStorlek(m: Rapportmall, id: string, bredd: number, hojd: number): Rapportmall {
+/** Flyttar flera block samma sträcka (markerad grupp). */
+export function flyttaFlera(m: Rapportmall, ids: string[], dx: number, dy: number, snapp = true): Rapportmall {
+  let ut = m;
+  for (const id of ids) { const b = m.block.find((x) => x.id === id); if (b !== undefined) ut = flyttaBlock(ut, id, b.x + dx, b.y + dy, snapp); }
+  return ut;
+}
+
+export function andraStorlek(m: Rapportmall, id: string, bredd: number, hojd: number, snapp = true): Rapportmall {
+  const g = snapp ? (m.rutnat ?? RUTNAT) : 0;
   return {
     ...m,
     block: m.block.map((b) => (b.id !== id ? b : {
-      ...b, b: klamma(snappa(bredd), 10, A4.bredd - b.x), h: klamma(snappa(hojd), 6, A4.hojd - b.y),
+      ...b, b: klamma(snappa(bredd, g), 10, A4.bredd - b.x), h: klamma(snappa(hojd, g), 6, A4.hojd - b.y),
     })),
   };
+}
+
+export type Linjering = 'vanster' | 'hcenter' | 'hoger' | 'topp' | 'vcenter' | 'botten';
+
+/**
+ * Linjerar markerade block mot varandra: vänsterkant, horisontell mitt, högerkant,
+ * överkant, vertikal mitt eller underkant. Referensen är gruppens yttre kant
+ * (respektive mitten av gruppens omslutande rektangel).
+ */
+export function linjeraBlock(m: Rapportmall, ids: string[], lage: Linjering): Rapportmall {
+  const valda = m.block.filter((b) => ids.includes(b.id));
+  if (valda.length < 2) return m;
+  const minX = Math.min(...valda.map((b) => b.x)); const maxX = Math.max(...valda.map((b) => b.x + b.b));
+  const minY = Math.min(...valda.map((b) => b.y)); const maxY = Math.max(...valda.map((b) => b.y + b.h));
+  const cx = (minX + maxX) / 2; const cy = (minY + maxY) / 2;
+  return {
+    ...m,
+    block: m.block.map((b) => {
+      if (!ids.includes(b.id)) return b;
+      switch (lage) {
+        case 'vanster': return { ...b, x: minX };
+        case 'hoger': return { ...b, x: maxX - b.b };
+        case 'hcenter': return { ...b, x: Math.round((cx - b.b / 2) * 10) / 10 };
+        case 'topp': return { ...b, y: minY };
+        case 'botten': return { ...b, y: maxY - b.h };
+        case 'vcenter': return { ...b, y: Math.round((cy - b.h / 2) * 10) / 10 };
+        default: return b;
+      }
+    }),
+  };
+}
+
+/** Fördelar markerade block med lika mellanrum vågrätt eller lodrätt. */
+export function fordelaBlock(m: Rapportmall, ids: string[], riktning: 'vagratt' | 'lodratt'): Rapportmall {
+  const valda = m.block.filter((b) => ids.includes(b.id)).sort((a, b) => (riktning === 'vagratt' ? a.x - b.x : a.y - b.y));
+  if (valda.length < 3) return m;
+  const forsta = valda[0]; const sista = valda[valda.length - 1];
+  const total = riktning === 'vagratt' ? sista.x + sista.b - forsta.x : sista.y + sista.h - forsta.y;
+  const summa = valda.reduce((n, b) => n + (riktning === 'vagratt' ? b.b : b.h), 0);
+  const mellan = (total - summa) / (valda.length - 1);
+  let pos = riktning === 'vagratt' ? forsta.x : forsta.y;
+  const nyPos = new Map<string, number>();
+  for (const b of valda) { nyPos.set(b.id, Math.round(pos * 10) / 10); pos += (riktning === 'vagratt' ? b.b : b.h) + mellan; }
+  return { ...m, block: m.block.map((b) => (nyPos.has(b.id) ? (riktning === 'vagratt' ? { ...b, x: nyPos.get(b.id)! } : { ...b, y: nyPos.get(b.id)! }) : b)) };
+}
+
+export function laggTillSida(m: Rapportmall): Rapportmall {
+  return { ...m, antalSidor: antalSidor(m) + 1 };
+}
+
+/** Tar bort en sida och dess block; efterföljande sidor numreras om. */
+export function taBortSida(m: Rapportmall, sida: number): Rapportmall {
+  if (antalSidor(m) <= 1) return m;
+  return {
+    ...m, antalSidor: antalSidor(m) - 1,
+    block: m.block.filter((b) => blockSida(b) !== sida).map((b) => (blockSida(b) > sida ? { ...b, sida: blockSida(b) - 1 } : b)),
+  };
+}
+
+/** Flyttar block till en annan sida. */
+export function tillSida(m: Rapportmall, ids: string[], sida: number): Rapportmall {
+  return { ...m, block: m.block.map((b) => (ids.includes(b.id) ? { ...b, sida: Math.max(1, Math.min(antalSidor(m), sida)) } : b)) };
 }
 
 export function uppdateraBlock(m: Rapportmall, id: string, patch: Partial<Omit<Block, 'id'>>): Rapportmall {
@@ -152,9 +237,9 @@ export function dupliceraBlock(m: Rapportmall, id: string, nyttId: string): Rapp
   return { ...m, block: [...m.block, { ...b, id: nyttId, x: klamma(b.x + RUTNAT, 0, A4.bredd - b.b), y: klamma(b.y + RUTNAT, 0, A4.hojd - b.h), z: Math.max(...m.block.map((x) => x.z)) + 1 }] };
 }
 
-/** Blocken i ritordning (lägst z först). */
-export function ritordning(m: Rapportmall): Block[] {
-  return [...m.block].sort((a, b) => a.z - b.z || a.id.localeCompare(b.id));
+/** Blocken i ritordning (lägst z först), valfritt bara en sida. */
+export function ritordning(m: Rapportmall, sida?: number): Block[] {
+  return [...m.block].filter((b) => sida === undefined || blockSida(b) === sida).sort((a, b) => a.z - b.z || a.id.localeCompare(b.id));
 }
 
 /** Byter ut {elev}, {amne}, {datum}, {klass} i fri text. */
@@ -190,6 +275,7 @@ export function tolkaRapportmall(json: string): Rapportmall {
     return {
       id: typeof x.id === 'string' ? x.id : `b${i}`, typ: x.typ,
       x: Number(x.x ?? 0), y: Number(x.y ?? 0), b: Number(x.b ?? 40), h: Number(x.h ?? 20), z: Number(x.z ?? i),
+      ...(x.sida !== undefined ? { sida: Number(x.sida) } : {}),
       ...(x.rubrik !== undefined ? { rubrik: String(x.rubrik) } : {}), ...(x.text !== undefined ? { text: String(x.text) } : {}),
       ...(x.kalla !== undefined ? { kalla: x.kalla } : {}), ...(x.bild !== undefined ? { bild: String(x.bild) } : {}),
       ...(x.rum !== undefined ? { rum: String(x.rum) } : {}), ...(x.stil !== undefined ? { stil: x.stil } : {}),
@@ -197,7 +283,8 @@ export function tolkaRapportmall(json: string): Rapportmall {
   });
   return {
     id: r.id, namn: r.namn, ...(r.beskrivning !== undefined ? { beskrivning: r.beskrivning } : {}),
-    marginal: Number(r.marginal ?? 15), block, skapad: r.skapad ?? '', andrad: r.andrad ?? '', version: 1,
+    marginal: Number(r.marginal ?? 15), ...(r.antalSidor !== undefined ? { antalSidor: Number(r.antalSidor) } : {}),
+    ...(r.rutnat !== undefined ? { rutnat: Number(r.rutnat) } : {}), block, skapad: r.skapad ?? '', andrad: r.andrad ?? '', version: 1,
   };
 }
 

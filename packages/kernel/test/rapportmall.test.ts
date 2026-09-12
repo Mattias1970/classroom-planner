@@ -65,3 +65,59 @@ describe('rapportmall — block på en A4-sida', () => {
     expect(taBortRapportmall(s, 'std').rapportmallar).toEqual([]);
   });
 });
+
+describe('Del 106: sidor, rutnät och linjering', async () => {
+  const { antalSidor, blockSida, flyttaFlera, fordelaBlock, laggTillSida, linjeraBlock, taBortSida, tillSida } = await import('../src/domain/rapportmall.js');
+
+  it('flera sidor: block hör till en sida, sidor kan läggas till och tas bort', () => {
+    let m = nyMall('m', 'x', '2026-09-11');
+    m = laggTillBlock(m, 'a', 'text', 20, 20);
+    m = laggTillSida(m); m = laggTillSida(m);
+    expect(antalSidor(m)).toBe(3);
+    m = laggTillBlock(m, 'b', 'text', 20, 20, '2026-09-11', 2);
+    m = laggTillBlock(m, 'c', 'text', 20, 20, '2026-09-11', 3);
+    expect(ritordning(m, 2).map((b) => b.id)).toEqual(['b']);
+    expect(ritordning(m).map((b) => b.id)).toEqual(['a', 'b', 'c']);
+    m = tillSida(m, ['a'], 3);
+    expect(blockSida(m.block.find((b) => b.id === 'a')!)).toBe(3);
+    m = taBortSida(m, 2); // b försvinner, c och a flyttas till sida 2
+    expect(antalSidor(m)).toBe(2);
+    expect(m.block.map((b) => `${b.id}:${blockSida(b)}`).sort()).toEqual(['a:2', 'c:2']);
+    expect(taBortSida(nyMall('x', 'x', ''), 1).antalSidor).toBeUndefined(); // enda sidan kan inte tas bort
+  });
+
+  it('rutnätet är valbart: 0 = fritt, 10 = grovt', () => {
+    expect(snappa(23, 0)).toBe(23);
+    expect(snappa(23, 10)).toBe(20);
+    expect(snappa(23.46, 0)).toBe(23.5);
+    let m = { ...nyMall('m', 'x', ''), rutnat: 10 };
+    m = laggTillBlock(m, 'a', 'kpi', 23, 27);
+    expect(m.block[0]).toMatchObject({ x: 20, y: 30 });
+    m = flyttaBlock(m, 'a', 33, 33, false); // snapp av
+    expect(m.block[0]).toMatchObject({ x: 33, y: 33 });
+  });
+
+  it('linjering: vänster, höger, hcenter, topp, botten, vcenter', () => {
+    let m = nyMall('m', 'x', '');
+    m = laggTillBlock(m, 'a', 'kpi', 10, 10); // 42×26
+    m = laggTillBlock(m, 'b', 'kpi', 60, 40);
+    m = andraStorlek(m, 'b', 20, 10);
+    const pos = (mm: typeof m) => mm.block.map((b) => `${b.id}:${b.x},${b.y}`);
+    expect(pos(linjeraBlock(m, ['a', 'b'], 'vanster'))).toEqual(['a:10,10', 'b:10,40']);
+    expect(pos(linjeraBlock(m, ['a', 'b'], 'hoger'))).toEqual(['a:38,10', 'b:60,40']);   // maxX = 80
+    expect(pos(linjeraBlock(m, ['a', 'b'], 'topp'))).toEqual(['a:10,10', 'b:60,10']);
+    expect(pos(linjeraBlock(m, ['a', 'b'], 'botten'))).toEqual(['a:10,24', 'b:60,40']); // maxY = 50, a är 26 hög
+    expect(pos(linjeraBlock(m, ['a', 'b'], 'hcenter'))).toEqual(['a:24,10', 'b:35,40']); // cx = 45
+    expect(pos(linjeraBlock(m, ['a', 'b'], 'vcenter'))).toEqual(['a:10,17', 'b:60,25']); // cy = 30
+    expect(linjeraBlock(m, ['a'], 'topp')).toBe(m); // ett block: inget att linjera mot
+  });
+
+  it('fördela och flytta flera', () => {
+    let m = nyMall('m', 'x', '');
+    m = laggTillBlock(m, 'a', 'kpi', 0, 0); m = laggTillBlock(m, 'b', 'kpi', 50, 0); m = laggTillBlock(m, 'c', 'kpi', 140, 0);
+    const f = fordelaBlock(m, ['a', 'b', 'c'], 'vagratt');
+    expect(f.block.map((b) => b.x)).toEqual([0, 70, 140]); // 182 − 126 = 56 / 2 = 28 mellanrum
+    const fl = flyttaFlera(m, ['a', 'b'], 10, 5);
+    expect(fl.block.map((b) => `${b.x},${b.y}`)).toEqual(['10,5', '60,5', '140,0']);
+  });
+});

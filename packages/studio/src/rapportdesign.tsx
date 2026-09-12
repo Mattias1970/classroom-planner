@@ -10,10 +10,11 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  A4, BLOCK_NAMN, BLOCK_STANDARD, RUTNAT, andraStorlek, arDatablock, dupliceraBlock, elevanalys, enkelRapport, flyttaBlock,
-  fyllText, laggTillBlock, nyMall, nyttId, ordnaBlock, ritordning, socrativeElevLank, sparaRapportmall, standardmall,
-  studieguide, taBortBlock, taBortRapportmall, tolkaRapportmall, uppdateraBlock,
-  type Block, type BlockTyp, type DashboardFilter, type Rapportmall, type Struktur,
+  A4, BLOCK_NAMN, BLOCK_STANDARD, RUTNAT, RUTNAT_VAL, TYPNAMN, andraStorlek, antalSidor, arDatablock, blockSida, dupliceraBlock,
+  elevanalys, enkelRapport, flyttaBlock, flyttaFlera, fordelaBlock, fyllText, laggTillBlock, laggTillSida, linjeraBlock, nyMall, nyttId,
+  ordnaBlock, ritordning, socrativeElevLank, sparaRapportmall, standardmall, studieguide, taBortBlock, taBortRapportmall, taBortSida,
+  tillSida, tolkaRapportmall, uppdateraBlock,
+  type Block, type BlockTyp, type DashboardFilter, type Linjering, type Rapportmall, type Struktur,
 } from '@planner/kernel';
 import { lasStruktur } from './store.js';
 import { hamtaFilerFranGitHub, konfigKomplett, lasGitHubConfig, sparaFilTillGitHub } from './github.js';
@@ -142,9 +143,33 @@ function BlockInnehall({ b, d, s }: { b: Block; d: Elevdata; s: Struktur }) {
     case 'fragematris': {
       const m = d.analys?.matris;
       if (m === undefined || m.fragor.length === 0) return (<>{rubrik}{tom('Ingen frågedata')}</>);
-      return (<>{rubrik ?? <div className="rd-blockrubrik">Fråga för fråga</div>}<div className="rd-matris" style={{ gridTemplateColumns: `auto repeat(${m.fragor.length}, 1fr)` }}>
-        {m.rader.map((r) => (<div key={r.nyckel} className="rd-matrisrad"><small>{r.datum.slice(5).replace('-', '/')}</small>{r.elevCeller?.map((c, i) => <i key={i} className={c === true ? 'ok' : c === false ? 'ej' : ''} />)}</div>))}
-      </div></>);
+      // Samma uppställning som i SuperTeach: gruppraden med quiznamn och delkapitel,
+      // frågenummer, sedan en rad per förhör med typ och quiz — grön/röd/tom per fråga
+      const kolumner = `auto auto auto repeat(${m.fragor.length}, minmax(0, 1fr))`;
+      return (<>{rubrik ?? <div className="rd-blockrubrik">Fråga för fråga</div>}
+        <div className="rd-fm" style={{ gridTemplateColumns: kolumner }}>
+          <div className="rd-fm-horn" style={{ gridColumn: '1 / span 3' }} />
+          {m.grupper.map((g) => (
+            <div key={g.kod} className="rd-fm-grupp" style={{ gridColumn: `${3 + g.fran} / span ${g.till - g.fran + 1}` }} title={g.ursprung}>
+              <b>{g.ursprung}</b><small>{g.kod !== '—' ? `${g.kod} · ` : ''}{g.till - g.fran + 1} frågor</small>
+            </div>
+          ))}
+          <div className="rd-fm-h">Datum</div><div className="rd-fm-h">Typ</div><div className="rd-fm-h">Quiz</div>
+          {m.fragor.map((fr) => <div key={fr.nr} className={`rd-fm-nr${m.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}`} title={fr.fraga}>{fr.nr}</div>)}
+          {m.rader.map((r) => (
+            <React.Fragment key={r.nyckel}>
+              <div className="rd-fm-c">{r.datum.slice(5).replace('-', '/')}{r.tid !== undefined ? ` ${r.tid}` : ''}</div>
+              <div className={`rd-fm-c rd-fm-typ ${r.kalla}`}>{TYPNAMN[r.kalla]}</div>
+              <div className="rd-fm-c rd-fm-quiz" title={r.prov}>{r.prov}</div>
+              {m.fragor.map((fr, i) => {
+                const c = r.celler[i]; const e = r.elevCeller?.[i];
+                const klass = c === null ? 'tom' : e === true ? 'ok' : e === false ? 'ej' : 'ejgjord';
+                return <i key={fr.nr} className={`rd-fm-ruta ${klass}${m.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}`} title={c === null ? 'ingick inte' : e === true ? `Fråga ${fr.nr}: rätt` : e === false ? `Fråga ${fr.nr}: fel` : 'ej gjord'} />;
+              })}
+            </React.Fragment>
+          ))}
+        </div>
+      </>);
     }
     case 'begrepp-kvar': case 'begrepp-vant': {
       const lista = b.typ === 'begrepp-kvar' ? d.enkel?.kvar ?? [] : d.enkel?.vant ?? [];
@@ -177,7 +202,13 @@ export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: ()
   const [mallId, setMallId] = useState(mallar[0]?.id ?? '');
   const [utkast, setUtkast] = useState<Rapportmall | null>(null);
   const mall = utkast ?? mallar.find((m) => m.id === mallId) ?? null;
-  const [vald, setVald] = useState<string | null>(null);
+  // Markering: flera block med Shift-klick; 'vald' är det senast markerade (egenskaper visar det)
+  const [markerade, setMarkerade] = useState<string[]>([]);
+  const vald = markerade.length > 0 ? markerade[markerade.length - 1] : null;
+  const setVald = (id: string | null, laggTillMark = false) =>
+    setMarkerade((f) => (id === null ? [] : laggTillMark ? (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]) : [id]));
+  const [sida, setSida] = useState(1);
+  const [snappPa, setSnappPa] = useState(true);
   const [skala, setSkala] = useState(2.6); // px per mm
   const klasser = s.klasser;
   const [klassId, setKlassId] = useState(klasser[0]?.id ?? '');
@@ -207,43 +238,50 @@ export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: ()
   const laggTill = (typ: BlockTyp) => {
     if (mall === null) return;
     const id = nyttId('blk');
-    satt(laggTillBlock(mall, id, typ, 20 + (mall.block.length % 5) * 5, 20 + (mall.block.length % 5) * 5, idag));
+    satt(laggTillBlock(mall, id, typ, 20 + (mall.block.length % 5) * 5, 20 + (mall.block.length % 5) * 5, idag, sida));
     setVald(id);
   };
 
   // Drag och storleksändring i mm via pekare
-  const drag = useRef<{ id: string; lage: 'flytt' | 'storlek'; startX: number; startY: number; x0: number; y0: number; b0: number; h0: number } | null>(null);
+  const drag = useRef<{ id: string; lage: 'flytt' | 'storlek'; startX: number; startY: number; start: Rapportmall; ids: string[] } | null>(null);
   const pekareNed = (ev: React.PointerEvent, b: Block, lage: 'flytt' | 'storlek') => {
     ev.stopPropagation(); ev.preventDefault();
+    if (mall === null) return;
     (ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId);
-    drag.current = { id: b.id, lage, startX: ev.clientX, startY: ev.clientY, x0: b.x, y0: b.y, b0: b.b, h0: b.h };
-    setVald(b.id);
+    const ids = markerade.includes(b.id) ? markerade : [b.id];
+    if (!markerade.includes(b.id)) setVald(b.id, ev.shiftKey);
+    drag.current = { id: b.id, lage, startX: ev.clientX, startY: ev.clientY, start: mall, ids: ev.shiftKey ? [...ids, b.id] : ids };
   };
   const pekareRor = (ev: React.PointerEvent) => {
-    const d = drag.current; if (d === null || mall === null) return;
+    const d = drag.current; if (d === null) return;
     const dx = (ev.clientX - d.startX) / skala; const dy = (ev.clientY - d.startY) / skala;
-    if (d.lage === 'flytt') satt(flyttaBlock(mall, d.id, d.x0 + dx, d.y0 + dy));
-    else satt(andraStorlek(mall, d.id, d.b0 + dx, d.h0 + dy));
+    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+    const b0 = d.start.block.find((x) => x.id === d.id); if (b0 === undefined) return;
+    if (d.lage === 'flytt') satt(flyttaFlera(d.start, d.ids, dx, dy, snappPa));
+    else satt(andraStorlek(d.start, d.id, b0.b + dx, b0.h + dy, snappPa));
   };
   const pekareUpp = () => { drag.current = null; };
 
   // Tangentbord: piltangenter flyttar 5 mm, Delete tar bort, Ctrl+D duplicerar
   useEffect(() => {
     const h = (ev: KeyboardEvent) => {
-      if (mall === null || vald === null) return;
+      if (mall === null) return;
       const mal = ev.target as HTMLElement | null;
       if (mal !== null && typeof mal.closest === 'function' && mal.closest('input,textarea,select') !== null) return;
-      const b = mall.block.find((x) => x.id === vald); if (b === undefined) return;
-      if (ev.key === 'Delete' || ev.key === 'Backspace') { satt(taBortBlock(mall, vald)); setVald(null); ev.preventDefault(); }
-      else if (ev.key === 'ArrowLeft') { satt(flyttaBlock(mall, vald, b.x - RUTNAT, b.y)); ev.preventDefault(); }
-      else if (ev.key === 'ArrowRight') { satt(flyttaBlock(mall, vald, b.x + RUTNAT, b.y)); ev.preventDefault(); }
-      else if (ev.key === 'ArrowUp') { satt(flyttaBlock(mall, vald, b.x, b.y - RUTNAT)); ev.preventDefault(); }
-      else if (ev.key === 'ArrowDown') { satt(flyttaBlock(mall, vald, b.x, b.y + RUTNAT)); ev.preventDefault(); }
-      else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'd') { satt(dupliceraBlock(mall, vald, nyttId('blk'))); ev.preventDefault(); }
+      if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'a') { setMarkerade(ritordning(mall, sida).map((b) => b.id)); ev.preventDefault(); return; }
+      if (ev.key === 'Escape') { setMarkerade([]); return; }
+      if (markerade.length === 0) return;
+      const steg = ev.shiftKey ? 1 : (mall.rutnat ?? RUTNAT) || 1;
+      if (ev.key === 'Delete' || ev.key === 'Backspace') { let m2 = mall; for (const id of markerade) m2 = taBortBlock(m2, id); satt(m2); setMarkerade([]); ev.preventDefault(); }
+      else if (ev.key === 'ArrowLeft') { satt(flyttaFlera(mall, markerade, -steg, 0, !ev.shiftKey)); ev.preventDefault(); }
+      else if (ev.key === 'ArrowRight') { satt(flyttaFlera(mall, markerade, steg, 0, !ev.shiftKey)); ev.preventDefault(); }
+      else if (ev.key === 'ArrowUp') { satt(flyttaFlera(mall, markerade, 0, -steg, !ev.shiftKey)); ev.preventDefault(); }
+      else if (ev.key === 'ArrowDown') { satt(flyttaFlera(mall, markerade, 0, steg, !ev.shiftKey)); ev.preventDefault(); }
+      else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'd') { let m2 = mall; for (const id of markerade) m2 = dupliceraBlock(m2, id, nyttId('blk')); satt(m2); ev.preventDefault(); }
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [mall, vald]);
+  }, [mall, markerade, sida]);
 
   // GitHub: rapportmallar/<id>.json
   const synkaUpp = async () => {
@@ -325,18 +363,48 @@ export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: ()
             <button className="btn sec sm" onClick={() => window.print()}>🖨 Skriv ut / PDF</button>
             <button className="btn" disabled={!andrad} onClick={spara}>💾 Spara mall{andrad ? ' *' : ''}</button>
           </div>
+          <div className="rad rd-verktyg2 no-print">
+            {/* Sidor */}
+            <div className="rd-sidflikar" role="tablist" aria-label="Sidor">
+              {Array.from({ length: antalSidor(mall) }, (_, i) => i + 1).map((n) => (
+                <button key={n} role="tab" aria-selected={sida === n} className={`rd-sidflik${sida === n ? ' act' : ''}`}
+                  onClick={() => { setSida(n); setMarkerade([]); }}>Sida {n} <small>{ritordning(mall, n).length}</small></button>
+              ))}
+              <button className="rd-sidflik" title="Lägg till sida" onClick={() => { satt(laggTillSida(mall)); setSida(antalSidor(mall) + 1); setMarkerade([]); }}>＋</button>
+              {antalSidor(mall) > 1 && <button className="rd-sidflik" title={`Ta bort sida ${sida} och dess block`}
+                onClick={() => { if (window.confirm(`Ta bort sida ${sida}? Blocken på sidan försvinner.`)) { satt(taBortSida(mall, sida)); setSida(Math.max(1, sida - 1)); setMarkerade([]); } }}>🗑</button>}
+            </div>
+            <span className="rd-sep" />
+            {/* Rutnät / snapp */}
+            <label className="small">Rutnät{' '}
+              <select aria-label="Rutnät" value={mall.rutnat ?? RUTNAT} onChange={(e) => satt({ ...mall, rutnat: Number(e.target.value) })}>
+                {RUTNAT_VAL.map((r) => <option key={r} value={r}>{r === 0 ? 'fritt' : `${r} mm`}</option>)}
+              </select></label>
+            <label className="small"><input type="checkbox" checked={snappPa} onChange={(e) => setSnappPa(e.target.checked)} /> snapp</label>
+            <span className="rd-sep" />
+            {/* Linjering — kräver minst två markerade */}
+            <div className="rd-linjera" aria-label="Linjera markerade">
+              {([['vanster', '⫷', 'Vänsterkanter'], ['hcenter', '⫶', 'Mitt vågrätt'], ['hoger', '⫸', 'Högerkanter'],
+                ['topp', '⫠', 'Överkanter'], ['vcenter', '⫲', 'Mitt lodrätt'], ['botten', '⫡', 'Underkanter']] as Array<[Linjering, string, string]>).map(([l, ikon, titel]) => (
+                <button key={l} className="rd-linj" title={`${titel} (kräver 2+ markerade)`} aria-label={titel} disabled={markerade.length < 2} onClick={() => satt(linjeraBlock(mall, markerade, l))}>{ikon}</button>
+              ))}
+              <button className="rd-linj" title="Fördela jämnt vågrätt (3+)" aria-label="Fördela vågrätt" disabled={markerade.length < 3} onClick={() => satt(fordelaBlock(mall, markerade, 'vagratt'))}>↔</button>
+              <button className="rd-linj" title="Fördela jämnt lodrätt (3+)" aria-label="Fördela lodrätt" disabled={markerade.length < 3} onClick={() => satt(fordelaBlock(mall, markerade, 'lodratt'))}>↕</button>
+            </div>
+            {markerade.length > 0 && <small className="muted">{markerade.length} markerade · Shift+klick lägger till · Ctrl+A alla på sidan</small>}
+          </div>
           <div className="rd-arkram" onPointerMove={pekareRor} onPointerUp={pekareUpp} onPointerCancel={pekareUpp}>
             <div ref={arkRef} className="rd-ark" style={{ width: A4.bredd * skala, height: A4.hojd * skala, ['--mm' as string]: `${skala}px` }}
-              onPointerDown={() => setVald(null)}>
-              {ritordning(mall).map((b) => {
-                const ar = vald === b.id;
+              onPointerDown={() => setMarkerade([])}>
+              {ritordning(mall, sida).map((b) => {
+                const ar = markerade.includes(b.id);
                 return (
                   <div key={b.id} className={`rd-block ${b.typ}${ar ? ' vald' : ''}`}
                     style={blockStil(b)}
                     onPointerDown={(ev) => pekareNed(ev, b, 'flytt')}>
                     <BlockInnehall b={b} d={data} s={s} />
-                    {ar && <div className="rd-handtag no-print" onPointerDown={(ev) => pekareNed(ev, b, 'storlek')} title="Dra för att ändra storlek" />}
-                    {ar && <div className="rd-etikett no-print">{BLOCK_NAMN[b.typ]} · {b.b}×{b.h} mm</div>}
+                    {ar && vald === b.id && <div className="rd-handtag no-print" onPointerDown={(ev) => pekareNed(ev, b, 'storlek')} title="Dra för att ändra storlek" />}
+                    {ar && vald === b.id && <div className="rd-etikett no-print">{BLOCK_NAMN[b.typ]} · {b.b}×{b.h} mm</div>}
                   </div>
                 );
               })}
@@ -392,11 +460,16 @@ export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: ()
                 <label className="rd-check"><input type="checkbox" checked={valtBlock.stil?.fet ?? false} onChange={(e) => uppd({ stil: { fet: e.target.checked } })} /> Fet</label>
               </>)}
             </div>
+            {antalSidor(mall!) > 1 && (
+              <label>Sida <select aria-label="Blockets sida" value={blockSida(valtBlock)} onChange={(e) => { satt(tillSida(mall!, markerade, Number(e.target.value))); setSida(Number(e.target.value)); }}>
+                {Array.from({ length: antalSidor(mall!) }, (_, i) => i + 1).map((n) => <option key={n} value={n}>Sida {n}</option>)}
+              </select></label>
+            )}
             <div className="rad" style={{ gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
               <button className="btn sec sm" onClick={() => satt(ordnaBlock(mall!, vald!, 'fram'))}>⬆ Främst</button>
               <button className="btn sec sm" onClick={() => satt(ordnaBlock(mall!, vald!, 'bak'))}>⬇ Bakerst</button>
               <button className="btn sec sm" onClick={() => satt(dupliceraBlock(mall!, vald!, nyttId('blk')))}>⧉ Duplicera</button>
-              <button className="btn sec sm" onClick={() => { satt(taBortBlock(mall!, vald!)); setVald(null); }}>🗑 Ta bort</button>
+              <button className="btn sec sm" onClick={() => { let m2 = mall!; for (const id of markerade) m2 = taBortBlock(m2, id); satt(m2); setMarkerade([]); }}>🗑 Ta bort{markerade.length > 1 ? ` (${markerade.length})` : ''}</button>
               <button className="btn sec sm" onClick={() => uppd({ stil: { bakgrund: undefined, kant: undefined } })} title="Ta bort bakgrund och kant">◻ Rensa stil</button>
             </div>
           </div>
@@ -411,11 +484,15 @@ export function MallRendering({ s, mall, elevId, klassId, amneId }: { s: Struktu
   const data = anvandElevdata(s, elevId, klassId, amneId);
   const skala = 3;
   return (
-    <div className="rd-ark rd-utskrift" style={{ width: A4.bredd * skala, height: A4.hojd * skala, ['--mm' as string]: `${skala}px` }}>
-      {ritordning(mall).map((b) => (
-          <div key={b.id} className={`rd-block ${b.typ}`} style={blockStil(b)}>
-            <BlockInnehall b={b} d={data} s={s} />
-          </div>
+    <div className="rd-sidor">
+      {Array.from({ length: antalSidor(mall) }, (_, i) => i + 1).map((n) => (
+        <div key={n} className="rd-ark rd-utskrift" style={{ width: A4.bredd * skala, height: A4.hojd * skala, ['--mm' as string]: `${skala}px` }}>
+          {ritordning(mall, n).map((b) => (
+            <div key={b.id} className={`rd-block ${b.typ}`} style={blockStil(b)}>
+              <BlockInnehall b={b} d={data} s={s} />
+            </div>
+          ))}
+        </div>
       ))}
     </div>
   );
