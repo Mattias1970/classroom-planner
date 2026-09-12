@@ -8,12 +8,12 @@
  * Mallen är kernel-data (Rapportmall). All layoutlogik ligger i kernel; den här
  * filen sköter bara pekare, tangenter och rendering av blocken med elevens data.
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   A4, BLOCK_NAMN, BLOCK_STANDARD, RUTNAT, RUTNAT_VAL, TYPNAMN, andraStorlek, antalSidor, arDatablock, blockSida, dupliceraBlock,
   elevanalys, enkelRapport, flyttaBlock, flyttaFlera, fordelaBlock, fyllText, laggTillBlock, laggTillSida, linjeraBlock, nyMall, nyttId,
   ordnaBlock, ritordning, socrativeElevLank, sparaRapportmall, standardmall, studieguide, taBortBlock, taBortRapportmall, taBortSida,
-  tillSida, tolkaRapportmall, uppdateraBlock,
+  tillSida, tolkaRapportmall, uppdateraBlock, vaxBlock,
   type Block, type BlockTyp, type DashboardFilter, type Linjering, type Rapportmall, type Struktur,
 } from '@planner/kernel';
 import { lasStruktur } from './store.js';
@@ -126,15 +126,15 @@ function BlockInnehall({ b, d, s }: { b: Block; d: Elevdata; s: Struktur }) {
     case 'rad': return (<>{rubrik}{(d.analys?.rad ?? []).length === 0 ? tom('Inga råd') : d.analys!.rad.map((r, i) => <div key={i} className={`rd-punkt ${r.ton}`}><b>{r.rubrik}</b><p>{r.text}</p></div>)}</>);
     case 'laxkurva': {
       const l = d.enkel?.laxforhor ?? [];
-      return (<>{rubrik ?? <div className="rd-blockrubrik">Läxförhör</div>}{l.length === 0 ? tom('Inga läxförhör') : <LinjeMm varden={l.map((x) => x.procent)} etiketter={l.map((x) => x.datum.slice(5).replace('-', '/'))} krav={90} />}</>);
+      return (<div className="rd-grafram">{rubrik ?? <div className="rd-blockrubrik">Läxförhör</div>}{l.length === 0 ? tom('Inga läxförhör') : <div className="rd-grafyta"><LinjeMm varden={l.map((x) => x.procent)} etiketter={l.map((x) => x.datum.slice(5).replace('-', '/'))} krav={90} /></div>}</div>);
     }
     case 'exitlax': {
       const e = d.enkel?.exitTillLax ?? [];
-      return (<>{rubrik ?? <div className="rd-blockrubrik">Exit ticket → läxförhör</div>}{e.length === 0 ? tom('Inga par') : <StaplarMm par={e.map((x) => ({ kod: x.kod, a: x.exitProcent, b: x.laxProcent }))} />}</>);
+      return (<div className="rd-grafram">{rubrik ?? <div className="rd-blockrubrik">Exit ticket → läxförhör</div>}{e.length === 0 ? tom('Inga par') : <div className="rd-grafyta"><StaplarMm par={e.map((x) => ({ kod: x.kod, a: x.exitProcent, b: x.laxProcent }))} /></div>}</div>);
     }
     case 'delkapitel': {
       const nu = d.analys?.nu.delkapitel ?? [];
-      return (<>{rubrik ?? <div className="rd-blockrubrik">Delkapitel just nu</div>}{nu.length === 0 ? tom('Inga delkapitel') : <StaplarMm par={nu.map((x) => ({ kod: x.kod, a: 0, b: x.procent ?? 0 }))} />}</>);
+      return (<div className="rd-grafram">{rubrik ?? <div className="rd-blockrubrik">Delkapitel just nu</div>}{nu.length === 0 ? tom('Inga delkapitel') : <div className="rd-grafyta"><StaplarMm par={nu.map((x) => ({ kod: x.kod, a: 0, b: x.procent ?? 0 }))} /></div>}</div>);
     }
     case 'narvaro': {
       const a = d.analys;
@@ -194,6 +194,31 @@ function blockStil(b: Block): React.CSSProperties {
   };
 }
 
+/**
+ * Automatisk höjd. Efter varje render mäts blocken: om innehållet är högre än
+ * blocket växer blocket (kernel vaxBlock — raden följer med, allt under flyttas).
+ * Höjden växer bara, aldrig krymper, så loopen konvergerar när allt får plats.
+ * Grafer växer inte (de skalas); block med autoHojd=false lämnas i fred.
+ */
+const VAXER_INTE: BlockTyp[] = ['platta', 'bild', 'qr', 'laxkurva', 'exitlax', 'delkapitel', 'kpi', 'narvaro'];
+
+function useAutoHojd(mall: Rapportmall | null, aktiv: boolean, skala: number, andra: (m: Rapportmall) => void) {
+  const refs = useRef(new Map<string, HTMLDivElement>());
+  useLayoutEffect(() => {
+    if (!aktiv || mall === null) return;
+    let ny = mall; let andrat = false;
+    for (const b of mall.block) {
+      if (b.autoHojd === false || VAXER_INTE.includes(b.typ)) continue;
+      const el = refs.current.get(b.id);
+      if (el === undefined) continue;
+      const behov = el.scrollHeight / skala; // mm
+      if (behov > b.h + 1) { ny = vaxBlock(ny, b.id, behov + (b.stil?.marginal ?? 2) * 2); andrat = true; }
+    }
+    if (andrat) andra(ny);
+  });
+  return (id: string) => (el: HTMLDivElement | null) => { if (el === null) refs.current.delete(id); else refs.current.set(id, el); };
+}
+
 // ── Designern ────────────────────────────────────────────────
 
 export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur, m: string) => void; meddela: (m: string) => void }) {
@@ -209,6 +234,7 @@ export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: ()
     setMarkerade((f) => (id === null ? [] : laggTillMark ? (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]) : [id]));
   const [sida, setSida] = useState(1);
   const [snappPa, setSnappPa] = useState(true);
+  const [autoHojd, setAutoHojd] = useState(true);
   const [skala, setSkala] = useState(2.6); // px per mm
   const klasser = s.klasser;
   const [klassId, setKlassId] = useState(klasser[0]?.id ?? '');
@@ -223,6 +249,7 @@ export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: ()
   const andrad = utkast !== null;
 
   const satt = (m: Rapportmall) => setUtkast(m);
+  const matRef = useAutoHojd(mall, autoHojd, skala, satt);
   const nyMallKnapp = () => { const id = nyttId('mall'); satt(nyMall(id, 'Ny mall', idag)); setMallId(id); setVald(null); };
   const standard = () => { const id = nyttId('mall'); satt(standardmall(id, idag)); setMallId(id); setVald(null); };
   const spara = () => {
@@ -381,6 +408,7 @@ export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: ()
                 {RUTNAT_VAL.map((r) => <option key={r} value={r}>{r === 0 ? 'fritt' : `${r} mm`}</option>)}
               </select></label>
             <label className="small"><input type="checkbox" checked={snappPa} onChange={(e) => setSnappPa(e.target.checked)} /> snapp</label>
+            <label className="small" title="Block vars innehåll inte får plats växer; block på samma rad följer med och allt under flyttas ned"><input type="checkbox" checked={autoHojd} onChange={(e) => setAutoHojd(e.target.checked)} /> auto-höjd</label>
             <span className="rd-sep" />
             {/* Linjering — kräver minst två markerade */}
             <div className="rd-linjera" aria-label="Linjera markerade">
@@ -399,7 +427,7 @@ export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: ()
               {ritordning(mall, sida).map((b) => {
                 const ar = markerade.includes(b.id);
                 return (
-                  <div key={b.id} className={`rd-block ${b.typ}${ar ? ' vald' : ''}`}
+                  <div key={b.id} ref={matRef(b.id)} className={`rd-block ${b.typ}${ar ? ' vald' : ''}`}
                     style={blockStil(b)}
                     onPointerDown={(ev) => pekareNed(ev, b, 'flytt')}>
                     <BlockInnehall b={b} d={data} s={s} />
@@ -437,6 +465,7 @@ export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: ()
                 <small className="muted">{'{elev} {amne} {klass} {datum}'} byts ut</small></label>
             )}
             {arDatablock(valtBlock.typ) && <label>Rubrik <input aria-label="Blockets rubrik" value={valtBlock.rubrik ?? ''} placeholder="(standard)" onChange={(e) => uppd({ rubrik: e.target.value })} /></label>}
+            {!VAXER_INTE.includes(valtBlock.typ) && <label className="rd-check"><input type="checkbox" checked={valtBlock.autoHojd !== false} onChange={(e) => uppd({ autoHojd: e.target.checked })} /> Växer med innehållet</label>}
             {valtBlock.typ === 'kpi' && (
               <label>Källa <select aria-label="KPI-källa" value={valtBlock.kalla ?? 'helhet'} onChange={(e) => uppd({ kalla: e.target.value as Block['kalla'] })}>{KALLOR.map(([id, n]) => <option key={id} value={id}>{n}</option>)}</select></label>
             )}
@@ -480,15 +509,19 @@ export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: ()
 }
 
 /** Renderar en mall för en elev (används av Rapporter → Skriv ut med mall). */
-export function MallRendering({ s, mall, elevId, klassId, amneId }: { s: Struktur; mall: Rapportmall; elevId: string; klassId: string; amneId: string }) {
+export function MallRendering({ s, mall: malln, elevId, klassId, amneId }: { s: Struktur; mall: Rapportmall; elevId: string; klassId: string; amneId: string }) {
   const data = anvandElevdata(s, elevId, klassId, amneId);
   const skala = 3;
+  // Utskriften får en egen kopia som växer efter elevens innehåll — mallen ändras inte
+  const [mall, setMall] = useState(malln);
+  useEffect(() => { setMall(malln); }, [malln, elevId]);
+  const matRef = useAutoHojd(mall, true, skala, setMall);
   return (
     <div className="rd-sidor">
       {Array.from({ length: antalSidor(mall) }, (_, i) => i + 1).map((n) => (
         <div key={n} className="rd-ark rd-utskrift" style={{ width: A4.bredd * skala, height: A4.hojd * skala, ['--mm' as string]: `${skala}px` }}>
           {ritordning(mall, n).map((b) => (
-            <div key={b.id} className={`rd-block ${b.typ}`} style={blockStil(b)}>
+            <div key={b.id} ref={matRef(b.id)} className={`rd-block ${b.typ}`} style={blockStil(b)}>
               <BlockInnehall b={b} d={data} s={s} />
             </div>
           ))}

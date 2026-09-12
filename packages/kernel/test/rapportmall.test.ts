@@ -121,3 +121,32 @@ describe('Del 106: sidor, rutnät och linjering', async () => {
     expect(fl.block.map((b) => `${b.x},${b.y}`)).toEqual(['10,5', '60,5', '140,0']);
   });
 });
+
+describe('Del 107: vaxBlock — blocket växer, raden följer, allt under flyttas ned', async () => {
+  const { vaxBlock, antalSidor, blockSida } = await import('../src/domain/rapportmall.js');
+  function layout() {
+    let m = nyMall('m', 'x', '');
+    m = laggTillBlock(m, 'a', 'kpi', 20, 20);   // rad 1, 42×26
+    m = laggTillBlock(m, 'b', 'kpi', 70, 20);   // rad 1
+    m = laggTillBlock(m, 'c', 'text', 20, 60);  // under, 170×24
+    m = laggTillBlock(m, 'd', 'text', 20, 240); // långt ner, 24 hög
+    return m;
+  }
+  it('växer, raden får samma höjd, blocken under flyttas lika mycket', () => {
+    const m = vaxBlock(layout(), 'a', 50);
+    const b = (id: string) => m.block.find((x) => x.id === id)!;
+    expect(b('a').h).toBe(50);
+    expect(b('b').h).toBe(50); // samma rad följer med
+    expect(b('c').y).toBe(84); // 60 + 24
+    expect(b('d').y).toBe(264);
+    expect(vaxBlock(m, 'a', 30)).toBe(m); // krymper aldrig
+  });
+  it('block som inte längre ryms hamnar överst på nästa sida i samma ordning', () => {
+    const m = vaxBlock(layout(), 'a', 80); // delta 54: d skulle hamna på y=294, under sidkanten
+    const d = m.block.find((x) => x.id === 'd')!;
+    expect(antalSidor(m)).toBe(2);
+    expect(blockSida(d)).toBe(2);
+    expect(d.y).toBe(15); // marginalen
+    expect(blockSida(m.block.find((x) => x.id === 'c')!)).toBe(1);
+  });
+});

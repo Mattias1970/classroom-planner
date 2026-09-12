@@ -909,3 +909,8 @@ input.fel { border-color: #B71C1C; }
 .rd-fm-ruta.ok { background: #4CAF50; } .rd-fm-ruta.ej { background: #D32F2F; } .rd-fm-ruta.tom { background: #F7F8FA; } .rd-fm-ruta.ejgjord { background: #E4E8EF; }
 .rd-fm .gstart { box-shadow: calc(var(--mm) * -0.5) 0 0 0 #C9D2E0; }
 @media print { .rd-sidor { display: block; } .rd-utskrift { page-break-after: always; break-after: page; } .rd-utskrift:last-child { page-break-after: auto; break-after: auto; } }
+
+/* Del 107: grafer i egen ram, auto-höjd */
+.rd-grafram { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.rd-grafyta { flex: 1 1 0; min-height: 0; }
+.rd-grafyta .rd-graf { width: 100%; height: 100%; }

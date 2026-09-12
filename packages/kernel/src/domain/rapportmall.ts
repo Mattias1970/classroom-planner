@@ -56,6 +56,8 @@ export interface Block {
   bild?: string;
   /** Socrative-rum för QR-block. */
   rum?: string;
+  /** false = låst höjd; annars växer blocket när innehållet inte får plats. */
+  autoHojd?: boolean;
   stil?: BlockStil;
 }
 
@@ -279,6 +281,7 @@ export function tolkaRapportmall(json: string): Rapportmall {
       ...(x.rubrik !== undefined ? { rubrik: String(x.rubrik) } : {}), ...(x.text !== undefined ? { text: String(x.text) } : {}),
       ...(x.kalla !== undefined ? { kalla: x.kalla } : {}), ...(x.bild !== undefined ? { bild: String(x.bild) } : {}),
       ...(x.rum !== undefined ? { rum: String(x.rum) } : {}), ...(x.stil !== undefined ? { stil: x.stil } : {}),
+      ...(x.autoHojd !== undefined ? { autoHojd: Boolean(x.autoHojd) } : {}),
     };
   });
   return {
@@ -302,4 +305,46 @@ export function standardmall(id: string, idag: string): Rapportmall {
   m = laggTillBlock(m, `${id}-vant`, 'begrepp-vant', 108, 180);
   m = laggTillBlock(m, `${id}-rad`, 'rad', 20, 245);
   return m;
+}
+
+// ── Del 107: automatisk höjd — blocket växer, raden följer, allt under flyttas ned ──
+
+/** Tolerans i mm för "samma rad" (samma överkant). */
+const RAD_TOLERANS = 2;
+
+/**
+ * Ger ett block ny höjd när innehållet inte får plats. Block på samma rad
+ * (samma överkant) som är lägre får samma höjd, och alla block under raden
+ * flyttas nedåt lika mycket. Block som då hamnar utanför sidan flyttas till
+ * nästa sida (som skapas vid behov), överst, i samma ordning som förut.
+ */
+export function vaxBlock(m: Rapportmall, id: string, nyHojd: number): Rapportmall {
+  const b = m.block.find((x) => x.id === id);
+  if (b === undefined) return m;
+  const hojd = Math.max(b.h, Math.ceil(nyHojd));
+  const delta = hojd - b.h;
+  if (delta <= 0) return m;
+  const sida = blockSida(b);
+  const gammalBotten = b.y + b.h;
+  const radIds = new Set(m.block.filter((x) => x.id !== id && blockSida(x) === sida && Math.abs(x.y - b.y) <= RAD_TOLERANS && x.h < hojd).map((x) => x.id));
+  const under = new Set(m.block.filter((x) => x.id !== id && blockSida(x) === sida && !radIds.has(x.id) && x.y >= gammalBotten - RAD_TOLERANS).map((x) => x.id));
+  let block = m.block.map((x) => {
+    if (x.id === id) return { ...x, h: hojd };
+    if (radIds.has(x.id)) return { ...x, h: hojd };
+    if (under.has(x.id)) return { ...x, y: x.y + delta };
+    return x;
+  });
+  // Det som inte längre ryms på sidan går till nästa sida, överst, i samma ordning
+  let antal = antalSidor(m);
+  const flyttas = block.filter((x) => blockSida(x) === sida && x.y + x.h > A4.hojd - m.marginal / 2).sort((p, q) => p.y - q.y || p.x - q.x);
+  if (flyttas.length > 0) {
+    const nasta = sida + 1;
+    if (nasta > antal) antal = nasta;
+    // Behåll inbördes avstånd: första flyttade blocket hamnar vid marginalen
+    const forsta = flyttas[0].y;
+    const upptagen = Math.max(0, ...block.filter((x) => blockSida(x) === nasta).map((x) => x.y + x.h));
+    const ids = new Set(flyttas.map((x) => x.id));
+    block = block.map((x) => (ids.has(x.id) ? { ...x, sida: nasta, y: Math.min(A4.hojd - x.h, upptagen + m.marginal + (x.y - forsta)) } : x));
+  }
+  return { ...m, antalSidor: antal, block };
 }
