@@ -107,7 +107,7 @@ export function studieguide(sIn: Struktur, elevId: string, f: DashboardFilter & 
   const forklaringar: Record<string, string> = {};
   const delkapitelBok: RapportDelkapitel[] = rapport?.kapitel.flatMap((k) => k.delkapitel) ?? [];
   for (const d of delkapitelBok) for (const b of d.begrepp) if (b.forklaring !== null) forklaringar[b.begrepp] = b.forklaring;
-  const fragaTillBegrepp = (fr: FragaNu): string => (Object.keys(forklaringar).length === 0 ? fr.fraga : (begreppForFraga(forklaringar, fr.fraga) ?? fr.fraga));
+  const fragaTillBegrepp = (fr: FragaNu): string => fr.begrepp ?? (Object.keys(forklaringar).length === 0 ? fr.fraga : (begreppForFraga(forklaringar, fr.fraga) ?? fr.fraga));
 
   // Per delkapitel: vad sitter, vad är fel, vad är otestat
   const delar: StudieDel[] = [];

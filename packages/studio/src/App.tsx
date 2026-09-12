@@ -3322,6 +3322,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
                       ))}</div>
                       {tkSteg?.elevId === e.elev.id && e.steg[tkSteg.index] !== undefined && (() => {
                         const st = e.steg[tkSteg.index];
+                        // Steget bär redan 'begrepp — innebörd' ur de rätta svaren; boken är reserv
                         const rad = (fraga: string) => { const b = tkBegrepp(fraga); return b === null ? fraga : `${b} — ${fraga}`; };
                         return (
                           <div className="st-tk-detalj">
@@ -3331,11 +3332,11 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
                               <button className="btn sec sm" onClick={() => setTkSteg(null)}>✕</button></div>
                             {st.glomtFragor.length > 0 && (<>
                               <div className="st-nu-rubrik kvar">Glömt ({st.glomtFragor.length})</div>
-                              <ul className="small st-begreppslista">{st.glomtFragor.map((q) => <li key={q}>{rad(q)}</li>)}</ul>
+                              <ul className="small st-begreppslista">{st.glomtBegrepp.map((q, i) => <li key={i}>{q.includes(' — ') ? q : rad(q)}</li>)}</ul>
                             </>)}
                             {st.lartFragor.length > 0 && (<>
                               <div className="st-nu-rubrik fixat">Lärt ({st.lartFragor.length})</div>
-                              <ul className="small st-begreppslista">{st.lartFragor.map((q) => <li key={q}>{rad(q)}</li>)}</ul>
+                              <ul className="small st-begreppslista">{st.lartBegrepp.map((q, i) => <li key={i}>{q.includes(' — ') ? q : rad(q)}</li>)}</ul>
                             </>)}
                             {st.glomtFragor.length === 0 && st.lartFragor.length === 0 && <p className="small muted">Inga svar ändrades mellan proven.</p>}
                           </div>
@@ -4598,7 +4599,7 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
             namn: r.namn, poang: r.poang, maxPoang: r.maxPoang, sidId: r.sidId,
             // Frågesvar + härlett facit gör trendkollen möjlig (samma fråga i två förhör)
             ...(r.svar !== undefined && rapport.fragor.length > 0
-              ? { svar: rapport.fragor.map((fraga, j) => ({ fraga, svar: r.svar![j] ?? '', ratt: arRatt(r.svar![j] ?? '', rapport.nyckel[j]) })) }
+              ? { svar: rapport.fragor.map((fraga, j) => ({ fraga, svar: r.svar![j] ?? '', ratt: arRatt(r.svar![j] ?? '', rapport.nyckel[j]), ...(rapport.nyckel[j] !== null ? { facit: rapport.nyckel[j]! } : {}) })) }
               : {}),
           })),
           redanInne: amnet !== undefined && arFilImporterad(s, amnet.id, fil.name),

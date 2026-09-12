@@ -10,8 +10,8 @@
  * (Ring 1, I2: ingen fetch/DOM/lagring.)
  */
 import type { Elev, Struktur } from './typer.js';
-import type { Resultat, ResultatKalla } from './resultat.js';
-import { fragenyckel } from './trendkoll.js';
+import { begreppUrFacit, type Resultat, type ResultatKalla } from './resultat.js';
+import { fragenyckel, svarText } from './trendkoll.js';
 import { koderForProv } from './elevrapport.js';
 
 export interface DelkapitelFilter { klassId: string; amneId?: string; kallor?: ResultatKalla[]; fran?: string; till?: string; elevId?: string; }
@@ -271,6 +271,8 @@ export interface MatrisFraga {
   /** Provet där frågan först ställdes. */
   ursprung: string;
   ursprungRum?: string;
+  /** Begreppet frågan beskriver, ur facit i Socrative-rapporten (finns när frågan importerats med facit). */
+  begrepp?: string;
 }
 
 /** Klassens utfall på en fråga i ett tillfälle. */
@@ -302,14 +304,16 @@ export function fragematris(s: Struktur, f: DelkapitelFilter): Fragematris {
   const tillfallen = tillfallenFor(s, f);
   const hemvist = fragansDelkapitel(tillfallen);
   // Frågornas ordning: efter delkapitel, sedan efter när de först dök upp
-  const forstaGangen = new Map<string, { fraga: string; ursprung: string; rum?: string; ordning: number }>();
+  const forstaGangen = new Map<string, { fraga: string; ursprung: string; rum?: string; ordning: number; begrepp?: string }>();
   let raknare = 0;
   for (const t of tillfallen) {
     for (const r of t.resultat) {
       for (const sv of r.svar ?? []) {
         const n = fragenyckel(sv.fraga);
-        if (forstaGangen.has(n)) continue;
-        forstaGangen.set(n, { fraga: sv.fraga, ursprung: t.prov, ...(t.rum !== undefined ? { rum: t.rum } : {}), ordning: raknare++ });
+        const facit = begreppUrFacit(sv.facit);
+        const finns = forstaGangen.get(n);
+        if (finns !== undefined) { if (finns.begrepp === undefined && facit !== null) finns.begrepp = facit; continue; }
+        forstaGangen.set(n, { fraga: sv.fraga, ursprung: t.prov, ...(t.rum !== undefined ? { rum: t.rum } : {}), ordning: raknare++, ...(facit !== null ? { begrepp: facit } : {}) });
       }
     }
   }
@@ -319,7 +323,7 @@ export function fragematris(s: Struktur, f: DelkapitelFilter): Fragematris {
   });
   const fragor: MatrisFraga[] = nycklar.map((n, i) => {
     const post = forstaGangen.get(n)!;
-    return { nr: i + 1, fraga: post.fraga, kod: hemvist.get(n) ?? '—', ursprung: post.ursprung, ...(post.rum !== undefined ? { ursprungRum: post.rum } : {}) };
+    return { nr: i + 1, fraga: post.fraga, kod: hemvist.get(n) ?? '—', ursprung: post.ursprung, ...(post.rum !== undefined ? { ursprungRum: post.rum } : {}), ...(post.begrepp !== undefined ? { begrepp: post.begrepp } : {}) };
   });
   const index = new Map(nycklar.map((n, i) => [n, i]));
   const rader: FragaRad[] = tillfallen.map((t) => {
@@ -445,8 +449,43 @@ export interface Nulage {
 }
 
 /** Elevens aktuella kunskapsläge: senaste svaret på varje fråga. */
+/**
+ * Begreppet bakom varje fråga, hämtat ur elevernas RÄTTA svar: den som svarade
+ * rätt på 'En naturtyp med vissa typiska …' valde 'B • biotop', och det svaret
+ * är begreppet. Säkrare än att matcha frågetexten mot boken, vars förklaringar
+ * kan vara formulerade annorlunda. Räknas per struktur och filter.
+ */
+const begreppCache = new WeakMap<Struktur, Map<string, Map<string, string>>>();
+export function begreppUrSvar(s: Struktur, f: DelkapitelFilter): Map<string, string> {
+  let per = begreppCache.get(s);
+  if (per === undefined) { per = new Map(); begreppCache.set(s, per); }
+  const nyckel = `${f.klassId}|${f.amneId ?? ''}`;
+  const c = per.get(nyckel); if (c !== undefined) return c;
+  const karta = new Map<string, string>();
+  const rakna = new Map<string, Map<string, number>>();
+  for (const t of tillfallenFor(s, { klassId: f.klassId, ...(f.amneId !== undefined ? { amneId: f.amneId } : {}) })) {
+    for (const r of t.resultat) {
+      for (const sv of r.svar ?? []) {
+        if (sv.ratt !== true) continue;
+        const text = svarText(sv.svar);
+        // En ensam bokstav ('B') är alternativet, inte begreppet — ger ingen ledning
+        if (text.length <= 2) continue;
+        const n = fragenyckel(sv.fraga);
+        const m = rakna.get(n) ?? new Map<string, number>();
+        m.set(text, (m.get(text) ?? 0) + 1);
+        rakna.set(n, m);
+      }
+    }
+  }
+  // Vanligaste rätta svaret per fråga (skydd mot enstaka felmärkta rader)
+  for (const [n, m] of rakna) karta.set(n, [...m.entries()].sort((a, b) => b[1] - a[1])[0][0]);
+  per.set(nyckel, karta);
+  return karta;
+}
+
 export function nulage(s: Struktur, elevId: string, f: DelkapitelFilter): Nulage {
   const m = fragematris(s, { ...f, elevId });
+  const begrepp = begreppUrSvar(s, f);
   const fragor: FragaNu[] = [];
   m.fragor.forEach((fr, i) => {
     let senast: { ratt: boolean; prov: string; datum: string } | null = null;
@@ -459,9 +498,12 @@ export function nulage(s: Struktur, elevId: string, f: DelkapitelFilter): Nulage
       senast = { ratt: svar, prov: rad.prov, datum: rad.datum };
     }
     if (senast === null) return;
+    // Facit ur rapporten först, annars vanligaste rätta svaret i klassen
+    const b = fr.begrepp ?? begrepp.get(fragenyckel(fr.fraga));
     fragor.push({
       fraga: fr.fraga, kod: fr.kod, nr: fr.nr, ratt: senast.ratt,
       senastProv: senast.prov, senastDatum: senast.datum, tidigareFel, antalGanger: antal,
+      ...(b !== undefined ? { begrepp: b } : {}),
     });
   });
   const perDel = new Map<string, FragaNu[]>();

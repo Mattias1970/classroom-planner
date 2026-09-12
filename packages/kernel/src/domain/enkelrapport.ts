@@ -108,7 +108,7 @@ export function enkelRapport(sIn: Struktur, elevId: string, f: DashboardFilter &
       const forklaringar: Record<string, string> = {};
       for (const k of rapport.kapitel) for (const d of k.delkapitel) for (const b of d.begrepp) if (b.forklaring !== null) forklaringar[b.begrepp] = b.forklaring;
       if (Object.keys(forklaringar).length > 0) {
-        const fragor = nu.fragor.map((fr) => { const b = begreppForFraga(forklaringar, fr.fraga); return b === null ? fr : { ...fr, begrepp: b }; });
+        const fragor = nu.fragor.map((fr) => { if (fr.begrepp !== undefined) return fr; const b = begreppForFraga(forklaringar, fr.fraga); return b === null ? fr : { ...fr, begrepp: b }; });
         nu = { ...nu, fragor, kan: fragor.filter((x) => x.ratt), kvar: fragor.filter((x) => !x.ratt), fixat: fragor.filter((x) => x.ratt && x.tidigareFel > 0) };
       }
     } catch { /* ämne utan bok — begreppen visas som frågetext */ }

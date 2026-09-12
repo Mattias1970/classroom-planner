@@ -312,3 +312,46 @@ describe('Del 99: övningar med samma quiz räknas in i huvudsviten', async () =
     expect(tk.elever.find((e) => e.elev.id === 'a')!.steg.map((x) => x.prov)).toContain('Extra 4.1-4.2');
   });
 });
+
+describe('Del 109: begreppet ur elevernas rätta svar', async () => {
+  const { begreppUrSvar, nulage } = await import('../src/domain/delkapiteltrend.js');
+  const { svarText } = await import('../src/domain/trendkoll.js');
+  it('svarText tar bort alternativbokstav och punkt', () => {
+    expect(svarText('B • biotop')).toBe('biotop');
+    expect(svarText('c) nisch')).toBe('nisch');
+    expect(svarText('ekologi')).toBe('ekologi');
+  });
+  it('rätta svaret ger begreppet, även när boken saknar förklaringen', () => {
+    let s = bygg();
+    // Byt ut svarstexterna till Socrative-form: bara den som svarat rätt avslöjar begreppet
+    s = { ...s, resultat: (s.resultat ?? []).map((r) => ({ ...r, svar: (r.svar ?? []).map((sv) => ({
+      ...sv, svar: sv.fraga === A ? (sv.ratt ? 'A • ekologi' : 'C • biotop') : sv.fraga === B ? (sv.ratt ? 'E • population' : 'A • ekologi') : sv.svar })) })) };
+    const karta = begreppUrSvar(s, f);
+    expect(karta.get(A.toLowerCase().replace(/[.,;:!?"'()[\]{}…]/g, ' ').replace(/\s+/g, ' ').trim())).toBe('ekologi');
+    const nu = nulage(s, 'a', f);
+    expect(nu.fragor.find((x) => x.fraga === A)?.begrepp).toBe('ekologi');
+    expect(nu.fragor.find((x) => x.fraga === B)?.begrepp).toBe('population');
+  });
+});
+
+describe('Del 109: begreppet ur facit (rapportens nyckel) går före rätta svar och bok', async () => {
+  const { begreppUrFacit } = await import('../src/domain/resultat.js');
+  const { fragematris, nulage } = await import('../src/domain/delkapiteltrend.js');
+  it('facit rensas från alternativbokstav och bullet', () => {
+    expect(begreppUrFacit('A • ekologi')).toBe('ekologi');
+    expect(begreppUrFacit('b) biotop')).toBe('biotop');
+    expect(begreppUrFacit('  negativ återkoppling ')).toBe('negativ återkoppling');
+    expect(begreppUrFacit('')).toBeNull();
+    expect(begreppUrFacit(undefined)).toBeNull();
+  });
+  it('en fråga importerad med facit får begreppet oavsett vad eleverna svarade', () => {
+    let s = bygg();
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-laxforhor', prov: 'Med facit', datum: '2026-09-10', rum: 'Biologi41',
+      rader: [{ namn: 'Anna Berg', poang: 0, maxPoang: 1, svar: [{ fraga: A, svar: 'C • biologi', ratt: false, facit: 'A • ekologi' }] }] }).s;
+    expect(fragematris(s, f).fragor.find((x) => x.fraga === A)!.begrepp).toBe('ekologi');
+    const nu = nulage(s, 'a', f);
+    expect(nu.fragor.find((x) => x.fraga === A)!.begrepp).toBe('ekologi');
+    // En ensam bokstav i svaret räknas aldrig som begrepp
+    expect(nulage(bygg(), 'a', f).fragor.every((x) => x.begrepp === undefined || x.begrepp.length > 2)).toBe(true);
+  });
+});

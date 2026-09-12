@@ -93,17 +93,19 @@ export function begreppForFraga(forklaringar: Record<string, string>, fraga: str
   const borjan = poster.find(([, text]) => text.startsWith(f.slice(0, Math.min(f.length, 40))) || f.startsWith(text.slice(0, Math.min(text.length, 40))));
   if (borjan !== undefined) return borjan[0];
   // Ordöverlappning: quizet kan sakna bokstäver eller vara nedkortat
-  const ord = new Set(f.split(' ').filter((o) => o.length > 3));
+  // Quiztexter kan ha tappat bokstäver ('organismena', 'näingskedja') — jämför på ordstammar utan vokaler
+  const stam = (o: string) => o.replace(/[aeiouyåäö]/g, '').slice(0, 6);
+  const ord = new Set(f.split(' ').filter((o) => o.length > 3).map(stam));
   if (ord.size < 3) return null;
   let bast: { begrepp: string; andel: number } | null = null;
   for (const [b, text] of poster) {
-    const andra = new Set(text.split(' ').filter((o) => o.length > 3));
+    const andra = new Set(text.split(' ').filter((o) => o.length > 3).map(stam));
     if (andra.size === 0) continue;
     const gemensam = [...ord].filter((o) => andra.has(o)).length;
     const andel = gemensam / Math.max(ord.size, andra.size);
     if (bast === null || andel > bast.andel) bast = { begrepp: b, andel };
   }
-  return bast !== null && bast.andel >= 0.6 ? bast.begrepp : null;
+  return bast !== null && bast.andel >= 0.5 ? bast.begrepp : null;
 }
 
 function forklaringFor(kap: Kapitel, begrepp: string): string | null {

@@ -29,6 +29,12 @@ export function fragenyckel(fraga: string): string {
   return n;
 }
 
+/** 'B • ekosystem' → 'ekosystem' — svarstexten utan alternativbokstav och punkt. */
+export function svarText(svar: string): string {
+  // Socrative skriver 'B • biotop', 'B. biotop' eller 'b) biotop' — bokstaven följs av punkt, parentes eller bullet
+  return svar.replace(/^[a-e]\s*(?:[.)]|[•·])\s*/i, '').replace(/[•·]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 function svarNyckel(svar: string): string {
   // Socrative skriver 'A. • ekologi'; alternativbokstaven räcker inte, texten avgör
   return svar.toLowerCase().replace(/^[a-e]\s*[.)]\s*/i, '').replace(/[•·]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -147,6 +153,9 @@ export interface TrendSteg {
   lartFragor: string[];
   /** Frågorna som gick från rätt till fel. */
   glomtFragor: string[];
+  /** 'begrepp — innebörd' för samma frågor, när begreppet kunde läsas ur de rätta svaren. */
+  lartBegrepp: string[];
+  glomtBegrepp: string[];
 }
 
 export interface TrendkollElev {
@@ -203,6 +212,12 @@ export function trendkoll(s: Struktur, f: TrendkollFilter): Trendkoll {
       if (p !== null) { par.push(p); break; } // varje tillfälle mot närmast följande med gemensamma frågor
     }
   }
+  // Begreppet bakom frågan ur de rätta svaren i urvalet
+  const begreppAv = new Map<string, string>();
+  for (const t of tillfallen) for (const r of t) for (const sv of r.svar ?? []) {
+    if (sv.ratt === true) { const txt = svarText(sv.svar); if (txt !== '' && !begreppAv.has(fragenyckel(sv.fraga))) begreppAv.set(fragenyckel(sv.fraga), txt); }
+  }
+  const medBegrepp = (fraga: string): string => { const b = begreppAv.get(fragenyckel(fraga)); return b === undefined ? fraga : `${b} — ${fraga}`; };
   const perElev: TrendkollElev[] = elever.map((elev) => {
     const rader = par.map((p) => p.elever.find((e) => e.elev.id === elev.id)).filter((r): r is ElevJamforelse => r !== undefined);
     const lart = rader.reduce((n, r) => n + r.lart, 0);
@@ -216,6 +231,8 @@ export function trendkoll(s: Struktur, f: TrendkollFilter): Trendkoll {
         prov: p.efter.prov, datum: p.efter.datum, foreProv: p.fore.prov, foreDatum: p.fore.datum,
         lartFragor: r.fragor.filter((f) => f.overgang === 'lart').map((f) => f.fraga),
         glomtFragor: r.fragor.filter((f) => f.overgang === 'glomt').map((f) => f.fraga),
+        lartBegrepp: r.fragor.filter((f) => f.overgang === 'lart').map((f) => medBegrepp(f.fraga)),
+        glomtBegrepp: r.fragor.filter((f) => f.overgang === 'glomt').map((f) => medBegrepp(f.fraga)),
       }));
     return {
       elev, lart, glomt, netto: lart - glomt, serie: rader.map((r) => r.netto), steg,

@@ -138,6 +138,7 @@ export function elevanalys(sIn: Struktur, elevId: string, f: DashboardFilter & {
   }
   if (Object.keys(forklaringar).length > 0) {
     const berika = (fr: typeof nu.fragor[number]) => {
+      if (fr.begrepp !== undefined) return fr; // ur elevernas rätta svar — säkrast
       const b = begreppForFraga(forklaringar, fr.fraga);
       return b === null ? fr : { ...fr, begrepp: b };
     };
@@ -240,6 +241,7 @@ export function elevanalys(sIn: Struktur, elevId: string, f: DashboardFilter & {
   /** 'biotop — En naturtyp med …' när begreppet är känt, annars bara beskrivningen. */
   const begreppRad = (x: { begrepp?: string; fraga: string }): string =>
     (x.begrepp !== undefined ? `${x.begrepp} — ${x.fraga}` : x.fraga);
+  const begreppNamn = new Map(nu.fragor.filter((x) => x.begrepp !== undefined).map((x) => [x.fraga, x.begrepp!]));
   const rad: Rad[] = [];
   if (nu.kvar.length > 0) {
     rad.push({

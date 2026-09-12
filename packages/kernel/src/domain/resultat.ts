@@ -50,8 +50,16 @@ export interface Resultat {
 }
 
 /** En rad ur en resultatfil, före elevmatchning. */
-/** Ett svar på en enskild fråga. */
-export interface FragaSvar { fraga: string; svar: string; ratt: boolean | null; }
+/** Ett svar på en enskild fråga. `facit` = det rätta svaret, dvs. begreppet frågan beskriver ('A • ekologi'). */
+export interface FragaSvar { fraga: string; svar: string; ratt: boolean | null; facit?: string; }
+
+/** 'A • ekologi' → 'ekologi'. Begreppet är det rätta svaret på begreppsfrågan. */
+export function begreppUrFacit(facit: string | undefined | null): string | null {
+  if (facit === undefined || facit === null) return null;
+  // 'A • ekologi', 'A. ekologi', 'b) biotop' — bokstaven följs av bullet, punkt eller parentes
+  const b = facit.replace(/^[a-eA-E]\s*(?:[.)]|[•·])\s*/, '').replace(/[•·]/g, ' ').replace(/\s+/g, ' ').trim();
+  return b === '' ? null : b;
+}
 export interface ImportRad { namn: string; poang: number; maxPoang: number; /** Student ID ur Socrative-rapporten (valfritt). */ sidId?: string; svar?: FragaSvar[]; }
 
 export interface ImportUnderlag {
