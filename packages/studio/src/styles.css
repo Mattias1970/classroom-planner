@@ -904,9 +904,14 @@ input.fel { border-color: #B71C1C; }
 .rd-fm-typ { font-weight: 700; border-radius: calc(var(--mm) * 1); padding: 0 calc(var(--mm) * 1); text-align: center; font-size: calc(var(--mm) * 2.2); }
 .rd-fm-typ.socrative-laxforhor { background: #E8EAF6; color: #1A2A6B; } .rd-fm-typ.socrative-exit { background: #E3F2FD; color: #2f5aa8; }
 .rd-fm-typ.socrative-ovning { background: #E0F2F1; color: #00838F; } .rd-fm-typ.magma { background: #F3E5F5; color: #6A1B9A; } .rd-fm-typ.digiexam { background: #FBE9E7; color: #BF360C; }
-.rd-fm-quiz { font-weight: 600; max-width: calc(var(--mm) * 36); }
-.rd-fm-ruta { display: block; aspect-ratio: 1; min-width: 0; border-radius: calc(var(--mm) * 0.6); background: #F1F3F6; }
-.rd-fm-ruta.ok { background: #4CAF50; } .rd-fm-ruta.ej { background: #D32F2F; } .rd-fm-ruta.tom { background: #F7F8FA; } .rd-fm-ruta.ejgjord { background: #E4E8EF; }
+.rd-fm-quiz { font-weight: 700; color: #1d2b3f; max-width: calc(var(--mm) * 40); }
+.rd-fm-datum { color: #556; }
+.rd-fmtext { font-size: calc(var(--mm) * 2.4); color: #5a6472; margin-bottom: calc(var(--mm) * 1.5); }
+.rd-fm-h { padding-bottom: calc(var(--mm) * 0.6); }
+.rd-fm-ruta { display: block; aspect-ratio: 1; min-width: 0; border-radius: calc(var(--mm) * 0.8); background: #F1F3F6; }
+.rd-fm-ruta.ok { background: #43A047; } .rd-fm-ruta.ej { background: #D32F2F; } .rd-fm-ruta.tom { background: #F7F8FA; } .rd-fm-ruta.ejgjord { background: #DDE2EA; }
+.rd-fm-grupp { padding: calc(var(--mm) * 1) calc(var(--mm) * 1.5); }
+.rd-fm-grupp b { font-size: calc(var(--mm) * 2.8); }
 .rd-fm .gstart { box-shadow: calc(var(--mm) * -0.5) 0 0 0 #C9D2E0; }
 @media print { .rd-sidor { display: block; } .rd-utskrift { page-break-after: always; break-after: page; } .rd-utskrift:last-child { page-break-after: auto; break-after: auto; } }
 

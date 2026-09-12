@@ -53,6 +53,14 @@ function anvandElevdata(s: Struktur, elevId: string, klassId: string, amneId: st
   }, [s, elevId, klassId, amneId]);
 }
 
+const VECKODAG = ['sön', 'mån', 'tis', 'ons', 'tor', 'fre', 'lör'];
+const MANAD = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+/** '2026-08-20' → 'tor 20 aug' — samma form som i Rapporter. */
+function datumMedDag(datum: string): string {
+  const d = new Date(`${datum}T12:00:00Z`);
+  return `${VECKODAG[d.getUTCDay()]} ${d.getUTCDate()} ${MANAD[d.getUTCMonth()]}`;
+}
+
 // ── Enkla, utskriftsvänliga grafer (SVG i mm-skala) ──────────
 
 function LinjeMm({ varden, etiketter, krav, farg = '#2f5aa8' }: { varden: number[]; etiketter: string[]; krav?: number; farg?: string }) {
@@ -143,24 +151,24 @@ function BlockInnehall({ b, d, s }: { b: Block; d: Elevdata; s: Struktur }) {
     case 'fragematris': {
       const m = d.analys?.matris;
       if (m === undefined || m.fragor.length === 0) return (<>{rubrik}{tom('Ingen frågedata')}</>);
-      // Samma uppställning som i SuperTeach: gruppraden med quiznamn och delkapitel,
-      // frågenummer, sedan en rad per förhör med typ och quiz — grön/röd/tom per fråga
-      const kolumner = `auto auto auto repeat(${m.fragor.length}, minmax(0, 1fr))`;
+      // Exakt som 'Fråga för fråga' i Rapporter: Quiz | Datum | grupprad med quiznamn och
+      // '4.1 · 12 frågor' | frågenummer | grön = rätt, röd = fel, ljusgrå = ej gjord, tom = ingick inte
+      const kolumner = `auto auto repeat(${m.fragor.length}, minmax(0, 1fr))`;
       return (<>{rubrik ?? <div className="rd-blockrubrik">Fråga för fråga</div>}
+        <div className="rd-fmtext">Grön ruta = rätt, röd = fel, tom = frågan ingick inte i det quizet.</div>
         <div className="rd-fm" style={{ gridTemplateColumns: kolumner }}>
-          <div className="rd-fm-horn" style={{ gridColumn: '1 / span 3' }} />
+          <div className="rd-fm-horn" style={{ gridColumn: '1 / span 2' }} />
           {m.grupper.map((g) => (
-            <div key={g.kod} className="rd-fm-grupp" style={{ gridColumn: `${3 + g.fran} / span ${g.till - g.fran + 1}` }} title={g.ursprung}>
+            <div key={g.kod} className="rd-fm-grupp" style={{ gridColumn: `${2 + g.fran} / span ${g.till - g.fran + 1}` }} title={g.ursprung}>
               <b>{g.ursprung}</b><small>{g.kod !== '—' ? `${g.kod} · ` : ''}{g.till - g.fran + 1} frågor</small>
             </div>
           ))}
-          <div className="rd-fm-h">Datum</div><div className="rd-fm-h">Typ</div><div className="rd-fm-h">Quiz</div>
+          <div className="rd-fm-h">Quiz</div><div className="rd-fm-h">Datum</div>
           {m.fragor.map((fr) => <div key={fr.nr} className={`rd-fm-nr${m.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}`} title={fr.fraga}>{fr.nr}</div>)}
           {m.rader.map((r) => (
             <React.Fragment key={r.nyckel}>
-              <div className="rd-fm-c">{r.datum.slice(5).replace('-', '/')}{r.tid !== undefined ? ` ${r.tid}` : ''}</div>
-              <div className={`rd-fm-c rd-fm-typ ${r.kalla}`}>{TYPNAMN[r.kalla]}</div>
-              <div className="rd-fm-c rd-fm-quiz" title={r.prov}>{r.prov}</div>
+              <div className="rd-fm-c rd-fm-quiz" title={`${r.prov} · ${TYPNAMN[r.kalla]}`}>{r.prov}</div>
+              <div className="rd-fm-c rd-fm-datum">{datumMedDag(r.datum)}{r.tid !== undefined ? ` ${r.tid}` : ''}</div>
               {m.fragor.map((fr, i) => {
                 const c = r.celler[i]; const e = r.elevCeller?.[i];
                 const klass = c === null ? 'tom' : e === true ? 'ok' : e === false ? 'ej' : 'ejgjord';
