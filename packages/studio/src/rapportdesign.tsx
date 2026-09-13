@@ -266,8 +266,35 @@ export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: ()
 
   const satt = (m: Rapportmall) => setUtkast(m);
   const matRef = useAutoHojd(mall, autoHojd, skala, satt);
-  const nyMallKnapp = () => { const id = nyttId('mall'); satt(nyMall(id, 'Ny mall', idag)); setMallId(id); setVald(null); };
-  const standard = () => { const id = nyttId('mall'); satt(standardmall(id, idag)); setMallId(id); setVald(null); };
+  /** Frågar efter namn; tomt = avbryt. */
+  const fragaNamn = (rubrik: string, forslag: string): string | null => {
+    const svar = window.prompt(rubrik, forslag);
+    if (svar === null) return null;
+    const namn = svar.trim();
+    return namn === '' ? null : namn;
+  };
+  const nyMallKnapp = () => {
+    const namn = fragaNamn('Vad ska mallen heta?', `Mall ${mallar.length + 1}`); if (namn === null) return;
+    const id = nyttId('mall'); satt(nyMall(id, namn, idag)); setMallId(id); setVald(null);
+  };
+  const standard = () => {
+    const namn = fragaNamn('Vad ska mallen heta?', 'Enkel elevrapport'); if (namn === null) return;
+    const id = nyttId('mall'); satt({ ...standardmall(id, idag), namn }); setMallId(id); setVald(null);
+  };
+  const dopOm = () => {
+    if (mall === null) return;
+    const namn = fragaNamn('Nytt namn på mallen:', mall.namn); if (namn === null || namn === mall.namn) return;
+    satt({ ...mall, namn });
+  };
+  const kopiera = () => {
+    if (mall === null) return;
+    const namn = fragaNamn('Namn på kopian:', `${mall.namn} (kopia)`); if (namn === null) return;
+    const id = nyttId('mall');
+    // Blocken får nya id:n så kopian inte delar block med originalet
+    const kopia: Rapportmall = { ...mall, id, namn, skapad: idag, andrad: idag, block: mall.block.map((b) => ({ ...b, id: nyttId('blk') })) };
+    kor(() => sparaRapportmall(lasStruktur(), kopia, idag), `Kopian "${namn}" skapad.`);
+    setUtkast(null); setMallId(id); setVald(null);
+  };
   const spara = () => {
     if (mall === null) return;
     kor(() => sparaRapportmall(lasStruktur(), mall, idag), `Mallen "${mall.namn}" sparad.`);
@@ -366,13 +393,25 @@ export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: ()
           <div className="rd-rubrik">Mallar</div>
           <select aria-label="Rapportmall" value={mallId} onChange={(e) => { setMallId(e.target.value); setUtkast(null); setVald(null); }}>
             <option value="">— välj mall —</option>
-            {mallar.map((m) => <option key={m.id} value={m.id}>{m.namn}</option>)}
+            {mallar.map((m) => <option key={m.id} value={m.id} title={m.beskrivning ?? ''}>{m.namn}{m.beskrivning !== undefined && m.beskrivning !== '' ? ` — ${m.beskrivning.slice(0, 30)}` : ''}</option>)}
           </select>
           <div className="rad" style={{ gap: 4, flexWrap: 'wrap' }}>
             <button className="btn sec sm" onClick={nyMallKnapp}>➕ Ny</button>
             <button className="btn sec sm" onClick={standard}>✨ Startmall</button>
-            {mall !== null && <button className="btn sec sm" onClick={taBort}>🗑</button>}
           </div>
+          {mall !== null && (
+            <div className="rad" style={{ gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+              <button className="btn sec sm" onClick={dopOm} title="Döp om mallen">✏ Döp om</button>
+              <button className="btn sec sm" onClick={kopiera} title="Spara en kopia under nytt namn">⧉ Kopiera</button>
+              <button className="btn sec sm" onClick={taBort} title="Ta bort mallen">🗑 Ta bort</button>
+            </div>
+          )}
+          {mall !== null && (
+            <label className="small" style={{ display: 'block', marginTop: 6 }}>Beskrivning
+              <textarea aria-label="Mallens beskrivning" rows={2} value={mall.beskrivning ?? ''} placeholder="Vad mallen är till för — visas i listan"
+                onChange={(e) => satt({ ...mall, beskrivning: e.target.value })} style={{ width: '100%', boxSizing: 'border-box', font: 'inherit', fontSize: 12 }} />
+            </label>
+          )}
           <div className="rad" style={{ gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
             <button className="btn sec sm" disabled={synk !== '' || mall === null} onClick={() => void synkaUpp()}>☁ Spara i datarepot</button>
             <button className="btn sec sm" disabled={synk !== ''} onClick={() => void hamtaNer()}>☁ Hämta mallar</button>
@@ -400,7 +439,8 @@ export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: ()
           <div className="rd-tomark"><p>Välj en mall till vänster, eller skapa en ny.</p><button className="btn" onClick={standard}>✨ Börja med startmallen</button></div>
         ) : (<>
           <div className="rad rd-verktyg no-print">
-            <input className="rd-mallnamn" aria-label="Mallens namn" value={mall.namn} onChange={(e) => satt({ ...mall, namn: e.target.value })} />
+            <label className="rd-namnfalt"><small>Mall</small>
+              <input className="rd-mallnamn" aria-label="Mallens namn" value={mall.namn} placeholder="Mallens namn" onChange={(e) => satt({ ...mall, namn: e.target.value })} /></label>
             <span className="spacer" />
             <label className="small">Zoom <input type="range" min={1.5} max={4} step={0.1} value={skala} onChange={(e) => setSkala(Number(e.target.value))} /></label>
             <button className="btn sec sm" onClick={() => window.print()}>🖨 Skriv ut / PDF</button>

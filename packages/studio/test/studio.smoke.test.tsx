@@ -2126,7 +2126,17 @@ describe('🎨 Rapportdesign', () => {
     act(() => { knapp(host, '📄 Rapporter').click(); });
     act(() => { knapp(host, '🎨 Rapportdesign').click(); });
     expect(host.textContent).toContain('Välj en mall till vänster');
+    // Namnet frågas vid skapande; Döp om ändrar det
+    window.prompt = () => 'Terminsrapport';
     act(() => { knapp(host, '✨ Börja med startmallen').click(); });
+    expect((host.querySelector('input[aria-label="Mallens namn"]') as HTMLInputElement).value).toBe('Terminsrapport');
+    window.prompt = () => 'Terminsrapport HT';
+    act(() => { knapp(host, '✏ Döp om').click(); });
+    expect((host.querySelector('input[aria-label="Mallens namn"]') as HTMLInputElement).value).toBe('Terminsrapport HT');
+    // Avbrutet prompt (null) ändrar ingenting
+    window.prompt = () => null;
+    act(() => { knapp(host, '✏ Döp om').click(); });
+    expect((host.querySelector('input[aria-label="Mallens namn"]') as HTMLInputElement).value).toBe('Terminsrapport HT');
     expect(host.querySelectorAll('.rd-block').length).toBeGreaterThan(8);
     expect(host.querySelector('.rd-block.rubrik')!.textContent).toContain('Rapport — Anna Berg'); // {elev} ifylld
 
@@ -2159,6 +2169,14 @@ describe('🎨 Rapportdesign', () => {
     // Spara mallen → finns i strukturen; syns sedan som utskriftsval i Rapporter
     act(() => { knapp(host, '💾 Spara mall *').click(); });
     expect(lasStruktur().rapportmallar).toHaveLength(1);
+    expect(lasStruktur().rapportmallar![0].namn).toBe('Terminsrapport HT');
+    // Kopiera under nytt namn → två mallar med egna block-id:n
+    window.prompt = () => 'Terminsrapport VT';
+    act(() => { knapp(host, '⧉ Kopiera').click(); });
+    expect(lasStruktur().rapportmallar!.map((m) => m.namn)).toEqual(['Terminsrapport HT', 'Terminsrapport VT']);
+    const [a, b] = lasStruktur().rapportmallar!;
+    expect(a.block.map((x) => x.id)).not.toEqual(b.block.map((x) => x.id));
+    expect(a.block.length).toBe(b.block.length);
     expect(lasStruktur().rapportmallar![0].block.some((b) => b.typ === 'text')).toBe(true);
 
     act(() => { knapp(host, '← Rapporter').click(); });

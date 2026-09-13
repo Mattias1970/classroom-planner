@@ -930,3 +930,8 @@ input.fel { border-color: #B71C1C; }
 .st-info-popup p { margin: 8px 0; }
 .st-info-kort { font-weight: 600; color: #1d2b3f; }
 .rd-forklaring { margin-top: calc(var(--mm) * 1.5); padding-top: calc(var(--mm) * 1); border-top: calc(var(--mm) * 0.2) solid #DDE2EA; font-size: calc(var(--mm) * 2.6); color: #4a5563; line-height: 1.35; }
+
+/* Del 112: namnge och döp om mallar */
+.rd-namnfalt { display: flex; align-items: center; gap: 6px; }
+.rd-namnfalt small { color: var(--muted-varm); font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: .04em; }
+.rd-mallnamn { border: 1px solid var(--ram); background: #fff; }
