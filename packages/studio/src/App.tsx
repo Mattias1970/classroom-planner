@@ -4172,6 +4172,7 @@ function EnkelRapportVy({ s, elev, f, periodText, onTillbaka, onFull, onStudie, 
  */
 function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur, m: string) => void; meddela: (m: string) => void }) {
   const [design, setDesign] = useState(false);
+  const [mallAlla, setMallAlla] = useState<string | null>(null);
   const klasser = [...s.klasser].sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
   const [klassId, setKlassId] = useState(klasser[0]?.id ?? '');
   const klass = klasser.find((k) => k.id === klassId) ?? klasser[0];
@@ -4234,6 +4235,30 @@ function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur,
       .finally(() => { setSkriver(''); setForlopp(''); });
   };
 
+  const mallenAlla = mallAlla === null ? null : (s.rapportmallar ?? []).find((m) => m.id === mallAlla) ?? null;
+  if (mallenAlla !== null) {
+    const medResultat = rader.filter((r) => r.antalProv > 0);
+    return (
+      <div className="card superteach st-dash rd-utskriftsvy">
+        <div className="rad no-print">
+          <button className="btn sm" onClick={() => setMallAlla(null)}>← Rapporter</button>
+          <b>{klass.namn} · {amnen.find((a) => a.id === valtAmne)?.namn ?? ''}</b>
+          <small className="muted">mall: {mallenAlla.namn} · {medResultat.length} elever med resultat{rader.length - medResultat.length > 0 ? ` (${rader.length - medResultat.length} utan resultat hoppas över)` : ''}</small>
+          <span className="spacer" />
+          <button className="btn" onClick={() => window.print()}>🖨 Skriv ut / spara som PDF</button>
+        </div>
+        <p className="small muted no-print">Varje elev börjar på ny sida. I utskriftsdialogen: välj "Spara som PDF" för en fil med alla elever, eller skriv ut direkt.</p>
+        <div className="rd-alla">
+          {medResultat.map((r) => (
+            <section key={r.elev.id} className="rd-elevsida">
+              <div className="rd-elevnamn no-print">{r.elev.namn}</div>
+              <MallRendering s={s} mall={mallenAlla} elevId={r.elev.id} klassId={klass.id} amneId={valtAmne} />
+            </section>
+          ))}
+        </div>
+      </div>
+    );
+  }
   if (design) {
     return (
       <div className="card superteach st-dash">
@@ -4267,6 +4292,13 @@ function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur,
         <span className="spacer" />
         <small className="muted">{rader.length} elever</small>
         <button className="btn sec" onClick={() => setDesign(true)} title="Bygg och redigera rapportmallar">🎨 Rapportdesign{(s.rapportmallar ?? []).length > 0 ? ` (${(s.rapportmallar ?? []).length})` : ''}</button>
+        {(s.rapportmallar ?? []).length > 0 && (
+          <select aria-label="Skriv ut alla elever med mall" className="rd-mallval" value="" onChange={(e) => { if (e.target.value !== '') setMallAlla(e.target.value); }}
+            title="Renderar mallen för varje elev med resultat, klar att skriva ut eller spara som PDF">
+            <option value="">🖨 Skriv ut alla med mall…</option>
+            {(s.rapportmallar ?? []).map((m) => <option key={m.id} value={m.id}>{m.namn}</option>)}
+          </select>
+        )}
         <button className="btn sec" disabled={skriver !== ''} onClick={allaEnklaTillWord}
           title="En enkel Word-rapport per elev, packade i ett zip-arkiv">
           {skriver === 'enkla' ? `… skapar ${forlopp}` : '📝 Enkla rapporter (zip)'}

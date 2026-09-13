@@ -2189,5 +2189,15 @@ describe('🎨 Rapportdesign', () => {
     valj(val, lasStruktur().rapportmallar![0].id);
     expect(host.querySelectorAll('.rd-utskrift')).toHaveLength(2); // två sidor
     expect(knapp(host, '🖨 Skriv ut / PDF')).not.toBeNull();
+
+    // Alla elever med mall: eleven utan resultat hoppas över → 0 sidor, men vyn och knappen finns
+    act(() => { knapp(host, '← Tillbaka').click(); });
+    act(() => { knapp(host, '← Alla elever').click(); });
+    const allaVal = host.querySelector('select[aria-label="Skriv ut alla elever med mall"]') as HTMLSelectElement;
+    expect(allaVal).not.toBeNull();
+    valj(allaVal, lasStruktur().rapportmallar![0].id);
+    expect(host.querySelector('.rd-alla')).not.toBeNull();
+    expect(host.textContent).toContain('utan resultat hoppas över');
+    expect(knapp(host, '🖨 Skriv ut / spara som PDF')).not.toBeNull();
   });
 });

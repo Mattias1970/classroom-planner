@@ -935,3 +935,9 @@ input.fel { border-color: #B71C1C; }
 .rd-namnfalt { display: flex; align-items: center; gap: 6px; }
 .rd-namnfalt small { color: var(--muted-varm); font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: .04em; }
 .rd-mallnamn { border: 1px solid var(--ram); background: #fff; }
+
+/* Del 115: alla elever med mall */
+.rd-alla { display: flex; flex-direction: column; gap: 28px; align-items: center; }
+.rd-elevsida { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.rd-elevnamn { font-weight: 800; color: var(--muted-varm); font-size: 13px; }
+@media print { .rd-alla { display: block; } .rd-elevsida { display: block; page-break-after: always; break-after: page; } .rd-elevsida:last-child { page-break-after: auto; break-after: auto; } }
