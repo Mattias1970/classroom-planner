@@ -2122,6 +2122,8 @@ describe('🎨 Rapportdesign', () => {
     skriv(input(host, 'Elevens namn'), 'Anna Berg');
     act(() => { knapp(host, '➕ Lägg till elev').click(); });
 
+    // Designern nås från Rapporter
+    act(() => { knapp(host, '📄 Rapporter').click(); });
     act(() => { knapp(host, '🎨 Rapportdesign').click(); });
     expect(host.textContent).toContain('Välj en mall till vänster');
     act(() => { knapp(host, '✨ Börja med startmallen').click(); });
@@ -2159,7 +2161,7 @@ describe('🎨 Rapportdesign', () => {
     expect(lasStruktur().rapportmallar).toHaveLength(1);
     expect(lasStruktur().rapportmallar![0].block.some((b) => b.typ === 'text')).toBe(true);
 
-    act(() => { knapp(host, '📄 Rapporter').click(); });
+    act(() => { knapp(host, '← Rapporter').click(); });
     // Utan resultat visar listan eleven men rapporten går ändå att öppna
     const rad = host.querySelector('.st-rapportrad') as HTMLElement;
     act(() => { rad.click(); });

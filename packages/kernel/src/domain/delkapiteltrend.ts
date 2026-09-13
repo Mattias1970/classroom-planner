@@ -630,6 +630,8 @@ export function harmoniseraOvningar(s: Struktur, f: DelkapitelFilter, grans = 60
   const inkluderade: Inkluderad[] = [];
   const resultat = (s.resultat ?? []).map((r) => {
     if (r.kalla !== 'socrative-ovning') return r;
+    // Läraren har uttryckligen satt typen — då är det en övning, punkt
+    if (r.manuellTyp === true) return r;
     const m = somTyp.get(`${r.datum}|${r.kalla}|${r.prov}`);
     if (m === undefined) return r;
     let post = inkluderade.find((x) => x.prov === r.prov && x.datum === r.datum);

@@ -355,3 +355,18 @@ describe('Del 109: begreppet ur facit (rapportens nyckel) går före rätta svar
     expect(nulage(bygg(), 'a', f).fragor.every((x) => x.begrepp === undefined || x.begrepp.length > 2)).toBe(true);
   });
 });
+
+describe('Del 111: en manuellt satt typ räknas inte om av harmoniseringen', async () => {
+  const { harmoniseraOvningar } = await import('../src/domain/delkapiteltrend.js');
+  const { andraKalla } = await import('../src/domain/resultat.js');
+  it('läraren märker ett läxförhör som övning → det förblir övning i analysen', () => {
+    let s = bygg();
+    // 4.1-4.2 Begrepp delar alla frågor med de andra förhören → skulle annars räknas in igen
+    s = andraKalla(s, { amneId: 'bi', prov: '4.1-4.2 Begrepp', datum: '2026-08-28', franKalla: 'socrative-laxforhor', tillKalla: 'socrative-ovning' });
+    const r = s.resultat!.find((x) => x.prov === '4.1-4.2 Begrepp')!;
+    expect(r).toMatchObject({ kalla: 'socrative-ovning', manuellTyp: true });
+    const h = harmoniseraOvningar(s, f);
+    expect(h.inkluderade).toEqual([]);
+    expect(h.s.resultat!.find((x) => x.prov === '4.1-4.2 Begrepp')!.kalla).toBe('socrative-ovning');
+  });
+});

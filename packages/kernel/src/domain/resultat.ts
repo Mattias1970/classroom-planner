@@ -45,6 +45,8 @@ export interface Resultat {
   svar?: FragaSvar[];
   /** Satt av harmoniseraOvningar: var en övning, räknas som denna typ i analysen. */
   inkluderadSom?: ResultatKalla;
+  /** Läraren har satt typen för hand (andraKalla) — analysen får inte räkna om den. */
+  manuellTyp?: boolean;
   poang: number;
   maxPoang: number;
 }
@@ -441,7 +443,7 @@ export function andraKalla(s: Struktur, val: { amneId: string; prov: string; dat
     r.amneId === val.amneId && r.prov === val.prov && r.kalla === val.franKalla && (r.datum === undefined || r.datum === val.datum);
   return {
     ...s,
-    resultat: (s.resultat ?? []).map((r) => (traff(r) ? { ...r, kalla: val.tillKalla } : r)),
+    resultat: (s.resultat ?? []).map((r) => (traff(r) ? { ...r, kalla: val.tillKalla, manuellTyp: true } : r)),
     filregister: (s.filregister ?? []).map((f) => (traff(f) ? { ...f, kalla: val.tillKalla } : f)),
   };
 }
