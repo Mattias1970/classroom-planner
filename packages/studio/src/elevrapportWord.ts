@@ -220,100 +220,46 @@ export function rapportFilnamn(a: Elevanalys): string {
 
 /** Bygger rapporten som en .docx-blob (delas av enskild nedladdning och klassexporten). */
 export async function elevrapportDocx(a: Elevanalys): Promise<Blob> {
+  const idag = new Date().toISOString().slice(0, 10);
+  const senast = a.nu.senastDatum ?? null;
   const barn: Array<Paragraph | Table> = [
     new Paragraph({ text: `${a.elev.namn} — ${a.amneNamn}`, heading: HeadingLevel.HEADING_1 }),
     new Paragraph({ children: [new TextRun({ text: a.sammanfattning, italics: true })] }),
-    ...(a.period.fran !== null || a.period.till !== null
-      ? [new Paragraph({ children: [new TextRun({ text: `Period: ${a.period.fran ?? 'start'} – ${a.period.till ?? 'idag'}`, color: '777777', size: 18 })] })]
-      : []),
+    new Paragraph({ children: [new TextRun({ text: `Rapport skapad ${idag}${a.period.fran !== null || a.period.till !== null ? ` · period ${a.period.fran ?? 'start'} – ${a.period.till ?? 'idag'}` : ''}. Förhörsgränserna 90 % (läxförhör) och 70 % (exit ticket) gäller begreppsfrågorna och är inte ett ämnesbetyg.`, color: '777777', size: 18 })] }),
     tom(),
-    new Paragraph({ text: 'Hur går det?', heading: HeadingLevel.HEADING_2 }),
   ];
-  for (const r of a.laget) { barn.push(punkt(r), tom()); }
-  if (a.laget.length === 0) barn.push(new Paragraph('Inga resultat i perioden.'), tom());
 
-  if (a.kurva.length > 0) {
-    barn.push(new Paragraph({ text: 'Resultat över tid', heading: HeadingLevel.HEADING_2 }));
-    barn.push(forklaringRad('laxforhor'));
-    barn.push(forklaringRad('exit'));
-    barn.push(bild(await kurvBild(a), 560, 226));
-    barn.push(new Paragraph({ children: [new TextRun({ text: 'Varje punkt är ett förhör. Streckade linjer är kraven: 90 % för läxförhör, 70 % för exit ticket.', size: 18, color: '777777' })] }));
-    barn.push(tom());
-    barn.push(tabell(['Nr', 'Datum', 'Prov', 'Resultat', 'Bedömning'],
-      a.kurva.map((p, i) => [`T${i + 1}`, p.datum, p.prov, `${p.procent} %`, p.klarat === null ? '—' : p.klarat ? 'Godkänt' : 'Ej godkänt'])));
-    barn.push(tom());
-  }
-
-  const kb = await kallBild(a);
-  if (kb !== null) {
-    barn.push(new Paragraph({ text: 'Du och klassen', heading: HeadingLevel.HEADING_2 }));
-    barn.push(bild(kb, 560, 172));
-    barn.push(new Paragraph({ children: [new TextRun({ text: 'Färgad stapel = du, grå stapel = klassens snitt.', size: 18, color: '777777' })] }));
-    barn.push(tom());
-  }
-
-  const lb = await ledBild(a);
-  if (lb !== null) {
-    barn.push(new Paragraph({ text: 'Delkapitel i förhören', heading: HeadingLevel.HEADING_2 }));
-    barn.push(forklaringRad('delkapitel'));
-    barn.push(bild(lb, 560, 217));
-    barn.push(new Paragraph({ children: [new TextRun({ text: 'Stapelns höjd är antalet frågor, den fyllda delen hur många du hade rätt på. Läxförhören är kumulativa, så ett led som tunnas ut betyder att du tappat den delen.', size: 18, color: '777777' })] }));
-    barn.push(tom());
-  }
-
-  barn.push(new Paragraph({ text: 'Vad kan du göra?', heading: HeadingLevel.HEADING_2 }));
-  for (const r of a.rad) { barn.push(punkt(r), tom()); }
-
-  if (a.nu.fragor.length > 0) {
-    barn.push(new Paragraph({ text: 'Vad du kan nu', heading: HeadingLevel.HEADING_2 }));
-    barn.push(forklaringRad('nulage'));
-    barn.push(new Paragraph({ children: [new TextRun({
-      text: `${a.nu.kan.length} av ${a.nu.fragor.length} begrepp (${a.nu.procent} %) sitter, räknat på ditt senaste svar på varje fråga. `
-        + 'Läxförhören är kumulativa, så samma begrepp återkommer — det du missade tidigare men kan nu räknas som kunnigt.', bold: true })] }));
-    barn.push(tabell(['Delkapitel', 'Kan', 'Kvar', 'Andel', 'Senast testat'],
+  // ── 1. Aktuellt kunnande ──
+  barn.push(new Paragraph({ text: `1. Aktuellt kunnande${senast !== null ? ` (senaste försöket per fråga, till och med ${senast})` : ''}`, heading: HeadingLevel.HEADING_2 }));
+  barn.push(forklaringRad('nulage'));
+  if (a.nu.fragor.length === 0) barn.push(new Paragraph('Inga begreppsfrågor med svar i perioden.'));
+  else {
+    barn.push(new Paragraph({ children: [new TextRun({ text: `Rätt på ${a.nu.kan.length} av ${a.nu.fragor.length} testade begreppsfrågor (${a.nu.procent} %). ${a.nu.kvar.length} var fel i senaste försöket.`, bold: true })] }));
+    barn.push(tabell(['Delkapitel', 'Rätt', 'Fel', 'Andel', 'Senast testat'],
       a.nu.delkapitel.map((d) => [d.kod, String(d.ratt), String(d.fel), `${d.procent} %`, `${d.senastProv ?? '—'} ${d.senastDatum ?? ''}`])));
-    barn.push(tom());
     if (a.nu.kvar.length > 0) {
-      barn.push(new Paragraph({ children: [new TextRun({ text: `Kvar att lära (${a.nu.kvar.length})`, bold: true })] }));
-      for (const x of a.nu.kvar) {
-        barn.push(new Paragraph({ bullet: { level: 0 }, children: [
-          ...(x.begrepp !== undefined ? [new TextRun({ text: `${x.begrepp} — `, bold: true })] : []),
-          new TextRun(x.fraga),
-          new TextRun({ text: `  (${x.kod}, senast fel i ${x.senastProv})`, size: 18, color: '777777' }),
-        ] }));
-      }
-      barn.push(tom());
+      barn.push(new Paragraph({ children: [new TextRun({ text: `Fel i senaste försöket (${a.nu.kvar.length})`, bold: true })] }));
+      for (const x of a.nu.kvar) barn.push(new Paragraph({ bullet: { level: 0 }, children: [
+        ...(x.begrepp !== undefined ? [new TextRun({ text: `${x.begrepp} — `, bold: true })] : []), new TextRun(x.fraga),
+        new TextRun({ text: `  (${x.kod}, ${x.senastProv} ${x.senastDatum})`, size: 18, color: '777777' }),
+      ] }));
     }
     if (a.nu.fixat.length > 0) {
-      barn.push(new Paragraph({ children: [new TextRun({ text: `Vänt till rätt (${a.nu.fixat.length})`, bold: true })] }));
-      for (const x of a.nu.fixat) {
-        barn.push(new Paragraph({ bullet: { level: 0 }, children: [
-          ...(x.begrepp !== undefined ? [new TextRun({ text: `${x.begrepp} — `, bold: true })] : []),
-          new TextRun(x.fraga),
-          new TextRun({ text: `  (${x.kod}, ${x.tidigareFel} fel tidigare, rätt nu)`, size: 18, color: '777777' }),
-        ] }));
-      }
-      barn.push(tom());
+      barn.push(new Paragraph({ children: [new TextRun({ text: `Rätt i senaste försöket efter tidigare fel (${a.nu.fixat.length})`, bold: true })] }));
+      for (const x of a.nu.fixat) barn.push(new Paragraph({ bullet: { level: 0 }, children: [
+        ...(x.begrepp !== undefined ? [new TextRun({ text: `${x.begrepp} — `, bold: true })] : []), new TextRun(x.fraga),
+        new TextRun({ text: `  (${x.kod}, ${x.tidigareFel} fel tidigare)`, size: 18, color: '777777' }),
+      ] }));
     }
   }
+  barn.push(tom());
 
-  const matris = matrisTabell(a);
-  if (matris.length > 0) {
-    barn.push(new Paragraph({ text: 'Fråga för fråga', heading: HeadingLevel.HEADING_2 }));
-    barn.push(forklaringRad('fragematris'));
-    barn.push(...matris);
-    barn.push(new Paragraph({ children: [new TextRun({ text: 'Grön ruta = rätt, röd = fel, tom = frågan ingick inte i det quizet. Siffrorna är frågans nummer; samma fråga har samma nummer i alla quiz, så du kan följa den över tid.', size: 18, color: '777777' })] }));
-    barn.push(tom());
-    for (const g of a.matris.grupper) {
-      barn.push(new Paragraph({ children: [new TextRun({ text: `Fråga ${g.fran}–${g.till}: ${g.ursprung}${g.kod !== '—' ? ` (${g.kod})` : ''}`, size: 18, color: '777777' })] }));
-    }
-    barn.push(tom());
-  }
-
+  // ── 2. Nästa steg ──
+  barn.push(new Paragraph({ text: '2. Nästa steg — fokus, lärarstöd och uppföljning', heading: HeadingLevel.HEADING_2 }));
+  for (const r of a.rad) { barn.push(punkt(r), tom()); }
   if (a.ovningar.length > 0 || a.filmer.length > 0) {
-    barn.push(new Paragraph({ text: 'Öva och se filmer', heading: HeadingLevel.HEADING_2 }));
     if (a.ovningar.length > 0) {
-      barn.push(new Paragraph({ children: [new TextRun({ text: 'Öva i Socrative — logga in med ditt namn och kör quizet igen:', bold: true })] }));
+      barn.push(new Paragraph({ children: [new TextRun({ text: 'Socrative-rum att öva i:', bold: true })] }));
       for (const o of a.ovningar) barn.push(lank(`${o.rum} — ${o.kod} ${o.namn}`, o.url));
     }
     if (a.filmer.length > 0) {
@@ -323,38 +269,82 @@ export async function elevrapportDocx(a: Elevanalys): Promise<Blob> {
     barn.push(tom());
   }
 
-  if (a.fastnat.length > 0) {
-    barn.push(new Paragraph({ text: 'Begrepp att träna på', heading: HeadingLevel.HEADING_2 }));
-    barn.push(tabell(['Begrepp', 'Delkapitel', 'Fel', 'Senast fel'],
-      a.fastnat.slice(0, 15).map((b) => [b.fraga, b.kod, String(b.antalFel), b.senasteFel])));
+  // ── 3. Historik ──
+  barn.push(new Paragraph({ text: '3. Historik — resultat med datum', heading: HeadingLevel.HEADING_2 }));
+  for (const r of a.laget) { barn.push(punkt(r), tom()); }
+  if (a.laget.length === 0) barn.push(new Paragraph('Inga resultat i perioden.'), tom());
+  if (a.kurva.length > 0) {
+    barn.push(forklaringRad('laxforhor'));
+    barn.push(forklaringRad('exit'));
+    barn.push(bild(await kurvBild(a), 560, 226));
+    barn.push(new Paragraph({ children: [new TextRun({ text: 'Varje punkt är ett prov. Streckade linjer är förhörsgränserna: 90 % för läxförhör, 70 % för exit ticket. Jämförelsen är mot dina egna tidigare resultat.', size: 18, color: '777777' })] }));
+    barn.push(tabell(['Nr', 'Datum', 'Prov', 'Resultat', 'Förhörsgräns'],
+      a.kurva.map((p, i) => [`T${i + 1}`, p.datum, p.prov, `${p.procent} %`, p.klarat === null ? '—' : p.klarat ? 'nådd' : 'ej nådd'])));
+    barn.push(tom());
+  }
+  const lb = await ledBild(a);
+  if (lb !== null) {
+    barn.push(new Paragraph({ children: [new TextRun({ text: 'Delkapitel i förhören', bold: true })] }));
+    barn.push(forklaringRad('delkapitel'));
+    barn.push(bild(lb, 560, 217));
+    barn.push(tom());
+  }
+  const kb = await kallBild(a);
+  if (kb !== null) {
+    barn.push(new Paragraph({ children: [new TextRun({ text: 'Snitt per testtyp, du och klassen', bold: true })] }));
+    barn.push(bild(kb, 560, 172));
+    barn.push(new Paragraph({ children: [new TextRun({ text: 'Färgad stapel = du, grå = klassens snitt. Klassens snitt är en referens, inte målet — målet är din egen utveckling.', size: 18, color: '777777' })] }));
     barn.push(tom());
   }
 
-  if (a.rapport !== null) {
-    for (const k of a.rapport.kapitel) {
-      barn.push(new Paragraph({ text: `Kapitel ${k.nr} ${k.namn}`, heading: HeadingLevel.HEADING_2 }));
-      barn.push(tabell(['Delkapitel', 'Status', 'Senaste resultat'],
-        k.delkapitel.map((d) => [`${d.kod} ${d.namn}`,
-          d.status === 'klarat' ? 'klarat' : d.status === 'ova' ? 'öva mer' : 'ej testat',
-          d.senaste.map((x) => `${x.procent} %`).join(', ') || '—'])));
-      if (k.sammanfattning !== null) {
-        barn.push(new Paragraph({ children: [new TextRun({ text: 'Sammanfattning', bold: true })] }));
-        for (const rad of k.sammanfattning.split('\n')) barn.push(new Paragraph(rad));
-      }
-      if (k.attOva.length > 0) {
-        barn.push(new Paragraph({ children: [new TextRun({ text: 'Begrepp att öva', bold: true })] }));
-        for (const b of k.attOva) {
-          barn.push(new Paragraph({ bullet: { level: 0 }, children: [
-            new TextRun({ text: b.begrepp, bold: true }),
-            ...(b.forklaring !== null ? [new TextRun(` — ${b.forklaring}`)] : []),
-          ] }));
-        }
-      }
-      if (k.filmer.length > 0) {
-        barn.push(new Paragraph({ children: [new TextRun({ text: 'Filmer', bold: true })] }));
-        for (const film of k.filmer) barn.push(lank(`${film.titel} (${film.for})`, film.url));
-      }
+  // ── Bilaga A: frågematris ──
+  const matris = matrisTabell(a);
+  if (matris.length > 0) {
+    barn.push(new Paragraph({ text: 'Bilaga A — Fråga för fråga', heading: HeadingLevel.HEADING_2, pageBreakBefore: true }));
+    barn.push(forklaringRad('fragematris'));
+    barn.push(...matris);
+    barn.push(new Paragraph({ children: [new TextRun({ text: 'Grön ruta = rätt, röd = fel, tom = frågan ingick inte i det quizet. Samma fråga har samma nummer i alla quiz.', size: 18, color: '777777' })] }));
+    for (const g of a.matris.grupper) {
+      barn.push(new Paragraph({ children: [new TextRun({ text: `Fråga ${g.fran}–${g.till}: ${g.ursprung}${g.kod !== '—' ? ` (${g.kod})` : ''}`, size: 18, color: '777777' })] }));
+    }
+    barn.push(tom());
+  }
+
+  // ── Bilaga B: begrepp med förklaringar ──
+  if (a.fastnat.length > 0 || a.rapport !== null) {
+    barn.push(new Paragraph({ text: 'Bilaga B — Begrepp och förklaringar', heading: HeadingLevel.HEADING_2, pageBreakBefore: true }));
+    if (a.fastnat.length > 0) {
+      barn.push(new Paragraph({ children: [new TextRun({ text: 'Begrepp som varit fel minst två gånger', bold: true })] }));
+      barn.push(forklaringRad('fastnat'));
+      barn.push(tabell(['Begrepp', 'Delkapitel', 'Fel', 'Senast fel'],
+        a.fastnat.slice(0, 15).map((b) => [b.fraga, b.kod, String(b.antalFel), b.senasteFel])));
       barn.push(tom());
+    }
+    if (a.rapport !== null) {
+      for (const k of a.rapport.kapitel) {
+        barn.push(new Paragraph({ children: [new TextRun({ text: `Kapitel ${k.nr} ${k.namn}`, bold: true })] }));
+        barn.push(tabell(['Delkapitel', 'Begreppsfrågor just nu', 'Äldre prov'],
+          k.delkapitel.map((d) => {
+            const nuDel = a.nu.delkapitel.find((x) => x.kod === d.kod);
+            return [`${d.kod} ${d.namn}`,
+              nuDel === undefined || nuDel.procent === null ? 'inte testat' : `${nuDel.procent} % (${nuDel.senastDatum ?? ''})`,
+              d.senaste.map((x) => `${x.procent} % (${x.datum})`).join(', ') || '—'];
+          })));
+        if (k.sammanfattning !== null) {
+          barn.push(new Paragraph({ children: [new TextRun({ text: 'Sammanfattning', bold: true })] }));
+          for (const rad of k.sammanfattning.split('\n')) barn.push(new Paragraph(rad));
+        }
+        if (k.attOva.length > 0) {
+          barn.push(new Paragraph({ children: [new TextRun({ text: 'Begreppsförklaringar', bold: true })] }));
+          for (const b of k.attOva) {
+            barn.push(new Paragraph({ bullet: { level: 0 }, children: [
+              new TextRun({ text: b.begrepp, bold: true }),
+              ...(b.forklaring !== null ? [new TextRun(` — ${b.forklaring}`)] : []),
+            ] }));
+          }
+        }
+        barn.push(tom());
+      }
     }
   }
 

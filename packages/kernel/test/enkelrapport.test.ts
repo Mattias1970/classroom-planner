@@ -32,17 +32,17 @@ describe('enkelRapport', () => {
     const r = enkelRapport(bygg(), 'a', f);
     expect(r.trend).toBe('upp');
     expect(r.ton).toBe('bra');
-    expect(r.rubrik).toBe('Det går uppåt för Anna Berg');
+    expect(r.rubrik).toBe('Läxförhören går uppåt för Anna Berg');
     expect(r.laxforhor.map((x) => `${x.procent}:${x.delta}`)).toEqual(['50:null', '100:50']);
     expect(r.laxforhor[1].godkant).toBe(true);
-    expect(r.text[0]).toContain('från 50 % (2026-08-24) till 100 % (2026-08-31)');
+    expect(r.text[0]).toContain('Från 50 % (2026-08-24) till 100 % (2026-08-31) på 2 läxförhör');
   });
 
   it('exit ticket → nästa läxförhör per delkapitel', () => {
     const r = enkelRapport(bygg(), 'a', f);
     expect(r.exitTillLax.map((x) => `${x.kod}:${x.exitProcent}→${x.laxProcent}`)).toEqual(['4.1:50→50', '4.2:0→100']);
     expect(r.exitTillLax[1]).toMatchObject({ exitProv: 'Exit 4.2', laxProv: 'Läxförhör 4.1-4.2', delta: 100 });
-    expect(r.text.some((t) => t.includes('förbättrades 1 av 2 delkapitel'))).toBe(true);
+    expect(r.text.some((t) => t.includes('1 av 2 gick upp, 0 gick ned'))).toBe(true);
   });
 
   it('begrepp: allt rätt nu, tre vända (A och B och C var fel någon gång)', () => {
@@ -50,8 +50,8 @@ describe('enkelRapport', () => {
     expect(r.kvar).toEqual([]);
     expect(r.vant.map((x) => x.fraga).sort()).toEqual([A, B, C].sort());
     expect(r.nuProcent).toBe(100);
-    expect(r.text).toContain('Inga begrepp är kvar att lära just nu.');
-    expect(r.text.some((t) => t.includes('3 begrepp som tidigare var fel sitter nu'))).toBe(true);
+    expect(r.text.some((t) => t.includes('rätt begrepp i senaste försöket på alla 3 testade frågor'))).toBe(true);
+    expect(r.text.some((t) => t.includes('3 frågor som tidigare var fel är rätt i senaste försöket'))).toBe(true);
   });
 
   it('nedåtgående trend under godkänt ger oro', () => {
@@ -62,7 +62,7 @@ describe('enkelRapport', () => {
     expect(r.laxforhor.map((x) => x.procent)).toEqual([50, 100, 33]);
     expect(['ned', 'jamn']).toContain(r.trend);
     expect(r.kvar.map((x) => x.fraga).sort()).toEqual([A, B].sort());
-    expect(r.text.some((t) => t.includes('2 begrepp är kvar att lära'))).toBe(true);
+    expect(r.text.some((t) => t.includes('2 av 3 testade begreppsfrågor var fel i senaste försöket'))).toBe(true);
   });
 
   it('elev utan läxförhör', () => {

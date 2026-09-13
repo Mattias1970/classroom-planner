@@ -443,6 +443,9 @@ function veckodagFor(datum: string): number {
 }
 
 /** Lektioner med härledd närvaro, kronologiskt. Källfiltret ignoreras (närvaro bygger alltid på Socrative). */
+/** Innehåller lektionens sessioner det datumet? */
+function g_har(g: Resultat[], datum: string): boolean { return g.some((r) => r.datum === datum); }
+
 export function narvaroLektioner(s: Struktur, f: DashboardFilter): NarvaroLektion[] {
   const rs = dashboardResultat(s, { ...f, kallor: NARVARO_KALLOR });
   const alla = sokElever(s, f.klassId, '').map((e) => e.id);
@@ -454,8 +457,19 @@ export function narvaroLektioner(s: Struktur, f: DashboardFilter): NarvaroLektio
     const n = `${dag}|${r.amneId ?? ''}`;
     grupper.set(n, [...(grupper.get(n) ?? []), r]);
   }
+  // Närvaro = något Socrative-svar den dagen, oavsett typ. En elev som gjorde en övning
+  // (eller ett quiz läraren märkt om) på lektionsdagen har inte varit frånvarande.
+  const allaSocr = dashboardResultat(s, { ...f, kallor: ['socrative-laxforhor', 'socrative-exit', 'socrative-ovning'] });
+  const svarPerDag = new Map<string, Set<string>>();
+  for (const r of allaSocr) {
+    const dag = (avResultat.get(r.id) ?? r.datum).slice(0, 10);
+    const n = `${dag}|${r.amneId ?? ''}`;
+    const m = svarPerDag.get(n) ?? new Set<string>(); m.add(r.elevId); svarPerDag.set(n, m);
+    // Halvklass: ett svar på den andra sessionens datum räknas till samma lektion
+    for (const [nn] of grupper) if (nn.endsWith(`|${r.amneId ?? ''}`) && nn !== n && Math.abs(Date.parse(nn.slice(0, 10)) - Date.parse(dag)) <= 7 * 86_400_000 && g_har(grupper.get(nn) ?? [], r.datum)) { const m2 = svarPerDag.get(nn) ?? new Set<string>(); m2.add(r.elevId); svarPerDag.set(nn, m2); }
+  }
   return [...grupper.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([n, g]) => {
-    const narv = new Set(g.map((r) => r.elevId));
+    const narv = svarPerDag.get(n) ?? new Set(g.map((r) => r.elevId));
     const narvarande = alla.filter((id) => narv.has(id));
     const franvarande = alla.filter((id) => !narv.has(id));
     const tider = g.map((r) => r.tid).filter((t): t is string => t !== undefined).sort();

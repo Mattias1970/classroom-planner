@@ -2069,8 +2069,9 @@ describe('📄 Rapporter', () => {
     expect(host.textContent).toContain('Så pluggar du bäst');
     expect(host.textContent).toContain('Din plan');
     act(() => { knapp(host, 'Fullständig rapport').click(); });
-    expect(host.textContent).toContain('Hur går det?');
-    expect(host.textContent).toContain('Vad kan du göra?');
+    expect(host.textContent).toContain('1. Aktuellt kunnande');
+    expect(host.textContent).toContain('2. Nästa steg');
+    expect(host.textContent).toContain('3. Historik');
     expect(host.querySelectorAll('.st-punkt-kort').length).toBeGreaterThan(1);
     expect(knapp(host, '📝 Skriv ut till Word')).not.toBeNull();
     act(() => { knapp(host, 'Enkel rapport').click(); });

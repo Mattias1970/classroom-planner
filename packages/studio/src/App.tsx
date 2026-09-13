@@ -3462,7 +3462,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
       </div>
 
       <details className={`st-fall${lyst === 'st-sekt-lekt' ? ' lyst' : ''}`} id="st-sekt-lekt" open={oppnaSekt.has('lekt')} onToggle={(e) => vaxlaSekt('lekt', (e.target as HTMLDetailsElement).open)}>
-        <summary><b>🎯 Lektionstest</b><InfoKnapp id="lektionstest" /> <small className="muted">läxförhör och exit ticket per lektion, Δ per elev</small></summary>
+        <summary><b>🎯 Lektionstest</b><InfoKnapp id="lektionstest" /> <small className="muted">läxförhör och exit ticket från samma lektion · Δ = exit − läxförhör räknas per lektion och medelvärdet tas sedan (bara lektioner med båda testerna), så det kan skilja sig från skillnaden mellan totalsnitten</small></summary>
       {/* Lektionstest: läxförhör vs exit ticket per lektion */}
       <div className="uppg-kort st-widget st-lektionstest">
         <div className="rad">
@@ -4320,59 +4320,9 @@ function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur,
             <p className="small muted">Räknas in som förhör eftersom samma quiz kördes: {analys.inkluderadeOvningar.map((x) => `${x.prov} (${kortDatum(x.datum)} → ${TYPNAMN[x.som]})`).join(' · ')}.</p>
           )}
 
-          <h3>Hur går det?</h3>
-          {analys.laget.length === 0 ? <p className="muted small">Inga resultat i perioden.</p> : (
-            <div className="st-punkter">{analys.laget.map((r, i) => (
-              <div key={i} className={`st-punkt-kort ${r.ton}`}><b>{r.rubrik}</b><p>{r.text}</p></div>
-            ))}</div>
-          )}
-
-          {analys.kurva.length > 0 && (<>
-            <h3>Resultat över tid</h3>
-            <LinjeDiagram hojd={280} visaVarden
-              tillfallen={analys.kurva.map((p, i) => ({ etikett: [`T${i + 1}`, p.datum.slice(5)], titel: `${p.prov} · ${p.datum}` }))}
-              serier={[{ namn: valdElev.namn, varden: analys.kurva.map((p) => p.procent), farg: KORT_FARG['socrative-exit'] }]}
-              kravLinjer={[{ procent: 90, namn: 'läxförhör 90 %' }, { procent: 70, namn: 'exit 70 %' }]} />
-            <TestLista tillfallen={analys.tillfallen} />
-          </>)}
-
-          <h3>Vad kan du göra?</h3>
-          <div className="st-punkter">{analys.rad.map((r, i) => (
-            <div key={i} className={`st-punkt-kort ${r.ton}`}><b>{r.rubrik}</b><p>{r.text}</p></div>
-          ))}</div>
-
-          {analys.fastnat.length > 0 && (<>
-            <h3>Begrepp att träna på</h3>
-            <table className="tbl st-tabell">
-              <thead><tr><th>Begrepp</th><th>Del</th><th>Fel</th><th>Historik</th></tr></thead>
-              <tbody>{analys.fastnat.map((b) => (
-                <tr key={b.fraga}>
-                  <td><div className="st-provnamn" title={b.fraga}>{b.fraga}</div></td>
-                  <td>{b.kod}</td><td className="st-diff ned">{b.antalFel}</td>
-                  <td>{b.historik.map((h, i) => <span key={i} className={`st-tk-steg ${h.ratt ? 'upp' : 'ned'}`} title={`${h.prov} ${h.datum}`}>{h.ratt ? '✓' : '✗'}</span>)}</td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </>)}
-
-          {(analys.ovningar.length > 0 || analys.filmer.length > 0) && (<>
-            <h3>Öva och se filmer</h3>
-            <div className="st-lankar">
-              {analys.ovningar.map((o) => (
-                <a key={o.rum} className="st-lank ovning" href={o.url} target="_blank" rel="noreferrer" title={`Socrative-rum ${o.rum}`}>
-                  🎯 {o.rum} <small>{o.kod} {o.namn}</small>
-                </a>
-              ))}
-              {analys.filmer.map((film) => (
-                <a key={film.url} className="st-lank film" href={film.url} target="_blank" rel="noreferrer">
-                  ▶ {film.titel} <small>{film.for}</small>
-                </a>
-              ))}
-            </div>
-          </>)}
-
+          <h3>1. Aktuellt kunnande <InfoKnapp id="nulage" /> <small className="muted">senaste försöket per fråga{analys.nu.senastDatum !== null ? ` · till och med ${analys.nu.senastDatum}` : ''}</small></h3>
+          {analys.nu.fragor.length === 0 && <p className="muted small">Inga begreppsfrågor med svar i perioden (kräver filimporterade Socrative-rapporter).</p>}
           {analys.nu.fragor.length > 0 && (<>
-            <h3>Vad du kan nu <InfoKnapp id="nulage" /></h3>
             <p className="small muted">Räknat på ditt <b>senaste</b> svar på varje fråga — läxförhören är kumulativa, så samma begrepp kommer igen. Det du missade tidigare men kan nu räknas som kunnigt.</p>
             <div className="st-nu">
               <div className="st-nu-tal"><b>{analys.nu.procent} %</b><span>{analys.nu.kan.length} av {analys.nu.fragor.length} begrepp</span></div>
@@ -4414,8 +4364,60 @@ function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur,
             </table>
           </>)}
 
+          <h3>2. Nästa steg <small className="muted">fokus, lärarstöd och uppföljning</small></h3>
+          <div className="st-punkter">{analys.rad.map((r, i) => (
+            <div key={i} className={`st-punkt-kort ${r.ton}`}><b>{r.rubrik}</b><p>{r.text}</p></div>
+          ))}</div>
+
+          <h3>3. Historik <small className="muted">resultat med datum — jämförelsen är mot dina egna tidigare resultat</small></h3>
+          {analys.laget.length === 0 ? <p className="muted small">Inga resultat i perioden.</p> : (
+            <div className="st-punkter">{analys.laget.map((r, i) => (
+              <div key={i} className={`st-punkt-kort ${r.ton}`}><b>{r.rubrik}</b><p>{r.text}</p></div>
+            ))}</div>
+          )}
+
+          {analys.kurva.length > 0 && (<>
+            <h3>Resultat över tid</h3>
+            <LinjeDiagram hojd={280} visaVarden
+              tillfallen={analys.kurva.map((p, i) => ({ etikett: [`T${i + 1}`, p.datum.slice(5)], titel: `${p.prov} · ${p.datum}` }))}
+              serier={[{ namn: valdElev.namn, varden: analys.kurva.map((p) => p.procent), farg: KORT_FARG['socrative-exit'] }]}
+              kravLinjer={[{ procent: 90, namn: 'läxförhör 90 %' }, { procent: 70, namn: 'exit 70 %' }]} />
+            <TestLista tillfallen={analys.tillfallen} />
+          </>)}
+
+
+          {analys.fastnat.length > 0 && (<>
+            <h3>Bilaga B — Begrepp som varit fel minst två gånger <InfoKnapp id="fastnat" /></h3>
+            <table className="tbl st-tabell">
+              <thead><tr><th>Begrepp</th><th>Del</th><th>Fel</th><th>Historik</th></tr></thead>
+              <tbody>{analys.fastnat.map((b) => (
+                <tr key={b.fraga}>
+                  <td><div className="st-provnamn" title={b.fraga}>{b.fraga}</div></td>
+                  <td>{b.kod}</td><td className="st-diff ned">{b.antalFel}</td>
+                  <td>{b.historik.map((h, i) => <span key={i} className={`st-tk-steg ${h.ratt ? 'upp' : 'ned'}`} title={`${h.prov} ${h.datum}`}>{h.ratt ? '✓' : '✗'}</span>)}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </>)}
+
+          {(analys.ovningar.length > 0 || analys.filmer.length > 0) && (<>
+            <h3>Öva och se filmer</h3>
+            <div className="st-lankar">
+              {analys.ovningar.map((o) => (
+                <a key={o.rum} className="st-lank ovning" href={o.url} target="_blank" rel="noreferrer" title={`Socrative-rum ${o.rum}`}>
+                  🎯 {o.rum} <small>{o.kod} {o.namn}</small>
+                </a>
+              ))}
+              {analys.filmer.map((film) => (
+                <a key={film.url} className="st-lank film" href={film.url} target="_blank" rel="noreferrer">
+                  ▶ {film.titel} <small>{film.for}</small>
+                </a>
+              ))}
+            </div>
+          </>)}
+
           {analys.matris.fragor.length > 0 && (<>
-            <h3>Fråga för fråga</h3>
+            <h3>Bilaga A — Fråga för fråga <InfoKnapp id="fragematris" /></h3>
             <p className="small muted">Grön ruta = rätt, röd = fel, tom = frågan ingick inte i det quizet. Klicka på en ruta för att se frågan.</p>
             <div className="st-scroll" style={{ display: 'inline-block', maxWidth: '100%' }}>
               <table className="tbl st-fmtabell">

@@ -49,24 +49,39 @@ describe('elevanalys', () => {
     const lax = a.kallor.find((k) => k.kalla === 'socrative-laxforhor')!;
     expect(lax).toMatchObject({ snittProcent: 100, krav: 90, andelKlarade: 100, antal: 3 });
     expect(a.narvaroProcent).toBe(100);
-    expect(a.laget.map((r) => r.rubrik)).toContain('Läxförhören sitter');
-    expect(a.laget.find((r) => r.rubrik === 'Läxförhören sitter')!.text).toContain('kumulativa');
+    expect(a.laget.map((r) => r.rubrik)).toContain('Läxförhören når förhörsgränsen');
+    const laxRad = a.laget.find((r) => r.rubrik === 'Läxförhören når förhörsgränsen')!.text;
+    expect(laxRad).toContain('kumulativa');
+    expect(laxRad).toContain('inte ett ämnesbetyg');
+    expect(laxRad).toMatch(/på \d+ läxförhör/); // underlaget anges
     expect(a.fastnat).toEqual([]);
-    expect(a.rad.map((r) => r.rubrik)).toContain('Fånga upp lektionens slut'); // exit strax under läxförhören
-    expect(a.sammanfattning).toContain('Anna Berg kan 2 av 2 begrepp i Biologi just nu (100 %)');
-    expect(a.laget[0].rubrik).toBe('Du kan 2 av 2 begrepp just nu'); // nuläget först
+    // Inga orsaksslutsatser: skillnaden exit/läxförhör beskrivs med underlag, inte som "tappar koncentrationen"
+    const diffRad = a.laget.find((r) => r.rubrik.startsWith('Exit ticket jämfört med läxförhör'));
+    expect(diffRad).toBeDefined();
+    expect(diffRad!.text).toContain('räknas per lektion');
+    expect(diffRad!.text).toContain('olika innehåll');
+    expect(a.laget.map((r) => r.text).join(' ')).not.toMatch(/koncentration|fungerar för dig|tappar under/);
+    expect(a.sammanfattning).toContain('Anna Berg: rätt på 2 av 2 testade begreppsfrågor i Biologi');
+    expect(a.laget[0].rubrik).toBe('Rätt på 2 av 2 testade begreppsfrågor'); // nuläget först, med underlag
+    expect(a.laget[0].text).toContain('senaste försöket'); // inte "sitter"
   });
 
   it('Omar: svaga läxförhör, frånvaro och begrepp som fastnat ger konkreta råd', () => {
     const o = elevanalys(bygg(), 'b', f);
     expect(o.narvaroProcent).toBe(67);
     expect(o.franvaroDatum).toEqual(['2026-09-04']);
-    expect(o.laget.map((r) => r.rubrik)).toEqual(expect.arrayContaining(['Läxförhören behöver mer tid', 'Frånvaron påverkar']));
+    expect(o.laget.map((r) => r.rubrik)).toEqual(expect.arrayContaining(['Läxförhören ligger under förhörsgränsen']));
+    // Frånvaro beskrivs som saknat quizsvar, inte som en påverkan
+    const narvRad = o.laget.find((r) => r.rubrik.startsWith('Quizsvar saknas'))!;
+    expect(narvRad.text).toContain('visar inte att du var borta');
+    expect(o.laget.map((r) => r.rubrik).join(' ')).not.toContain('Frånvaron påverkar');
     expect(o.fastnat.map((b) => b.fraga)).toEqual([A]);
     const rubriker = o.rad.map((r) => r.rubrik);
-    expect(rubriker[0]).toContain('begrepp kvar att lära'); // rådet utgår från senaste svaret
-    expect(rubriker).toEqual(expect.arrayContaining(['Plugga begreppen i flera omgångar', 'Ta igen de missade lektionerna']));
-    expect(o.rad.find((r) => r.rubrik === 'Ta igen de missade lektionerna')!.text).toContain('2026-09-04');
+    expect(rubriker[0]).toContain('Fokus 1'); // ett tydligt fokus, med underlag
+    expect(o.rad[0].text).toContain('Uppföljning vid nästa läxförhör');
+    expect(rubriker).toEqual(expect.arrayContaining(['Lektioner utan quizsvar']));
+    expect(o.rad.find((r) => r.rubrik === 'Lektioner utan quizsvar')!.text).toContain('2026-09-04');
+    expect(o.rad.map((r) => r.text).join(' ')).not.toMatch(/hur mycket du övat\.|Läxförhören behöver mer tid/);
   });
 
   it('elev utan resultat ger tom men läsbar analys; okänd elev kastar', () => {

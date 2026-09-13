@@ -31,7 +31,7 @@ export const FORKLARINGAR = {
     kort: 'Görs sista minuterna på lektionen och testar bara dagens avsnitt. Godkänt är 70 %.',
     lang: [
       'Exit ticket görs i Socrative i slutet av lektionen och handlar bara om det som gåtts igenom samma lektion. Den visar om lektionens innehåll landade.',
-      'Godkänt är 70 %. Ett lågt exit-resultat följt av ett bra läxförhör betyder att eleven pluggat ikapp hemma; tvärtom betyder det att det som satt på lektionen försvann till förhöret.',
+      'Målet är 70 %. Läxförhör och exit ticket prövar olika frågor och svårighetsgrad, så skillnaden mellan dem säger inte i sig vad den beror på — den följs upp tillsammans med eleven.',
     ],
   },
   ovning: {
@@ -48,10 +48,10 @@ export const FORKLARINGAR = {
   },
   narvaro: {
     rubrik: 'Närvaro',
-    kort: 'Andel lektioner där eleven svarat på läxförhöret eller exit ticket.',
+    kort: 'Andel lektioner där eleven har ett registrerat quizsvar (läxförhör, exit ticket eller övning).',
     lang: [
-      'Närvaron härleds ur Socrative: en lektion räknas som närvarande om eleven svarat på läxförhöret eller exit ticket den dagen. Inget svar på någotdera = frånvarande.',
-      'Det betyder att närvaron mäter deltagande i lektionens tester, inte fysisk närvaro. En elev som är i salen men inte gör testerna räknas som frånvarande här.',
+      'Måttet härleds ur Socrative: en lektion räknas som "med svar" om eleven svarat på något quiz den dagen. Inget svar = "utan svar".',
+      'Ett saknat quizsvar bevisar inte frånvaro från lektionen, och ett svar bevisar inte närvaro. Måttet stäms av mot skolans närvaroregistrering innan slutsatser dras.',
     ],
   },
   trendkluster: {
@@ -71,9 +71,10 @@ export const FORKLARINGAR = {
   },
   lektionstest: {
     rubrik: 'Lektionstest',
-    kort: 'Läxförhör och exit ticket från samma lektion sida vid sida; Δ = exit − läxförhör.',
+    kort: 'Läxförhör och exit ticket från samma lektion sida vid sida; Δ = exit − läxförhör, räknat per lektion.',
     lang: [
-      'Skillnaden visar om lektionen lyfte eleven. Positiv Δ: eleven kunde mer efter lektionen än före. Negativ Δ: eleven svarade sämre i slutet av lektionen än i början — vanligen koncentration eller att det nya inte hann landa.',
+      'Bara lektioner där eleven gjort båda testerna räknas. Skillnaden räknas per lektion och medelvärdet tas sedan, så det kan avvika från skillnaden mellan de två totalsnitten (som kan bygga på olika lektioner).',
+      'Testerna prövar olika innehåll och svårighetsgrad. Δ beskriver resultaten; vad skillnaden beror på följs upp med eleven.',
     ],
   },
   samband: {
@@ -87,16 +88,17 @@ export const FORKLARINGAR = {
   },
   trendkoll: {
     rubrik: 'Trendkoll',
-    kort: 'Samma fråga i två förhör: fel → rätt räknas som lärt, rätt → fel som glömt.',
+    kort: 'Samma fråga i två förhör: antal svar som gick fel → rätt respektive rätt → fel.',
     lang: [
-      'Eftersom läxförhören är kumulativa återkommer frågorna. Trendkollen jämför elevens svar på samma fråga i två förhör efter varandra. Netto = lärt − glömt. En elev med negativt netto glömmer mer än den lär sig och behöver repetera med mellanrum snarare än plugga mer.',
+      'Eftersom läxförhören är kumulativa återkommer frågorna. Trendkollen jämför svaren på samma fråga i två förhör efter varandra och redovisar antalen. Det visar ändrade svar; orsaken och hur varaktigt det är fastställs inte här.',
     ],
   },
   nulage: {
     rubrik: 'Vad du kan nu',
-    kort: 'Senaste svaret på varje fråga räknas — det som missades tidigare men sitter nu räknas som kunnigt.',
+    kort: 'Senaste svaret på varje testad fråga. Visar vad eleven valde rätt i senaste försöket — inte varaktig kunskap.',
     lang: [
-      'Läxförhören är kumulativa, så ett fel för tre veckor sedan säger inget om nuläget. Varje fråga bidrar med sitt senaste svar. Kvar att lära: senaste svaret var fel. Vänt till rätt: var fel förut, rätt nu.',
+      'Läxförhören är kumulativa, så varje fråga bidrar med sitt senaste svar. "Fel i senaste försöket" är det som behöver följas upp. "Rätt efter tidigare fel" visar ändrade svar.',
+      'Begrepp som inte testats än redovisas separat. Egen förklaring, tillämpning och kunskap efter en tids uppehåll behöver följas upp på annat sätt än med begreppsfrågor.',
     ],
   },
   fragematris: {
@@ -115,13 +117,13 @@ export const FORKLARINGAR = {
   },
   begreppKvar: {
     rubrik: 'Kvar att lära',
-    kort: 'Begrepp där senaste svaret var fel — det här är det enda som behöver pluggas in.',
+    kort: 'Begrepp där senaste svaret var fel — det som följs upp först.',
     lang: ['Listan är kort med flit: bara det som inte sitter just nu. Skriv en egen förklaring till varje, med ett exempel, och testa sedan i Socrative-rummet.'],
   },
   begreppVant: {
     rubrik: 'Vänt till rätt',
-    kort: 'Begrepp som varit fel någon gång men sitter nu. Framsteg, inte skulder.',
-    lang: ['Håll dem vid liv genom att svara på dem igen i nästa kumulativa läxförhör. Ett begrepp som vänts en gång kan vända tillbaka om det inte repeteras.'],
+    kort: 'Begrepp som varit fel någon gång men var rätt i senaste försöket.',
+    lang: ['Det visar ett ändrat svar. Om det håller följs upp i nästa kumulativa läxförhör, och genom att eleven förklarar begreppet med egna ord.'],
   },
   fastnat: {
     rubrik: 'Begrepp som fastnat',
@@ -140,8 +142,8 @@ export const FORKLARINGAR = {
   },
   elevProv: {
     rubrik: 'Elev × provtillfälle',
-    kort: 'Varje elevs procent per prov. Färg mot godkänt: grönt klarat, orange nära, rött under. Rött kryss = frånvarande.',
-    lang: ['Ett rött kryss betyder att eleven inte svarade på det Socrative-testet — inte att det gick dåligt. En punkt betyder att provet inte gäller den eleven (till exempel Magma-test som inte gjorts).'],
+    kort: 'Varje elevs procent per prov. Färg mot förhörsgränsen: grönt nådd, orange nära, rött under. Rött kryss = inget quizsvar.',
+    lang: ['Ett rött kryss betyder att eleven inte svarade på det Socrative-testet — inte att det gick dåligt, och inte nödvändigtvis frånvaro. En punkt betyder att provet inte gäller den eleven.'],
   },
   grupper: {
     rubrik: 'Grupp A vs B',

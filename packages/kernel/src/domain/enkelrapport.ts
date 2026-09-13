@@ -114,7 +114,8 @@ export function enkelRapport(sIn: Struktur, elevId: string, f: DashboardFilter &
     } catch { /* ämne utan bok — begreppen visas som frågetext */ }
   }
 
-  // Rubrik och text — positivt när det går uppåt
+  // Rubrik och text — beskrivande, med underlag. Positivt när serien går uppåt,
+  // men utan orsaksslutsatser om vad det beror på.
   const sista = laxforhor[laxforhor.length - 1];
   const forsta = laxforhor[0];
   const text: string[] = [];
@@ -122,25 +123,27 @@ export function enkelRapport(sIn: Struktur, elevId: string, f: DashboardFilter &
   if (laxforhor.length === 0) {
     rubrik = `${elev.namn} har inga läxförhör i perioden`; ton = 'okej';
   } else if (trend === 'upp') {
-    rubrik = `Det går uppåt för ${elev.namn}`; ton = 'bra';
-    text.push(`Läxförhören har gått från ${forsta.procent} % (${forsta.datum}) till ${sista.procent} % (${sista.datum}). Bra jobbat — fortsätt så.`);
+    rubrik = `Läxförhören går uppåt för ${elev.namn}`; ton = 'bra';
+    text.push(`Från ${forsta.procent} % (${forsta.datum}) till ${sista.procent} % (${sista.datum}) på ${laxforhor.length} läxförhör. Bra jobbat.`);
   } else if (trend === 'ned') {
-    rubrik = `${elev.namn} har tappat lite`; ton = sista.godkant === true ? 'okej' : 'oro';
-    text.push(`Läxförhören har gått från ${forsta.procent} % till ${sista.procent} %. ${sista.godkant === true ? 'Det är fortfarande godkänt, men riktningen är värd att bryta.' : 'Senaste förhöret var under godkänt.'}`);
+    rubrik = `Läxförhören går nedåt för ${elev.namn}`; ton = sista.godkant === true ? 'okej' : 'oro';
+    text.push(`Från ${forsta.procent} % (${forsta.datum}) till ${sista.procent} % (${sista.datum}). ${sista.godkant === true ? 'Senaste ligger fortfarande över förhörsgränsen 90 %.' : 'Senaste ligger under förhörsgränsen 90 %.'} Vi tittar tillsammans på vad som ändrats.`);
   } else {
-    rubrik = `${elev.namn} ligger stabilt`; ton = sista.godkant === true ? 'bra' : 'okej';
-    text.push(`Läxförhören ligger runt ${sista.procent} %${sista.godkant === true ? ', godkänt' : ''}.`);
+    rubrik = `${elev.namn} ligger jämnt på läxförhören`; ton = sista.godkant === true ? 'bra' : 'okej';
+    text.push(`Runt ${sista.procent} % på ${laxforhor.length} läxförhör${sista.godkant === true ? ', över förhörsgränsen 90 %' : ', under förhörsgränsen 90 %'}.`);
   }
   const lyft = exitTillLax.filter((x) => x.delta > 0).length;
   const tapp = exitTillLax.filter((x) => x.delta < 0).length;
   if (exitTillLax.length > 0) {
-    text.push(lyft >= tapp
-      ? `Från exit ticket till nästa läxförhör förbättrades ${lyft} av ${exitTillLax.length} delkapitel — det du övat på efter lektionen sitter bättre på förhöret.`
-      : `Från exit ticket till nästa läxförhör tappade ${tapp} av ${exitTillLax.length} delkapitel — det som satt på lektionen försvann till förhöret, så repetera innan förhöret.`);
+    text.push(`Från exit ticket till nästa läxförhör på samma delkapitel: ${lyft} av ${exitTillLax.length} gick upp, ${tapp} gick ned. Testerna prövar olika frågor, så skillnaden följs upp med dig innan vi drar slutsatser.`);
   }
-  if (nu.kvar.length === 0 && nu.fragor.length > 0) text.push('Inga begrepp är kvar att lära just nu.');
-  else if (nu.kvar.length > 0) text.push(`${nu.kvar.length} begrepp är kvar att lära — de står nedan.`);
-  if (nu.fixat.length > 0) text.push(`${nu.fixat.length} begrepp som tidigare var fel sitter nu.`);
+  if (nu.fragor.length > 0) {
+    text.push(nu.kvar.length === 0
+      ? `Du valde rätt begrepp i senaste försöket på alla ${nu.fragor.length} testade frågor.`
+      : `${nu.kvar.length} av ${nu.fragor.length} testade begreppsfrågor var fel i senaste försöket — de står nedan.`);
+  }
+  if (nu.fixat.length > 0) text.push(`${nu.fixat.length} frågor som tidigare var fel är rätt i senaste försöket.`);
+  text.push('Förhörsgränserna 90 % (läxförhör) och 70 % (exit ticket) gäller begreppsfrågorna och är inte ett ämnesbetyg.');
 
   return { elev, amneNamn, trend, laxforhor, exitTillLax, kvar: nu.kvar, vant: nu.fixat, nuProcent: nu.procent, rubrik, text, ton };
 }

@@ -17,6 +17,7 @@ import {
 import { trendkoll } from './trendkoll.js';
 import { aterkommandeFel, aterkommandeFelKlass, delkapitelSegment, harmoniseraOvningar, nulage, ovningsDubbletter, type BegreppsFel, type Inkluderad, type Nulage, type OvningsMatchning, type SegmentTillfalle } from './delkapiteltrend.js';
 import { begreppForFraga, elevrapport, socrativeElevLank, type Elevrapport } from './elevrapport.js';
+import { planForAmne } from './studieguide.js';
 import { fragematris, type Fragematris } from './delkapiteltrend.js';
 
 export interface KallaSammanfattning {
@@ -152,177 +153,194 @@ export function elevanalys(sIn: Struktur, elevId: string, f: DashboardFilter & {
   }
 
   // ── Läget ────────────────────────────────────────────────
-  // Nuläget först: det intressanta är vad eleven kan nu, inte vad som missades
-  // för tre veckor sedan. Läxförhören är kumulativa, så senaste svaret gäller.
+  // Principer (efter granskning av 29 rapporter):
+  //  • Beskriv vad resultaten visar. Dra inga orsaksslutsatser ("koncentration",
+  //    "genomgångarna fungerar") — testerna prövar olika innehåll och svårighet.
+  //  • Ange underlaget för varje siffra: vilka prov, hur många, vilket datum.
+  //  • Saknat underlag ska synas separat, aldrig som "allt sitter".
+  //  • "Rätt i senaste försöket" är det som visats — inte att begreppet "sitter".
+  //  • Frånvaro = inget quizsvar den dagen; det bevisar inte lektionsfrånvaro.
   const laget: Rad[] = [];
+  const lax = kallor.find((k) => k.kalla === 'socrative-laxforhor');
+  const exit = kallor.find((k) => k.kalla === 'socrative-exit');
+  const otestade = rapport === null ? 0
+    : rapport.kapitel.flatMap((k) => k.delkapitel).flatMap((d) => d.begrepp.map((b) => b.begrepp.toLowerCase()))
+      .filter((b, i, arr) => arr.indexOf(b) === i)
+      .filter((b) => !nu.fragor.some((fr) => (fr.begrepp ?? '').toLowerCase() === b)).length;
+  const senastDatum = nu.senastDatum ?? null;
+  const senastProv = nu.senastProv ?? null;
+
   if (nu.fragor.length > 0) {
     const svaga = nu.delkapitel.filter((d) => d.procent !== null && d.procent < 100);
     laget.push({
       ton: (nu.procent ?? 0) >= 90 ? 'bra' : (nu.procent ?? 0) >= 70 ? 'okej' : 'oro',
-      rubrik: `Du kan ${nu.kan.length} av ${nu.fragor.length} begrepp just nu`,
-      text: `Räknat på ditt senaste svar på varje fråga sitter ${nu.procent} % av begreppen`
-        + `${nu.senastProv !== null ? ` (färskast: ${nu.senastProv}, ${nu.senastDatum})` : ''}. `
-        + (nu.kvar.length === 0 ? 'Inget är kvar att lära in just nu.'
-          : `Kvar att lära: ${nu.kvar.length} begrepp${svaga.length > 0 ? `, mest i ${svaga.map((d) => d.kod).join(' och ')}` : ''}.`)
-        + (nu.fixat.length > 0 ? ` Du har vänt ${nu.fixat.length} begrepp från fel till rätt.` : ''),
+      rubrik: `Rätt på ${nu.kan.length} av ${nu.fragor.length} testade begreppsfrågor`,
+      text: `Räknat på ditt senaste svar på varje fråga (senaste förhöret ${senastProv ?? ''}${senastDatum !== null ? `, ${senastDatum}` : ''}). `
+        + (nu.kvar.length === 0
+          ? `Du valde rätt begrepp i senaste försöket på alla ${nu.fragor.length} testade frågor.`
+          : `${nu.kvar.length} frågor var fel i senaste försöket${svaga.length > 0 ? `, mest i ${svaga.map((d) => d.kod).join(' och ')}` : ''}.`)
+        + (otestade > 0 ? ` ${otestade} begrepp i kapitlet är inte testade än och återstår att följa upp.` : '')
+        + (nu.fixat.length > 0 ? ` ${nu.fixat.length} frågor som tidigare var fel är rätt i senaste försöket.` : ''),
     });
   }
-  const lax = kallor.find((k) => k.kalla === 'socrative-laxforhor');
-  const exit = kallor.find((k) => k.kalla === 'socrative-exit');
   if (lax !== undefined && lax.snittProcent !== null) {
     const over = lax.krav !== null && lax.snittProcent >= lax.krav;
     laget.push({
       ton: over ? 'bra' : lax.snittProcent >= 75 ? 'okej' : 'oro',
-      rubrik: over ? 'Läxförhören sitter' : 'Läxförhören behöver mer tid',
-      text: `Snittet på läxförhören är ${lax.snittProcent} %${lax.krav !== null ? ` mot kravet ${lax.krav} %` : ''}`
-        + `${lax.klassSnitt !== null ? ` (klassen ${lax.klassSnitt} %)` : ''}. `
-        + `Läxförhören är kumulativa: varje nytt förhör tar med begreppen från de tidigare, så resultatet visar hur mycket du har kvar från hela kapitlet.`
-        + `${lax.trend === 'upp' ? ' Kurvan pekar uppåt.' : lax.trend === 'ned' ? ' Kurvan pekar nedåt.' : ''}`,
+      rubrik: over ? 'Läxförhören når förhörsgränsen' : 'Läxförhören ligger under förhörsgränsen',
+      text: `Snitt ${lax.snittProcent} % på ${lax.antal} läxförhör${lax.krav !== null ? ` (gränsen för godkänt förhör är ${lax.krav} %` : ''}`
+        + `${lax.klassSnitt !== null ? `; klassens snitt ${lax.klassSnitt} %` : ''}${lax.krav !== null ? ')' : ''}. `
+        + 'Läxförhören är kumulativa — varje nytt tar med begreppen från de tidigare delkapitlen.'
+        + `${lax.trend === 'upp' ? ' Serien går uppåt.' : lax.trend === 'ned' ? ' Serien går nedåt.' : ''}`
+        + ' Förhörsgränsen är ett mått på begreppsfrågorna, inte ett ämnesbetyg.',
     });
   }
   if (exit !== undefined && exit.snittProcent !== null) {
     const over = exit.krav !== null && exit.snittProcent >= exit.krav;
     laget.push({
       ton: over ? 'bra' : exit.snittProcent >= 60 ? 'okej' : 'oro',
-      rubrik: over ? 'Du tar till dig lektionerna' : 'Lektionsinnehållet fastnar inte helt',
-      text: `Exit tickets ligger på ${exit.snittProcent} %${exit.krav !== null ? ` mot kravet ${exit.krav} %` : ''}`
-        + `${exit.klassSnitt !== null ? ` (klassen ${exit.klassSnitt} %)` : ''}. Exit ticket görs i slutet av lektionen och mäter dagens innehåll.`,
+      rubrik: over ? 'Exit tickets ligger över målet' : 'Exit tickets ligger under målet',
+      text: `Snitt ${exit.snittProcent} % på ${exit.antal} exit tickets${exit.krav !== null ? ` (målet är ${exit.krav} %)` : ''}`
+        + `${exit.klassSnitt !== null ? `; klassens snitt ${exit.klassSnitt} %` : ''}. Exit ticket görs i slutet av lektionen och prövar bara dagens avsnitt. `
+        + (over ? 'Vi följer upp om du kan använda kunskapen vid ett senare tillfälle.' : 'Vi följer upp vilket stöd som behövs under lektionen.'),
     });
   }
-  if (lekt?.diffSnitt !== null && lekt !== null) {
+  if (lekt !== null && lekt.diffSnitt !== null && lekt.lektioner > 0) {
     const d = lekt.diffSnitt;
     laget.push({
-      ton: d >= 5 ? 'bra' : d <= -5 ? 'oro' : 'okej',
-      rubrik: d >= 5 ? 'Lektionerna lyfter dig' : d <= -5 ? 'Du tappar under lektionen' : 'Jämnt före och efter lektionen',
-      text: `Skillnaden mellan exit ticket och läxförhör är i snitt ${d > 0 ? '+' : ''}${d} procentenheter. `
-        + (d >= 5 ? 'Du kan mer efter lektionen än före — genomgångarna fungerar för dig.'
-          : d <= -5 ? 'Du svarar sämre i slutet av lektionen än i början. Det brukar handla om att koncentrationen tar slut eller att det nya innehållet inte hann landa.'
-            : 'Du ligger ungefär lika före och efter lektionen.'),
+      ton: 'okej',
+      rubrik: 'Exit ticket jämfört med läxförhör på samma lektion',
+      text: `På de ${lekt.lektioner} lektioner där du gjort både läxförhör och exit ticket ligger exit ticket i snitt ${d > 0 ? '+' : ''}${d} procentenheter ${d >= 0 ? 'över' : 'under'} läxförhöret `
+        + `(läxförhör ${lekt.laxforhorSnitt ?? '—'} %, exit ${lekt.exitSnitt ?? '—'} % på dessa lektioner; skillnaden räknas per lektion och medelvärdet tas sedan, så den kan avvika från skillnaden mellan de två totalsnitten). `
+        + 'De två testerna prövar olika innehåll och svårighetsgrad, så skillnaden visar inte i sig vad den beror på — det följer vi upp tillsammans.',
     });
   }
-  if (narvaro?.narvaroProcent !== null && narvaro !== null) {
+  if (narvaro !== null && narvaro.narvaroProcent !== null) {
+    const saknade = narvaro.lektioner - narvaro.narvarande;
     laget.push({
       ton: narvaro.narvaroProcent >= 90 ? 'bra' : narvaro.narvaroProcent >= 80 ? 'okej' : 'oro',
-      rubrik: narvaro.narvaroProcent >= 90 ? 'Du är med på lektionerna' : 'Frånvaron påverkar',
-      text: `Du har deltagit i ${narvaro.narvarande} av ${narvaro.lektioner} lektioner (${narvaro.narvaroProcent} %).`
-        + (narvaro.franvaroDatum.length > 0 ? ` Frånvaro: ${narvaro.franvaroDatum.join(', ')}.` : ''),
+      rubrik: saknade === 0 ? 'Quizsvar på alla lektioner' : `Quizsvar saknas på ${saknade} av ${narvaro.lektioner} lektioner`,
+      text: `Registrerat quizsvar på ${narvaro.narvarande} av ${narvaro.lektioner} lektioner (${narvaro.narvaroProcent} %).`
+        + (narvaro.franvaroDatum.length > 0 ? ` Utan svar: ${narvaro.franvaroDatum.join(', ')}.` : '')
+        + ' Ett saknat quizsvar visar inte att du var borta från lektionen — det stäms av mot närvaroregistreringen.',
     });
   }
   if (tkElev !== null && (tkElev.lart > 0 || tkElev.glomt > 0)) {
     laget.push({
-      ton: tkElev.netto > 0 ? 'bra' : tkElev.netto < 0 ? 'oro' : 'okej',
-      rubrik: tkElev.netto > 0 ? 'Du lär dig mer än du glömmer' : tkElev.netto < 0 ? 'Du glömmer mer än du lär dig' : 'Lika mycket lärt som glömt',
-      text: `På frågor som återkommit har ${tkElev.lart} svar gått från fel till rätt och ${tkElev.glomt} från rätt till fel.`,
+      ton: 'okej',
+      rubrik: 'Ändrade svar mellan förhören',
+      text: `På frågor som ställts igen gick ${tkElev.lart} svar från fel till rätt och ${tkElev.glomt} från rätt till fel (${tkElev.steg.length} jämförelser). `
+        + 'Det visar ändrade svar; orsaken och hur länge det håller är inte fastställda.',
     });
   }
+
   if (harm.inkluderade.length > 0) {
     laget.push({
-      ton: 'bra', rubrik: 'Övningar som räknas som förhör',
+      ton: 'okej', rubrik: 'Övningar som räknas som förhör',
       text: `${harm.inkluderade.map((o) => `${o.prov} (${o.datum}) kör samma quiz som ${o.liknar} och räknas därför som ${KALLNAMN[o.som].toLowerCase()}`).join('; ')}. `
-        + 'Det senaste svaret på varje fråga gäller, så en övning där du fick rätt räknas dig till godo.',
+        + 'Senaste svaret per fråga gäller, så ett rätt svar i övningen räknas.',
     });
   }
   if (dubblettOvningar.length > 0) {
     laget.push({
       ton: 'okej', rubrik: 'Övningar med delvis samma frågor',
-      text: `${dubblettOvningar.map((o) => `${o.ovning.prov} delar ${o.overlapp} % av frågorna med ${o.liknar.prov}`).join(', ')}. `
-        + 'Under gränsen för att räknas som samma test — ligger som separat övning.',
-    });
-  }
-  const svaga = segment.length === 0 ? [] : (segment[segment.length - 1].segment ?? []).filter((x) => x.procent !== null && x.procent < 70);
-  if (svaga.length > 0) {
-    laget.push({
-      ton: 'oro', rubrik: 'Delar som halkat efter',
-      text: `I det senaste förhöret låg ${svaga.map((x) => `${x.kod} på ${x.procent} %`).join(', ')}. Det är de delkapitlen som drar ner helheten.`,
+      text: `${dubblettOvningar.map((o) => `${o.ovning.prov} delar ${o.overlapp} % av frågorna med ${o.liknar.prov}`).join(', ')}. Ligger som separat övning.`,
     });
   }
 
-  // ── Råd ──────────────────────────────────────────────────
-  /** 'biotop — En naturtyp med …' när begreppet är känt, annars bara beskrivningen. */
+  // ── Råd: ett eller två fokus, med underlag och uppföljning ──
+  const rad: Rad[] = [];
   const begreppRad = (x: { begrepp?: string; fraga: string }): string =>
     (x.begrepp !== undefined ? `${x.begrepp} — ${x.fraga}` : x.fraga);
-  const begreppNamn = new Map(nu.fragor.filter((x) => x.begrepp !== undefined).map((x) => [x.fraga, x.begrepp!]));
-  const rad: Rad[] = [];
+  const nastaLax = (() => {
+    if (f.amneId === undefined) return null;
+    try {
+      const plan = planForAmne(s, f.amneId);
+      const idag = new Date().toISOString().slice(0, 10);
+      const n = plan.filter((p) => p.datum !== null && p.datum > idag && p.lektion.socStart !== '—' && p.lektion.socStart.trim() !== '').sort((a, b) => a.datum!.localeCompare(b.datum!))[0];
+      return n === undefined ? null : n.datum;
+    } catch { return null; }
+  })();
+  const uppfoljning = nastaLax !== null ? `Uppföljning vid nästa läxförhör, ${nastaLax}.` : 'Uppföljning vid nästa läxförhör.';
+
   if (nu.kvar.length > 0) {
     rad.push({
-      ton: 'oro', rubrik: `${nu.kvar.length} begrepp kvar att lära`,
-      text: `Det här svarade du fel på senast: ${nu.kvar.slice(0, 6).map(begreppRad).join(' · ')}`
-        + `${nu.kvar.length > 6 ? ` (och ${nu.kvar.length - 6} till)` : ''}. `
-        + 'Börja här — resten kan du redan. Skriv en egen förklaring till varje och testa dig själv i Socrative-rummet.',
+      ton: 'oro', rubrik: `Fokus 1: ${Math.min(nu.kvar.length, 5)} begrepp som var fel i senaste försöket`,
+      text: `${nu.kvar.slice(0, 5).map(begreppRad).join(' · ')}${nu.kvar.length > 5 ? ` (och ${nu.kvar.length - 5} till i bilagan)` : ''}. `
+        + `Du skriver en egen förklaring med ett exempel till varje och testar dig i Socrative-rummet. Läraren går igenom dem med dig vid nästa lektion. ${uppfoljning}`,
+    });
+  }
+  if (otestade > 0) {
+    rad.push({
+      ton: 'okej', rubrik: `${otestade} begrepp är inte testade än`,
+      text: 'De kommer i nästa kumulativa läxförhör. Läs förklaringarna i bilagan och ta med dem i din repetition.',
     });
   }
   if (nu.fixat.length > 0) {
     rad.push({
-      ton: 'bra', rubrik: `${nu.fixat.length} begrepp har du redan vänt`,
-      text: `${nu.fixat.slice(0, 5).map(begreppRad).join(' · ')} satt inte förut men sitter nu. Håll dem vid liv genom att svara på dem igen i nästa kumulativa läxförhör.`,
+      ton: 'bra', rubrik: `${nu.fixat.length} begrepp du svarade rätt på efter tidigare fel`,
+      text: `${nu.fixat.slice(0, 5).map(begreppRad).join(' · ')}${nu.fixat.length > 5 ? ` (fler i bilagan)` : ''}. `
+        + 'Nästa steg är att förklara dem med egna ord och använda dem i ett sammanhang — det följer vi upp separat.',
     });
   }
-  if (fastnat.length > 0) {
-    rad.push({
-      ton: 'oro', rubrik: `Börja med ${Math.min(3, fastnat.length)} begrepp`,
-      text: `Dessa har du svarat fel på minst två gånger: ${fastnat.slice(0, 5).map((b) => b.fraga).join(' · ')}. `
-        + 'Skriv en egen förklaring till varje, med ett exempel. De försvinner ur listan när du svarat rätt på dem två gånger i rad.',
-    });
-  }
+  // "Öva mer"-delkapitel bara när begreppsfrågorna faktiskt visar fel, och med underlaget utskrivet
   if (rapport !== null) {
     const ova = rapport.kapitel.flatMap((k) => k.delkapitel.filter((d) => d.status === 'ova'));
-    if (ova.length > 0) {
+    const medUnderlag = ova.map((d) => {
+      const nuDel = nu.delkapitel.find((x) => x.kod === d.kod);
+      const senaste = d.senaste[0];
+      return { d, nuDel, senaste };
+    });
+    const behovs = medUnderlag.filter((x) => x.nuDel === undefined || (x.nuDel.procent ?? 0) < 100);
+    const redanRatt = medUnderlag.filter((x) => x.nuDel !== undefined && (x.nuDel.procent ?? 0) >= 100);
+    if (behovs.length > 0) {
       rad.push({
-        ton: 'okej', rubrik: 'Repetera dessa delkapitel',
-        text: `${ova.map((d) => `${d.kod} ${d.namn}`).join(', ')}. Läs sammanfattningen och gå igenom begreppen innan nästa läxförhör.`,
+        ton: 'okej', rubrik: 'Delkapitel att repetera',
+        text: behovs.map((x) => `${x.d.kod} ${x.d.namn} (underlag: ${x.senaste !== undefined ? `${x.senaste.kalla === 'socrative-laxforhor' ? 'läxförhör' : x.senaste.kalla === 'socrative-exit' ? 'exit ticket' : x.senaste.kalla} ${x.senaste.datum}, ${x.senaste.procent} %` : 'äldre resultat'}${x.nuDel !== undefined && x.nuDel.procent !== null ? `; begreppsfrågorna just nu ${x.nuDel.procent} %` : ''})`).join('; ') + '.',
       });
     }
-    const filmLista = rapport.kapitel.flatMap((k) => k.filmer).slice(0, 4);
-    if (filmLista.length > 0) {
-      rad.push({ ton: 'okej', rubrik: 'Se filmerna', text: filmLista.map((x) => `${x.titel} (${x.for})`).join(' · ') });
-    }
-    const rum = ova.filter((d) => d.socrativeRum !== null);
-    if (rum.length > 0) {
+    if (redanRatt.length > 0) {
       rad.push({
-        ton: 'okej', rubrik: 'Öva i Socrative',
-        text: `Kör quizet igen i ${rum.map((d) => d.socrativeRum!).join(' och ')} tills du har alla rätt. Länkarna finns under "Öva och se filmer".`,
+        ton: 'bra', rubrik: 'Delkapitel där begreppsfrågorna redan är rätt',
+        text: `${redanRatt.map((x) => `${x.d.kod} ${x.d.namn}`).join(', ')}: ett äldre prov (${redanRatt.map((x) => x.senaste?.datum ?? '—').join(', ')}) låg under gränsen, men i senaste förhöret var begreppsfrågorna rätt. Nästa steg här är egen förklaring och tillämpning, inte mer repetition av begreppen.`,
       });
     }
+    const filmer = rapport.kapitel.flatMap((k) => k.filmer).slice(0, 4);
+    if (filmer.length > 0 && (behovs.length > 0 || nu.kvar.length > 0)) {
+      rad.push({ ton: 'okej', rubrik: 'Filmer att se', text: filmer.map((x) => `${x.titel} (${x.for})`).join(' · ') });
+    }
   }
-  if (lax !== undefined && lax.krav !== null && lax.snittProcent !== null && lax.snittProcent < lax.krav) {
+  if (lax !== undefined && lax.krav !== null && lax.snittProcent !== null && lax.snittProcent < lax.krav && nu.kvar.length === 0) {
     rad.push({
-      ton: 'okej', rubrik: 'Plugga begreppen i flera omgångar',
-      text: 'Eftersom läxförhören är kumulativa räcker det inte att läsa dagen före. Gå igenom alla tidigare delkapitels begrepp i tio minuter före varje läxförhör — det du redan kan går snabbt, och du upptäcker vad som glidit iväg.',
+      ton: 'okej', rubrik: 'Läxförhören under gränsen — vi väljer fokus tillsammans',
+      text: `Snittet är ${lax.snittProcent} % mot gränsen ${lax.krav} %. Resultatet säger inte hur mycket du övat. Vi bestämmer ett eller två fokus (till exempel begreppen i ett delkapitel), hur läraren stöttar under lektionen, och ${uppfoljning.toLowerCase()}`,
     });
   }
-  if (lekt?.diffSnitt !== null && lekt !== null && lekt.diffSnitt <= -5) {
+  if (narvaro !== null && narvaro.narvaroProcent !== null && narvaro.narvaroProcent < 80 && narvaro.franvaroDatum.length > 0) {
     rad.push({
-      ton: 'okej', rubrik: 'Fånga upp lektionens slut',
-      text: 'Skriv tre rader om vad lektionen handlade om innan du lämnar salen, och fråga direkt när något är oklart — exit ticket kommer på samma innehåll.',
+      ton: 'okej', rubrik: 'Lektioner utan quizsvar',
+      text: `${narvaro.franvaroDatum.slice(0, 4).join(', ')}${narvaro.franvaroDatum.length > 4 ? ' m.fl.' : ''}. Om du var borta: be om materialet och gör förhören i efterhand — de räknas. Om du var där: säg till läraren så stäms registreringen av.`,
     });
   }
-  if (narvaro !== null && narvaro.narvaroProcent !== null && narvaro.narvaroProcent < 80) {
-    rad.push({
-      ton: 'oro', rubrik: 'Ta igen de missade lektionerna',
-      text: `Du saknar ${narvaro.lektioner - narvaro.narvarande} lektioner. Be om materialet för ${narvaro.franvaroDatum.slice(0, 3).join(', ')} och gör förhören i efterhand — de räknas.`,
-    });
-  }
-  if (tkElev !== null && tkElev.netto < 0) {
+  if (tkElev !== null && tkElev.glomt > tkElev.lart) {
     rad.push({
       ton: 'okej', rubrik: 'Repetera med mellanrum',
-      text: 'Du kan sakerna när du lär dig dem men tappar dem senare. Repetera samma begrepp efter en dag, efter en vecka och efter en månad i stället för allt på en gång.',
+      text: `${tkElev.glomt} svar gick från rätt till fel mot ${tkElev.lart} åt andra hållet. Ett sätt att prova: repetera samma begrepp efter en dag, en vecka och en månad, och se vid nästa förhör om det ändrar bilden.`,
     });
   }
   if (rad.length === 0) {
-    rad.push({ ton: 'bra', rubrik: 'Fortsätt som du gör', text: 'Inget i siffrorna pekar ut något som behöver ändras just nu. Håll i rutinen med begreppen före varje läxförhör.' });
+    rad.push({ ton: 'bra', rubrik: 'Fortsätt som du gör', text: `Inget i underlaget pekar ut något att ändra just nu. ${uppfoljning}` });
   }
 
   const helhet = snitt(egna.map(resultatProcent).filter((x): x is number => x !== null));
   const sammanfattning = kallor.length === 0
     ? `${elev.namn} har inga resultat i urvalet.`
     : nu.fragor.length > 0
-      ? `${elev.namn} kan ${nu.kan.length} av ${nu.fragor.length} begrepp i ${amneNamn} just nu (${nu.procent} %)`
-        + `${nu.kvar.length > 0 ? `, med ${nu.kvar.length} kvar att lära` : ''}`
-        + `${narvaro?.narvaroProcent !== undefined && narvaro.narvaroProcent !== null ? `. Närvaro ${narvaro.narvaroProcent} %` : ''}.`
-      : `${elev.namn} ligger på ${helhet ?? '—'} % sammantaget i ${amneNamn}`
-      + `${lax?.snittProcent !== undefined && lax.snittProcent !== null ? `, läxförhör ${lax.snittProcent} %` : ''}`
-      + `${exit?.snittProcent !== undefined && exit.snittProcent !== null ? ` och exit tickets ${exit.snittProcent} %` : ''}`
-      + `${narvaro?.narvaroProcent !== undefined && narvaro.narvaroProcent !== null ? `, med ${narvaro.narvaroProcent} % närvaro` : ''}.`;
+      ? `${elev.namn}: rätt på ${nu.kan.length} av ${nu.fragor.length} testade begreppsfrågor i ${amneNamn} (senaste försöket per fråga${senastDatum !== null ? `, till och med ${senastDatum}` : ''})`
+        + `${nu.kvar.length > 0 ? `, ${nu.kvar.length} var fel` : ''}${otestade > 0 ? `, ${otestade} begrepp inte testade än` : ''}.`
+      : `${elev.namn}: ${helhet ?? '—'} % i snitt i ${amneNamn}`
+      + `${lax?.snittProcent !== undefined && lax.snittProcent !== null ? `, läxförhör ${lax.snittProcent} % (${lax.antal} st)` : ''}`
+      + `${exit?.snittProcent !== undefined && exit.snittProcent !== null ? `, exit tickets ${exit.snittProcent} % (${exit.antal} st)` : ''}.`;
 
   const ovningar = (rapport?.kapitel ?? []).flatMap((k) => k.delkapitel
     .filter((d) => d.status === 'ova' && d.socrativeRum !== null)
