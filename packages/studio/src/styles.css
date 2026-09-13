@@ -919,3 +919,14 @@ input.fel { border-color: #B71C1C; }
 .rd-grafram { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .rd-grafyta { flex: 1 1 0; min-height: 0; }
 .rd-grafyta .rd-graf { width: 100%; height: 100%; }
+
+/* Del 110: förklaringar (ℹ) och rött kryss vid frånvaro */
+.st-matris .st-cell.franvaro { color: #C62828; font-weight: 800; background: transparent !important; font-size: 14px; }
+.st-info { border: 1px solid var(--ram); background: #fff; color: var(--bla); border-radius: 999px; width: 18px; height: 18px; font-size: 11px; line-height: 1; cursor: pointer; margin-left: 6px; vertical-align: middle; padding: 0; }
+.st-info:hover { background: var(--bla); color: #fff; border-color: var(--bla); }
+.st-info-bak { position: fixed; inset: 0; background: rgba(20, 30, 50, .35); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.st-info-popup { background: #fff; border-radius: 14px; padding: 16px 20px; max-width: 560px; width: 100%; box-shadow: 0 12px 40px rgba(0,0,0,.25); font-size: 14px; line-height: 1.45; }
+.st-info-popup b { font-size: 16px; }
+.st-info-popup p { margin: 8px 0; }
+.st-info-kort { font-weight: 600; color: #1d2b3f; }
+.rd-forklaring { margin-top: calc(var(--mm) * 1.5); padding-top: calc(var(--mm) * 1); border-top: calc(var(--mm) * 0.2) solid #DDE2EA; font-size: calc(var(--mm) * 2.6); color: #4a5563; line-height: 1.35; }

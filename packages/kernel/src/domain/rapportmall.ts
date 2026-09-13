@@ -11,6 +11,7 @@
  * (Ring 1, I2: ingen fetch/DOM/lagring.)
  */
 import type { Struktur } from './typer.js';
+import type { ForklaringId } from './forklaringar.js';
 
 export const A4 = { bredd: 210, hojd: 297 } as const;
 export const RUTNAT = 5;
@@ -58,6 +59,8 @@ export interface Block {
   rum?: string;
   /** false = låst höjd; annars växer blocket när innehållet inte får plats. */
   autoHojd?: boolean;
+  /** Skriv ut förklaringen till datat under blocket (för elev och vårdnadshavare). */
+  medForklaring?: boolean;
   stil?: BlockStil;
 }
 
@@ -92,6 +95,22 @@ export const BLOCK_STANDARD: Record<BlockTyp, { b: number; h: number }> = {
   laxkurva: { b: 170, h: 60 }, exitlax: { b: 170, h: 55 }, fragematris: { b: 170, h: 70 }, delkapitel: { b: 170, h: 60 },
   narvaro: { b: 80, h: 40 }, 'begrepp-kvar': { b: 82, h: 60 }, 'begrepp-vant': { b: 82, h: 60 }, studieplan: { b: 170, h: 40 }, qr: { b: 40, h: 46 },
 };
+
+/** Vilken förklaring som hör till ett datablock (null = ingen). */
+export const BLOCK_FORKLARING: Partial<Record<BlockTyp, ForklaringId>> = {
+  kpi: 'helhet', sammanfattning: 'nulage', laget: 'nulage', rad: 'begreppKvar',
+  laxkurva: 'laxforhor', exitlax: 'exitTillLax', fragematris: 'fragematris', delkapitel: 'delkapitel', narvaro: 'narvaro',
+  'begrepp-kvar': 'begreppKvar', 'begrepp-vant': 'begreppVant', studieplan: 'studieplan',
+};
+
+/** Förklaringen för ett block; KPI-kort följer sin källa. */
+export function blockForklaring(b: Block): ForklaringId | null {
+  if (b.typ === 'kpi') {
+    const perKalla: Record<NonNullable<Block['kalla']>, ForklaringId> = { 'socrative-laxforhor': 'laxforhor', 'socrative-exit': 'exit', 'socrative-ovning': 'ovning', magma: 'helhet', digiexam: 'helhet', helhet: 'helhet' };
+    return perKalla[b.kalla ?? 'helhet'];
+  }
+  return BLOCK_FORKLARING[b.typ] ?? null;
+}
 
 /** Datablock kräver en elev (och för vissa ett ämne) för att kunna renderas. */
 export function arDatablock(typ: BlockTyp): boolean {
@@ -282,6 +301,7 @@ export function tolkaRapportmall(json: string): Rapportmall {
       ...(x.kalla !== undefined ? { kalla: x.kalla } : {}), ...(x.bild !== undefined ? { bild: String(x.bild) } : {}),
       ...(x.rum !== undefined ? { rum: String(x.rum) } : {}), ...(x.stil !== undefined ? { stil: x.stil } : {}),
       ...(x.autoHojd !== undefined ? { autoHojd: Boolean(x.autoHojd) } : {}),
+      ...(x.medForklaring !== undefined ? { medForklaring: Boolean(x.medForklaring) } : {}),
     };
   });
   return {

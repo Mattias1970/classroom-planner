@@ -6,7 +6,7 @@
  * utskriften säger samma sak som skärmen.
  */
 import { AlignmentType, Document, ExternalHyperlink, HeadingLevel, ImageRun, Packer, Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType } from 'docx';
-import type { Elevanalys, EnkelRapport, Studieguide } from '@planner/kernel';
+import { forklaring, type Elevanalys, type EnkelRapport, type ForklaringId, type Studieguide } from '@planner/kernel';
 
 const BLA = '#2f5aa8'; const GRON = '#1B5E20'; const ROD = '#B71C1C'; const GRA = '#9AA3AE';
 const TON_FARG = { bra: 'E8F5E9', okej: 'FFF8E1', oro: 'FFEBEE' } as const;
@@ -169,6 +169,12 @@ function tabell(rubriker: string[], rader: string[][]): Table {
 
 const tom = (): Paragraph => new Paragraph('');
 
+/** Kort förklaring under ett avsnitt, i grått. */
+function forklaringRad(id: ForklaringId): Paragraph {
+  const f = forklaring(id);
+  return new Paragraph({ children: [new TextRun({ text: `${f.kort} ${f.lang[0] ?? ''}`, size: 18, color: '666666', italics: true })] });
+}
+
 const RATT = 'C8E6C9'; const FEL = 'FFCDD2'; const EJ = 'F2F4F7';
 
 /** Frågematrisen: en rad per förhör, en ruta per fråga (grön rätt, röd fel, tom = ej gjord). */
@@ -228,6 +234,8 @@ export async function elevrapportDocx(a: Elevanalys): Promise<Blob> {
 
   if (a.kurva.length > 0) {
     barn.push(new Paragraph({ text: 'Resultat över tid', heading: HeadingLevel.HEADING_2 }));
+    barn.push(forklaringRad('laxforhor'));
+    barn.push(forklaringRad('exit'));
     barn.push(bild(await kurvBild(a), 560, 226));
     barn.push(new Paragraph({ children: [new TextRun({ text: 'Varje punkt är ett förhör. Streckade linjer är kraven: 90 % för läxförhör, 70 % för exit ticket.', size: 18, color: '777777' })] }));
     barn.push(tom());
@@ -247,6 +255,7 @@ export async function elevrapportDocx(a: Elevanalys): Promise<Blob> {
   const lb = await ledBild(a);
   if (lb !== null) {
     barn.push(new Paragraph({ text: 'Delkapitel i förhören', heading: HeadingLevel.HEADING_2 }));
+    barn.push(forklaringRad('delkapitel'));
     barn.push(bild(lb, 560, 217));
     barn.push(new Paragraph({ children: [new TextRun({ text: 'Stapelns höjd är antalet frågor, den fyllda delen hur många du hade rätt på. Läxförhören är kumulativa, så ett led som tunnas ut betyder att du tappat den delen.', size: 18, color: '777777' })] }));
     barn.push(tom());
@@ -257,6 +266,7 @@ export async function elevrapportDocx(a: Elevanalys): Promise<Blob> {
 
   if (a.nu.fragor.length > 0) {
     barn.push(new Paragraph({ text: 'Vad du kan nu', heading: HeadingLevel.HEADING_2 }));
+    barn.push(forklaringRad('nulage'));
     barn.push(new Paragraph({ children: [new TextRun({
       text: `${a.nu.kan.length} av ${a.nu.fragor.length} begrepp (${a.nu.procent} %) sitter, räknat på ditt senaste svar på varje fråga. `
         + 'Läxförhören är kumulativa, så samma begrepp återkommer — det du missade tidigare men kan nu räknas som kunnigt.', bold: true })] }));
@@ -290,6 +300,7 @@ export async function elevrapportDocx(a: Elevanalys): Promise<Blob> {
   const matris = matrisTabell(a);
   if (matris.length > 0) {
     barn.push(new Paragraph({ text: 'Fråga för fråga', heading: HeadingLevel.HEADING_2 }));
+    barn.push(forklaringRad('fragematris'));
     barn.push(...matris);
     barn.push(new Paragraph({ children: [new TextRun({ text: 'Grön ruta = rätt, röd = fel, tom = frågan ingick inte i det quizet. Siffrorna är frågans nummer; samma fråga har samma nummer i alla quiz, så du kan följa den över tid.', size: 18, color: '777777' })] }));
     barn.push(tom());
@@ -441,6 +452,7 @@ async function enkelBarn(r: EnkelRapport): Promise<Array<Paragraph | Table>> {
   ];
   if (r.laxforhor.length > 0) {
     barn.push(new Paragraph({ text: 'Läxförhör till läxförhör', heading: HeadingLevel.HEADING_2 }));
+    barn.push(forklaringRad('laxforhor'));
     const lb = await laxBild(r);
     if (lb !== null) {
       barn.push(bild(lb, 560, 199));
@@ -452,6 +464,7 @@ async function enkelBarn(r: EnkelRapport): Promise<Array<Paragraph | Table>> {
   }
   if (r.exitTillLax.length > 0) {
     barn.push(new Paragraph({ text: 'Från exit ticket till läxförhör', heading: HeadingLevel.HEADING_2 }));
+    barn.push(forklaringRad('exitTillLax'));
     const eb = await exitLaxBild(r);
     if (eb !== null) {
       barn.push(bild(eb, 560, 181));
@@ -462,6 +475,7 @@ async function enkelBarn(r: EnkelRapport): Promise<Array<Paragraph | Table>> {
     barn.push(tom());
   }
   barn.push(new Paragraph({ text: 'Begrepp du haft problem med', heading: HeadingLevel.HEADING_2 }));
+  barn.push(forklaringRad('nulage'));
   if (r.kvar.length === 0 && r.vant.length === 0) barn.push(new Paragraph('Inga.'));
   if (r.kvar.length > 0) {
     barn.push(new Paragraph({ children: [new TextRun({ text: `Kvar att lära (${r.kvar.length})`, bold: true })] }));
@@ -509,6 +523,7 @@ export async function studieguideTillWord(g: Studieguide): Promise<void> {
   ];
   if (g.plan.length > 0) {
     barn.push(new Paragraph({ text: 'Din plan', heading: HeadingLevel.HEADING_2 }));
+    barn.push(forklaringRad('studieplan'));
     barn.push(tabell(['Dag', 'Datum', 'Plugga', 'Tid'],
       g.plan.map((d) => [`Dag ${d.dag}`, d.datum ?? '—', d.delar.map((k) => (k === 'repetition' ? 'Repetera allt' : `${k} ${g.delar.find((x) => x.kod === k)?.namn ?? ''}`)).join(', ') || '—', `${d.minuter} min`])));
     barn.push(tom());

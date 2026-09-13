@@ -24,7 +24,7 @@ import {
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   arFilImporterad, arRatt, andraKalla, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
-  delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, enkelRapport, studieguide, rapportOversikt, begreppForFraga, harmoniseraOvningar, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
+  delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, enkelRapport, studieguide, rapportOversikt, forklaring, type ForklaringId, begreppForFraga, harmoniseraOvningar, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
@@ -2310,6 +2310,7 @@ const KORT_FARG: Record<KortKalla, string> = {
   'socrative-laxforhor': '#1A2A6B', 'socrative-exit': '#2f5aa8', 'socrative-ovning': '#00838F', magma: '#6A1B9A', digiexam: '#BF360C', helhet: '#1B5E20',
 };
 const KORT_IKON: Record<KortKalla, string> = { 'socrative-laxforhor': '✅', 'socrative-exit': '🎟', 'socrative-ovning': '✏️', magma: '🧠', digiexam: '📝', helhet: '📊' };
+const KORT_INFO: Record<KortKalla, ForklaringId> = { 'socrative-laxforhor': 'laxforhor', 'socrative-exit': 'exit', 'socrative-ovning': 'ovning', magma: 'helhet', digiexam: 'helhet', helhet: 'helhet' };
 const KORT_RUBRIK: Record<KortKalla, string> = { 'socrative-laxforhor': 'Läxförhör', 'socrative-exit': 'Exit tickets', 'socrative-ovning': 'Övning', magma: 'Magma test', digiexam: 'DigiExam prov', helhet: 'Helhet' };
 const KLUSTER_FARG = { stigande: '#1B5E20', stabil: '#2f5aa8', riskzon: '#B71C1C', ojamn: '#E65100' } as const;
 function initialer(namn: string): string {
@@ -2800,6 +2801,33 @@ function AxelText({ x, y, rader, rotera, titel, bredd = 999 }: { x: number; y: n
   );
 }
 
+/** ℹ-knapp som öppnar förklaringen till en widget i en popup. */
+function InfoKnapp({ id }: { id: ForklaringId }) {
+  const [oppen, setOppen] = useState(false);
+  const f = forklaring(id);
+  useEffect(() => {
+    if (!oppen) return;
+    const h = (ev: KeyboardEvent) => { if (ev.key === 'Escape') setOppen(false); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [oppen]);
+  return (
+    <>
+      <button className="st-info" aria-label={`Vad betyder ${f.rubrik}?`} title="Vad betyder det här?" onClick={(e) => { e.stopPropagation(); setOppen(true); }}>ℹ</button>
+      {oppen && (
+        <div className="st-info-bak" onClick={() => setOppen(false)} role="presentation">
+          <div className="st-info-popup" role="dialog" aria-label={f.rubrik} onClick={(e) => e.stopPropagation()}>
+            <div className="rad"><b>{f.rubrik}</b><span className="spacer" /><button className="btn sec sm" onClick={() => setOppen(false)}>✕ Stäng</button></div>
+            <p className="st-info-kort">{f.kort}</p>
+            {f.lang.map((t, i) => <p key={i}>{t}</p>)}
+            <p className="small muted">Samma förklaring kan skrivas ut under blocket i en rapportmall (🎨 Rapportdesign → blockets egenskaper → Visa förklaring).</p>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 /** Numrerad förteckning över tillfällena — provnamnen får inte plats under axeln. */
 function TestLista({ tillfallen }: { tillfallen: Array<{ nyckel: string; prov: string; datum: string; kalla: ResultatKalla; rum?: string }> }) {
   if (tillfallen.length === 0) return null;
@@ -3129,7 +3157,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
               onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); gaTill(KORT_MAL[k.kalla].id, KORT_MAL[k.kalla].sektion); } }}>
               <div className="st-kort-topp">
                 <span className="st-ikon" aria-hidden="true">{KORT_IKON[k.kalla]}</span>
-                <div><div className="st-kort-rubrik">{k.rubrik}</div><div className="st-kort-fraga">{k.fraga}</div></div>
+                <div><div className="st-kort-rubrik">{k.rubrik}<InfoKnapp id={KORT_INFO[k.kalla]} /></div><div className="st-kort-fraga">{k.fraga}</div></div>
               </div>
               {k.antalProv === 0 ? <div className="muted small">Inga resultat ännu</div> : (<>
                 <div className="st-kort-mitt">
@@ -3179,7 +3207,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
       {/* Frågematris */}
       <div className={`uppg-kort st-widget st-fragematris${lyst === 'st-fragematris' ? ' lyst' : ''}`} id="st-fragematris">
         <div className="rad">
-          <b>🔢 Frågematris</b> <small className="muted">en rad per förhör, en kolumn per fråga · klicka på en ruta för att se frågan</small>
+          <b>🔢 Frågematris</b><InfoKnapp id="fragematris" /> <small className="muted">en rad per förhör, en kolumn per fråga · klicka på en ruta för att se frågan</small>
           <span className="spacer" />
           <button className={`chipbtn ${ledElev === null ? 'act' : ''}`} onClick={() => setLedElev(null)}>Klassen</button>
           {ledElev !== null && <span className="small">{s.elever.find((e) => e.id === ledElev)?.namn}</span>}
@@ -3288,7 +3316,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
       {/* Trendkoll: lär eller glömmer eleverna? */}
       <div className="uppg-kort st-widget st-trendkoll">
         <div className="rad">
-          <b>🔁 Trendkoll</b> <small className="muted">samma fråga i två förhör (kumulativa läxförhör upprepar tidigare delkapitel) · fel→rätt = lärt, rätt→fel = glömt</small>
+          <b>🔁 Trendkoll</b><InfoKnapp id="trendkoll" /> <small className="muted">samma fråga i två förhör (kumulativa läxförhör upprepar tidigare delkapitel) · fel→rätt = lärt, rätt→fel = glömt</small>
           <span className="spacer" />
           {tk.par.length > 0 && <label className="small"><input type="checkbox" checked={visaTkPar} onChange={(e) => setVisaTkPar(e.target.checked)} /> per jämförelse</label>}
         </div>
@@ -3374,7 +3402,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
       <div className="st-grid2">
         <div className="uppg-kort st-widget st-led">
           <div className="rad">
-            <b>🧱 Delkapitel i förhören</b> <small className="muted">varje förhör som led · stapelns höjd = antal frågor, fylld del = andel rätt</small>
+            <b>🧱 Delkapitel i förhören</b><InfoKnapp id="delkapitel" /> <small className="muted">varje förhör som led · stapelns höjd = antal frågor, fylld del = andel rätt</small>
             <span className="spacer" />
             {ledElev !== null && <button className="btn sm" onClick={() => setLedElev(null)}>✕ hela klassen</button>}
           </div>
@@ -3394,7 +3422,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
         </div>
 
         <div className="uppg-kort st-widget st-fastnat">
-          <b>📌 Begrepp som fastnat</b> <small className="muted">fel minst två gånger · försvinner när eleven svarat rätt två gånger sedan senaste felet</small>
+          <b>📌 Begrepp som fastnat</b><InfoKnapp id="fastnat" /> <small className="muted">fel minst två gånger · försvinner när eleven svarat rätt två gånger sedan senaste felet</small>
           {ledElev !== null ? (
             (() => {
               const lista = aterkommandeFel(s, ledElev, tkFilter);
@@ -3434,7 +3462,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
       </div>
 
       <details className={`st-fall${lyst === 'st-sekt-lekt' ? ' lyst' : ''}`} id="st-sekt-lekt" open={oppnaSekt.has('lekt')} onToggle={(e) => vaxlaSekt('lekt', (e.target as HTMLDetailsElement).open)}>
-        <summary><b>🎯 Lektionstest</b> <small className="muted">läxförhör och exit ticket per lektion, Δ per elev</small></summary>
+        <summary><b>🎯 Lektionstest</b><InfoKnapp id="lektionstest" /> <small className="muted">läxförhör och exit ticket per lektion, Δ per elev</small></summary>
       {/* Lektionstest: läxförhör vs exit ticket per lektion */}
       <div className="uppg-kort st-widget st-lektionstest">
         <div className="rad">
@@ -3497,7 +3525,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
       </details>
 
       <details className={`st-fall${lyst === 'st-sekt-narv' ? ' lyst' : ''}`} id="st-sekt-narv" open={oppnaSekt.has('narv')} onToggle={(e) => vaxlaSekt('narv', (e.target as HTMLDetailsElement).open)}>
-        <summary><b>🙋 Närvaro & tid på dagen</b> <small className="muted">härledd ur Socrative-svaren</small></summary>
+        <summary><b>🙋 Närvaro & tid på dagen</b><InfoKnapp id="narvaro" /> <small className="muted">härledd ur Socrative-svaren</small></summary>
       {/* Närvaro & tid på dagen */}
       <div className="st-grid2">
         <div className="uppg-kort st-widget st-narvaro">
@@ -3561,7 +3589,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
       </details>
 
       <details className={`st-fall${lyst === 'st-sekt-jamf' ? ' lyst' : ''}`} id="st-sekt-jamf" open={oppnaSekt.has('jamf')} onToggle={(e) => vaxlaSekt('jamf', (e.target as HTMLDetailsElement).open)}>
-        <summary><b>📈 Läxförhör vs Exit tickets & trendkluster</b> <small className="muted">veckokurvor, kluster, normerad graf</small></summary>
+        <summary><b>📈 Läxförhör vs Exit tickets & trendkluster</b><InfoKnapp id="trendkluster" /> <small className="muted">veckokurvor, kluster, normerad graf</small></summary>
       {/* Jämförelse + kluster */}
       <div className="st-grid2">
         <div className="uppg-kort st-widget">
@@ -3675,7 +3703,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
       {/* Grupper + samband */}
       <div className="st-grid2 smal">
         <div className="uppg-kort st-widget">
-          <b>Grupp A vs B</b> <small className="muted">snitt per källa</small>
+          <b>Grupp A vs B</b><InfoKnapp id="grupper" /> <small className="muted">snitt per källa</small>
           <table className="tbl st-grupper">
             <thead><tr><th>Källa</th><th>Grupp A <small className="muted">({grupper[0].antalElever})</small></th><th>Grupp B <small className="muted">({grupper[1].antalElever})</small></th></tr></thead>
             <tbody>{(['socrative-laxforhor', 'socrative-exit', 'magma', 'digiexam', 'helhet'] as KortKalla[]).filter((k) => k === 'helhet' || kallor === undefined || kallor.includes(k)).map((k) => (
@@ -3689,7 +3717,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
         </div>
 
         <div className="uppg-kort st-widget">
-          <b>Sambandsanalys</b> <small className="muted">korrelation (Pearson r) mellan elevernas snitt i två källor</small>
+          <b>Sambandsanalys</b><InfoKnapp id="samband" /> <small className="muted">korrelation (Pearson r) mellan elevernas snitt i två källor</small>
           {samband.length === 0 && narvaroSamband === null ? <p className="muted small">Kräver minst tre elever med resultat i båda källorna.</p> : (
             <table className="tbl st-samband"><tbody>{[...samband, ...(narvaroSamband !== null ? [{ a: 'narvaro', b: 'helhet', r: narvaroSamband.r, n: narvaroSamband.n, text: 'Närvaro ↔ helhetsresultat' }] : [])].map((sb) => (
               <tr key={`${sb.a}|${sb.b}`}><td>{sb.text} <small className="muted">({sb.n} elever)</small></td>
@@ -3701,7 +3729,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
 
       {/* Elev × prov */}
       <div className="uppg-kort">
-        <b>🧑‍🎓 Elev × provtillfälle</b> <small className="muted">färg = mot kravet (grönt klarat, orange nära, rött under) · klicka på en elev för elevvyn</small>
+        <b>🧑‍🎓 Elev × provtillfälle</b><InfoKnapp id="elevProv" /> <small className="muted">färg = mot kravet (grönt klarat, orange nära, rött under) · klicka på en elev för elevvyn</small>
         {matris.tillfallen.length === 0 ? <p className="muted small">Inga provtillfällen i urvalet.</p> : (
           <div className="st-scroll">
             <table className="tbl st-matris">
@@ -3718,7 +3746,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
                     const socr = matris.tillfallen[i].kalla === 'socrative-laxforhor' || matris.tillfallen[i].kalla === 'socrative-exit';
                     const franv = c === null && socr;
                     return (
-                      <td key={i} className={`st-cell${franv ? ' franvaro' : ''}`} style={{ background: procentFarg(c?.procent ?? null, matris.tillfallen[i].krav) }}
+                      <td key={i} className={`st-cell${franv ? ' franvaro' : ''}`} style={{ background: franv ? undefined : procentFarg(c?.procent ?? null, matris.tillfallen[i].krav) }}
                         title={c === null ? (socr ? 'frånvarande (inget Socrative-svar)' : 'saknas') : `${c.poang}/${c.maxPoang}`}>{c === null ? (socr ? '✕' : '·') : c.procent}</td>
                     );
                   })}
@@ -3991,7 +4019,7 @@ function StudieguideVy({ s, elev, f, onTillbaka, onLage }: {
       </div>
 
       {g.plan.length > 0 && (<>
-        <h3>Din plan</h3>
+        <h3>Din plan <InfoKnapp id="studieplan" /></h3>
         <div className="st-enkel-steg">{g.plan.map((d) => (
           <div key={d.dag} className="st-enkel-ruta ok st-plandag">
             <small>Dag {d.dag}{d.datum !== null ? ` · ${kortDatum(d.datum)}` : ''}</small>
@@ -4084,7 +4112,7 @@ function EnkelRapportVy({ s, elev, f, periodText, onTillbaka, onFull, onStudie }
       </div>
 
       {r.laxforhor.length > 0 && (<>
-        <h3>Läxförhör till läxförhör {r.trend !== null && <small className={`st-trendtag ${r.trend}`}>{TREND[r.trend]}</small>}</h3>
+        <h3>Läxförhör till läxförhör <InfoKnapp id="laxforhor" />{r.trend !== null && <small className={`st-trendtag ${r.trend}`}>{TREND[r.trend]}</small>}</h3>
         <LinjeDiagram hojd={230} visaVarden
           tillfallen={r.laxforhor.map((x, i) => ({ etikett: [`T${i + 1}`, kortDatum(x.datum)], titel: `${x.prov} · ${x.datum}` }))}
           serier={[{ namn: 'Läxförhör', varden: r.laxforhor.map((x) => x.procent), farg: KORT_FARG['socrative-laxforhor'] }]}
@@ -4100,7 +4128,7 @@ function EnkelRapportVy({ s, elev, f, periodText, onTillbaka, onFull, onStudie }
       </>)}
 
       {r.exitTillLax.length > 0 && (<>
-        <h3>Från exit ticket till läxförhör</h3>
+        <h3>Från exit ticket till läxförhör <InfoKnapp id="exitTillLax" /></h3>
         <p className="small muted">Exit ticket görs i slutet av lektionen; samma delkapitel testas igen i nästa läxförhör. Pilen visar om det satt bättre eller sämre då.</p>
         <ExitLaxStaplar rader={r.exitTillLax} />
         <table className="tbl st-tabell">
@@ -4117,7 +4145,7 @@ function EnkelRapportVy({ s, elev, f, periodText, onTillbaka, onFull, onStudie }
         </table>
       </>)}
 
-      <h3>Begrepp du haft problem med</h3>
+      <h3>Begrepp du haft problem med <InfoKnapp id="begreppKvar" /></h3>
       {r.kvar.length === 0 && r.vant.length === 0 ? <p className="small muted">Inga — antingen allt rätt hela vägen, eller inga frågedata ännu.</p> : (
         <div className="st-nu">
           <div className="st-nu-lista">
@@ -4328,7 +4356,7 @@ function RapportVy({ s }: { s: Struktur }) {
           </>)}
 
           {analys.nu.fragor.length > 0 && (<>
-            <h3>Vad du kan nu</h3>
+            <h3>Vad du kan nu <InfoKnapp id="nulage" /></h3>
             <p className="small muted">Räknat på ditt <b>senaste</b> svar på varje fråga — läxförhören är kumulativa, så samma begrepp kommer igen. Det du missade tidigare men kan nu räknas som kunnigt.</p>
             <div className="st-nu">
               <div className="st-nu-tal"><b>{analys.nu.procent} %</b><span>{analys.nu.kan.length} av {analys.nu.fragor.length} begrepp</span></div>

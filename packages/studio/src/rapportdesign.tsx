@@ -13,7 +13,7 @@ import {
   A4, BLOCK_NAMN, BLOCK_STANDARD, RUTNAT, RUTNAT_VAL, TYPNAMN, andraStorlek, antalSidor, arDatablock, blockSida, dupliceraBlock,
   elevanalys, enkelRapport, flyttaBlock, flyttaFlera, fordelaBlock, fyllText, laggTillBlock, laggTillSida, linjeraBlock, nyMall, nyttId,
   ordnaBlock, ritordning, socrativeElevLank, sparaRapportmall, standardmall, studieguide, taBortBlock, taBortRapportmall, taBortSida,
-  tillSida, tolkaRapportmall, uppdateraBlock, vaxBlock,
+  tillSida, tolkaRapportmall, uppdateraBlock, vaxBlock, blockForklaring, forklaring,
   type Block, type BlockTyp, type DashboardFilter, type Linjering, type Rapportmall, type Struktur,
 } from '@planner/kernel';
 import { lasStruktur } from './store.js';
@@ -107,6 +107,14 @@ function StaplarMm({ par }: { par: Array<{ kod: string; a: number; b: number }> 
 }
 
 /** Innehållet i ett block, givet elevdata. */
+/** Förklaringstexten under ett datablock när 'Visa förklaring' är på. */
+function BlockForklaring({ b }: { b: Block }) {
+  const id = blockForklaring(b);
+  if (b.medForklaring !== true || id === null) return null;
+  const f = forklaring(id);
+  return <div className="rd-forklaring"><b>{f.rubrik}: </b>{f.kort} {f.lang.join(' ')}</div>;
+}
+
 function BlockInnehall({ b, d, s }: { b: Block; d: Elevdata; s: Struktur }) {
   const st = b.stil ?? {};
   const textStil = { fontSize: `${st.storlek ?? 11}pt`, fontWeight: st.fet ? 700 : 400, color: st.textfarg ?? '#111' };
@@ -439,6 +447,7 @@ export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: ()
                     style={blockStil(b)}
                     onPointerDown={(ev) => pekareNed(ev, b, 'flytt')}>
                     <BlockInnehall b={b} d={data} s={s} />
+                    <BlockForklaring b={b} />
                     {ar && vald === b.id && <div className="rd-handtag no-print" onPointerDown={(ev) => pekareNed(ev, b, 'storlek')} title="Dra för att ändra storlek" />}
                     {ar && vald === b.id && <div className="rd-etikett no-print">{BLOCK_NAMN[b.typ]} · {b.b}×{b.h} mm</div>}
                   </div>
@@ -474,6 +483,7 @@ export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: ()
             )}
             {arDatablock(valtBlock.typ) && <label>Rubrik <input aria-label="Blockets rubrik" value={valtBlock.rubrik ?? ''} placeholder="(standard)" onChange={(e) => uppd({ rubrik: e.target.value })} /></label>}
             {!VAXER_INTE.includes(valtBlock.typ) && <label className="rd-check"><input type="checkbox" checked={valtBlock.autoHojd !== false} onChange={(e) => uppd({ autoHojd: e.target.checked })} /> Växer med innehållet</label>}
+            {blockForklaring(valtBlock) !== null && <label className="rd-check" title={forklaring(blockForklaring(valtBlock)!).kort}><input type="checkbox" checked={valtBlock.medForklaring === true} onChange={(e) => uppd({ medForklaring: e.target.checked })} /> Visa förklaring under blocket</label>}
             {valtBlock.typ === 'kpi' && (
               <label>Källa <select aria-label="KPI-källa" value={valtBlock.kalla ?? 'helhet'} onChange={(e) => uppd({ kalla: e.target.value as Block['kalla'] })}>{KALLOR.map(([id, n]) => <option key={id} value={id}>{n}</option>)}</select></label>
             )}
@@ -531,6 +541,7 @@ export function MallRendering({ s, mall: malln, elevId, klassId, amneId }: { s: 
           {ritordning(mall, n).map((b) => (
             <div key={b.id} ref={matRef(b.id)} className={`rd-block ${b.typ}`} style={blockStil(b)}>
               <BlockInnehall b={b} d={data} s={s} />
+              <BlockForklaring b={b} />
             </div>
           ))}
         </div>

@@ -1485,6 +1485,14 @@ describe('📊 SuperTeach', () => {
     act(() => { ([...host.querySelectorAll('.st-kort.klick')].find((k) => k.textContent?.includes('Trendkluster')) as HTMLElement).click(); });
     expect(jamfSekt.open).toBe(true);
 
+    // ℹ-knappen öppnar förklaringen som popup; Esc stänger
+    const info = host.querySelector('button[aria-label="Vad betyder Sambandsanalys?"]') as HTMLButtonElement;
+    expect(info).not.toBeNull();
+    act(() => { info.click(); });
+    expect(host.querySelector('.st-info-popup')!.textContent).toContain('Pearson');
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+    expect(host.querySelector('.st-info-popup')).toBeNull();
+
     // Trendkoll: utan frågedata (inklistrade resultat) förklaras varför
     expect(host.querySelector('.st-trendkoll')!.textContent).toContain('kräver att samma fråga ställs igen');
 
