@@ -274,14 +274,14 @@ describe('Del 92: övningar som liknar läxförhör eller exit', async () => {
   });
 });
 
-describe('Del 99: övningar med samma quiz räknas in i huvudsviten', async () => {
+describe('Del 99: övningar med samma quiz räknas in i huvudsviten (bara autoklassade)', async () => {
   const { harmoniseraOvningar, nulage } = await import('../src/domain/delkapiteltrend.js');
   const { trendkoll } = await import('../src/domain/trendkoll.js');
 
   it('övning med samma frågor som läxförhöret räknas som läxförhör; övning med egna frågor lämnas', () => {
     let s = bygg();
     // Samma quiz som 4.1-4.2 (A, B, C) kört som övning en vecka senare — Anna vänder B
-    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-ovning', prov: 'Extra 4.1-4.2', datum: '2026-09-11', rum: 'BIOLOGI8BB',
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-ovning', prov: 'Extra 4.1-4.2', datum: '2026-09-11', rum: 'BIOLOGI8BB', autoTyp: true,
       rader: [{ namn: 'Anna Berg', poang: 3, maxPoang: 3, svar: sv([[A, true], [B, true], [C, true]]) }] }).s;
     // Övning med helt egna frågor
     s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-ovning', prov: 'Kahoot-lek', datum: '2026-09-12', rum: 'BIOLOGI8BB',
@@ -301,7 +301,7 @@ describe('Del 99: övningar med samma quiz räknas in i huvudsviten', async () =
 
   it('efter harmonisering syns övningen i nuläget och trendkollen', () => {
     let s = bygg();
-    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-ovning', prov: 'Extra 4.1-4.2', datum: '2026-09-11', rum: 'BIOLOGI8BB',
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-ovning', prov: 'Extra 4.1-4.2', datum: '2026-09-11', rum: 'BIOLOGI8BB', autoTyp: true,
       rader: [{ namn: 'Anna Berg', poang: 3, maxPoang: 3, svar: sv([[A, true], [B, true], [C, true]]) }] }).s;
     // Utan harmonisering: filtret på läxförhör ser inte övningen → B är fortfarande fel för Anna
     const fLax = { ...f, kallor: ['socrative-laxforhor'] as ('socrative-laxforhor')[] };
@@ -368,5 +368,17 @@ describe('Del 111: en manuellt satt typ räknas inte om av harmoniseringen', asy
     const h = harmoniseraOvningar(s, f);
     expect(h.inkluderade).toEqual([]);
     expect(h.s.resultat!.find((x) => x.prov === '4.1-4.2 Begrepp')!.kalla).toBe('socrative-ovning');
+  });
+});
+
+describe('Del 113: Övning är en egen testtyp om inte importen själv valde den', async () => {
+  const { harmoniseraOvningar } = await import('../src/domain/delkapiteltrend.js');
+  it('en övning importerad utan autoTyp lämnas som övning även om den kör samma quiz', () => {
+    let s = bygg();
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-ovning', prov: 'Extra 4.1-4.2', datum: '2026-09-11', rum: 'BIOLOGI8BB',
+      rader: [{ namn: 'Anna Berg', poang: 3, maxPoang: 3, svar: sv([[A, true], [B, true], [C, true]]) }] }).s;
+    const h = harmoniseraOvningar(s, f);
+    expect(h.inkluderade).toEqual([]);
+    expect(h.s.resultat!.find((x) => x.prov === 'Extra 4.1-4.2')!.kalla).toBe('socrative-ovning');
   });
 });

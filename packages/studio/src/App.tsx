@@ -3016,7 +3016,9 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
     magma: { id: 'st-kurva' }, digiexam: { id: 'st-kurva' }, helhet: { id: 'st-kurva' },
   };
   const harm = useMemo(() => harmoniseraOvningar(sIn, { klassId, ...(amneId !== '' ? { amneId } : {}) }), [sIn, klassId, amneId]);
-  const s = inkluderaOvn ? harm.s : sIn;
+  // Visar filtret övningar ska de synas som övningar — inte inräknade som förhör
+  const visarOvning = kallor !== undefined && kallor.includes('socrative-ovning') && !kallor.includes('socrative-laxforhor') && !kallor.includes('socrative-exit');
+  const s = inkluderaOvn && !visarOvning ? harm.s : sIn;
   // Fokus: en eller flera elever i den stora vyn. Första eleven är 'huvudelev'.
   const [fokus, setFokus] = useState<string[]>([]);
   const [fokusRubrik, setFokusRubrik] = useState<string>('');
@@ -4605,6 +4607,8 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
     matchade: number; omatchadeNamn: string[]; deltog: number;
     rader: Array<{ namn: string; poang: number; maxPoang: number; sidId: string; svar?: FragaSvar[] }>;
     redanInne: boolean;
+    /** Läraren har ändrat typen i rullgardinen före import. */
+    typAndrad?: boolean;
   }
   const [filRader, setFilRader] = useState<FilRad[]>([]);
   const [importeraOm, setImporteraOm] = useState(false);
@@ -4660,7 +4664,8 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
       let st = lasStruktur();
       for (const f of importerbara) {
         st = importeraResultat(st, {
-          klassId: klass.id, amneId: f.amneId!, kalla: f.kalla!, prov: f.quiz, datum: f.datum, rum: f.rum, ...(f.tid !== null ? { tid: f.tid } : {}), rader: f.rader,
+          klassId: klass.id, amneId: f.amneId!, kalla: f.kalla!, prov: f.quiz, datum: f.datum, rum: f.rum, ...(f.tid !== null ? { tid: f.tid } : {}),
+          ...(f.typAndrad !== true ? { autoTyp: true } : {}), rader: f.rader,
         }).s;
         st = registreraFil(st, { amneId: f.amneId!, filnamn: f.filnamn, importerad: new Date().toISOString(), kalla: f.kalla!, prov: f.quiz, datum: f.datum, traffar: f.matchade, rum: f.rum });
       }
@@ -4767,7 +4772,7 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
                 <td className="small muted">{f.tid ?? '—'}</td>
                 <td>
                   <select aria-label={`Typ för ${f.filnamn}`} value={f.kalla ?? ''} disabled={f.amneId === null}
-                    onChange={(e) => setFilRader(filRader.map((x, j) => (j === i ? { ...x, kalla: e.target.value === '' ? null : e.target.value as ResultatKalla } : x)))}>
+                    onChange={(e) => setFilRader(filRader.map((x, j) => (j === i ? { ...x, kalla: e.target.value === '' ? null : e.target.value as ResultatKalla, typAndrad: true } : x)))}>
                     <option value="">— välj —</option>
                     {FM_TYPER.map((k) => <option key={k} value={k}>{TYPNAMN[k]}</option>)}
                   </select>

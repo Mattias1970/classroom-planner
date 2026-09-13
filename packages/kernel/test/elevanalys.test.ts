@@ -123,7 +123,7 @@ describe('Del 92: övning med samma frågor flaggas i analysen', () => {
     let s = bygg();
     const svar = [{ fraga: A, svar: 'r', ratt: true }, { fraga: B, svar: 'r', ratt: true }];
     // Läxförhöret 21/8 hade A och B; övningen har samma frågor
-    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-ovning', prov: 'Extraövning', datum: '2026-09-10', rum: 'BIOLOGI8BB',
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-ovning', prov: 'Extraövning', autoTyp: true, datum: '2026-09-10', rum: 'BIOLOGI8BB',
       rader: [{ namn: 'Anna Berg', poang: 2, maxPoang: 2, svar }] }).s;
     const a = elevanalys(s, 'a', f);
     // Samma quiz → räknas in som läxförhör i analysen, inte som separat övning

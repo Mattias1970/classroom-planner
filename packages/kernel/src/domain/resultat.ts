@@ -47,6 +47,9 @@ export interface Resultat {
   inkluderadSom?: ResultatKalla;
   /** Läraren har satt typen för hand (andraKalla) — analysen får inte räkna om den. */
   manuellTyp?: boolean;
+  /** Typen sattes automatiskt vid import (t.ex. övning för att tiden inte matchade en lektion).
+   *  Bara sådana övningar får räknas in som förhör när de kör samma quiz. */
+  autoTyp?: boolean;
   poang: number;
   maxPoang: number;
 }
@@ -74,6 +77,8 @@ export interface ImportUnderlag {
   /** Socrative-rum (valfritt). */
   rum?: string;
   amneId?: string;
+  /** Typen valdes automatiskt av importen (inte av läraren). */
+  autoTyp?: boolean;
   rader: ImportRad[];
 }
 
@@ -165,6 +170,7 @@ export function importeraResultat(s: Struktur, u: ImportUnderlag): ImportUtfall 
       datum: u.datum, poang: rad.poang, maxPoang: rad.maxPoang,
       ...(u.tid !== undefined ? { tid: u.tid } : {}),
       ...(u.rum !== undefined ? { rum: u.rum } : {}),
+      ...(u.autoTyp === true ? { autoTyp: true } : {}),
       ...(rad.svar !== undefined && rad.svar.length > 0 ? { svar: rad.svar } : {}),
       ...(u.amneId !== undefined ? { amneId: u.amneId } : {}),
     });
@@ -443,7 +449,7 @@ export function andraKalla(s: Struktur, val: { amneId: string; prov: string; dat
     r.amneId === val.amneId && r.prov === val.prov && r.kalla === val.franKalla && (r.datum === undefined || r.datum === val.datum);
   return {
     ...s,
-    resultat: (s.resultat ?? []).map((r) => (traff(r) ? { ...r, kalla: val.tillKalla, manuellTyp: true } : r)),
+    resultat: (s.resultat ?? []).map((r) => (traff(r) ? { ...r, kalla: val.tillKalla, manuellTyp: true, autoTyp: false } : r)),
     filregister: (s.filregister ?? []).map((f) => (traff(f) ? { ...f, kalla: val.tillKalla } : f)),
   };
 }

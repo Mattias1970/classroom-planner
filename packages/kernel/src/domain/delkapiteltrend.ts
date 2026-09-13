@@ -630,8 +630,10 @@ export function harmoniseraOvningar(s: Struktur, f: DelkapitelFilter, grans = 60
   const inkluderade: Inkluderad[] = [];
   const resultat = (s.resultat ?? []).map((r) => {
     if (r.kalla !== 'socrative-ovning') return r;
-    // Läraren har uttryckligen satt typen — då är det en övning, punkt
-    if (r.manuellTyp === true) return r;
+    // Övning är en egen testtyp. Bara övningar som importen själv klassade som övning
+    // (autoTyp) får räknas in som förhör när de kör samma quiz — allt läraren valt,
+    // eller som importerats som övning med avsikt, stannar som övning.
+    if (r.autoTyp !== true || r.manuellTyp === true) return r;
     const m = somTyp.get(`${r.datum}|${r.kalla}|${r.prov}`);
     if (m === undefined) return r;
     let post = inkluderade.find((x) => x.prov === r.prov && x.datum === r.datum);
