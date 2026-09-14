@@ -1,0 +1,41 @@
+# Del 39 (uppdaterad Del 119: Node 22, actions v5): bygg web- OCH studioappen och publicera till GitHub Pages
+# Webbappen på /, studio (v2) på /studio/ — nås från valfri dator via
+# https://mattias1970.github.io/classroom-planner/
+name: Deploy till GitHub Pages
+on:
+  push:
+    branches: [classroom-planner, main, utveckling]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npx vitest run
+      - run: npx vite build
+        working-directory: packages/web
+      - run: npx vite build
+        working-directory: packages/studio
+      - name: Sätt ihop siten (web på /, studio på /studio/)
+        run: |
+          mkdir -p site/studio
+          cp -r packages/web/dist/* site/
+          cp -r packages/studio/dist/* site/studio/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with: { path: site }
+      - id: deployment
+        uses: actions/deploy-pages@v4
