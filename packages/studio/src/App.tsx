@@ -3990,6 +3990,45 @@ function ExitLaxStaplar({ rader }: { rader: Array<{ kod: string; exitProcent: nu
   );
 }
 
+/**
+ * Utskriftsval: en rapport skrivs alltid ut med en vald mall. Mallarna listas
+ * överst; Word-formaten (enkel, fullständig, studieguide) finns som färdiga
+ * alternativ under. Saknas mallar leds man till Rapportdesign.
+ */
+function UtskriftVal({ s, rubrik, val, onValj, onDesign, onStang }: {
+  s: Struktur; rubrik: string;
+  val: Array<{ id: string; namn: string; beskrivning: string }>;
+  onValj: (id: string) => void; onDesign?: () => void; onStang: () => void;
+}) {
+  const mallar = s.rapportmallar ?? [];
+  useEffect(() => {
+    const h = (ev: KeyboardEvent) => { if (ev.key === 'Escape') onStang(); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [onStang]);
+  return (
+    <div className="st-info-bak" onClick={onStang} role="presentation">
+      <div className="st-info-popup st-utskriftval" role="dialog" aria-label={rubrik} onClick={(e) => e.stopPropagation()}>
+        <div className="rad"><b>🖨 {rubrik}</b><span className="spacer" /><button className="btn sec sm" onClick={onStang}>✕</button></div>
+        <div className="st-nu-rubrik">Rapportmallar <small className="muted">utskrift eller PDF, i den layout du byggt</small></div>
+        {mallar.length === 0 ? (
+          <p className="small muted">Inga mallar än. {onDesign !== undefined && <button className="linkbtn" onClick={() => { onStang(); onDesign(); }}>Skapa en i Rapportdesign</button>}</p>
+        ) : (
+          <div className="st-utskrift-lista">{mallar.map((m) => (
+            <button key={m.id} className="st-utskrift-knapp" onClick={() => { onStang(); onValj(`mall:${m.id}`); }}>
+              <b>🎨 {m.namn}</b>{m.beskrivning !== undefined && m.beskrivning !== '' && <small>{m.beskrivning}</small>}
+            </button>
+          ))}</div>
+        )}
+        <div className="st-nu-rubrik" style={{ marginTop: 10 }}>Word-format <small className="muted">färdiga dokument</small></div>
+        <div className="st-utskrift-lista">{val.map((v) => (
+          <button key={v.id} className="st-utskrift-knapp" onClick={() => { onStang(); onValj(v.id); }}><b>📝 {v.namn}</b><small>{v.beskrivning}</small></button>
+        ))}</div>
+      </div>
+    </div>
+  );
+}
+
 /** Studieguide inför provet: plan per dag, begrepp att plugga, rum och filmer. */
 function StudieguideVy({ s, elev, f, onTillbaka, onLage }: {
   s: Struktur; elev: Elev; f: DashboardFilter & { amneId: string }; onTillbaka: () => void; onLage: (l: 'enkel' | 'full' | 'studie') => void;
@@ -4066,6 +4105,7 @@ function EnkelRapportVy({ s, elev, f, periodText, onTillbaka, onFull, onStudie, 
 }) {
   const [skriver, setSkriver] = useState(false);
   const [mallUtskrift, setMallUtskrift] = useState<string | null>(null);
+  const [val, setVal] = useState(false);
   const mallen = mallUtskrift === null ? null : (s.rapportmallar ?? []).find((m) => m.id === mallUtskrift) ?? null;
   const r = useMemo(() => enkelRapport(s, elev.id, f), [s, elev.id, f.amneId, f.veckaFran, f.veckaTill, f.fran, f.till]); // eslint-disable-line react-hooks/exhaustive-deps
   if (mallen !== null) {
@@ -4093,18 +4133,25 @@ function EnkelRapportVy({ s, elev, f, periodText, onTillbaka, onFull, onStudie, 
         <span className="spacer" />
         {onStudie !== undefined && <button className="btn sec sm" onClick={onStudie}>📚 Inför provet</button>}
         <button className="btn sec sm" onClick={onFull}>Fullständig rapport</button>
-        {(s.rapportmallar ?? []).length > 0 ? (
-          <select aria-label="Skriv ut med mall" className="rd-mallval" value="" onChange={(e) => { if (e.target.value !== '') setMallUtskrift(e.target.value); }}>
-            <option value="">🎨 Skriv ut med mall…</option>
-            {(s.rapportmallar ?? []).map((m) => <option key={m.id} value={m.id}>{m.namn}</option>)}
-          </select>
-        ) : onDesign !== undefined ? <button className="btn sec sm" onClick={onDesign} title="Inga mallar än — skapa en i Rapportdesign">🎨 Skapa mall</button> : null}
-        <button className="btn" disabled={skriver} onClick={() => {
-          setSkriver(true);
-          void import('./elevrapportWord.js').then(({ enkelRapportTillWord }) => enkelRapportTillWord(r))
-            .catch(() => window.alert('Rapporten kunde inte skapas.')).finally(() => setSkriver(false));
-        }}>{skriver ? '… skapar' : '📝 Word'}</button>
+        <button className="btn" disabled={skriver} onClick={() => setVal(true)}>{skriver ? '… skapar' : '🖨 Skriv ut…'}</button>
       </div>
+      {val && (
+        <UtskriftVal s={s} rubrik={`Skriv ut rapport för ${elev.namn}`} onStang={() => setVal(false)} onDesign={onDesign}
+          val={[
+            { id: 'word:enkel', namn: 'Enkel rapport', beskrivning: 'Kort Word-fil: trend, förhör, begrepp, två diagram' },
+            { id: 'word:full', namn: 'Fullständig rapport', beskrivning: 'Word-fil med aktuellt kunnande, nästa steg, historik och bilagor' },
+            ...(f.amneId !== undefined ? [{ id: 'word:studie', namn: 'Studieguide inför provet', beskrivning: 'Plan per dag, begrepp att plugga, rum och filmer' }] : []),
+          ]}
+          onValj={(id) => {
+            if (id.startsWith('mall:')) { setMallUtskrift(id.slice(5)); return; }
+            setSkriver(true);
+            void import('./elevrapportWord.js').then(async (m) => {
+              if (id === 'word:enkel') await m.enkelRapportTillWord(r);
+              else if (id === 'word:full') await m.elevrapportTillWord(elevanalys(s, elev.id, f));
+              else await m.studieguideTillWord(studieguide(s, elev.id, { ...f, amneId: f.amneId! }, new Date().toISOString().slice(0, 10)));
+            }).catch(() => window.alert('Rapporten kunde inte skapas.')).finally(() => setSkriver(false));
+          }} />
+      )}
 
       <div className={`st-punkt-kort ${r.ton} st-enkel-rubrik`}>
         <b>{r.rubrik}</b>
@@ -4173,6 +4220,7 @@ function EnkelRapportVy({ s, elev, f, periodText, onTillbaka, onFull, onStudie, 
 function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur, m: string) => void; meddela: (m: string) => void }) {
   const [design, setDesign] = useState(false);
   const [mallAlla, setMallAlla] = useState<string | null>(null);
+  const [valAlla, setValAlla] = useState(false);
   const klasser = [...s.klasser].sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
   const [klassId, setKlassId] = useState(klasser[0]?.id ?? '');
   const klass = klasser.find((k) => k.id === klassId) ?? klasser[0];
@@ -4292,22 +4340,18 @@ function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur,
         <span className="spacer" />
         <small className="muted">{rader.length} elever</small>
         <button className="btn sec" onClick={() => setDesign(true)} title="Bygg och redigera rapportmallar">🎨 Rapportdesign{(s.rapportmallar ?? []).length > 0 ? ` (${(s.rapportmallar ?? []).length})` : ''}</button>
-        {(s.rapportmallar ?? []).length > 0 && (
-          <select aria-label="Skriv ut alla elever med mall" className="rd-mallval" value="" onChange={(e) => { if (e.target.value !== '') setMallAlla(e.target.value); }}
-            title="Renderar mallen för varje elev med resultat, klar att skriva ut eller spara som PDF">
-            <option value="">🖨 Skriv ut alla med mall…</option>
-            {(s.rapportmallar ?? []).map((m) => <option key={m.id} value={m.id}>{m.namn}</option>)}
-          </select>
-        )}
-        <button className="btn sec" disabled={skriver !== ''} onClick={allaEnklaTillWord}
-          title="En enkel Word-rapport per elev, packade i ett zip-arkiv">
-          {skriver === 'enkla' ? `… skapar ${forlopp}` : '📝 Enkla rapporter (zip)'}
-        </button>
-        <button className="btn" disabled={skriver !== ''} onClick={allaTillWord}
-          title="En fullständig Word-fil per elev, packade i ett zip-arkiv">
-          {skriver === 'alla' ? `… skapar ${forlopp}` : '📝 Fullständiga (zip)'}
+        <button className="btn" disabled={skriver !== ''} onClick={() => setValAlla(true)} title="Välj mall eller Word-format för alla elever i urvalet">
+          {skriver !== '' ? `… skapar ${forlopp}` : '🖨 Skriv ut alla…'}
         </button>
       </div>
+      {valAlla && (
+        <UtskriftVal s={s} rubrik={`Skriv ut ${rader.filter((r) => r.antalProv > 0).length} elever`} onStang={() => setValAlla(false)} onDesign={() => setDesign(true)}
+          val={[
+            { id: 'word:enkel', namn: 'Enkla rapporter (zip)', beskrivning: 'En kort Word-fil per elev med två diagram' },
+            { id: 'word:full', namn: 'Fullständiga rapporter (zip)', beskrivning: 'Aktuellt kunnande, nästa steg, historik och bilagor' },
+          ]}
+          onValj={(id) => { if (id.startsWith('mall:')) setMallAlla(id.slice(5)); else if (id === 'word:enkel') allaEnklaTillWord(); else allaTillWord(); }} />
+      )}
 
       {analys === null || valdElev === null ? (
         <div className="uppg-kort st-widget">
@@ -4325,8 +4369,8 @@ function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur,
                   <td>{r.antalProv === 0 ? <span className="muted">inga resultat</span>
                     : r.oro === 0 ? <span className="st-krav ok">inget att oroa sig för</span>
                       : <span className="st-krav ej">{r.oro} sak{r.oro > 1 ? 'er' : ''} att ta tag i</span>}</td>
-                  <td><button className="btn sm" disabled={skriver === r.elev.id || r.antalProv === 0}
-                    onClick={(ev) => { ev.stopPropagation(); setSkriver(r.elev.id); tillWord(elevanalys(s, r.elev.id, f), r.elev.id); }}>{skriver === r.elev.id ? '…' : '📝 Word'}</button></td>
+                  <td><button className="btn sm" disabled={r.antalProv === 0} title="Öppna rapporten och välj mall"
+                    onClick={(ev) => { ev.stopPropagation(); setElevId(r.elev.id); }}>🖨 Skriv ut…</button></td>
                 </tr>
               ))}</tbody>
             </table>
@@ -4345,7 +4389,7 @@ function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur,
             <span className="spacer" />
             <button className="btn sec sm" onClick={() => setLage('enkel')}>Enkel rapport</button>
             {valtAmne !== '' && <button className="btn sec sm" onClick={() => setLage('studie')}>📚 Inför provet</button>}
-            <button className="btn" disabled={skriver === valdElev.id} onClick={() => tillWord(analys, valdElev.id)}>{skriver === valdElev.id ? '… skapar' : '📝 Skriv ut till Word'}</button>
+            <button className="btn" onClick={() => setLage('enkel')} title="Utskrift och mallval finns i enkla rapporten">🖨 Skriv ut…</button>
           </div>
           <p className="st-rapport-ingress">{analys.sammanfattning}</p>
           {analys.inkluderadeOvningar.length > 0 && (

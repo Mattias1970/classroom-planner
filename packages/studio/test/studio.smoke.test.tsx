@@ -2053,16 +2053,22 @@ describe('📄 Rapporter', () => {
     expect(rad.textContent).toContain('50 %'); // exit-snittet
     expect(rad.textContent).toContain('att ta tag i');
 
-    // Knapparna som skapar en Word-fil per elev (enkel och fullständig) finns i filterraden
-    expect(knapp(host, '📝 Enkla rapporter (zip)').disabled).toBe(false);
-    expect(knapp(host, '📝 Fullständiga (zip)').disabled).toBe(false);
+    // En knapp för alla elever öppnar utskriftsvalet: mallar (inga än) + Word-format
+    act(() => { knapp(host, '🖨 Skriv ut alla…').click(); });
+    expect(host.querySelector('.st-utskriftval')!.textContent).toContain('Inga mallar än');
+    expect(host.querySelector('.st-utskriftval')!.textContent).toContain('Enkla rapporter (zip)');
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+    expect(host.querySelector('.st-utskriftval')).toBeNull();
 
     act(() => { (rad as HTMLElement).click(); });
     // Enkel rapport öppnas först: rubrik, begrepp med problem och Word-knapp
     expect(host.querySelector('.st-enkel')).not.toBeNull();
     expect(host.textContent).toContain('Begrepp du haft problem med');
     expect(host.textContent).toContain('har inga läxförhör i perioden'); // bara en exit ticket i testet
-    expect(knapp(host, '📝 Word')).not.toBeNull();
+    // Utskrift går alltid via valet: mallar + Word-format
+    act(() => { knapp(host, '🖨 Skriv ut…').click(); });
+    expect(host.querySelector('.st-utskriftval')!.textContent).toContain('Enkel rapport');
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
     // Studieguiden inför provet
     act(() => { knapp(host, '📚 Inför provet').click(); });
     expect(host.querySelector('.st-studie')).not.toBeNull();
@@ -2073,7 +2079,7 @@ describe('📄 Rapporter', () => {
     expect(host.textContent).toContain('2. Nästa steg');
     expect(host.textContent).toContain('3. Historik');
     expect(host.querySelectorAll('.st-punkt-kort').length).toBeGreaterThan(1);
-    expect(knapp(host, '📝 Skriv ut till Word')).not.toBeNull();
+    expect(knapp(host, '🖨 Skriv ut…')).not.toBeNull();
     act(() => { knapp(host, 'Enkel rapport').click(); });
     expect(host.querySelector('.st-enkel')).not.toBeNull();
     act(() => { knapp(host, '← Alla elever').click(); });
@@ -2196,18 +2202,19 @@ describe('🎨 Rapportdesign', () => {
     // Utan resultat visar listan eleven men rapporten går ändå att öppna
     const rad = host.querySelector('.st-rapportrad') as HTMLElement;
     act(() => { rad.click(); });
-    const val = host.querySelector('select[aria-label="Skriv ut med mall"]') as HTMLSelectElement;
-    expect(val).not.toBeNull();
-    valj(val, lasStruktur().rapportmallar![0].id);
+    act(() => { knapp(host, '🖨 Skriv ut…').click(); });
+    const mallKnapp = [...host.querySelectorAll('.st-utskrift-knapp')].find((b) => b.textContent?.includes('Terminsrapport HT')) as HTMLButtonElement;
+    expect(mallKnapp).not.toBeUndefined();
+    act(() => { mallKnapp.click(); });
     expect(host.querySelectorAll('.rd-utskrift')).toHaveLength(2); // två sidor
     expect(knapp(host, '🖨 Skriv ut / PDF')).not.toBeNull();
 
     // Alla elever med mall: eleven utan resultat hoppas över → 0 sidor, men vyn och knappen finns
     act(() => { knapp(host, '← Tillbaka').click(); });
     act(() => { knapp(host, '← Alla elever').click(); });
-    const allaVal = host.querySelector('select[aria-label="Skriv ut alla elever med mall"]') as HTMLSelectElement;
-    expect(allaVal).not.toBeNull();
-    valj(allaVal, lasStruktur().rapportmallar![0].id);
+    act(() => { knapp(host, '🖨 Skriv ut alla…').click(); });
+    const allaMall = [...host.querySelectorAll('.st-utskrift-knapp')].find((b) => b.textContent?.includes('Terminsrapport HT')) as HTMLButtonElement;
+    act(() => { allaMall.click(); });
     expect(host.querySelector('.rd-alla')).not.toBeNull();
     expect(host.textContent).toContain('utan resultat hoppas över');
     expect(knapp(host, '🖨 Skriv ut / spara som PDF')).not.toBeNull();
