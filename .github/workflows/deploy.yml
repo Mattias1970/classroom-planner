@@ -1,4 +1,4 @@
-# Del 39: bygg web- OCH studioappen och publicera till GitHub Pages
+# Del 39 (uppdaterad Del 119: Node 22, actions v5): bygg web- OCH studioappen och publicera till GitHub Pages
 # Webbappen på /, studio (v2) på /studio/ — nås från valfri dator via
 # https://mattias1970.github.io/classroom-planner/
 name: Deploy till GitHub Pages
@@ -20,9 +20,9 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: npx vitest run
       - run: npx vite build
@@ -35,7 +35,7 @@ jobs:
           cp -r packages/web/dist/* site/
           cp -r packages/studio/dist/* site/studio/
       - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with: { path: site }
       - id: deployment
         uses: actions/deploy-pages@v4
