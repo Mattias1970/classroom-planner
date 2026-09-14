@@ -174,3 +174,12 @@ describe('Del 116: rubrik på alla datablock och typografi i punkter', async () 
     expect(t.block[0].stil?.rubrikPt).toBe(16);
   });
 });
+
+describe('Del 118: passning krymp/flytta sparas och läses', () => {
+  it('passning följer med i JSON och saknas = krymp (standard i gränssnittet)', () => {
+    const m = { ...nyMall('m', 'x', ''), passning: 'flytta' as const };
+    expect(tolkaRapportmall(JSON.stringify(m)).passning).toBe('flytta');
+    expect(tolkaRapportmall(JSON.stringify(nyMall('m', 'x', ''))).passning).toBeUndefined();
+    expect(tolkaRapportmall(JSON.stringify({ ...m, passning: 'hoppsan' })).passning).toBeUndefined();
+  });
+});

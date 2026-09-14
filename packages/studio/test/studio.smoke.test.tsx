@@ -2169,6 +2169,13 @@ describe('🎨 Rapportdesign', () => {
     // Alla datablock har rubrik
     for (const el of host.querySelectorAll('.rd-block.kpi, .rd-block.laxkurva, .rd-block\\.begrepp-kvar')) expect(el.querySelector('.rd-blockrubrik')).not.toBeNull();
 
+    // Passning: valet finns i verktygsraden, standard är att krympa texten
+    const passning = host.querySelector('select[aria-label="Passning"]') as HTMLSelectElement;
+    expect(passning.value).toBe('krymp');
+    valj(passning, 'flytta');
+    expect((host.querySelector('select[aria-label="Passning"]') as HTMLSelectElement).value).toBe('flytta');
+    valj(host.querySelector('select[aria-label="Passning"]') as HTMLSelectElement, 'krymp');
+
     // Sida 2: läggs till, block hamnar där, utskriften får två ark
     act(() => { knapp(host, '＋').click(); });
     expect(host.querySelectorAll('.rd-sidflik').length).toBeGreaterThanOrEqual(3); // Sida 1, Sida 2, ＋(, 🗑)

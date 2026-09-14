@@ -221,11 +221,26 @@ function blockStil(b: Block, m?: Pick<Rapportmall, 'typografi'>): React.CSSPrope
  */
 const VAXER_INTE: BlockTyp[] = ['platta', 'bild', 'qr', 'laxkurva', 'exitlax', 'delkapitel'];
 
-function useAutoHojd(mall: Rapportmall | null, aktiv: boolean, skala: number, andra: (m: Rapportmall) => void) {
+/** Lägsta textfaktor vid krympning (60 % av vald storlek). */
+const MIN_FAKTOR = 0.6;
+const FAKTOR_STEG = 0.05;
+
+/**
+ * Passning. Efter varje render mäts blocken. Ett block vars innehåll inte får
+ * plats växer (vaxBlock — raden följer, allt under flyttas). Om växningen skulle
+ * skjuta block utanför sidan gäller mallens passning:
+ *   'krymp' (standard): texten minskas ett steg (5 %) och layouten återställs,
+ *                       tills allt ryms eller 60 % nåtts — då flyttas som sist utväg;
+ *   'flytta':           det som inte ryms hamnar överst på nästa sida.
+ * Returnerar ref-fabriken och den aktuella textfaktorn (1 = ingen krympning).
+ */
+function useAutoHojd(mall: Rapportmall | null, aktiv: boolean, skala: number, andra: (m: Rapportmall) => void, ursprung: Rapportmall | null) {
   const refs = useRef(new Map<string, HTMLDivElement>());
-  // Skydd mot oändlig tillväxt (innehåll som själv följer blockets höjd): max antal
-  // växningar per block, och aldrig över sidhöjden
   const varv = useRef(new Map<string, number>());
+  const [faktor, setFaktor] = useState(1);
+  const ursprungId = ursprung?.id; const ursprungAndrad = ursprung?.andrad;
+  // Ny mall eller ny data → börja om från full storlek
+  useEffect(() => { setFaktor(1); varv.current.clear(); }, [ursprungId, ursprungAndrad]);
   useLayoutEffect(() => {
     if (!aktiv || mall === null) return;
     let ny = mall; let andrat = false;
@@ -242,9 +257,20 @@ function useAutoHojd(mall: Rapportmall | null, aktiv: boolean, skala: number, an
         andrat = true;
       }
     }
-    if (andrat) andra(ny);
+    if (!andrat) return;
+    const krymper = (mall.passning ?? 'krymp') === 'krymp';
+    const sprangerSidan = antalSidor(ny) > antalSidor(ursprung ?? mall);
+    if (krymper && sprangerSidan && faktor - FAKTOR_STEG >= MIN_FAKTOR - 1e-9 && ursprung !== null) {
+      // Minska texten ett steg och börja om från ursprungslayouten
+      setFaktor((f) => Math.round((f - FAKTOR_STEG) * 100) / 100);
+      varv.current.clear();
+      andra(ursprung);
+      return;
+    }
+    andra(ny);
   });
-  return (id: string) => (el: HTMLDivElement | null) => { if (el === null) refs.current.delete(id); else refs.current.set(id, el); };
+  const matRef = (id: string) => (el: HTMLDivElement | null) => { if (el === null) refs.current.delete(id); else refs.current.set(id, el); };
+  return { matRef, faktor };
 }
 
 // ── Designern ────────────────────────────────────────────────
@@ -277,7 +303,7 @@ export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: ()
   const andrad = utkast !== null;
 
   const satt = (m: Rapportmall) => setUtkast(m);
-  const matRef = useAutoHojd(mall, autoHojd, skala, satt);
+  const { matRef, faktor } = useAutoHojd(mall, autoHojd, skala, satt, mallar.find((m) => m.id === mallId) ?? mall);
   /** Frågar efter namn; tomt = avbryt. */
   const fragaNamn = (rubrik: string, forslag: string): string | null => {
     const svar = window.prompt(rubrik, forslag);
@@ -478,6 +504,13 @@ export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: ()
               </select></label>
             <label className="small"><input type="checkbox" checked={snappPa} onChange={(e) => setSnappPa(e.target.checked)} /> snapp</label>
             <span className="rd-sep" />
+            <label className="small" title="Vad som händer när innehållet inte ryms på sidan">Om sidan blir full{' '}
+              <select aria-label="Passning" value={mall.passning ?? 'krymp'} onChange={(e) => satt({ ...mall, passning: e.target.value as 'krymp' | 'flytta' })}>
+                <option value="krymp">krymp texten</option>
+                <option value="flytta">flytta till nästa sida</option>
+              </select></label>
+            {faktor < 1 && <small className="rd-faktor" title="Texten har krympts för att allt ska rymmas på sidan">text {Math.round(faktor * 100)} %</small>}
+            <span className="rd-sep" />
             <label className="small" title="Rubrikstorlek för alla block (punkter)">Rubrik{' '}
               <input type="number" min={6} max={36} step={1} aria-label="Rubrikstorlek pt" style={{ width: 52 }} value={mall.typografi?.rubrikPt ?? TYPOGRAFI_STANDARD.rubrikPt}
                 onChange={(e) => satt({ ...mall, typografi: { rubrikPt: Number(e.target.value), brodPt: mall.typografi?.brodPt ?? TYPOGRAFI_STANDARD.brodPt } })} /> pt</label>
@@ -498,7 +531,7 @@ export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: ()
             {markerade.length > 0 && <small className="muted">{markerade.length} markerade · Shift+klick lägger till · Ctrl+A alla på sidan</small>}
           </div>
           <div className="rd-arkram" onPointerMove={pekareRor} onPointerUp={pekareUpp} onPointerCancel={pekareUpp}>
-            <div ref={arkRef} className="rd-ark" style={{ width: A4.bredd * skala, height: A4.hojd * skala, ['--mm' as string]: `${skala}px`, ['--pt-skala' as string]: String(skala / (96 / 25.4)) }}
+            <div ref={arkRef} className="rd-ark" style={{ width: A4.bredd * skala, height: A4.hojd * skala, ['--mm' as string]: `${skala}px`, ['--pt-skala' as string]: String((skala / (96 / 25.4)) * faktor), ['--pt-faktor' as string]: String(faktor) }}
               onPointerDown={() => setMarkerade([])}>
               {ritordning(mall, sida).map((b) => {
                 const ar = markerade.includes(b.id);
@@ -601,11 +634,11 @@ export function MallRendering({ s, mall: malln, elevId, klassId, amneId }: { s: 
   // Utskriften får en egen kopia som växer efter elevens innehåll — mallen ändras inte
   const [mall, setMall] = useState(malln);
   useEffect(() => { setMall(malln); }, [malln, elevId]);
-  const matRef = useAutoHojd(mall, true, skala, setMall);
+  const { matRef, faktor } = useAutoHojd(mall, true, skala, setMall, malln);
   return (
     <div className="rd-sidor">
       {Array.from({ length: antalSidor(mall) }, (_, i) => i + 1).map((n) => (
-        <div key={n} className="rd-ark rd-utskrift" style={{ width: A4.bredd * skala, height: A4.hojd * skala, ['--mm' as string]: `${skala}px`, ['--pt-skala' as string]: String(skala / (96 / 25.4)) }}>
+        <div key={n} className="rd-ark rd-utskrift" data-faktor={faktor} style={{ width: A4.bredd * skala, height: A4.hojd * skala, ['--mm' as string]: `${skala}px`, ['--pt-skala' as string]: String((skala / (96 / 25.4)) * faktor), ['--pt-faktor' as string]: String(faktor) }}>
           {ritordning(mall, n).map((b) => (
             <div key={b.id} ref={matRef(b.id)} className={`rd-block ${b.typ}`} style={blockStil(b, mall)}>
               <BlockInnehall b={b} d={data} s={s} />

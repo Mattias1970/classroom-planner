@@ -108,6 +108,12 @@ export interface Rapportmall {
   rutnat?: number;
   /** Typografi för hela mallen: rubrik- och brödtextstorlek i punkter. */
   typografi?: { rubrikPt: number; brodPt: number };
+  /**
+   * Vad som händer när innehållet inte ryms på sidan:
+   * 'krymp' (standard) — texten minskas steg för steg tills alla rutor får plats;
+   * 'flytta' — rutorna växer och det som inte ryms flyttas till nästa sida.
+   */
+  passning?: 'krymp' | 'flytta';
   block: Block[];
   skapad: string;
   andrad: string;
@@ -342,6 +348,7 @@ export function tolkaRapportmall(json: string): Rapportmall {
     id: r.id, namn: r.namn, ...(r.beskrivning !== undefined ? { beskrivning: r.beskrivning } : {}),
     marginal: Number(r.marginal ?? 15), ...(r.antalSidor !== undefined ? { antalSidor: Number(r.antalSidor) } : {}),
     ...(r.typografi !== undefined ? { typografi: { rubrikPt: Number(r.typografi.rubrikPt ?? 12), brodPt: Number(r.typografi.brodPt ?? 10) } } : {}),
+    ...(r.passning === 'flytta' || r.passning === 'krymp' ? { passning: r.passning } : {}),
     ...(r.rutnat !== undefined ? { rutnat: Number(r.rutnat) } : {}), block, skapad: r.skapad ?? '', andrad: r.andrad ?? '', version: 1,
   };
 }
@@ -391,7 +398,8 @@ export function vaxBlock(m: Rapportmall, id: string, nyHojd: number): Rapportmal
   });
   // Det som inte längre ryms på sidan går till nästa sida, överst, i samma ordning
   let antal = antalSidor(m);
-  const flyttas = block.filter((x) => blockSida(x) === sida && x.y + x.h > A4.hojd - m.marginal / 2).sort((p, q) => p.y - q.y || p.x - q.x);
+  // Sidans nedre gräns: 5 mm från kanten (utskriftsbar yta), inte sidmarginalen — den är layoutens sak
+  const flyttas = block.filter((x) => blockSida(x) === sida && x.y + x.h > A4.hojd - 5).sort((p, q) => p.y - q.y || p.x - q.x);
   if (flyttas.length > 0) {
     const nasta = sida + 1;
     if (nasta > antal) antal = nasta;

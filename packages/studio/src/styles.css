@@ -873,7 +873,7 @@ input.fel { border-color: #B71C1C; }
   body { background: #fff; }
   .rd { display: block; }
   .rd-arkram { padding: 0; background: none; overflow: visible; }
-  .rd-ark, .rd-utskrift { box-shadow: none; margin: 0; width: 210mm !important; height: 297mm !important; --mm: 1mm !important; --pt-skala: 1 !important; background-image: none; }
+  .rd-ark, .rd-utskrift { box-shadow: none; margin: 0; width: 210mm !important; height: 297mm !important; --mm: 1mm !important; --pt-skala: var(--pt-faktor, 1) !important; background-image: none; }
   .rd-block { outline: none !important; }
   @page { size: A4 portrait; margin: 0; }
 }
@@ -948,3 +948,5 @@ input.fel { border-color: #B71C1C; }
 .st-utskrift-knapp { text-align: left; border: 1px solid var(--ram); background: #F7F9FC; border-radius: 10px; padding: 10px 12px; cursor: pointer; font: inherit; display: flex; flex-direction: column; gap: 2px; }
 .st-utskrift-knapp:hover { border-color: var(--bla); background: #EEF3FB; }
 .st-utskrift-knapp small { color: var(--muted-varm); }
+
+.rd-faktor { background: #FFF8E1; color: #7a5a00; border-radius: 6px; padding: 2px 8px; font-weight: 700; }
