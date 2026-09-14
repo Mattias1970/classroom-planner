@@ -42,7 +42,7 @@ describe('enkelRapport', () => {
     const r = enkelRapport(bygg(), 'a', f);
     expect(r.exitTillLax.map((x) => `${x.kod}:${x.exitProcent}→${x.laxProcent}`)).toEqual(['4.1:50→50', '4.2:0→100']);
     expect(r.exitTillLax[1]).toMatchObject({ exitProv: 'Exit 4.2', laxProv: 'Läxförhör 4.1-4.2', delta: 100 });
-    expect(r.text.some((t) => t.includes('1 av 2 gick upp, 0 gick ned'))).toBe(true);
+    expect(r.text.some((t) => t.includes('höll alla 2 delkapitel eller gick upp'))).toBe(true);
   });
 
   it('begrepp: allt rätt nu, tre vända (A och B och C var fel någon gång)', () => {

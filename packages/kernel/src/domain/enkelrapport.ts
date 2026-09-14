@@ -135,7 +135,9 @@ export function enkelRapport(sIn: Struktur, elevId: string, f: DashboardFilter &
   const lyft = exitTillLax.filter((x) => x.delta > 0).length;
   const tapp = exitTillLax.filter((x) => x.delta < 0).length;
   if (exitTillLax.length > 0) {
-    text.push(`Från exit ticket till nästa läxförhör på samma delkapitel: ${lyft} av ${exitTillLax.length} gick upp, ${tapp} gick ned. Testerna prövar olika frågor, så skillnaden följs upp med dig innan vi drar slutsatser.`);
+    text.push(tapp > 0
+      ? `Från exit ticket till nästa läxförhör på samma delkapitel tappade ${tapp} av ${exitTillLax.length} delkapitel — det som satt efter lektionen höll inte till förhöret, vanligen för att det inte lästes på däremellan. Läs på kort och ofta: tio minuter dagen efter lektionen och sedan varannan dag.`
+      : `Från exit ticket till nästa läxförhör höll alla ${exitTillLax.length} delkapitel eller gick upp — det du kunde efter lektionen fanns kvar till förhöret.`);
   }
   if (nu.fragor.length > 0) {
     text.push(nu.kvar.length === 0

@@ -55,12 +55,11 @@ describe('elevanalys', () => {
     expect(laxRad).toContain('inte ett ämnesbetyg');
     expect(laxRad).toMatch(/på \d+ läxförhör/); // underlaget anges
     expect(a.fastnat).toEqual([]);
-    // Inga orsaksslutsatser: skillnaden exit/läxförhör beskrivs med underlag, inte som "tappar koncentrationen"
-    const diffRad = a.laget.find((r) => r.rubrik.startsWith('Exit ticket jämfört med läxförhör'));
-    expect(diffRad).toBeDefined();
-    expect(diffRad!.text).toContain('räknas per lektion');
-    expect(diffRad!.text).toContain('olika innehåll');
+    // Exit vs läxförhör jämförs inte längre (olika innehåll); inga orsaksslutsatser om koncentration
+    expect(a.laget.some((r) => r.rubrik.startsWith('Exit ticket jämfört med läxförhör'))).toBe(false);
     expect(a.laget.map((r) => r.text).join(' ')).not.toMatch(/koncentration|fungerar för dig|tappar under/);
+    // Anna tappade 4.1 från exit (100 %) till läxförhör (94 %... i fixturen 100→100) — inget tapp här
+    expect(a.laget.some((r) => r.rubrik.includes('tappade från exit ticket'))).toBe(false);
     expect(a.sammanfattning).toContain('Anna Berg: rätt på 2 av 2 testade begreppsfrågor i Biologi');
     expect(a.laget[0].rubrik).toBe('Rätt på 2 av 2 testade begreppsfrågor'); // nuläget först, med underlag
     expect(a.laget[0].text).toContain('senaste försöket'); // inte "sitter"
@@ -147,5 +146,23 @@ describe('Del 92: övning med samma frågor flaggas i analysen', () => {
     expect(a.ovningsDubbletter).toEqual([]);
     expect(a.laget.map((r) => r.rubrik)).toContain('Övningar som räknas som förhör');
     expect(a.kallor.find((k) => k.kalla === 'socrative-laxforhor')!.antal).toBe(4); // 3 förhör + övningen
+  });
+});
+
+describe('Del 116: glömska och läsrytm', () => {
+  it('svar som gick rätt→fel och tapp exit→läxförhör ger fokus på att läsa på oftare', () => {
+    let s = bygg();
+    // Omar: A rätt på läxförhör 21/8 (nej: fel) — bygg ett tydligt fall: rätt först, fel sen
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-laxforhor', prov: '4.1-4.4 Begrepp', datum: '2026-09-11', rum: 'Biologi41234',
+      rader: [{ namn: 'Anna Berg', poang: 0, maxPoang: 2, svar: sv([[A, false], [B, false]]) }] }).s; // Anna hade rätt förut → glömt
+    const a = elevanalys(s, 'a', f);
+    const glom = a.laget.find((r) => r.rubrik.includes('svar glömda'));
+    expect(glom).toBeDefined();
+    expect(glom!.rubrik).toMatch(/^2 svar glömda, 0 vända till rätt/);
+    expect(glom!.text).toContain('hur ofta du läser på');
+    const fokus = a.rad.find((r) => r.rubrik.includes('läs på oftare'));
+    expect(fokus).toBeDefined();
+    expect(fokus!.text).toContain('tio minuter varje dag');
+    expect(fokus!.text).toContain('Uppföljning vid nästa läxförhör');
   });
 });

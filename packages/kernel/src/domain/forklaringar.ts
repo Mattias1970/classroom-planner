@@ -88,9 +88,9 @@ export const FORKLARINGAR = {
   },
   trendkoll: {
     rubrik: 'Trendkoll',
-    kort: 'Samma fråga i två förhör: antal svar som gick fel → rätt respektive rätt → fel.',
+    kort: 'Samma fråga i två förhör: antal svar som glömdes (rätt → fel) och vändes till rätt (fel → rätt).',
     lang: [
-      'Eftersom läxförhören är kumulativa återkommer frågorna. Trendkollen jämför svaren på samma fråga i två förhör efter varandra och redovisar antalen. Det visar ändrade svar; orsaken och hur varaktigt det är fastställs inte här.',
+      'Eftersom läxförhören är kumulativa återkommer frågorna. Glömda svar betyder oftast att repetitionen inte täckt allt sedan förra förhöret — det är det viktigaste måttet på om man läser på regelbundet. Vändningar visar att det man missat har pluggats in.',
     ],
   },
   nulage: {
@@ -132,8 +132,8 @@ export const FORKLARINGAR = {
   },
   exitTillLax: {
     rubrik: 'Från exit ticket till läxförhör',
-    kort: 'Samma delkapitel på exit ticket och i nästa läxförhör: höll det som satt på lektionen till förhöret?',
-    lang: ['Grå stapel = exit ticket i slutet av lektionen, färgad = samma delkapitels frågor i nästa läxförhör. Grön om det gick upp, röd om det gick ner.'],
+    kort: 'Samma delkapitel på exit ticket och i nästa läxförhör: höll det som satt efter lektionen till förhöret?',
+    lang: ['Grå stapel = exit ticket i slutet av lektionen, färgad = samma delkapitels frågor i nästa läxförhör. Röd betyder att det gick ned — det som satt efter lektionen lästes troligen inte på däremellan. Hur ofta man läser på väger tyngre än hur mycket per gång.'],
   },
   studieplan: {
     rubrik: 'Studieplan',

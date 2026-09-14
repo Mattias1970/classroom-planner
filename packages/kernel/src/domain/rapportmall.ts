@@ -14,6 +14,34 @@ import type { Struktur } from './typer.js';
 import type { ForklaringId } from './forklaringar.js';
 
 export const A4 = { bredd: 210, hojd: 297 } as const;
+export const TYPOGRAFI_STANDARD = { rubrikPt: 12, brodPt: 10 } as const;
+
+/** Effektiv rubrik- och brödtextstorlek för ett block: blockets egen, annars mallens, annars standard. */
+export function blockTypografi(m: Pick<Rapportmall, 'typografi'>, b: Pick<Block, 'stil'>): { rubrikPt: number; brodPt: number } {
+  return {
+    rubrikPt: b.stil?.rubrikPt ?? m.typografi?.rubrikPt ?? TYPOGRAFI_STANDARD.rubrikPt,
+    brodPt: b.stil?.brodPt ?? m.typografi?.brodPt ?? TYPOGRAFI_STANDARD.brodPt,
+  };
+}
+
+/** Rubriken som skrivs över ett datablock: egen text, annars blocktypens namn. Alltid något. */
+export function blockRubrik(b: Pick<Block, 'typ' | 'rubrik' | 'kalla'>): string {
+  const egen = b.rubrik?.trim() ?? '';
+  if (egen !== '') return egen;
+  if (b.typ === 'kpi') return KPI_RUBRIK[b.kalla ?? 'helhet'];
+  return BLOCK_RUBRIK[b.typ];
+}
+
+const KPI_RUBRIK: Record<NonNullable<Block['kalla']>, string> = {
+  'socrative-laxforhor': 'Läxförhör', 'socrative-exit': 'Exit tickets', 'socrative-ovning': 'Övning', magma: 'Magma', digiexam: 'DigiExam', helhet: 'Helhet',
+};
+/** Standardrubrik per blocktyp i rapporten (kortare och elevvänligare än palettnamnet). */
+const BLOCK_RUBRIK: Record<BlockTyp, string> = {
+  platta: '', rubrik: '', text: '', bild: '', qr: 'Socrative',
+  kpi: 'Resultat', sammanfattning: 'Sammanfattning', laget: 'Så här ser det ut', rad: 'Nästa steg',
+  laxkurva: 'Läxförhör över tid', exitlax: 'Från exit ticket till läxförhör — håller det?', fragematris: 'Fråga för fråga', delkapitel: 'Delkapitel just nu',
+  narvaro: 'Quizsvar på lektionerna', 'begrepp-kvar': 'Fel i senaste försöket', 'begrepp-vant': 'Rätt efter tidigare fel', studieplan: 'Studieplan',
+};
 export const RUTNAT = 5;
 
 /** Vad ett block visar. Datablock hämtar sitt innehåll ur elevens resultat vid rendering. */
@@ -24,6 +52,10 @@ export type BlockTyp =
   | 'begrepp-kvar' | 'begrepp-vant' | 'studieplan' | 'qr';
 
 export interface BlockStil {
+  /** Rubrikstorlek i punkter för just detta block (annars mallens). */
+  rubrikPt?: number;
+  /** Brödtextstorlek i punkter för just detta block (annars mallens). */
+  brodPt?: number;
   bakgrund?: string;
   kant?: string;
   /** Hörnradie i mm. */
@@ -74,6 +106,8 @@ export interface Rapportmall {
   antalSidor?: number;
   /** Rutnät för snapp i mm (0 = av). */
   rutnat?: number;
+  /** Typografi för hela mallen: rubrik- och brödtextstorlek i punkter. */
+  typografi?: { rubrikPt: number; brodPt: number };
   block: Block[];
   skapad: string;
   andrad: string;
@@ -91,7 +125,7 @@ export const BLOCK_NAMN: Record<BlockTyp, string> = {
 /** Standardstorlek (mm) när ett block läggs till. */
 export const BLOCK_STANDARD: Record<BlockTyp, { b: number; h: number }> = {
   platta: { b: 90, h: 60 }, rubrik: { b: 170, h: 14 }, text: { b: 170, h: 24 }, bild: { b: 40, h: 40 },
-  kpi: { b: 42, h: 26 }, sammanfattning: { b: 170, h: 20 }, laget: { b: 170, h: 50 }, rad: { b: 170, h: 50 },
+  kpi: { b: 42, h: 34 }, sammanfattning: { b: 170, h: 20 }, laget: { b: 170, h: 50 }, rad: { b: 170, h: 50 },
   laxkurva: { b: 170, h: 60 }, exitlax: { b: 170, h: 55 }, fragematris: { b: 170, h: 70 }, delkapitel: { b: 170, h: 60 },
   narvaro: { b: 80, h: 40 }, 'begrepp-kvar': { b: 82, h: 60 }, 'begrepp-vant': { b: 82, h: 60 }, studieplan: { b: 170, h: 40 }, qr: { b: 40, h: 46 },
 };
@@ -307,6 +341,7 @@ export function tolkaRapportmall(json: string): Rapportmall {
   return {
     id: r.id, namn: r.namn, ...(r.beskrivning !== undefined ? { beskrivning: r.beskrivning } : {}),
     marginal: Number(r.marginal ?? 15), ...(r.antalSidor !== undefined ? { antalSidor: Number(r.antalSidor) } : {}),
+    ...(r.typografi !== undefined ? { typografi: { rubrikPt: Number(r.typografi.rubrikPt ?? 12), brodPt: Number(r.typografi.brodPt ?? 10) } } : {}),
     ...(r.rutnat !== undefined ? { rutnat: Number(r.rutnat) } : {}), block, skapad: r.skapad ?? '', andrad: r.andrad ?? '', version: 1,
   };
 }

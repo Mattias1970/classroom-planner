@@ -834,7 +834,7 @@ input.fel { border-color: #B71C1C; }
 .rd-arkram { overflow: auto; background: #D9DEE6; padding: 20px; border-radius: 12px; }
 .rd-ark { position: relative; background: #fff; box-shadow: 0 4px 24px rgba(0,0,0,.18); margin: 0 auto; overflow: hidden;
   background-image: linear-gradient(#EEF1F5 1px, transparent 1px), linear-gradient(90deg, #EEF1F5 1px, transparent 1px); background-size: calc(var(--mm) * 5) calc(var(--mm) * 5); }
-.rd-block { position: absolute; box-sizing: border-box; overflow: hidden; cursor: move; font-size: calc(var(--mm) * 3.6); line-height: 1.25; }
+.rd-block { position: absolute; box-sizing: border-box; overflow: hidden; cursor: move; font-size: calc(var(--brod-pt, 10pt) * var(--pt-skala, 1)); line-height: 1.3; }
 .rd-block.platta { cursor: move; }
 .rd-block.vald { outline: 2px solid var(--bla); outline-offset: 1px; }
 .rd-handtag { position: absolute; right: 0; bottom: 0; width: 12px; height: 12px; background: var(--bla); cursor: nwse-resize; border-top-left-radius: 4px; }
@@ -846,17 +846,17 @@ input.fel { border-color: #B71C1C; }
 .rd-check { display: flex; align-items: center; gap: 4px; }
 /* Blockinnehåll */
 .rd-text { white-space: pre-wrap; }
-.rd-p { margin: 0.3em 0 0; font-size: calc(var(--mm) * 3.3); }
-.rd-blockrubrik { font-weight: 800; font-size: calc(var(--mm) * 3.4); color: #465060; margin-bottom: calc(var(--mm) * 1); }
-.rd-tom { color: #9AA3AE; font-size: calc(var(--mm) * 3); }
-.rd-kpi { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 2px; }
+.rd-p { margin: 0.3em 0 0; font-size: 1em; }
+.rd-blockrubrik { font-weight: 800; font-size: calc(var(--rubrik-pt, 12pt) * var(--pt-skala, 1)); color: #1d2b3f; margin-bottom: calc(var(--mm) * 1); line-height: 1.2; }
+.rd-tom { color: #9AA3AE; font-size: 0.9em; }
+.rd-kpi { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: calc(var(--mm) * 1) 0; }
 .rd-kpi b { font-size: calc(var(--mm) * 7); line-height: 1; }
-.rd-kpi small { font-size: calc(var(--mm) * 2.8); color: #666; }
+.rd-kpi small { font-size: 0.85em; color: #666; }
 .rd-kpi small.ok { color: #1B5E20; font-weight: 700; } .rd-kpi small.ej { color: #B71C1C; font-weight: 700; }
-.rd-punkt { border-radius: calc(var(--mm) * 1.5); padding: calc(var(--mm) * 1.5) calc(var(--mm) * 2); margin-bottom: calc(var(--mm) * 1.2); font-size: calc(var(--mm) * 3.2); }
+.rd-punkt { border-radius: calc(var(--mm) * 1.5); padding: calc(var(--mm) * 1.5) calc(var(--mm) * 2); margin-bottom: calc(var(--mm) * 1.2); font-size: 1em; }
 .rd-punkt.bra { background: #E8F5E9; } .rd-punkt.okej { background: #FFF8E1; } .rd-punkt.oro { background: #FFEBEE; }
 .rd-punkt p { margin: 2px 0 0; }
-.rd-lista { margin: 0; padding-left: calc(var(--mm) * 4); font-size: calc(var(--mm) * 3.1); }
+.rd-lista { margin: 0; padding-left: calc(var(--mm) * 4); font-size: 1em; }
 .rd-lista li { margin-bottom: calc(var(--mm) * 0.6); }
 .rd-bild { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
 .rd-qrrum { text-align: center; font-weight: 800; font-size: calc(var(--mm) * 3.2); }
@@ -873,7 +873,7 @@ input.fel { border-color: #B71C1C; }
   body { background: #fff; }
   .rd { display: block; }
   .rd-arkram { padding: 0; background: none; overflow: visible; }
-  .rd-ark, .rd-utskrift { box-shadow: none; margin: 0; width: 210mm !important; height: 297mm !important; --mm: 1mm !important; background-image: none; }
+  .rd-ark, .rd-utskrift { box-shadow: none; margin: 0; width: 210mm !important; height: 297mm !important; --mm: 1mm !important; --pt-skala: 1 !important; background-image: none; }
   .rd-block { outline: none !important; }
   @page { size: A4 portrait; margin: 0; }
 }
@@ -893,7 +893,7 @@ input.fel { border-color: #B71C1C; }
 .rd-block.vald { outline: 2px solid var(--bla); outline-offset: 1px; }
 .rd-sidor { display: flex; flex-direction: column; gap: 24px; align-items: center; }
 /* Frågematris som på skärmen */
-.rd-fm { display: grid; gap: calc(var(--mm) * 0.5); align-items: stretch; font-size: calc(var(--mm) * 2.6); }
+.rd-fm { display: grid; gap: calc(var(--mm) * 0.5); align-items: stretch; font-size: 0.8em; }
 .rd-fm-horn { }
 .rd-fm-grupp { background: #E8ECF3; border-bottom: calc(var(--mm) * 0.5) solid #C9D2E0; border-radius: calc(var(--mm) * 1) calc(var(--mm) * 1) 0 0; padding: calc(var(--mm) * 0.6) calc(var(--mm) * 1); text-align: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; margin-left: calc(var(--mm) * 0.5); }
 .rd-fm-grupp b { display: block; font-size: calc(var(--mm) * 2.6); color: #465060; overflow: hidden; text-overflow: ellipsis; }
@@ -906,7 +906,7 @@ input.fel { border-color: #B71C1C; }
 .rd-fm-typ.socrative-ovning { background: #E0F2F1; color: #00838F; } .rd-fm-typ.magma { background: #F3E5F5; color: #6A1B9A; } .rd-fm-typ.digiexam { background: #FBE9E7; color: #BF360C; }
 .rd-fm-quiz { font-weight: 700; color: #1d2b3f; max-width: calc(var(--mm) * 40); }
 .rd-fm-datum { color: #556; }
-.rd-fmtext { font-size: calc(var(--mm) * 2.4); color: #5a6472; margin-bottom: calc(var(--mm) * 1.5); }
+.rd-fmtext { font-size: 0.85em; color: #5a6472; margin-bottom: calc(var(--mm) * 1.5); }
 .rd-fm-h { padding-bottom: calc(var(--mm) * 0.6); }
 .rd-fm-ruta { display: block; aspect-ratio: 1; min-width: 0; border-radius: calc(var(--mm) * 0.8); background: #F1F3F6; }
 .rd-fm-ruta.ok { background: #43A047; } .rd-fm-ruta.ej { background: #D32F2F; } .rd-fm-ruta.tom { background: #F7F8FA; } .rd-fm-ruta.ejgjord { background: #DDE2EA; }
@@ -929,7 +929,7 @@ input.fel { border-color: #B71C1C; }
 .st-info-popup b { font-size: 16px; }
 .st-info-popup p { margin: 8px 0; }
 .st-info-kort { font-weight: 600; color: #1d2b3f; }
-.rd-forklaring { margin-top: calc(var(--mm) * 1.5); padding-top: calc(var(--mm) * 1); border-top: calc(var(--mm) * 0.2) solid #DDE2EA; font-size: calc(var(--mm) * 2.6); color: #4a5563; line-height: 1.35; }
+.rd-forklaring { margin-top: calc(var(--mm) * 1.5); padding-top: calc(var(--mm) * 1); border-top: calc(var(--mm) * 0.2) solid #DDE2EA; font-size: 0.85em; color: #4a5563; line-height: 1.35; }
 
 /* Del 112: namnge och döp om mallar */
 .rd-namnfalt { display: flex; align-items: center; gap: 6px; }

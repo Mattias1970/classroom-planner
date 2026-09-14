@@ -13,7 +13,7 @@ import {
   A4, BLOCK_NAMN, BLOCK_STANDARD, RUTNAT, RUTNAT_VAL, TYPNAMN, andraStorlek, antalSidor, arDatablock, blockSida, dupliceraBlock,
   elevanalys, enkelRapport, flyttaBlock, flyttaFlera, fordelaBlock, fyllText, laggTillBlock, laggTillSida, linjeraBlock, nyMall, nyttId,
   ordnaBlock, ritordning, socrativeElevLank, sparaRapportmall, standardmall, studieguide, taBortBlock, taBortRapportmall, taBortSida,
-  tillSida, tolkaRapportmall, uppdateraBlock, vaxBlock, blockForklaring, forklaring,
+  tillSida, tolkaRapportmall, uppdateraBlock, vaxBlock, blockForklaring, forklaring, blockRubrik, blockTypografi, TYPOGRAFI_STANDARD,
   type Block, type BlockTyp, type DashboardFilter, type Linjering, type Rapportmall, type Struktur,
 } from '@planner/kernel';
 import { lasStruktur } from './store.js';
@@ -120,7 +120,8 @@ function BlockInnehall({ b, d, s }: { b: Block; d: Elevdata; s: Struktur }) {
   const textStil = { fontSize: `${st.storlek ?? 11}pt`, fontWeight: st.fet ? 700 : 400, color: st.textfarg ?? '#111' };
   const vars = { elev: d.namn, amne: d.amne, klass: d.klass, datum: new Date().toISOString().slice(0, 10) };
   const tom = (t: string) => <div className="rd-tom">{t}</div>;
-  const rubrik = b.rubrik !== undefined && b.rubrik !== '' ? <div className="rd-blockrubrik">{b.rubrik}</div> : null;
+  const rubrikText = blockRubrik(b);
+  const rubrik = rubrikText !== '' ? <div className="rd-blockrubrik">{rubrikText}</div> : null;
   switch (b.typ) {
     case 'platta': return null;
     case 'rubrik': return <div style={textStil} className="rd-text">{fyllText(b.text ?? '', vars)}</div>;
@@ -135,26 +136,26 @@ function BlockInnehall({ b, d, s }: { b: Block; d: Elevdata; s: Struktur }) {
       const k = d.analys?.kallor.find((x) => x.kalla === b.kalla) ?? null;
       const namn = KALLOR.find(([id]) => id === b.kalla)?.[1] ?? '';
       const helhet = b.kalla === 'helhet' ? d.analys?.nu.procent ?? null : k?.snittProcent ?? null;
-      return (<div className="rd-kpi"><small>{b.rubrik !== undefined && b.rubrik !== '' ? b.rubrik : namn}</small><b>{helhet ?? '—'} %</b>{k?.krav !== undefined && k.krav !== null && helhet !== null && <small className={helhet >= k.krav ? 'ok' : 'ej'}>{helhet >= k.krav ? 'Godkänt' : 'Ej godkänt'}</small>}</div>);
+      return (<>{rubrik}<div className="rd-kpi"><b>{helhet ?? '—'} %</b><small>{namn}{k !== null ? ` · ${k.antal} prov` : ''}</small>{k?.krav !== undefined && k.krav !== null && helhet !== null && <small className={helhet >= k.krav ? 'ok' : 'ej'}>{helhet >= k.krav ? 'Förhörsgräns nådd' : 'Under förhörsgränsen'}</small>}</div></>);
     }
-    case 'sammanfattning': return (<>{rubrik}<div className="rd-text" style={{ fontSize: '11pt', fontWeight: 600 }}>{d.enkel?.rubrik ?? d.analys?.sammanfattning ?? '—'}</div>{d.enkel !== null && d.enkel.text.map((t, i) => <p key={i} className="rd-p">{t}</p>)}</>);
+    case 'sammanfattning': return (<>{rubrik}<div className="rd-text" style={{ fontWeight: 600 }}>{d.enkel?.rubrik ?? d.analys?.sammanfattning ?? '—'}</div>{d.enkel !== null && d.enkel.text.map((t, i) => <p key={i} className="rd-p">{t}</p>)}</>);
     case 'laget': return (<>{rubrik}{(d.analys?.laget ?? []).length === 0 ? tom('Inga resultat') : d.analys!.laget.map((r, i) => <div key={i} className={`rd-punkt ${r.ton}`}><b>{r.rubrik}</b><p>{r.text}</p></div>)}</>);
     case 'rad': return (<>{rubrik}{(d.analys?.rad ?? []).length === 0 ? tom('Inga råd') : d.analys!.rad.map((r, i) => <div key={i} className={`rd-punkt ${r.ton}`}><b>{r.rubrik}</b><p>{r.text}</p></div>)}</>);
     case 'laxkurva': {
       const l = d.enkel?.laxforhor ?? [];
-      return (<div className="rd-grafram">{rubrik ?? <div className="rd-blockrubrik">Läxförhör</div>}{l.length === 0 ? tom('Inga läxförhör') : <div className="rd-grafyta"><LinjeMm varden={l.map((x) => x.procent)} etiketter={l.map((x) => x.datum.slice(5).replace('-', '/'))} krav={90} /></div>}</div>);
+      return (<div className="rd-grafram">{rubrik}{l.length === 0 ? tom('Inga läxförhör') : <div className="rd-grafyta"><LinjeMm varden={l.map((x) => x.procent)} etiketter={l.map((x) => x.datum.slice(5).replace('-', '/'))} krav={90} /></div>}</div>);
     }
     case 'exitlax': {
       const e = d.enkel?.exitTillLax ?? [];
-      return (<div className="rd-grafram">{rubrik ?? <div className="rd-blockrubrik">Exit ticket → läxförhör</div>}{e.length === 0 ? tom('Inga par') : <div className="rd-grafyta"><StaplarMm par={e.map((x) => ({ kod: x.kod, a: x.exitProcent, b: x.laxProcent }))} /></div>}</div>);
+      return (<div className="rd-grafram">{rubrik}{e.length === 0 ? tom('Inga par') : <div className="rd-grafyta"><StaplarMm par={e.map((x) => ({ kod: x.kod, a: x.exitProcent, b: x.laxProcent }))} /></div>}</div>);
     }
     case 'delkapitel': {
       const nu = d.analys?.nu.delkapitel ?? [];
-      return (<div className="rd-grafram">{rubrik ?? <div className="rd-blockrubrik">Delkapitel just nu</div>}{nu.length === 0 ? tom('Inga delkapitel') : <div className="rd-grafyta"><StaplarMm par={nu.map((x) => ({ kod: x.kod, a: 0, b: x.procent ?? 0 }))} /></div>}</div>);
+      return (<div className="rd-grafram">{rubrik}{nu.length === 0 ? tom('Inga delkapitel') : <div className="rd-grafyta"><StaplarMm par={nu.map((x) => ({ kod: x.kod, a: 0, b: x.procent ?? 0 }))} /></div>}</div>);
     }
     case 'narvaro': {
       const a = d.analys;
-      return (<>{rubrik ?? <div className="rd-blockrubrik">Närvaro</div>}<div className="rd-kpi"><b>{a?.narvaroProcent ?? '—'} %</b><small>{a?.narvaroLektioner ?? 0} lektioner</small></div></>);
+      return (<>{rubrik}<div className="rd-kpi"><b>{a?.narvaroProcent ?? '—'} %</b><small>{a?.narvaroLektioner ?? 0} lektioner</small></div></>);
     }
     case 'fragematris': {
       const m = d.analys?.matris;
@@ -162,7 +163,7 @@ function BlockInnehall({ b, d, s }: { b: Block; d: Elevdata; s: Struktur }) {
       // Exakt som 'Fråga för fråga' i Rapporter: Quiz | Datum | grupprad med quiznamn och
       // '4.1 · 12 frågor' | frågenummer | grön = rätt, röd = fel, ljusgrå = ej gjord, tom = ingick inte
       const kolumner = `auto auto repeat(${m.fragor.length}, minmax(0, 1fr))`;
-      return (<>{rubrik ?? <div className="rd-blockrubrik">Fråga för fråga</div>}
+      return (<>{rubrik}
         <div className="rd-fmtext">Grön ruta = rätt, röd = fel, tom = frågan ingick inte i det quizet.</div>
         <div className="rd-fm" style={{ gridTemplateColumns: kolumner }}>
           <div className="rd-fm-horn" style={{ gridColumn: '1 / span 2' }} />
@@ -189,21 +190,23 @@ function BlockInnehall({ b, d, s }: { b: Block; d: Elevdata; s: Struktur }) {
     }
     case 'begrepp-kvar': case 'begrepp-vant': {
       const lista = b.typ === 'begrepp-kvar' ? d.enkel?.kvar ?? [] : d.enkel?.vant ?? [];
-      return (<>{rubrik ?? <div className="rd-blockrubrik">{b.typ === 'begrepp-kvar' ? 'Kvar att lära' : 'Var fel, sitter nu'}</div>}{lista.length === 0 ? tom('Inga') : <ul className="rd-lista">{lista.map((x) => <li key={x.nr}><b>{x.begrepp ?? ''}</b>{x.begrepp !== undefined ? ' — ' : ''}{x.fraga}</li>)}</ul>}</>);
+      return (<>{rubrik}{lista.length === 0 ? tom('Inga') : <ul className="rd-lista">{lista.map((x) => <li key={x.nr}><b>{x.begrepp ?? ''}</b>{x.begrepp !== undefined ? ' — ' : ''}{x.fraga}</li>)}</ul>}</>);
     }
     case 'studieplan': {
       const g = d.guide;
-      return (<>{rubrik ?? <div className="rd-blockrubrik">{g?.rubrik ?? 'Studieplan'}</div>}{g === null ? tom('Kräver ämne med bok') : <ul className="rd-lista">{g.plan.map((p) => <li key={p.dag}><b>Dag {p.dag}{p.datum !== null ? ` · ${p.datum}` : ''}:</b> {p.delar.join(', ') || '—'} <small>({p.minuter} min)</small></li>)}</ul>}</>);
+      return (<>{rubrik}{g === null ? tom('Kräver ämne med bok') : <ul className="rd-lista">{g.plan.map((p) => <li key={p.dag}><b>Dag {p.dag}{p.datum !== null ? ` · ${p.datum}` : ''}:</b> {p.delar.join(', ') || '—'} <small>({p.minuter} min)</small></li>)}</ul>}</>);
     }
     default: return null;
   }
 }
 
 /** Position och stil i mm via --mm, så samma block kan ritas i skärmskala och i verklig A4 vid utskrift. */
-function blockStil(b: Block): React.CSSProperties {
+function blockStil(b: Block, m?: Pick<Rapportmall, 'typografi'>): React.CSSProperties {
   const st = b.stil ?? {};
   const mm = (v: number) => `calc(var(--mm) * ${v})`;
+  const t = blockTypografi(m ?? {}, b);
   return {
+    ['--rubrik-pt' as string]: `${t.rubrikPt}pt`, ['--brod-pt' as string]: `${t.brodPt}pt`,
     left: mm(b.x), top: mm(b.y), width: mm(b.b), height: mm(b.h),
     background: st.bakgrund, border: st.kant !== undefined ? `${mm(0.3)} solid ${st.kant}` : undefined,
     borderRadius: mm(st.radie ?? 0), opacity: st.opacitet ?? 1, padding: mm(st.marginal ?? 2),
@@ -216,10 +219,13 @@ function blockStil(b: Block): React.CSSProperties {
  * Höjden växer bara, aldrig krymper, så loopen konvergerar när allt får plats.
  * Grafer växer inte (de skalas); block med autoHojd=false lämnas i fred.
  */
-const VAXER_INTE: BlockTyp[] = ['platta', 'bild', 'qr', 'laxkurva', 'exitlax', 'delkapitel', 'kpi', 'narvaro'];
+const VAXER_INTE: BlockTyp[] = ['platta', 'bild', 'qr', 'laxkurva', 'exitlax', 'delkapitel'];
 
 function useAutoHojd(mall: Rapportmall | null, aktiv: boolean, skala: number, andra: (m: Rapportmall) => void) {
   const refs = useRef(new Map<string, HTMLDivElement>());
+  // Skydd mot oändlig tillväxt (innehåll som själv följer blockets höjd): max antal
+  // växningar per block, och aldrig över sidhöjden
+  const varv = useRef(new Map<string, number>());
   useLayoutEffect(() => {
     if (!aktiv || mall === null) return;
     let ny = mall; let andrat = false;
@@ -227,8 +233,14 @@ function useAutoHojd(mall: Rapportmall | null, aktiv: boolean, skala: number, an
       if (b.autoHojd === false || VAXER_INTE.includes(b.typ)) continue;
       const el = refs.current.get(b.id);
       if (el === undefined) continue;
+      const antal = varv.current.get(b.id) ?? 0;
+      if (antal >= 8) continue;
       const behov = el.scrollHeight / skala; // mm
-      if (behov > b.h + 1) { ny = vaxBlock(ny, b.id, behov + (b.stil?.marginal ?? 2) * 2); andrat = true; }
+      if (behov > b.h + 1 && b.h < A4.hojd - 10) {
+        ny = vaxBlock(ny, b.id, Math.min(A4.hojd - 10, behov + (b.stil?.marginal ?? 2) * 2));
+        varv.current.set(b.id, antal + 1);
+        andrat = true;
+      }
     }
     if (andrat) andra(ny);
   });
@@ -317,7 +329,8 @@ export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: ()
   const pekareNed = (ev: React.PointerEvent, b: Block, lage: 'flytt' | 'storlek') => {
     ev.stopPropagation(); ev.preventDefault();
     if (mall === null) return;
-    (ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId);
+    const mal = ev.currentTarget as HTMLElement;
+    if (typeof mal.setPointerCapture === 'function') mal.setPointerCapture(ev.pointerId); // saknas i jsdom
     const ids = markerade.includes(b.id) ? markerade : [b.id];
     if (!markerade.includes(b.id)) setVald(b.id, ev.shiftKey);
     drag.current = { id: b.id, lage, startX: ev.clientX, startY: ev.clientY, start: mall, ids: ev.shiftKey ? [...ids, b.id] : ids };
@@ -464,6 +477,13 @@ export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: ()
                 {RUTNAT_VAL.map((r) => <option key={r} value={r}>{r === 0 ? 'fritt' : `${r} mm`}</option>)}
               </select></label>
             <label className="small"><input type="checkbox" checked={snappPa} onChange={(e) => setSnappPa(e.target.checked)} /> snapp</label>
+            <span className="rd-sep" />
+            <label className="small" title="Rubrikstorlek för alla block (punkter)">Rubrik{' '}
+              <input type="number" min={6} max={36} step={1} aria-label="Rubrikstorlek pt" style={{ width: 52 }} value={mall.typografi?.rubrikPt ?? TYPOGRAFI_STANDARD.rubrikPt}
+                onChange={(e) => satt({ ...mall, typografi: { rubrikPt: Number(e.target.value), brodPt: mall.typografi?.brodPt ?? TYPOGRAFI_STANDARD.brodPt } })} /> pt</label>
+            <label className="small" title="Brödtextstorlek för alla block (punkter)">Text{' '}
+              <input type="number" min={6} max={24} step={0.5} aria-label="Brödtextstorlek pt" style={{ width: 52 }} value={mall.typografi?.brodPt ?? TYPOGRAFI_STANDARD.brodPt}
+                onChange={(e) => satt({ ...mall, typografi: { rubrikPt: mall.typografi?.rubrikPt ?? TYPOGRAFI_STANDARD.rubrikPt, brodPt: Number(e.target.value) } })} /> pt</label>
             <label className="small" title="Block vars innehåll inte får plats växer; block på samma rad följer med och allt under flyttas ned"><input type="checkbox" checked={autoHojd} onChange={(e) => setAutoHojd(e.target.checked)} /> auto-höjd</label>
             <span className="rd-sep" />
             {/* Linjering — kräver minst två markerade */}
@@ -478,13 +498,13 @@ export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: ()
             {markerade.length > 0 && <small className="muted">{markerade.length} markerade · Shift+klick lägger till · Ctrl+A alla på sidan</small>}
           </div>
           <div className="rd-arkram" onPointerMove={pekareRor} onPointerUp={pekareUpp} onPointerCancel={pekareUpp}>
-            <div ref={arkRef} className="rd-ark" style={{ width: A4.bredd * skala, height: A4.hojd * skala, ['--mm' as string]: `${skala}px` }}
+            <div ref={arkRef} className="rd-ark" style={{ width: A4.bredd * skala, height: A4.hojd * skala, ['--mm' as string]: `${skala}px`, ['--pt-skala' as string]: String(skala / (96 / 25.4)) }}
               onPointerDown={() => setMarkerade([])}>
               {ritordning(mall, sida).map((b) => {
                 const ar = markerade.includes(b.id);
                 return (
                   <div key={b.id} ref={matRef(b.id)} className={`rd-block ${b.typ}${ar ? ' vald' : ''}`}
-                    style={blockStil(b)}
+                    style={blockStil(b, mall)}
                     onPointerDown={(ev) => pekareNed(ev, b, 'flytt')}>
                     <BlockInnehall b={b} d={data} s={s} />
                     <BlockForklaring b={b} />
@@ -521,7 +541,15 @@ export function RapportdesignVy({ s, kor, meddela }: { s: Struktur; kor: (fn: ()
               <label>Text <textarea aria-label="Blockets text" rows={3} value={valtBlock.text ?? ''} onChange={(e) => uppd({ text: e.target.value })} />
                 <small className="muted">{'{elev} {amne} {klass} {datum}'} byts ut</small></label>
             )}
-            {arDatablock(valtBlock.typ) && <label>Rubrik <input aria-label="Blockets rubrik" value={valtBlock.rubrik ?? ''} placeholder="(standard)" onChange={(e) => uppd({ rubrik: e.target.value })} /></label>}
+            {(arDatablock(valtBlock.typ) || valtBlock.typ === 'qr') && <label>Rubrik <input aria-label="Blockets rubrik" value={valtBlock.rubrik ?? ''} placeholder={blockRubrik({ ...valtBlock, rubrik: '' })} onChange={(e) => uppd({ rubrik: e.target.value })} /></label>}
+            {(arDatablock(valtBlock.typ) || valtBlock.typ === 'qr') && (
+              <div className="rd-fyra">
+                <label>Rubrik pt <input type="number" min={6} max={36} step={1} aria-label="Blockets rubrikstorlek" value={valtBlock.stil?.rubrikPt ?? ''} placeholder={String(blockTypografi(mall!, { stil: {} }).rubrikPt)}
+                  onChange={(e) => uppd({ stil: { rubrikPt: e.target.value === '' ? undefined : Number(e.target.value) } })} /></label>
+                <label>Text pt <input type="number" min={6} max={24} step={0.5} aria-label="Blockets brödtextstorlek" value={valtBlock.stil?.brodPt ?? ''} placeholder={String(blockTypografi(mall!, { stil: {} }).brodPt)}
+                  onChange={(e) => uppd({ stil: { brodPt: e.target.value === '' ? undefined : Number(e.target.value) } })} /></label>
+              </div>
+            )}
             {!VAXER_INTE.includes(valtBlock.typ) && <label className="rd-check"><input type="checkbox" checked={valtBlock.autoHojd !== false} onChange={(e) => uppd({ autoHojd: e.target.checked })} /> Växer med innehållet</label>}
             {blockForklaring(valtBlock) !== null && <label className="rd-check" title={forklaring(blockForklaring(valtBlock)!).kort}><input type="checkbox" checked={valtBlock.medForklaring === true} onChange={(e) => uppd({ medForklaring: e.target.checked })} /> Visa förklaring under blocket</label>}
             {valtBlock.typ === 'kpi' && (
@@ -577,9 +605,9 @@ export function MallRendering({ s, mall: malln, elevId, klassId, amneId }: { s: 
   return (
     <div className="rd-sidor">
       {Array.from({ length: antalSidor(mall) }, (_, i) => i + 1).map((n) => (
-        <div key={n} className="rd-ark rd-utskrift" style={{ width: A4.bredd * skala, height: A4.hojd * skala, ['--mm' as string]: `${skala}px` }}>
+        <div key={n} className="rd-ark rd-utskrift" style={{ width: A4.bredd * skala, height: A4.hojd * skala, ['--mm' as string]: `${skala}px`, ['--pt-skala' as string]: String(skala / (96 / 25.4)) }}>
           {ritordning(mall, n).map((b) => (
-            <div key={b.id} ref={matRef(b.id)} className={`rd-block ${b.typ}`} style={blockStil(b)}>
+            <div key={b.id} ref={matRef(b.id)} className={`rd-block ${b.typ}`} style={blockStil(b, mall)}>
               <BlockInnehall b={b} d={data} s={s} />
               <BlockForklaring b={b} />
             </div>

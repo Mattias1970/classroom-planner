@@ -99,16 +99,16 @@ describe('Del 106: sidor, rutnät och linjering', async () => {
 
   it('linjering: vänster, höger, hcenter, topp, botten, vcenter', () => {
     let m = nyMall('m', 'x', '');
-    m = laggTillBlock(m, 'a', 'kpi', 10, 10); // 42×26
+    m = laggTillBlock(m, 'a', 'kpi', 10, 10); // 42×34
     m = laggTillBlock(m, 'b', 'kpi', 60, 40);
     m = andraStorlek(m, 'b', 20, 10);
     const pos = (mm: typeof m) => mm.block.map((b) => `${b.id}:${b.x},${b.y}`);
     expect(pos(linjeraBlock(m, ['a', 'b'], 'vanster'))).toEqual(['a:10,10', 'b:10,40']);
     expect(pos(linjeraBlock(m, ['a', 'b'], 'hoger'))).toEqual(['a:38,10', 'b:60,40']);   // maxX = 80
     expect(pos(linjeraBlock(m, ['a', 'b'], 'topp'))).toEqual(['a:10,10', 'b:60,10']);
-    expect(pos(linjeraBlock(m, ['a', 'b'], 'botten'))).toEqual(['a:10,24', 'b:60,40']); // maxY = 50, a är 26 hög
+    expect(pos(linjeraBlock(m, ['a', 'b'], 'botten'))).toEqual(['a:10,16', 'b:60,40']); // maxY = 50, a är 34 hög
     expect(pos(linjeraBlock(m, ['a', 'b'], 'hcenter'))).toEqual(['a:24,10', 'b:35,40']); // cx = 45
-    expect(pos(linjeraBlock(m, ['a', 'b'], 'vcenter'))).toEqual(['a:10,17', 'b:60,25']); // cy = 30
+    expect(pos(linjeraBlock(m, ['a', 'b'], 'vcenter'))).toEqual(['a:10,13', 'b:60,25']); // cy = 30
     expect(linjeraBlock(m, ['a'], 'topp')).toBe(m); // ett block: inget att linjera mot
   });
 
@@ -126,7 +126,7 @@ describe('Del 107: vaxBlock — blocket växer, raden följer, allt under flytta
   const { vaxBlock, antalSidor, blockSida } = await import('../src/domain/rapportmall.js');
   function layout() {
     let m = nyMall('m', 'x', '');
-    m = laggTillBlock(m, 'a', 'kpi', 20, 20);   // rad 1, 42×26
+    m = laggTillBlock(m, 'a', 'kpi', 20, 20);   // rad 1, 42×34
     m = laggTillBlock(m, 'b', 'kpi', 70, 20);   // rad 1
     m = laggTillBlock(m, 'c', 'text', 20, 60);  // under, 170×24
     m = laggTillBlock(m, 'd', 'text', 20, 240); // långt ner, 24 hög
@@ -137,16 +137,40 @@ describe('Del 107: vaxBlock — blocket växer, raden följer, allt under flytta
     const b = (id: string) => m.block.find((x) => x.id === id)!;
     expect(b('a').h).toBe(50);
     expect(b('b').h).toBe(50); // samma rad följer med
-    expect(b('c').y).toBe(84); // 60 + 24
-    expect(b('d').y).toBe(264);
+    expect(b('c').y).toBe(76); // 60 + 16
+    expect(b('d').y).toBe(256);
     expect(vaxBlock(m, 'a', 30)).toBe(m); // krymper aldrig
   });
   it('block som inte längre ryms hamnar överst på nästa sida i samma ordning', () => {
-    const m = vaxBlock(layout(), 'a', 80); // delta 54: d skulle hamna på y=294, under sidkanten
+    const m = vaxBlock(layout(), 'a', 80); // delta 46: d skulle hamna på y=286, under sidkanten
     const d = m.block.find((x) => x.id === 'd')!;
     expect(antalSidor(m)).toBe(2);
     expect(blockSida(d)).toBe(2);
     expect(d.y).toBe(15); // marginalen
     expect(blockSida(m.block.find((x) => x.id === 'c')!)).toBe(1);
+  });
+});
+
+describe('Del 116: rubrik på alla datablock och typografi i punkter', async () => {
+  const { blockRubrik, blockTypografi, TYPOGRAFI_STANDARD } = await import('../src/domain/rapportmall.js');
+  it('varje datablock får en rubrik, egen text vinner, KPI följer källan, dekor har ingen', () => {
+    let m = nyMall('m', 'x', '');
+    for (const typ of ['kpi', 'laxkurva', 'fragematris', 'begrepp-kvar', 'narvaro', 'studieplan', 'rad', 'laget', 'sammanfattning', 'exitlax', 'delkapitel', 'begrepp-vant'] as const) {
+      m = laggTillBlock(m, typ, typ, 0, 0);
+      expect(blockRubrik(m.block.find((b) => b.id === typ)!), typ).not.toBe('');
+    }
+    expect(blockRubrik({ typ: 'kpi', kalla: 'socrative-exit' })).toBe('Exit tickets');
+    expect(blockRubrik({ typ: 'kpi', rubrik: 'Mina läxförhör' })).toBe('Mina läxförhör');
+    expect(blockRubrik({ typ: 'platta' })).toBe('');
+    expect(blockRubrik({ typ: 'exitlax' })).toContain('håller det?');
+  });
+  it('typografi: block > mall > standard; sparas och läses ur JSON', () => {
+    const m = { ...nyMall('m', 'x', ''), typografi: { rubrikPt: 14, brodPt: 11 } };
+    expect(blockTypografi(m, { stil: {} })).toEqual({ rubrikPt: 14, brodPt: 11 });
+    expect(blockTypografi(m, { stil: { brodPt: 9 } })).toEqual({ rubrikPt: 14, brodPt: 9 });
+    expect(blockTypografi({}, {})).toEqual(TYPOGRAFI_STANDARD);
+    const t = tolkaRapportmall(JSON.stringify({ ...m, block: [{ typ: 'kpi', stil: { rubrikPt: 16 } }] }));
+    expect(t.typografi).toEqual({ rubrikPt: 14, brodPt: 11 });
+    expect(t.block[0].stil?.rubrikPt).toBe(16);
   });
 });

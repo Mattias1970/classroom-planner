@@ -80,6 +80,21 @@ export interface Elevanalys {
   sammanfattning: string;
 }
 
+/** Delkapitel där andelen rätt gick ned från exit ticket till nästa läxförhör. */
+function exitTillLaxTapp(segment: SegmentTillfalle[]): Array<{ kod: string; exitProcent: number; exitDatum: string; laxProcent: number; laxDatum: string }> {
+  const ut: Array<{ kod: string; exitProcent: number; exitDatum: string; laxProcent: number; laxDatum: string }> = [];
+  for (const ex of segment.filter((t) => t.kalla === 'socrative-exit')) {
+    for (const seg of ex.segment) {
+      if (seg.procent === null) continue;
+      const nasta = segment.find((t) => t.kalla === 'socrative-laxforhor' && t.datum > ex.datum && t.segment.some((x) => x.kod === seg.kod && x.procent !== null));
+      if (nasta === undefined) continue;
+      const laxSeg = nasta.segment.find((x) => x.kod === seg.kod)!;
+      if ((laxSeg.procent ?? 0) < seg.procent) ut.push({ kod: seg.kod, exitProcent: seg.procent, exitDatum: ex.datum, laxProcent: laxSeg.procent ?? 0, laxDatum: nasta.datum });
+    }
+  }
+  return ut;
+}
+
 const KALLNAMN: Record<ResultatKalla, string> = {
   'socrative-laxforhor': 'Läxförhör', 'socrative-exit': 'Exit tickets', 'socrative-ovning': 'Övningar',
   magma: 'Magma', digiexam: 'Prov',
@@ -205,16 +220,6 @@ export function elevanalys(sIn: Struktur, elevId: string, f: DashboardFilter & {
         + (over ? 'Vi följer upp om du kan använda kunskapen vid ett senare tillfälle.' : 'Vi följer upp vilket stöd som behövs under lektionen.'),
     });
   }
-  if (lekt !== null && lekt.diffSnitt !== null && lekt.lektioner > 0) {
-    const d = lekt.diffSnitt;
-    laget.push({
-      ton: 'okej',
-      rubrik: 'Exit ticket jämfört med läxförhör på samma lektion',
-      text: `På de ${lekt.lektioner} lektioner där du gjort både läxförhör och exit ticket ligger exit ticket i snitt ${d > 0 ? '+' : ''}${d} procentenheter ${d >= 0 ? 'över' : 'under'} läxförhöret `
-        + `(läxförhör ${lekt.laxforhorSnitt ?? '—'} %, exit ${lekt.exitSnitt ?? '—'} % på dessa lektioner; skillnaden räknas per lektion och medelvärdet tas sedan, så den kan avvika från skillnaden mellan de två totalsnitten). `
-        + 'De två testerna prövar olika innehåll och svårighetsgrad, så skillnaden visar inte i sig vad den beror på — det följer vi upp tillsammans.',
-    });
-  }
   if (narvaro !== null && narvaro.narvaroProcent !== null) {
     const saknade = narvaro.lektioner - narvaro.narvarande;
     laget.push({
@@ -225,12 +230,24 @@ export function elevanalys(sIn: Struktur, elevId: string, f: DashboardFilter & {
         + ' Ett saknat quizsvar visar inte att du var borta från lektionen — det stäms av mot närvaroregistreringen.',
     });
   }
+  // Glömska och vändningar: det som säger något om hur ofta man läser på
+  const tappadeDelar = (segment.length > 0 ? exitTillLaxTapp(segment) : []);
   if (tkElev !== null && (tkElev.lart > 0 || tkElev.glomt > 0)) {
     laget.push({
+      ton: tkElev.glomt > tkElev.lart ? 'oro' : tkElev.glomt > 0 ? 'okej' : 'bra',
+      rubrik: `${tkElev.glomt} svar glömda, ${tkElev.lart} vända till rätt`,
+      text: `På frågor som ställts igen i ett senare förhör gick ${tkElev.glomt} svar från rätt till fel och ${tkElev.lart} från fel till rätt (${tkElev.steg.length} jämförelser). `
+        + (tkElev.glomt > 0
+          ? 'Svar som går från rätt till fel betyder oftast att repetitionen inte täckt allt sedan förra förhöret — hur ofta du läser på väger tyngre än hur mycket du läser per gång.'
+          : 'Inget svar har gått från rätt till fel — det du en gång kunnat har hållit i sig.'),
+    });
+  }
+  if (tappadeDelar.length > 0) {
+    laget.push({
       ton: 'okej',
-      rubrik: 'Ändrade svar mellan förhören',
-      text: `På frågor som ställts igen gick ${tkElev.lart} svar från fel till rätt och ${tkElev.glomt} från rätt till fel (${tkElev.steg.length} jämförelser). `
-        + 'Det visar ändrade svar; orsaken och hur länge det håller är inte fastställda.',
+      rubrik: `${tappadeDelar.length} delkapitel tappade från exit ticket till nästa läxförhör`,
+      text: `${tappadeDelar.map((x) => `${x.kod}: ${x.exitProcent} % på exit ticket (${x.exitDatum}) → ${x.laxProcent} % på samma delkapitels frågor i läxförhöret (${x.laxDatum})`).join('; ')}. `
+        + 'Det som satt direkt efter lektionen höll inte till förhöret — vanligen för att det inte lästes på däremellan.',
     });
   }
 
@@ -322,10 +339,14 @@ export function elevanalys(sIn: Struktur, elevId: string, f: DashboardFilter & {
       text: `${narvaro.franvaroDatum.slice(0, 4).join(', ')}${narvaro.franvaroDatum.length > 4 ? ' m.fl.' : ''}. Om du var borta: be om materialet och gör förhören i efterhand — de räknas. Om du var där: säg till läraren så stäms registreringen av.`,
     });
   }
-  if (tkElev !== null && tkElev.glomt > tkElev.lart) {
+  if ((tkElev !== null && tkElev.glomt > 0) || tappadeDelar.length > 0) {
+    const glomda = tkElev?.glomt ?? 0;
     rad.push({
-      ton: 'okej', rubrik: 'Repetera med mellanrum',
-      text: `${tkElev.glomt} svar gick från rätt till fel mot ${tkElev.lart} åt andra hållet. Ett sätt att prova: repetera samma begrepp efter en dag, en vecka och en månad, och se vid nästa förhör om det ändrar bilden.`,
+      ton: glomda > (tkElev?.lart ?? 0) ? 'oro' : 'okej',
+      rubrik: `Fokus ${nu.kvar.length > 0 ? '2' : '1'}: läs på oftare, inte mer`,
+      text: `${glomda > 0 ? `${glomda} svar gick från rätt till fel` : ''}${glomda > 0 && tappadeDelar.length > 0 ? ' och ' : ''}${tappadeDelar.length > 0 ? `${tappadeDelar.length} delkapitel tappade från exit ticket till läxförhör` : ''}. `
+        + 'Det tyder på att begreppen inte lästs på mellan lektionerna. Prova tio minuter varje dag i stället för ett långt pass före förhöret: dag 1 samma dag som lektionen, dag 2, sedan varannan dag. '
+        + `Läraren kollar av vid nästa lektion vilka dagar du läst. ${uppfoljning}`,
     });
   }
   if (rad.length === 0) {

@@ -2151,6 +2151,18 @@ describe('🎨 Rapportdesign', () => {
     act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
     expect((host.querySelector('.rd-block.vald') as HTMLElement).style.left).not.toBe(fore);
 
+    // Typografi: mallens rubrik/text-pt slår igenom på blocken, blockets egen vinner
+    const rubrikPt = host.querySelector('input[aria-label="Rubrikstorlek pt"]') as HTMLInputElement;
+    skriv(rubrikPt, '16');
+    const text0 = host.querySelector('.rd-block.text') as HTMLElement;
+    expect(text0.style.getPropertyValue('--rubrik-pt')).toBe('16pt');
+    expect(text0.style.getPropertyValue('--brod-pt')).toBe('10pt');
+    act(() => { text0.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 })); });
+    const egenPt = host.querySelector('input[aria-label="Blockets brödtextstorlek"]') as HTMLInputElement | null;
+    if (egenPt !== null) { skriv(egenPt, '8'); expect((host.querySelector('.rd-block.vald') as HTMLElement).style.getPropertyValue('--brod-pt')).toBe('8pt'); }
+    // Alla datablock har rubrik
+    for (const el of host.querySelectorAll('.rd-block.kpi, .rd-block.laxkurva, .rd-block\\.begrepp-kvar')) expect(el.querySelector('.rd-blockrubrik')).not.toBeNull();
+
     // Sida 2: läggs till, block hamnar där, utskriften får två ark
     act(() => { knapp(host, '＋').click(); });
     expect(host.querySelectorAll('.rd-sidflik').length).toBeGreaterThanOrEqual(3); // Sida 1, Sida 2, ＋(, 🗑)
