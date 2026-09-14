@@ -80,15 +80,38 @@ export async function sparaTillGitHub(cfg: GitHubConfig, json: string): Promise<
 }
 
 /** Laddar JSON från datarepot; kastar om filen saknas. */
+/**
+ * Contents-API:t lämnar `content` tomt för filer över 1 MB (med
+ * encoding 'none'). Då hämtas innehållet via blobs-API:t, som klarar
+ * upp till 100 MB. Strukturen växer förbi 1 MB så fort frågesvar och
+ * QR-bilder finns med — därför gick 'Ladda från GitHub' sönder med
+ * 'Unexpected end of JSON input'.
+ */
+async function hamtaBlob(cfg: GitHubConfig, sha: string): Promise<string> {
+  const r = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/git/blobs/${sha}`, { headers: headers(cfg) });
+  if (!r.ok) throw new Error(`GitHub ${r.status}: kunde inte hämta filinnehållet (blob).`);
+  const data = (await r.json()) as { content?: string; encoding?: string };
+  if (data.content === undefined || data.content === '') throw new Error('GitHub lämnade tomt innehåll för filen.');
+  return data.encoding === 'base64' ? fromBase64(data.content) : data.content;
+}
+
+/** Läser innehållet ur ett contents-svar, med blobs-API:t som reserv för stora filer. */
+async function innehallUr(cfg: GitHubConfig, data: { content?: string; encoding?: string; sha?: string; size?: number }, sokvag: string): Promise<string> {
+  if (data.content !== undefined && data.content !== '' && data.encoding !== 'none') return fromBase64(data.content);
+  if (data.sha !== undefined) return hamtaBlob(cfg, data.sha);
+  throw new Error(`Oväntat svar från GitHub för ${sokvag} (varken innehåll eller sha).`);
+}
+
 export async function laddaFranGitHub(cfg: GitHubConfig): Promise<string> {
   if (!konfigKomplett(cfg)) throw new Error('GitHub-konfigurationen är ofullständig.');
   const sha = await hamtaSha(cfg);
-  if (sha === null) throw new Error('Filen finns inte i repot ännu — spara först.');
+  if (sha === null) throw new Error(`Filen ${cfg.path} finns inte i repot ännu — spara från den dator som har datan först.`);
   const r = await fetch(`${api(cfg)}?ref=${encodeURIComponent(cfg.branch)}`, { headers: headers(cfg) });
   if (!r.ok) throw new Error(`GitHub ${r.status}: kunde inte hämta filen`);
-  const data = (await r.json()) as { content?: string };
-  if (data.content === undefined) throw new Error('Oväntat svar från GitHub (ingen content).');
-  return fromBase64(data.content);
+  const data = (await r.json()) as { content?: string; encoding?: string; sha?: string; size?: number };
+  const text = await innehallUr(cfg, data, cfg.path);
+  if (text.trim() === '') throw new Error(`Filen ${cfg.path} är tom i repot.`);
+  return text;
 }
 
 export { toBase64, fromBase64 };
@@ -99,8 +122,8 @@ async function hamtaFilInnehall(cfg: GitHubConfig, sokvag: string): Promise<stri
   const r = await fetch(url, { headers: headers(cfg) });
   if (r.status === 404) return null;
   if (!r.ok) throw new Error(`GitHub ${r.status}: kunde inte hämta ${sokvag}`);
-  const data = (await r.json()) as { content?: string };
-  return data.content !== undefined ? fromBase64(data.content) : null;
+  const data = (await r.json()) as { content?: string; encoding?: string; sha?: string; size?: number };
+  return innehallUr(cfg, data, sokvag);
 }
 
 /**

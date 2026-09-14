@@ -51,6 +51,25 @@ describe('github-synk', () => {
     expect(await laddaFranGitHub(CFG)).toBe('{"ok":true}');
   });
 
+  it('Del 120: filer över 1 MB (tomt content, encoding none) hämtas via blobs-API:t', async () => {
+    const f = fetch as unknown as ReturnType<typeof vi.fn>;
+    f.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ sha: 'stor' }) });                                       // hamtaSha
+    f.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ content: '', encoding: 'none', sha: 'stor', size: 2_000_000 }) }); // GET contents
+    f.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ content: toBase64('{"stor":true}'), encoding: 'base64' }) });     // GET blob
+    expect(await laddaFranGitHub(CFG)).toBe('{"stor":true}');
+    const blobUrl = (f.mock.calls[2] as [string])[0];
+    expect(blobUrl).toContain('/git/blobs/stor');
+  });
+
+  it('Del 120: tom fil och saknad fil ger begripliga fel', async () => {
+    const f = fetch as unknown as ReturnType<typeof vi.fn>;
+    f.mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({}) }); // hamtaSha → null
+    await expect(laddaFranGitHub(CFG)).rejects.toThrow('finns inte i repot ännu');
+    f.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ sha: 's' }) });
+    f.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ content: toBase64('   '), encoding: 'base64', sha: 's' }) });
+    await expect(laddaFranGitHub(CFG)).rejects.toThrow('är tom i repot');
+  });
+
   it('kastar tydligt fel när konfigurationen är ofullständig', async () => {
     await expect(sparaTillGitHub({ ...CFG, token: '' }, '{}')).rejects.toThrow('ofullständig');
   });
