@@ -950,3 +950,15 @@ input.fel { border-color: #B71C1C; }
 .st-utskrift-knapp small { color: var(--muted-varm); }
 
 .rd-faktor { background: #FFF8E1; color: #7a5a00; border-radius: 6px; padding: 2px 8px; font-weight: 700; }
+
+/* Del 121: trendkoll i rapporten */
+.rd-trend { display: flex; flex-direction: column; gap: calc(var(--mm) * 1.2); }
+.rd-trend-steg { border: calc(var(--mm) * 0.2) solid #DDE2EA; border-radius: calc(var(--mm) * 1.5); padding: calc(var(--mm) * 1.2) calc(var(--mm) * 2); }
+.rd-trend-huvud { display: flex; gap: calc(var(--mm) * 2); flex-wrap: wrap; align-items: baseline; }
+.rd-trend-datum { font-weight: 800; }
+.rd-trend-prov { color: #5a6472; font-size: 0.9em; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rd-trend-netto { font-weight: 700; border-radius: 999px; padding: 0 calc(var(--mm) * 1.5); background: #EEF1F5; }
+.rd-trend-netto.upp { background: #E8F5E9; color: #1B5E20; } .rd-trend-netto.ned { background: #FFEBEE; color: #B71C1C; }
+.rd-trend-lista { margin-top: calc(var(--mm) * 0.6); font-size: 0.95em; }
+.rd-trend-lista.glomt b { color: #B71C1C; } .rd-trend-lista.vant b { color: #1B5E20; }
+.st-trend-i-rapport { --mm: 3.3px; font-size: 13px; }

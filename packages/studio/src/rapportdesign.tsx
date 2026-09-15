@@ -23,7 +23,7 @@ const PALETT: Array<{ grupp: string; typer: BlockTyp[] }> = [
   { grupp: 'Dekor', typer: ['platta', 'rubrik', 'text', 'bild', 'qr'] },
   { grupp: 'Texter', typer: ['sammanfattning', 'laget', 'rad', 'studieplan'] },
   { grupp: 'Siffror och grafer', typer: ['kpi', 'laxkurva', 'exitlax', 'delkapitel', 'narvaro', 'fragematris'] },
-  { grupp: 'Begrepp', typer: ['begrepp-kvar', 'begrepp-vant'] },
+  { grupp: 'Begrepp', typer: ['begrepp-kvar', 'begrepp-vant', 'trendkoll'] },
 ];
 const KALLOR = [
   ['socrative-laxforhor', 'Läxförhör'], ['socrative-exit', 'Exit tickets'], ['socrative-ovning', 'Övning'],
@@ -103,6 +103,30 @@ function StaplarMm({ par }: { par: Array<{ kod: string; a: number; b: number }> 
         );
       })}
     </svg>
+  );
+}
+
+/** Trendkollens steg: en rad per jämförelse med datum, netto och begreppen som glömdes/vändes. */
+export function Trendsteg({ steg }: { steg: Array<{ foreProv: string; foreDatum: string; prov: string; datum: string; lart: number; glomt: number; netto: number; lartBegrepp: string[]; glomtBegrepp: string[]; lartFragor: string[]; glomtFragor: string[] }> }) {
+  return (
+    <div className="rd-trend">
+      {steg.map((st, i) => {
+        const glomda = st.glomtBegrepp.length > 0 ? st.glomtBegrepp : st.glomtFragor;
+        const vanda = st.lartBegrepp.length > 0 ? st.lartBegrepp : st.lartFragor;
+        return (
+          <div key={i} className="rd-trend-steg">
+            <div className="rd-trend-huvud">
+              <span className="rd-trend-datum">{st.foreDatum} → {st.datum}</span>
+              <span className="rd-trend-prov">{st.foreProv} → {st.prov}</span>
+              <span className={`rd-trend-netto ${st.netto > 0 ? 'upp' : st.netto < 0 ? 'ned' : ''}`}>{st.glomt} glömda · {st.lart} vända</span>
+            </div>
+            {glomda.length > 0 && <div className="rd-trend-lista glomt"><b>Glömt:</b> {glomda.join(' · ')}</div>}
+            {vanda.length > 0 && <div className="rd-trend-lista vant"><b>Vänt till rätt:</b> {vanda.join(' · ')}</div>}
+            {glomda.length === 0 && vanda.length === 0 && <div className="rd-trend-lista"><small>Inga ändrade svar.</small></div>}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -191,6 +215,10 @@ function BlockInnehall({ b, d, s }: { b: Block; d: Elevdata; s: Struktur }) {
     case 'begrepp-kvar': case 'begrepp-vant': {
       const lista = b.typ === 'begrepp-kvar' ? d.enkel?.kvar ?? [] : d.enkel?.vant ?? [];
       return (<>{rubrik}{lista.length === 0 ? tom('Inga') : <ul className="rd-lista">{lista.map((x) => <li key={x.nr}><b>{x.begrepp ?? ''}</b>{x.begrepp !== undefined ? ' — ' : ''}{x.fraga}</li>)}</ul>}</>);
+    }
+    case 'trendkoll': {
+      const steg = d.analys?.trendsteg ?? [];
+      return (<>{rubrik}{steg.length === 0 ? tom('Inga upprepade frågor än') : <Trendsteg steg={steg} />}</>);
     }
     case 'studieplan': {
       const g = d.guide;

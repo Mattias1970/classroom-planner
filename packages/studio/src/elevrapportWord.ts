@@ -273,6 +273,17 @@ export async function elevrapportDocx(a: Elevanalys): Promise<Blob> {
   barn.push(new Paragraph({ text: '3. Historik — resultat med datum', heading: HeadingLevel.HEADING_2 }));
   for (const r of a.laget) { barn.push(punkt(r), tom()); }
   if (a.laget.length === 0) barn.push(new Paragraph('Inga resultat i perioden.'), tom());
+  if (a.trendsteg.length > 0) {
+    barn.push(new Paragraph({ children: [new TextRun({ text: 'Glömt och vänt mellan förhören', bold: true })] }));
+    barn.push(forklaringRad('trendkoll'));
+    barn.push(tabell(['Från → till', 'Glömda', 'Vända till rätt'],
+      a.trendsteg.map((st) => [
+        `${st.foreDatum} → ${st.datum}`,
+        `${st.glomt}${st.glomt > 0 ? `: ${(st.glomtBegrepp.length > 0 ? st.glomtBegrepp : st.glomtFragor).join(' · ')}` : ''}`,
+        `${st.lart}${st.lart > 0 ? `: ${(st.lartBegrepp.length > 0 ? st.lartBegrepp : st.lartFragor).join(' · ')}` : ''}`,
+      ])));
+    barn.push(tom());
+  }
   if (a.kurva.length > 0) {
     barn.push(forklaringRad('laxforhor'));
     barn.push(forklaringRad('exit'));

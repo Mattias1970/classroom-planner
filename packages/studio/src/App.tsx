@@ -38,7 +38,7 @@ import {
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
 } from '@planner/kernel';
 import { exportJson, importJson, lasInstallning, lasStruktur, sparaInstallning, sparaStruktur } from './store.js';
-import { RapportdesignVy, MallRendering } from './rapportdesign.js';
+import { RapportdesignVy, MallRendering, Trendsteg } from './rapportdesign.js';
 import {
   hamtaBockerFranGitHub, konfigKomplett, laddaFranGitHub, lasGitHubConfig, sparaGitHubConfig, sparaTillGitHub,
   type GitHubConfig,
@@ -4490,6 +4490,12 @@ function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur,
                 </a>
               ))}
             </div>
+          </>)}
+
+          {analys.trendsteg.length > 0 && (<>
+            <h3>Glömt och vänt mellan förhören <InfoKnapp id="trendkoll" /></h3>
+            <p className="small muted">Samma fråga i två förhör efter varandra. Glömda svar (rätt → fel) är det viktigaste tecknet på att begreppen inte lästs på mellan lektionerna.</p>
+            <div className="st-trend-i-rapport"><Trendsteg steg={analys.trendsteg} /></div>
           </>)}
 
           {analys.matris.fragor.length > 0 && (<>

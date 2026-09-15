@@ -14,7 +14,7 @@ import {
   elevKurva, elevLektionstest, elevNarvaro, provTillfallen, sokElever, trendFor,
   type DashboardFilter, type KurvPunkt, type ProvTillfalle, type Trend,
 } from './dashboard.js';
-import { trendkoll } from './trendkoll.js';
+import { trendkoll, type TrendSteg } from './trendkoll.js';
 import { aterkommandeFel, aterkommandeFelKlass, delkapitelSegment, harmoniseraOvningar, nulage, ovningsDubbletter, type BegreppsFel, type Inkluderad, type Nulage, type OvningsMatchning, type SegmentTillfalle } from './delkapiteltrend.js';
 import { begreppForFraga, elevrapport, socrativeElevLank, type Elevrapport } from './elevrapport.js';
 import { planForAmne } from './studieguide.js';
@@ -58,6 +58,8 @@ export interface Elevanalys {
   /** Fel → rätt och rätt → fel på upprepade frågor. */
   lart: number;
   glomt: number;
+  /** Trendkoll: varje jämförelse mellan två förhör med datum och vilka begrepp som glömdes/vändes. */
+  trendsteg: TrendSteg[];
   segment: SegmentTillfalle[];
   /** Fråga × testtillfälle för eleven — rätt, fel eller inte gjord. */
   matris: Fragematris;
@@ -380,6 +382,7 @@ export function elevanalys(sIn: Struktur, elevId: string, f: DashboardFilter & {
     lektionsDiff: lekt?.diffSnitt ?? null,
     lart: tkElev?.lart ?? 0,
     glomt: tkElev?.glomt ?? 0,
+    trendsteg: tkElev?.steg ?? [],
     segment, matris, nu, ovningsDubbletter: dubblettOvningar, inkluderadeOvningar: harm.inkluderade, fastnat, ovningar, filmer, rapport, laget, rad, sammanfattning,
   };
 }

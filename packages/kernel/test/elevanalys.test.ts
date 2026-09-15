@@ -166,3 +166,17 @@ describe('Del 116: glömska och läsrytm', () => {
     expect(fokus!.text).toContain('Uppföljning vid nästa läxförhör');
   });
 });
+
+describe('Del 121: trendkollens steg följer med i analysen', () => {
+  it('varje jämförelse har datum, prov och begreppen som glömdes eller vändes', () => {
+    let s = bygg();
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-laxforhor', prov: '4.1-4.4 Begrepp', datum: '2026-09-11', rum: 'Biologi41234',
+      rader: [{ namn: 'Anna Berg', poang: 0, maxPoang: 2, svar: sv([[A, false], [B, false]]) }] }).s;
+    const a = elevanalys(s, 'a', f);
+    expect(a.trendsteg.length).toBeGreaterThan(0);
+    const sista = a.trendsteg[a.trendsteg.length - 1];
+    expect(sista).toMatchObject({ datum: '2026-09-11', prov: '4.1-4.4 Begrepp', glomt: 2, lart: 0 });
+    expect(sista.foreDatum < sista.datum).toBe(true);
+    expect(sista.glomtFragor).toEqual(expect.arrayContaining([A, B]));
+  });
+});
