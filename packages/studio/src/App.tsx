@@ -24,7 +24,7 @@ import {
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   arFilImporterad, arRatt, andraKalla, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
-  delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, enkelRapport, studieguide, rapportOversikt, forklaring, type ForklaringId, begreppForFraga, harmoniseraOvningar, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
+  delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, enkelRapport, studieguide, rapportOversikt, forklaring, niva, type ForklaringId, begreppForFraga, harmoniseraOvningar, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
@@ -4169,7 +4169,7 @@ function EnkelRapportVy({ s, elev, f, periodText, onTillbaka, onFull, onStudie, 
             <small>{kortDatum(x.datum)}</small>
             <b>{x.procent} %</b>
             {x.delta !== null && <span className={`st-diff ${x.delta > 0 ? 'upp' : x.delta < 0 ? 'ned' : ''}`}>{x.delta > 0 ? '+' : ''}{x.delta}</span>}
-            <small className="muted">{x.godkant === null ? '' : x.godkant ? 'godkänt' : 'ej godkänt'}</small>
+            <small className={x.godkant === false ? 'st-diff ned' : 'muted'}>{niva('socrative-laxforhor', x.procent) ?? ''}</small>
           </div>
         ))}</div>
       </>)}
@@ -4492,6 +4492,21 @@ function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur,
             </div>
           </>)}
 
+          {analys.lektionsarbete.rader.length > 0 && (<>
+            <h3>Lektionsarbete <InfoKnapp id="exit" /> <small className="muted">exit tickets · godkänd nivå från 70 %: Bra · Mycket bra · Utmärkt</small></h3>
+            <table className="tbl st-tabell"><thead><tr><th>Datum</th><th>Exit ticket</th><th>Resultat</th><th>Bedömning</th></tr></thead>
+              <tbody>{analys.lektionsarbete.rader.map((x, i) => <tr key={i}><td>{x.datum}</td><td>{x.prov}</td><td>{x.procent} %</td><td className={x.niva === 'Under godkänd nivå' ? 'st-diff ned' : 'st-diff upp'}>{x.niva}</td></tr>)}</tbody></table>
+            <p className="small"><b>Snitt {analys.lektionsarbete.snitt} % — {analys.lektionsarbete.niva}</b></p>
+          </>)}
+          {analys.ovar.length > 0 && (<>
+            <h3>Övar du inför läxförhören? <InfoKnapp id="ovar" /></h3>
+            <table className="tbl st-tabell"><thead><tr><th>Läxförhör</th><th>Exit-begreppen</th><th>Tidigare läxa</th><th>Nya frågor</th><th>Tolkning</th></tr></thead>
+              <tbody>{analys.ovar.map((o, i) => {
+                const cell = (x: { ratt: number; antal: number; procent: number } | null) => (x === null ? '—' : `${x.ratt}/${x.antal} (${x.procent} %)`);
+                return <tr key={i}><td>{o.datum} <small className="muted">{o.prov}</small></td><td>{cell(o.exit)}</td><td>{cell(o.tidigare)}</td><td>{cell(o.nya)}</td><td>{o.tolkning}</td></tr>;
+              })}</tbody></table>
+            <p className="small muted">Högt på exit-begreppen men lågt på tidigare läxa: bara det senaste avsnittet lästes på. Hela läxan är alla begrepp hittills.</p>
+          </>)}
           {analys.trendsteg.length > 0 && (<>
             <h3>Glömt och vänt mellan förhören <InfoKnapp id="trendkoll" /></h3>
             <p className="small muted">Samma fråga i två förhör efter varandra. Glömda svar (rätt → fel) är det viktigaste tecknet på att begreppen inte lästs på mellan lektionerna.</p>

@@ -9,13 +9,13 @@
  * (Ring 1, I2: ingen fetch/DOM/lagring.)
  */
 import type { Elev, Struktur } from './typer.js';
-import { kravFor, resultatProcent, type ResultatKalla } from './resultat.js';
+import { kravFor, niva, resultatProcent, type ResultatKalla } from './resultat.js';
 import {
   elevKurva, elevLektionstest, elevNarvaro, provTillfallen, sokElever, trendFor,
   type DashboardFilter, type KurvPunkt, type ProvTillfalle, type Trend,
 } from './dashboard.js';
 import { trendkoll, type TrendSteg } from './trendkoll.js';
-import { aterkommandeFel, aterkommandeFelKlass, delkapitelSegment, harmoniseraOvningar, nulage, ovningsDubbletter, type BegreppsFel, type Inkluderad, type Nulage, type OvningsMatchning, type SegmentTillfalle } from './delkapiteltrend.js';
+import { aterkommandeFel, aterkommandeFelKlass, befastaDelkapitel, delkapitelSegment, harmoniseraOvningar, nulage, ovarBild, ovningsDubbletter, type BegreppsFel, type Inkluderad, type Nulage, type OvarRad, type OvningsMatchning, type SegmentTillfalle } from './delkapiteltrend.js';
 import { begreppForFraga, elevrapport, socrativeElevLank, type Elevrapport } from './elevrapport.js';
 import { planForAmne } from './studieguide.js';
 import { fragematris, type Fragematris } from './delkapiteltrend.js';
@@ -60,6 +60,12 @@ export interface Elevanalys {
   glomt: number;
   /** Trendkoll: varje jämförelse mellan två förhör med datum och vilka begrepp som glömdes/vändes. */
   trendsteg: TrendSteg[];
+  /** Lektionsarbete: varje exit ticket med bedömningsnivå, samt snitt. */
+  lektionsarbete: { rader: Array<{ prov: string; datum: string; procent: number; niva: string }>; snitt: number | null; niva: string | null };
+  /** Övar eleven? Per läxförhör: exit-begreppen, tidigare läxa och nya frågor var för sig. */
+  ovar: OvarRad[];
+  /** Delkapitel med alla rätt de två senaste läxförhören — märks aldrig 'öva' eller 'ej godkänt'. */
+  befasta: string[];
   segment: SegmentTillfalle[];
   /** Fråga × testtillfälle för eleven — rätt, fel eller inte gjord. */
   matris: Fragematris;
@@ -138,6 +144,14 @@ export function elevanalys(sIn: Struktur, elevId: string, f: DashboardFilter & {
   const tkElev = tk.elever.find((e) => e.elev.id === elevId) ?? null;
   const delF = { klassId: f.klassId, ...(f.amneId !== undefined ? { amneId: f.amneId } : {}), ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) };
   const segment = delkapitelSegment(s, { ...delF, elevId });
+  const befasta = befastaDelkapitel(segment);
+  const ovar = ovarBild(s, elevId, delF);
+  const exitRader = egna.filter((r) => r.kalla === 'socrative-exit').map((r) => {
+    const procent = resultatProcent(r) ?? 0;
+    return { prov: r.prov, datum: r.datum, procent, niva: niva('socrative-exit', procent) ?? '—' };
+  });
+  const exitSnitt = snitt(exitRader.map((x) => x.procent));
+  const lektionsarbete = { rader: exitRader, snitt: exitSnitt, niva: niva('socrative-exit', exitSnitt) };
   let nu = nulage(s, elevId, delF);
   const dubblettOvningar = ovningsDubbletter(s, delF);
   const fastnat = aterkommandeFel(s, elevId, delF);
@@ -145,6 +159,10 @@ export function elevanalys(sIn: Struktur, elevId: string, f: DashboardFilter & {
   let rapport: Elevrapport | null = null;
   if (f.amneId !== undefined) {
     try { rapport = elevrapport(s, elevId, f.amneId, { ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) }); } catch { rapport = null; }
+  }
+  if (rapport !== null && befasta.size > 0) {
+    // Befästa delkapitel visas som klarade även om ett äldre prov låg under gränsen
+    rapport = { ...rapport, kapitel: rapport.kapitel.map((k) => ({ ...k, delkapitel: k.delkapitel.map((d) => (befasta.has(d.kod) && d.status === 'ova' ? { ...d, status: 'klarat' as const } : d)) })) };
   }
 
   // Frågetexten är begreppsbeskrivningen ur boken — slå upp vilket begrepp den gäller
@@ -202,10 +220,11 @@ export function elevanalys(sIn: Struktur, elevId: string, f: DashboardFilter & {
   }
   if (lax !== undefined && lax.snittProcent !== null) {
     const over = lax.krav !== null && lax.snittProcent >= lax.krav;
+    const n = niva('socrative-laxforhor', lax.snittProcent);
     laget.push({
       ton: over ? 'bra' : lax.snittProcent >= 75 ? 'okej' : 'oro',
-      rubrik: over ? 'Läxförhören når förhörsgränsen' : 'Läxförhören ligger under förhörsgränsen',
-      text: `Snitt ${lax.snittProcent} % på ${lax.antal} läxförhör${lax.krav !== null ? ` (gränsen för godkänt förhör är ${lax.krav} %` : ''}`
+      rubrik: over ? `Läxförhör: ${n}` : 'Läxförhören ligger under godkänd nivå',
+      text: `Snitt ${lax.snittProcent} % på ${lax.antal} läxförhör${lax.krav !== null ? ` (godkänd nivå från ${lax.krav} %: 90–93 Bra, 94–96 Mycket bra, 97–100 Utmärkt` : ''}`
         + `${lax.klassSnitt !== null ? `; klassens snitt ${lax.klassSnitt} %` : ''}${lax.krav !== null ? ')' : ''}. `
         + 'Läxförhören är kumulativa — varje nytt tar med begreppen från de tidigare delkapitlen.'
         + `${lax.trend === 'upp' ? ' Serien går uppåt.' : lax.trend === 'ned' ? ' Serien går nedåt.' : ''}`
@@ -214,12 +233,34 @@ export function elevanalys(sIn: Struktur, elevId: string, f: DashboardFilter & {
   }
   if (exit !== undefined && exit.snittProcent !== null) {
     const over = exit.krav !== null && exit.snittProcent >= exit.krav;
+    const n = niva('socrative-exit', exit.snittProcent);
     laget.push({
       ton: over ? 'bra' : exit.snittProcent >= 60 ? 'okej' : 'oro',
-      rubrik: over ? 'Exit tickets ligger över målet' : 'Exit tickets ligger under målet',
-      text: `Snitt ${exit.snittProcent} % på ${exit.antal} exit tickets${exit.krav !== null ? ` (målet är ${exit.krav} %)` : ''}`
-        + `${exit.klassSnitt !== null ? `; klassens snitt ${exit.klassSnitt} %` : ''}. Exit ticket görs i slutet av lektionen och prövar bara dagens avsnitt. `
+      rubrik: over ? `Lektionsarbete: ${n}` : 'Lektionsarbete under godkänd nivå',
+      text: `Exit tickets visar hur väl du följde med på lektionen. Snitt ${exit.snittProcent} % på ${exit.antal} exit tickets`
+        + `${exit.krav !== null ? ` (godkänd nivå från ${exit.krav} %: 70–80 Bra, 81–90 Mycket bra, 91–100 Utmärkt)` : ''}`
+        + `${exit.klassSnitt !== null ? `; klassens snitt ${exit.klassSnitt} %` : ''}. `
+        + (lektionsarbete.rader.length > 0 ? `Per lektion: ${lektionsarbete.rader.map((x) => `${x.datum} ${x.procent} % (${x.niva})`).join(', ')}. ` : '')
         + (over ? 'Vi följer upp om du kan använda kunskapen vid ett senare tillfälle.' : 'Vi följer upp vilket stöd som behövs under lektionen.'),
+    });
+  }
+  // Övar eleven? Läxförhör och exit ticket bedöms var för sig; det intressanta är vad som
+  // hände från exit ticket till nästa läxförhör, och med den äldre läxan.
+  if (ovar.length > 0) {
+    const ord: Record<OvarRad['tolkning'], string> = {
+      'hela läxan': 'övade hela läxan', 'bara exit-begreppen': 'övade bara exit-begreppen', 'bara tidigare läxa': 'övade bara den äldre läxan',
+      'inte övat': 'övade inte inför förhöret', okänt: 'går inte att avgöra',
+    };
+    const sista = ovar[ovar.length - 1];
+    laget.push({
+      ton: sista.tolkning === 'hela läxan' ? 'bra' : sista.tolkning === 'inte övat' ? 'oro' : 'okej',
+      rubrik: `Inför läxförhöret ${sista.datum}: ${ord[sista.tolkning]}`,
+      text: ovar.map((o) => `${o.datum}: `
+        + [o.exit !== null ? `exit-begreppen ${o.exit.ratt}/${o.exit.antal} rätt (${o.exit.procent} %)` : null,
+          o.tidigare !== null ? `tidigare läxa ${o.tidigare.ratt}/${o.tidigare.antal} (${o.tidigare.procent} %)` : null,
+          o.nya !== null ? `nya frågor ${o.nya.ratt}/${o.nya.antal} (${o.nya.procent} %)` : null].filter((x) => x !== null).join(', ')
+        + ` → ${ord[o.tolkning]}`).join('. ')
+        + '. Högt på exit-begreppen men lågt på den tidigare läxan betyder att bara det senaste avsnittet lästes på; hela läxan är alla begrepp hittills.',
     });
   }
   if (narvaro !== null && narvaro.narvaroProcent !== null) {
@@ -310,8 +351,9 @@ export function elevanalys(sIn: Struktur, elevId: string, f: DashboardFilter & {
       const senaste = d.senaste[0];
       return { d, nuDel, senaste };
     });
-    const behovs = medUnderlag.filter((x) => x.nuDel === undefined || (x.nuDel.procent ?? 0) < 100);
-    const redanRatt = medUnderlag.filter((x) => x.nuDel !== undefined && (x.nuDel.procent ?? 0) >= 100);
+    // Delkapitel med alla rätt de två senaste läxförhören är befästa — de får aldrig 'öva' eller 'ej godkänt'
+    const behovs = medUnderlag.filter((x) => !befasta.has(x.d.kod) && (x.nuDel === undefined || (x.nuDel.procent ?? 0) < 100));
+    const redanRatt = medUnderlag.filter((x) => !befasta.has(x.d.kod) && x.nuDel !== undefined && (x.nuDel.procent ?? 0) >= 100);
     if (behovs.length > 0) {
       rad.push({
         ton: 'okej', rubrik: 'Delkapitel att repetera',
@@ -383,6 +425,7 @@ export function elevanalys(sIn: Struktur, elevId: string, f: DashboardFilter & {
     lart: tkElev?.lart ?? 0,
     glomt: tkElev?.glomt ?? 0,
     trendsteg: tkElev?.steg ?? [],
+    lektionsarbete, ovar, befasta: [...befasta].sort(),
     segment, matris, nu, ovningsDubbletter: dubblettOvningar, inkluderadeOvningar: harm.inkluderade, fastnat, ovningar, filmer, rapport, laget, rad, sammanfattning,
   };
 }

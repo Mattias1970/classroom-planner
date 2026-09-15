@@ -41,7 +41,7 @@ const BLOCK_RUBRIK: Record<BlockTyp, string> = {
   kpi: 'Resultat', sammanfattning: 'Sammanfattning', laget: 'Så här ser det ut', rad: 'Nästa steg',
   laxkurva: 'Läxförhör över tid', exitlax: 'Från exit ticket till läxförhör — håller det?', fragematris: 'Fråga för fråga', delkapitel: 'Delkapitel just nu',
   narvaro: 'Quizsvar på lektionerna', 'begrepp-kvar': 'Fel i senaste försöket', 'begrepp-vant': 'Rätt efter tidigare fel', studieplan: 'Studieplan',
-  trendkoll: 'Glömt och vänt mellan förhören',
+  trendkoll: 'Glömt och vänt mellan förhören', lektionsarbete: 'Lektionsarbete (exit tickets)', ovar: 'Övar du inför läxförhören?',
 };
 export const RUTNAT = 5;
 
@@ -50,7 +50,7 @@ export type BlockTyp =
   | 'platta' | 'rubrik' | 'text' | 'bild'
   | 'kpi' | 'sammanfattning' | 'laget' | 'rad'
   | 'laxkurva' | 'exitlax' | 'fragematris' | 'delkapitel' | 'narvaro'
-  | 'begrepp-kvar' | 'begrepp-vant' | 'studieplan' | 'qr' | 'trendkoll';
+  | 'begrepp-kvar' | 'begrepp-vant' | 'studieplan' | 'qr' | 'trendkoll' | 'lektionsarbete' | 'ovar';
 
 export interface BlockStil {
   /** Rubrikstorlek i punkter för just detta block (annars mallens). */
@@ -126,7 +126,7 @@ export const BLOCK_NAMN: Record<BlockTyp, string> = {
   platta: 'Platta', rubrik: 'Rubrik', text: 'Text', bild: 'Bild',
   kpi: 'KPI-kort', sammanfattning: 'Sammanfattning', laget: 'Hur går det?', rad: 'Vad kan du göra?',
   laxkurva: 'Läxförhör över tid', exitlax: 'Exit → läxförhör', fragematris: 'Frågematris', delkapitel: 'Delkapitel som led',
-  narvaro: 'Närvaro', 'begrepp-kvar': 'Begrepp kvar att lära', 'begrepp-vant': 'Begrepp som vänts', studieplan: 'Studieplan', qr: 'Socrative-QR', trendkoll: 'Trendkoll',
+  narvaro: 'Närvaro', 'begrepp-kvar': 'Begrepp kvar att lära', 'begrepp-vant': 'Begrepp som vänts', studieplan: 'Studieplan', qr: 'Socrative-QR', trendkoll: 'Trendkoll', lektionsarbete: 'Lektionsarbete', ovar: 'Övar eleven?',
 };
 
 /** Standardstorlek (mm) när ett block läggs till. */
@@ -134,14 +134,14 @@ export const BLOCK_STANDARD: Record<BlockTyp, { b: number; h: number }> = {
   platta: { b: 90, h: 60 }, rubrik: { b: 170, h: 14 }, text: { b: 170, h: 24 }, bild: { b: 40, h: 40 },
   kpi: { b: 42, h: 34 }, sammanfattning: { b: 170, h: 20 }, laget: { b: 170, h: 50 }, rad: { b: 170, h: 50 },
   laxkurva: { b: 170, h: 60 }, exitlax: { b: 170, h: 55 }, fragematris: { b: 170, h: 70 }, delkapitel: { b: 170, h: 60 },
-  narvaro: { b: 80, h: 40 }, 'begrepp-kvar': { b: 82, h: 60 }, 'begrepp-vant': { b: 82, h: 60 }, studieplan: { b: 170, h: 40 }, qr: { b: 40, h: 46 }, trendkoll: { b: 170, h: 60 },
+  narvaro: { b: 80, h: 40 }, 'begrepp-kvar': { b: 82, h: 60 }, 'begrepp-vant': { b: 82, h: 60 }, studieplan: { b: 170, h: 40 }, qr: { b: 40, h: 46 }, trendkoll: { b: 170, h: 60 }, lektionsarbete: { b: 82, h: 45 }, ovar: { b: 170, h: 45 },
 };
 
 /** Vilken förklaring som hör till ett datablock (null = ingen). */
 export const BLOCK_FORKLARING: Partial<Record<BlockTyp, ForklaringId>> = {
   kpi: 'helhet', sammanfattning: 'nulage', laget: 'nulage', rad: 'begreppKvar',
   laxkurva: 'laxforhor', exitlax: 'exitTillLax', fragematris: 'fragematris', delkapitel: 'delkapitel', narvaro: 'narvaro',
-  'begrepp-kvar': 'begreppKvar', 'begrepp-vant': 'begreppVant', studieplan: 'studieplan', trendkoll: 'trendkoll',
+  'begrepp-kvar': 'begreppKvar', 'begrepp-vant': 'begreppVant', studieplan: 'studieplan', trendkoll: 'trendkoll', lektionsarbete: 'exit', ovar: 'ovar',
 };
 
 /** Förklaringen för ett block; KPI-kort följer sin källa. */

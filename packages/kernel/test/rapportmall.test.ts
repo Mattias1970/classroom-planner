@@ -155,7 +155,7 @@ describe('Del 116: rubrik på alla datablock och typografi i punkter', async () 
   const { blockRubrik, blockTypografi, TYPOGRAFI_STANDARD } = await import('../src/domain/rapportmall.js');
   it('varje datablock får en rubrik, egen text vinner, KPI följer källan, dekor har ingen', () => {
     let m = nyMall('m', 'x', '');
-    for (const typ of ['kpi', 'laxkurva', 'fragematris', 'begrepp-kvar', 'narvaro', 'studieplan', 'rad', 'laget', 'sammanfattning', 'exitlax', 'delkapitel', 'begrepp-vant', 'trendkoll'] as const) {
+    for (const typ of ['kpi', 'laxkurva', 'fragematris', 'begrepp-kvar', 'narvaro', 'studieplan', 'rad', 'laget', 'sammanfattning', 'exitlax', 'delkapitel', 'begrepp-vant', 'trendkoll', 'lektionsarbete', 'ovar'] as const) {
       m = laggTillBlock(m, typ, typ, 0, 0);
       expect(blockRubrik(m.block.find((b) => b.id === typ)!), typ).not.toBe('');
     }

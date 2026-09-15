@@ -13,7 +13,7 @@ import {
   A4, BLOCK_NAMN, BLOCK_STANDARD, RUTNAT, RUTNAT_VAL, TYPNAMN, andraStorlek, antalSidor, arDatablock, blockSida, dupliceraBlock,
   elevanalys, enkelRapport, flyttaBlock, flyttaFlera, fordelaBlock, fyllText, laggTillBlock, laggTillSida, linjeraBlock, nyMall, nyttId,
   ordnaBlock, ritordning, socrativeElevLank, sparaRapportmall, standardmall, studieguide, taBortBlock, taBortRapportmall, taBortSida,
-  tillSida, tolkaRapportmall, uppdateraBlock, vaxBlock, blockForklaring, forklaring, blockRubrik, blockTypografi, TYPOGRAFI_STANDARD,
+  tillSida, tolkaRapportmall, uppdateraBlock, vaxBlock, blockForklaring, forklaring, blockRubrik, blockTypografi, TYPOGRAFI_STANDARD, niva,
   type Block, type BlockTyp, type DashboardFilter, type Linjering, type Rapportmall, type Struktur,
 } from '@planner/kernel';
 import { lasStruktur } from './store.js';
@@ -22,7 +22,7 @@ import { hamtaFilerFranGitHub, konfigKomplett, lasGitHubConfig, sparaFilTillGitH
 const PALETT: Array<{ grupp: string; typer: BlockTyp[] }> = [
   { grupp: 'Dekor', typer: ['platta', 'rubrik', 'text', 'bild', 'qr'] },
   { grupp: 'Texter', typer: ['sammanfattning', 'laget', 'rad', 'studieplan'] },
-  { grupp: 'Siffror och grafer', typer: ['kpi', 'laxkurva', 'exitlax', 'delkapitel', 'narvaro', 'fragematris'] },
+  { grupp: 'Siffror och grafer', typer: ['kpi', 'lektionsarbete', 'ovar', 'laxkurva', 'exitlax', 'delkapitel', 'narvaro', 'fragematris'] },
   { grupp: 'Begrepp', typer: ['begrepp-kvar', 'begrepp-vant', 'trendkoll'] },
 ];
 const KALLOR = [
@@ -160,7 +160,7 @@ function BlockInnehall({ b, d, s }: { b: Block; d: Elevdata; s: Struktur }) {
       const k = d.analys?.kallor.find((x) => x.kalla === b.kalla) ?? null;
       const namn = KALLOR.find(([id]) => id === b.kalla)?.[1] ?? '';
       const helhet = b.kalla === 'helhet' ? d.analys?.nu.procent ?? null : k?.snittProcent ?? null;
-      return (<>{rubrik}<div className="rd-kpi"><b>{helhet ?? '—'} %</b><small>{namn}{k !== null ? ` · ${k.antal} prov` : ''}</small>{k?.krav !== undefined && k.krav !== null && helhet !== null && <small className={helhet >= k.krav ? 'ok' : 'ej'}>{helhet >= k.krav ? 'Förhörsgräns nådd' : 'Under förhörsgränsen'}</small>}</div></>);
+      return (<>{rubrik}<div className="rd-kpi"><b>{helhet ?? '—'} %</b><small>{namn}{k !== null ? ` · ${k.antal} prov` : ''}</small>{k?.krav !== undefined && k.krav !== null && helhet !== null && b.kalla !== undefined && b.kalla !== 'helhet' && <small className={helhet >= k.krav ? 'ok' : 'ej'}>{niva(b.kalla, helhet) ?? ''}</small>}</div></>);
     }
     case 'sammanfattning': return (<>{rubrik}<div className="rd-text" style={{ fontWeight: 600 }}>{d.enkel?.rubrik ?? d.analys?.sammanfattning ?? '—'}</div>{d.enkel !== null && d.enkel.text.map((t, i) => <p key={i} className="rd-p">{t}</p>)}</>);
     case 'laget': return (<>{rubrik}{(d.analys?.laget ?? []).length === 0 ? tom('Inga resultat') : d.analys!.laget.map((r, i) => <div key={i} className={`rd-punkt ${r.ton}`}><b>{r.rubrik}</b><p>{r.text}</p></div>)}</>);
@@ -215,6 +215,26 @@ function BlockInnehall({ b, d, s }: { b: Block; d: Elevdata; s: Struktur }) {
     case 'begrepp-kvar': case 'begrepp-vant': {
       const lista = b.typ === 'begrepp-kvar' ? d.enkel?.kvar ?? [] : d.enkel?.vant ?? [];
       return (<>{rubrik}{lista.length === 0 ? tom('Inga') : <ul className="rd-lista">{lista.map((x) => <li key={x.nr}><b>{x.begrepp ?? ''}</b>{x.begrepp !== undefined ? ' — ' : ''}{x.fraga}</li>)}</ul>}</>);
+    }
+    case 'lektionsarbete': {
+      const la = d.analys?.lektionsarbete;
+      if (la === undefined || la.rader.length === 0) return (<>{rubrik}{tom('Inga exit tickets')}</>);
+      return (<>{rubrik}
+        <div className="rd-kpi"><b>{la.snitt ?? '—'} %</b><small>{la.rader.length} exit tickets</small>{la.niva !== null && <small className={la.niva === 'Under godkänd nivå' ? 'ej' : 'ok'}>{la.niva}</small>}</div>
+        <ul className="rd-lista">{la.rader.map((x, i) => <li key={i}>{x.datum} · {x.procent} % — <b>{x.niva}</b> <small>{x.prov}</small></li>)}</ul>
+        <div className="rd-tom">Godkänd nivå från 70 %: 70–80 Bra · 81–90 Mycket bra · 91–100 Utmärkt.</div>
+      </>);
+    }
+    case 'ovar': {
+      const ov = d.analys?.ovar ?? [];
+      if (ov.length === 0) return (<>{rubrik}{tom('Kräver minst två läxförhör med frågedata')}</>);
+      const ord = { 'hela läxan': 'övade hela läxan', 'bara exit-begreppen': 'övade bara exit-begreppen', 'bara tidigare läxa': 'övade bara den äldre läxan', 'inte övat': 'övade inte', okänt: 'går inte att avgöra' } as const;
+      const cell = (x: { ratt: number; antal: number; procent: number } | null) => (x === null ? '—' : `${x.ratt}/${x.antal} (${x.procent} %)`);
+      return (<>{rubrik}
+        <table className="rd-tabell"><thead><tr><th>Läxförhör</th><th>Exit-begreppen</th><th>Tidigare läxa</th><th>Nya frågor</th><th>Tolkning</th></tr></thead>
+          <tbody>{ov.map((o, i) => <tr key={i}><td>{o.datum}</td><td>{cell(o.exit)}</td><td>{cell(o.tidigare)}</td><td>{cell(o.nya)}</td><td className={`rd-ovar-${o.tolkning.replace(/[^a-z]/g, '')}`}>{ord[o.tolkning]}</td></tr>)}</tbody></table>
+        <div className="rd-tom">Högt på exit-begreppen men lågt på tidigare läxa = bara senaste avsnittet lästes på. Hela läxan = alla begrepp hittills.</div>
+      </>);
     }
     case 'trendkoll': {
       const steg = d.analys?.trendsteg ?? [];

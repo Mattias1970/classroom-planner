@@ -648,3 +648,86 @@ export function harmoniseraOvningar(s: Struktur, f: DelkapitelFilter, grans = 60
   per.set(nyckel, ut);
   return ut;
 }
+
+// ── Del 122: övar eleven? och befästa delkapitel ─────────────
+
+export interface OvarDel { ratt: number; antal: number; procent: number }
+
+export interface OvarRad {
+  prov: string;
+  datum: string;
+  /** Frågorna från exit ticket(s) sedan förra läxförhöret, som nu ställdes i läxförhöret. */
+  exit: OvarDel | null;
+  /** Frågorna från tidigare läxförhör (den gamla läxan). */
+  tidigare: OvarDel | null;
+  /** Frågor som var nya i det här läxförhöret. */
+  nya: OvarDel | null;
+  tolkning: 'hela läxan' | 'bara exit-begreppen' | 'bara tidigare läxa' | 'inte övat' | 'okänt';
+}
+
+function ovarDel(fragor: Set<string>, svar: Map<string, boolean>): OvarDel | null {
+  let ratt = 0; let antal = 0;
+  for (const n of fragor) { const v = svar.get(n); if (v === undefined) continue; antal += 1; if (v) ratt += 1; }
+  return antal === 0 ? null : { ratt, antal, procent: Math.round((ratt / antal) * 100) };
+}
+
+/**
+ * Övar eleven? För varje läxförhör: hur gick det på (a) frågorna från exit ticket
+ * sedan förra läxförhöret och (b) frågorna från tidigare läxförhör? Har eleven
+ * bara övat exit-begreppen syns det som högt på (a) och lågt på (b); har eleven
+ * övat hela läxan är båda höga.
+ */
+export function ovarBild(s: Struktur, elevId: string, f: DelkapitelFilter): OvarRad[] {
+  const tillfallen = tillfallenFor(s, f).filter((t) => t.kalla === 'socrative-laxforhor' || t.kalla === 'socrative-exit');
+  const fragorFor = (t: Tillfalle): Set<string> => {
+    const ut = new Set<string>();
+    for (const r of t.resultat) for (const sv of r.svar ?? []) ut.add(fragenyckel(sv.fraga));
+    return ut;
+  };
+  const ut: OvarRad[] = [];
+  const tidigareLax = new Set<string>();
+  let exitSedanSist = new Set<string>();
+  let harHaftLax = false;
+  for (const t of tillfallen) {
+    if (t.kalla === 'socrative-exit') { for (const n of fragorFor(t)) exitSedanSist.add(n); continue; }
+    // Läxförhör
+    const egna = t.resultat.find((r) => r.elevId === elevId);
+    const alla = fragorFor(t);
+    if (egna !== undefined && harHaftLax) {
+      const svar = new Map<string, boolean>();
+      for (const sv of egna.svar ?? []) if (sv.ratt !== null) svar.set(fragenyckel(sv.fraga), sv.ratt);
+      const exitF = new Set([...alla].filter((n) => exitSedanSist.has(n)));
+      const tidigareF = new Set([...alla].filter((n) => tidigareLax.has(n) && !exitF.has(n)));
+      const nyaF = new Set([...alla].filter((n) => !exitF.has(n) && !tidigareF.has(n)));
+      const exit = ovarDel(exitF, svar); const tidigare = ovarDel(tidigareF, svar); const nya = ovarDel(nyaF, svar);
+      const bra = (d: OvarDel | null) => d !== null && d.procent >= 90;
+      const tolkning: OvarRad['tolkning'] = exit === null && tidigare === null ? 'okänt'
+        : bra(exit) && (tidigare === null || bra(tidigare)) ? 'hela läxan'
+        : bra(exit) && !bra(tidigare) ? 'bara exit-begreppen'
+        : !bra(exit) && bra(tidigare) ? 'bara tidigare läxa'
+        : 'inte övat';
+      ut.push({ prov: t.prov, datum: t.datum, exit, tidigare, nya, tolkning });
+    }
+    for (const n of alla) tidigareLax.add(n);
+    exitSedanSist = new Set();
+    harHaftLax = true;
+  }
+  return ut;
+}
+
+/**
+ * Delkapitel eleven klarat helt de två senaste läxförhören som testade dem.
+ * Sådana ska inte märkas 'ej godkänt' eller 'öva' oavsett äldre resultat.
+ */
+export function befastaDelkapitel(segment: SegmentTillfalle[]): Set<string> {
+  const lax = segment.filter((t) => t.kalla === 'socrative-laxforhor');
+  const koder = new Set(lax.flatMap((t) => t.segment.map((x) => x.kod)));
+  const ut = new Set<string>();
+  for (const kod of koder) {
+    const med = lax.filter((t) => t.segment.some((x) => x.kod === kod && x.procent !== null));
+    if (med.length < 2) continue;
+    const tva = med.slice(-2);
+    if (tva.every((t) => (t.segment.find((x) => x.kod === kod)?.procent ?? 0) >= 100)) ut.add(kod);
+  }
+  return ut;
+}

@@ -92,9 +92,40 @@ export interface ImportUtfall {
 
 /** BAM-kravet för en källa i procent, eller null när inget fast krav finns. */
 export function kravFor(kalla: ResultatKalla): number | null {
-  if (kalla === 'socrative-laxforhor') return 90;
+  if (kalla === 'socrative-laxforhor' || kalla === 'socrative-ovning') return 90;
   if (kalla === 'socrative-exit') return 70;
   return null;
+}
+
+/** Bedömningsnivå över godkänd gräns; null = under gränsen eller källa utan gräns. */
+export type Niva = 'Bra' | 'Mycket bra' | 'Utmärkt';
+
+/**
+ * Bedömning i ord. Läxförhör och övning: 90–93 Bra, 94–96 Mycket bra, 97–100 Utmärkt.
+ * Exit ticket (lektionsarbete): 70–80 Bra, 81–90 Mycket bra, 91–100 Utmärkt.
+ * Under gränsen: 'Under godkänd nivå'. Källor utan gräns (Magma, DigiExam): null.
+ */
+export function niva(kalla: ResultatKalla, procent: number | null): Niva | 'Under godkänd nivå' | null {
+  if (procent === null) return null;
+  const p = Math.round(procent);
+  if (kalla === 'socrative-exit') {
+    if (p < 70) return 'Under godkänd nivå';
+    if (p <= 80) return 'Bra';
+    if (p <= 90) return 'Mycket bra';
+    return 'Utmärkt';
+  }
+  if (kalla === 'socrative-laxforhor' || kalla === 'socrative-ovning') {
+    if (p < 90) return 'Under godkänd nivå';
+    if (p <= 93) return 'Bra';
+    if (p <= 96) return 'Mycket bra';
+    return 'Utmärkt';
+  }
+  return null;
+}
+
+/** Kort etikett för tabeller: 'Utmärkt' / 'Bra' / 'Under godkänd nivå' / '—'. */
+export function nivaText(kalla: ResultatKalla, procent: number | null): string {
+  return niva(kalla, procent) ?? '—';
 }
 
 /** Resultatets procent (0–100, avrundad till heltal); null vid maxPoang 0. */

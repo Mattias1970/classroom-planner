@@ -6,7 +6,7 @@
  * utskriften säger samma sak som skärmen.
  */
 import { AlignmentType, Document, ExternalHyperlink, HeadingLevel, ImageRun, Packer, Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType } from 'docx';
-import { forklaring, type Elevanalys, type EnkelRapport, type ForklaringId, type Studieguide } from '@planner/kernel';
+import { forklaring, niva, type Elevanalys, type EnkelRapport, type ForklaringId, type Studieguide } from '@planner/kernel';
 
 const BLA = '#2f5aa8'; const GRON = '#1B5E20'; const ROD = '#B71C1C'; const GRA = '#9AA3AE';
 const TON_FARG = { bra: 'E8F5E9', okej: 'FFF8E1', oro: 'FFEBEE' } as const;
@@ -273,6 +273,20 @@ export async function elevrapportDocx(a: Elevanalys): Promise<Blob> {
   barn.push(new Paragraph({ text: '3. Historik — resultat med datum', heading: HeadingLevel.HEADING_2 }));
   for (const r of a.laget) { barn.push(punkt(r), tom()); }
   if (a.laget.length === 0) barn.push(new Paragraph('Inga resultat i perioden.'), tom());
+  if (a.lektionsarbete.rader.length > 0) {
+    barn.push(new Paragraph({ children: [new TextRun({ text: `Lektionsarbete — snitt ${a.lektionsarbete.snitt} %, ${a.lektionsarbete.niva}`, bold: true })] }));
+    barn.push(forklaringRad('exit'));
+    barn.push(tabell(['Datum', 'Exit ticket', 'Resultat', 'Bedömning'], a.lektionsarbete.rader.map((x) => [x.datum, x.prov, `${x.procent} %`, x.niva])));
+    barn.push(tom());
+  }
+  if (a.ovar.length > 0) {
+    barn.push(new Paragraph({ children: [new TextRun({ text: 'Övar du inför läxförhören?', bold: true })] }));
+    barn.push(forklaringRad('ovar'));
+    const cell = (x: { ratt: number; antal: number; procent: number } | null) => (x === null ? '—' : `${x.ratt}/${x.antal} (${x.procent} %)`);
+    barn.push(tabell(['Läxförhör', 'Exit-begreppen', 'Tidigare läxa', 'Nya frågor', 'Tolkning'],
+      a.ovar.map((o) => [`${o.datum} ${o.prov}`, cell(o.exit), cell(o.tidigare), cell(o.nya), o.tolkning])));
+    barn.push(tom());
+  }
   if (a.trendsteg.length > 0) {
     barn.push(new Paragraph({ children: [new TextRun({ text: 'Glömt och vänt mellan förhören', bold: true })] }));
     barn.push(forklaringRad('trendkoll'));
@@ -289,8 +303,8 @@ export async function elevrapportDocx(a: Elevanalys): Promise<Blob> {
     barn.push(forklaringRad('exit'));
     barn.push(bild(await kurvBild(a), 560, 226));
     barn.push(new Paragraph({ children: [new TextRun({ text: 'Varje punkt är ett prov. Streckade linjer är förhörsgränserna: 90 % för läxförhör, 70 % för exit ticket. Jämförelsen är mot dina egna tidigare resultat.', size: 18, color: '777777' })] }));
-    barn.push(tabell(['Nr', 'Datum', 'Prov', 'Resultat', 'Förhörsgräns'],
-      a.kurva.map((p, i) => [`T${i + 1}`, p.datum, p.prov, `${p.procent} %`, p.klarat === null ? '—' : p.klarat ? 'nådd' : 'ej nådd'])));
+    barn.push(tabell(['Nr', 'Datum', 'Prov', 'Resultat', 'Bedömning'],
+      a.kurva.map((p, i) => [`T${i + 1}`, p.datum, p.prov, `${p.procent} %`, niva(p.kalla, p.procent) ?? '—'])));
     barn.push(tom());
   }
   const lb = await ledBild(a);
@@ -459,8 +473,8 @@ async function enkelBarn(r: EnkelRapport): Promise<Array<Paragraph | Table>> {
       barn.push(bild(lb, 560, 199));
       barn.push(new Paragraph({ children: [new TextRun({ text: 'Grön punkt = godkänt, röd = under. Siffran under datumet är förändringen mot förra förhöret.', size: 18, color: '777777' })] }));
     }
-    barn.push(tabell(['Datum', 'Prov', 'Resultat', 'Förändring', 'Godkänt'],
-      r.laxforhor.map((x) => [x.datum, x.prov, `${x.procent} %`, x.delta === null ? '—' : `${x.delta > 0 ? '+' : ''}${x.delta}`, x.godkant === null ? '—' : x.godkant ? 'ja' : 'nej'])));
+    barn.push(tabell(['Datum', 'Prov', 'Resultat', 'Förändring', 'Bedömning'],
+      r.laxforhor.map((x) => [x.datum, x.prov, `${x.procent} %`, x.delta === null ? '—' : `${x.delta > 0 ? '+' : ''}${x.delta}`, niva('socrative-laxforhor', x.procent) ?? '—'])));
     barn.push(tom());
   }
   if (r.exitTillLax.length > 0) {

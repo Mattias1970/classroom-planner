@@ -49,8 +49,8 @@ describe('elevanalys', () => {
     const lax = a.kallor.find((k) => k.kalla === 'socrative-laxforhor')!;
     expect(lax).toMatchObject({ snittProcent: 100, krav: 90, andelKlarade: 100, antal: 3 });
     expect(a.narvaroProcent).toBe(100);
-    expect(a.laget.map((r) => r.rubrik)).toContain('Läxförhören når förhörsgränsen');
-    const laxRad = a.laget.find((r) => r.rubrik === 'Läxförhören når förhörsgränsen')!.text;
+    expect(a.laget.map((r) => r.rubrik)).toContain('Läxförhör: Utmärkt'); // 100 % → Utmärkt
+    const laxRad = a.laget.find((r) => r.rubrik === 'Läxförhör: Utmärkt')!.text;
     expect(laxRad).toContain('kumulativa');
     expect(laxRad).toContain('inte ett ämnesbetyg');
     expect(laxRad).toMatch(/på \d+ läxförhör/); // underlaget anges
@@ -69,7 +69,7 @@ describe('elevanalys', () => {
     const o = elevanalys(bygg(), 'b', f);
     expect(o.narvaroProcent).toBe(67);
     expect(o.franvaroDatum).toEqual(['2026-09-04']);
-    expect(o.laget.map((r) => r.rubrik)).toEqual(expect.arrayContaining(['Läxförhören ligger under förhörsgränsen']));
+    expect(o.laget.map((r) => r.rubrik)).toEqual(expect.arrayContaining(['Läxförhören ligger under godkänd nivå']));
     // Frånvaro beskrivs som saknat quizsvar, inte som en påverkan
     const narvRad = o.laget.find((r) => r.rubrik.startsWith('Quizsvar saknas'))!;
     expect(narvRad.text).toContain('visar inte att du var borta');
@@ -178,5 +178,28 @@ describe('Del 121: trendkollens steg följer med i analysen', () => {
     expect(sista).toMatchObject({ datum: '2026-09-11', prov: '4.1-4.4 Begrepp', glomt: 2, lart: 0 });
     expect(sista.foreDatum < sista.datum).toBe(true);
     expect(sista.glomtFragor).toEqual(expect.arrayContaining([A, B]));
+  });
+});
+
+describe('Del 122: bedömningsnivåer, lektionsarbete, övar eleven?, befästa delkapitel', () => {
+  it('lektionsarbetet bedöms i ord per exit ticket och som snitt', () => {
+    const a = elevanalys(bygg(), 'a', f);
+    // Anna: exit 100, 90, 90 → snitt 93 → Utmärkt
+    expect(a.lektionsarbete.rader.map((x) => `${x.procent}:${x.niva}`)).toEqual(['100:Utmärkt', '90:Mycket bra', '90:Mycket bra']);
+    expect(a.lektionsarbete.niva).toBe('Utmärkt');
+    expect(a.laget.find((r) => r.rubrik.startsWith('Lektionsarbete'))!.rubrik).toBe('Lektionsarbete: Utmärkt');
+    // Ingen jämförelse exit mot läxförhör på samma lektion
+    expect(a.laget.some((r) => r.rubrik.includes('jämfört med läxförhör'))).toBe(false);
+  });
+
+  it('övar eleven? syns per läxförhör; befästa delkapitel märks aldrig öva', () => {
+    const o = elevanalys(bygg(), 'b', f);
+    // Omar läxförhör 4/9 (tidigare läxa A,B fel) → inte övat; 4/9 finns inte för Omar — hitta raden som finns
+    expect(o.ovar.length).toBeGreaterThan(0);
+    expect(o.laget.some((r) => r.rubrik.startsWith('Inför läxförhöret'))).toBe(true);
+    // Anna har alla rätt på 4.1 i alla tre läxförhör → befäst
+    const a = elevanalys(bygg(), 'a', f);
+    expect(a.befasta).toContain('4.1');
+    expect(a.rad.some((r) => r.rubrik === 'Delkapitel att repetera' && r.text.includes('4.1'))).toBe(false);
   });
 });

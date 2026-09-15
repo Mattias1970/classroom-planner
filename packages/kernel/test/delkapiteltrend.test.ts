@@ -382,3 +382,31 @@ describe('Del 113: Övning är en egen testtyp om inte importen själv valde den
     expect(h.s.resultat!.find((x) => x.prov === 'Extra 4.1-4.2')!.kalla).toBe('socrative-ovning');
   });
 });
+
+describe('Del 122: övar eleven? och befästa delkapitel', async () => {
+  const { ovarBild, befastaDelkapitel, delkapitelSegment } = await import('../src/domain/delkapiteltrend.js');
+  it('skiljer på exit-begrepp, tidigare läxa och nya frågor i varje läxförhör', () => {
+    let s = bygg();
+    // Exit 4.2 (C) mellan läxförhör 1 och 2: Anna rätt på C i exit
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-exit', prov: 'Exit 4.2', datum: '2026-08-24', rum: 'Biologi42',
+      rader: [{ namn: 'Anna Berg', poang: 1, maxPoang: 1, svar: sv([[C, true]]) }] }).s;
+    const rader = ovarBild(s, 'a', f);
+    // Läxförhör 2 (28/8): A,B från tidigare läxa (A rätt, B fel → 50 %), C från exit (rätt → 100 %)
+    expect(rader[0]).toMatchObject({ prov: '4.1-4.2 Begrepp', exit: { ratt: 1, antal: 1, procent: 100 }, tidigare: { ratt: 1, antal: 2, procent: 50 }, tolkning: 'bara exit-begreppen' });
+    // Läxförhör 3 (4/9): inga exit sedan sist; A,B,C tidigare (A fel, B fel, C rätt → 33 %); D ny
+    expect(rader[1]).toMatchObject({ prov: '4.1-4.3 Begrepp', exit: null, tidigare: { ratt: 1, antal: 3, procent: 33 }, nya: { ratt: 1, antal: 1, procent: 100 }, tolkning: 'inte övat' });
+    // Första läxförhöret har inget att jämföra med
+    expect(rader).toHaveLength(2);
+  });
+
+  it('befäst = alla rätt i delkapitlet de två senaste läxförhören som testade det', () => {
+    let s = bygg();
+    // Omar: 4.2 (C) rätt i 28/8 och 4/9 → befäst; 4.1: 4/9 allt rätt men 28/8 B fel → inte befäst
+    const seg = delkapitelSegment(s, { ...f, elevId: 'b' });
+    expect([...befastaDelkapitel(seg)]).toEqual(['4.2']);
+    // Ett fjärde läxförhör där Omar har allt rätt → 4.1 blir befäst (två senaste: 4/9 och 11/9)
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-laxforhor', prov: '4.1-4.3 igen', datum: '2026-09-11', rum: 'Biologi4123',
+      rader: [{ namn: 'Omar Ali', poang: 4, maxPoang: 4, svar: sv([[A, true], [B, true], [C, true], [D, true]]) }] }).s;
+    expect([...befastaDelkapitel(delkapitelSegment(s, { ...f, elevId: 'b' }))].sort()).toEqual(['4.1', '4.2']); // 4.3 bara en gång rätt (4/9 fel)
+  });
+});

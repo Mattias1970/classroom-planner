@@ -20,7 +20,7 @@ export interface Forklaring {
 export const FORKLARINGAR = {
   laxforhor: {
     rubrik: 'Läxförhör',
-    kort: 'Görs i början av lektionen och tar med begreppen från alla tidigare delkapitel. Godkänt är 90 %.',
+    kort: 'Görs i början av lektionen och tar med begreppen från alla tidigare delkapitel. Godkänd nivå från 90 %: 90–93 Bra, 94–96 Mycket bra, 97–100 Utmärkt.',
     lang: [
       'Läxförhöret görs i Socrative i lektionens början. Det är kumulativt: varje nytt förhör innehåller begreppen från alla tidigare delkapitel, så resultatet visar hur mycket av hela kapitlet som sitter just nu, inte bara det senaste avsnittet.',
       'Godkänt är 90 % rätt. Eftersom samma begrepp återkommer räcker det inte att läsa dagen före — det man kunde för tre veckor sedan ska fortfarande sitta.',
@@ -28,7 +28,7 @@ export const FORKLARINGAR = {
   },
   exit: {
     rubrik: 'Exit ticket',
-    kort: 'Görs sista minuterna på lektionen och testar bara dagens avsnitt. Godkänt är 70 %.',
+    kort: 'Lektionsarbete: görs sista minuterna på lektionen och visar hur väl eleven följde med. Godkänd nivå från 70 %: 70–80 Bra, 81–90 Mycket bra, 91–100 Utmärkt.',
     lang: [
       'Exit ticket görs i Socrative i slutet av lektionen och handlar bara om det som gåtts igenom samma lektion. Den visar om lektionens innehåll landade.',
       'Målet är 70 %. Läxförhör och exit ticket prövar olika frågor och svårighetsgrad, så skillnaden mellan dem säger inte i sig vad den beror på — den följs upp tillsammans med eleven.',
@@ -36,9 +36,9 @@ export const FORKLARINGAR = {
   },
   ovning: {
     rubrik: 'Övning',
-    kort: 'Ett quiz som körts utanför lektionens rytm, till exempel som extraträning eller omtag.',
+    kort: 'Ett quiz som körts utanför lektionens rytm, till exempel som extraträning eller omtag. Bedöms som läxförhör: från 90 % Bra, Mycket bra, Utmärkt.',
     lang: [
-      'Övningar räknas inte som lektioner och har inget godkänt-krav. Om en övning använder samma frågor som ett läxförhör eller en exit ticket räknas den ändå in i analysen som det testet — det är ju samma begrepp som testats igen.',
+      'Övningar räknas inte som lektioner. Om en övning använder samma frågor som ett läxförhör eller en exit ticket räknas den ändå in i analysen som det testet — det är ju samma begrepp som testats igen.',
     ],
   },
   helhet: {
@@ -139,6 +139,14 @@ export const FORKLARINGAR = {
     rubrik: 'Studieplan',
     kort: 'Dagarna fram till provet med delkapitlen fördelade, svagaste först, repetition sist.',
     lang: ['Tidsuppskattningen räknar fyra minuter per begrepp att plugga in, en minut per repetition och tio minuter för ett varv i Socrative-rummet. Tre korta pass slår ett långt.'],
+  },
+  ovar: {
+    rubrik: 'Övar eleven?',
+    kort: 'För varje läxförhör: hur gick exit-begreppen från förra lektionen, den äldre läxan och de nya frågorna — var för sig.',
+    lang: [
+      'Läxförhör och exit ticket bedöms var för sig; det intressanta är vad som hände däremellan. Högt på exit-begreppen men lågt på den äldre läxan betyder att bara det senaste avsnittet lästes på. Högt på båda betyder att hela läxan — alla begrepp hittills — övades.',
+      'Delkapitel med alla rätt de två senaste läxförhören räknas som befästa och märks aldrig "öva" eller "ej godkänt", oavsett äldre resultat.',
+    ],
   },
   elevProv: {
     rubrik: 'Elev × provtillfälle',
