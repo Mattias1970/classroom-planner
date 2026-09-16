@@ -44,6 +44,7 @@ import { Oversikt } from './v3/Oversikt.js';
 import { Amnessida } from './v3/Amnessida.js';
 import { Classroom } from './v3/Classroom.js';
 import { Foraldrakontakt } from './v3/Foraldrakontakt.js';
+import { Datarepo } from './v3/Datarepo.js';
 import {
   hamtaBockerFranGitHub, konfigKomplett, laddaFranGitHub, lasGitHubConfig, sparaGitHubConfig, sparaTillGitHub,
   type GitHubConfig,
@@ -113,7 +114,7 @@ export function App() {
         <option value="klassisk">🎨 Klassisk blå</option>
         <option value="skog">🎨 Skog</option>
       </select>
-      <button className="btn sec" onClick={() => { setVy({ typ: 'oversikt' }); setHuvudvy('struktur'); setVald({ typ: 'github' }); }}>☁ GitHub</button>
+      <button className="btn sec" onClick={() => { setVy({ typ: 'datarepo' }); setHuvudvy('struktur'); setVald({ typ: 'github' }); }}>☁ Datarepo (GitHub)</button>
       <button className="btn sec" onClick={() => {
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([exportJson(s)], { type: 'application/json' }));
@@ -185,6 +186,7 @@ export function App() {
           {vy.typ === 'resultat' && <SuperTeachVy s={s} kor={kor} />}
           {vy.typ === 'elever' && <RapportVy s={s} kor={kor} meddela={setMsg} />}
           {vy.typ === 'foraldrakontakt' && <Foraldrakontakt s={s} filter={filter} setVy={setVy} />}
+          {vy.typ === 'datarepo' && <Datarepo s={s} spara={spara} kor={kor} meddela={setMsg} />}
         </Skal>
       </div>
     );

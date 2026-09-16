@@ -19,7 +19,7 @@ import { Ikon, amnesIkon } from './ikoner.js';
 
 export type V3Vy =
   | { typ: 'oversikt' } | { typ: 'planering' } | { typ: 'amne'; amneNamn: string }
-  | { typ: 'classroom' } | { typ: 'resultat' } | { typ: 'elever' } | { typ: 'foraldrakontakt' } | { typ: 'kalender' };
+  | { typ: 'classroom' } | { typ: 'resultat' } | { typ: 'elever' } | { typ: 'foraldrakontakt' } | { typ: 'kalender' } | { typ: 'datarepo' };
 
 export function vyNyckel(v: V3Vy): string { return v.typ === 'amne' ? `amne:${v.amneNamn}` : v.typ; }
 
@@ -79,6 +79,7 @@ export function Skal({ s, vy, setVy, filter, setFilter, notiser, larareNamn, ver
           <Nav v={{ typ: 'resultat' }} ikon={Ikon.staplar} text="Resultat" />
           <Nav v={{ typ: 'elever' }} ikon={Ikon.elever} text="Elever" />
           <Nav v={{ typ: 'foraldrakontakt' }} ikon={Ikon.kuvert} text="Föräldrakontakt" />
+          <Nav v={{ typ: 'datarepo' }} ikon={Ikon.klassrum} text="Datarepo" />
         </nav>
         <div className="v3-sida-fot"><Ikon.skola storlek={18} /><span>{skolaNamn}</span></div>
       </aside>

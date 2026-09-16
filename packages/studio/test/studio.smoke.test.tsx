@@ -2267,9 +2267,17 @@ describe('✨ Studio v3', () => {
       act(() => { ([...host.querySelectorAll('.v3-nav')].find((b) => b.textContent?.trim() === t) as HTMLButtonElement).click(); });
       expect(host.querySelector('.v3-nav.act')!.textContent, t).toContain(t);
     }
-    // Användarmenyn: verktygen (Ångra, GitHub, Backup, Återställ) finns och v2 kan väljas
+    // Datarepo: egen sida med nyckelfält, spara/ladda, böcker, mallar och anslutningstest
+    act(() => { ([...host.querySelectorAll('.v3-nav')].find((b) => b.textContent?.trim() === 'Datarepo') as HTMLButtonElement).click(); });
+    expect(host.querySelector('input[aria-label="Token"]')).not.toBeNull();
+    for (const t of ['🔌 Testa anslutningen', 'Spara strukturen', 'Ladda strukturen', 'Hämta böcker', 'Hämta mallar']) expect(knapp(host, t), t).not.toBeNull();
+    expect(knapp(host, 'Hämta böcker').disabled).toBe(true); // tomt token → avstängt
+    skriv(host.querySelector('input[aria-label="Ägare"]') as HTMLInputElement, 'Mattias1970');
+    skriv(host.querySelector('input[aria-label="Token"]') as HTMLInputElement, 'github_pat_test');
+    expect(knapp(host, 'Hämta böcker').disabled).toBe(false);
+    // Användarmenyn: verktygen (Ångra, Datarepo, Backup, Återställ) finns och v2 kan väljas
     act(() => { (host.querySelector('.v3-anvandare') as HTMLButtonElement).click(); });
-    for (const t of ['↩ Ångra', '☁ GitHub', '⬇ Backup']) expect(knapp(host, t)).not.toBeNull();
+    for (const t of ['↩ Ångra', '☁ Datarepo (GitHub)', '⬇ Backup']) expect(knapp(host, t)).not.toBeNull();
     act(() => { knapp(host, '🗂 Visa v2-flikarna').click(); });
     expect(knapp(host, '🗂 Struktur')).not.toBeNull(); // v2-flikarna
     act(() => { knapp(host, '✨ v3').click(); });

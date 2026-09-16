@@ -184,3 +184,27 @@ export async function hamtaFilerFranGitHub(cfg: GitHubConfig, monster: RegExp): 
   }
   return ut;
 }
+
+/** Anslutningstest: vem tokenen är, om repot nås och vilka filer som finns (böcker, struktur, mallar). */
+export async function testaAnslutning(cfg: GitHubConfig): Promise<{ anvandare: string | null; repo: string; bocker: string[]; struktur: boolean; mallar: number; fel: string | null }> {
+  const ut = { anvandare: null as string | null, repo: `${cfg.owner}/${cfg.repo}@${cfg.branch}`, bocker: [] as string[], struktur: false, mallar: 0, fel: null as string | null };
+  if (!konfigKomplett(cfg)) { ut.fel = 'Fyll i ägare, repo, gren, sökväg och token.'; return ut; }
+  try {
+    const me = await fetch('https://api.github.com/user', { headers: headers(cfg) });
+    if (me.status === 401) { ut.fel = 'Tokenen avvisas (401). Skapa en ny fine-grained PAT med Contents: Read and write på datarepot.'; return ut; }
+    if (me.ok) ut.anvandare = ((await me.json()) as { login?: string }).login ?? null;
+    const tr = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/git/trees/${encodeURIComponent(cfg.branch)}?recursive=1`, { headers: headers(cfg) });
+    if (tr.status === 404) { ut.fel = `Repot ${cfg.owner}/${cfg.repo} eller grenen ${cfg.branch} hittas inte — eller så saknar tokenen åtkomst till just det repot.`; return ut; }
+    if (tr.status === 403) { ut.fel = 'Åtkomst nekad (403). Tokenen behöver rättigheten Contents på datarepot.'; return ut; }
+    if (!tr.ok) { ut.fel = `GitHub svarade ${tr.status} när filträdet lästes.`; return ut; }
+    const trad = (await tr.json()) as { tree?: Array<{ path: string; type: string }>; truncated?: boolean };
+    const filer = (trad.tree ?? []).filter((t) => t.type === 'blob').map((t) => t.path);
+    ut.bocker = filer.filter((p) => /^books\/.+\/book\.json$/.test(p));
+    ut.struktur = filer.includes(cfg.path);
+    ut.mallar = filer.filter((p) => /^rapportmallar\/.+\.json$/.test(p)).length;
+    if (trad.truncated === true) ut.fel = 'Filträdet är för stort för ett anrop — böcker kan saknas i listan.';
+  } catch (e) {
+    ut.fel = `Nätverksfel: ${e instanceof Error ? e.message : String(e)}. Blockerar nätverket api.github.com?`;
+  }
+  return ut;
+}

@@ -181,3 +181,20 @@ body[data-layout="v3"] .studio { max-width: none; padding: 0; }
 .v3-tabell th { text-align: left; color: var(--v3-mut); font-weight: 700; padding: 6px 8px; border-bottom: 1px solid var(--v3-ram); }
 .v3-tabell td { padding: 7px 8px; border-bottom: 1px solid #EEF2F8; }
 .v3-tabell tr:hover td { background: #FAFBFE; }
+
+/* Del 125: Datarepo-sidan */
+.v3-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.v3-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--v3-mut); font-weight: 700; }
+.v3-form input { font: inherit; font-size: 14px; color: var(--v3-text); border: 1px solid var(--v3-ram); border-radius: 10px; padding: 8px 10px; font-weight: 400; }
+.v3-form-bred { grid-column: 1 / -1; }
+.v3-token { display: flex; gap: 6px; }
+.v3-token input { flex: 1; font-family: ui-monospace, Consolas, monospace; letter-spacing: .04em; }
+.v3-knapprad { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+.v3-testresultat { margin-top: 12px; border-radius: 12px; padding: 10px 14px; font-size: 13px; }
+.v3-testresultat p { margin: 4px 0; }
+.v3-testresultat.ok { background: var(--v3-gron-ljus); }
+.v3-testresultat.fel { background: var(--v3-rod-ljus); }
+.v3-synkrad { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.v3-synkkort { border: 1px solid var(--v3-ram); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+.v3-synkkort p { margin: 0; }
+.v3-synkkort .v3-knapp { align-self: flex-start; margin-top: auto; }
