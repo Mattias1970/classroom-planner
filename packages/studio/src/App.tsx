@@ -33,12 +33,17 @@ import {
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
-  resultatProcent, saknadeResultat, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type Elev, type KalenderDagRuta, type KalenderHandelse,
+  resultatProcent, saknadeResultat, planForAmne, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type Elev, type KalenderDagRuta, type KalenderHandelse,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
 } from '@planner/kernel';
 import { exportJson, importJson, lasInstallning, lasStruktur, sparaInstallning, sparaStruktur } from './store.js';
 import { RapportdesignVy, MallRendering, Trendsteg } from './rapportdesign.js';
+import { Skal, Kort, type Filter, type V3Vy } from './v3/Skal.js';
+import { Oversikt } from './v3/Oversikt.js';
+import { Amnessida } from './v3/Amnessida.js';
+import { Classroom } from './v3/Classroom.js';
+import { Foraldrakontakt } from './v3/Foraldrakontakt.js';
 import {
   hamtaBockerFranGitHub, konfigKomplett, laddaFranGitHub, lasGitHubConfig, sparaGitHubConfig, sparaTillGitHub,
   type GitHubConfig,
@@ -94,6 +99,97 @@ export function App() {
     spara(JSON.parse(fore) as Struktur, '↩ Ångrat.');
   };
 
+  // ── v3-layout (standard) eller v2 (flikarna) ──
+  const [layout, setLayout] = useState<'v3' | 'v2'>(() => lasInstallning<'v3' | 'v2'>('cp.layout', 'v3'));
+  useEffect(() => { document.body.dataset.layout = layout; sparaInstallning('cp.layout', layout); }, [layout]);
+  const [vy, setVy] = useState<V3Vy>(() => lasInstallning<V3Vy>('cp3.vy', { typ: 'oversikt' }));
+  useEffect(() => { sparaInstallning('cp3.vy', vy); }, [vy]);
+  const [filter, setFilter] = useState<Filter>(() => ({ klassId: s.klasser[0]?.id ?? '', skolarId: s.skolar[0]?.id ?? '', amneId: '', periodText: '', sok: '' }));
+  const verktyg = (
+    <>
+      <button className="btn sec" onClick={angra} title="Ångra senaste ändring (upp till 20 steg)">↩ Ångra</button>
+      <select aria-label="Färgtema" className="tema-valj" value={tema} onChange={(e) => setTema(e.target.value)} title="Färgtema">
+        <option value="varm">🎨 Varm</option>
+        <option value="klassisk">🎨 Klassisk blå</option>
+        <option value="skog">🎨 Skog</option>
+      </select>
+      <button className="btn sec" onClick={() => { setVy({ typ: 'oversikt' }); setHuvudvy('struktur'); setVald({ typ: 'github' }); }}>☁ GitHub</button>
+      <button className="btn sec" onClick={() => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([exportJson(s)], { type: 'application/json' }));
+        a.download = `studio_backup_${new Date().toISOString().slice(0, 10)}.json`;
+        a.click(); URL.revokeObjectURL(a.href);
+      }}>⬇ Backup</button>
+      <label className="btn sec file-btn">⬆ Återställ
+        <input type="file" accept="application/json" hidden onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void f.text().then((t) => { try { spara(importJson(t), '✓ Backup återställd.'); } catch (err) { setMsg(`✗ ${(err as Error).message}`); } });
+          e.currentTarget.value = '';
+        }} />
+      </label>
+      <button className="btn sec" onClick={() => setLayout(layout === 'v3' ? 'v2' : 'v3')} title="Växla mellan den nya layouten och flikarna från v2">
+        {layout === 'v3' ? '🗂 Visa v2-flikarna' : '✨ Visa v3-layouten'}
+      </button>
+    </>
+  );
+  // Notiser: förväntade prov utan resultat i vald klass (samma varning som i SuperTeach)
+  const notiser = useMemo(() => {
+    const idag = new Date().toISOString().slice(0, 10);
+    const amnen = s.amnen.filter((a) => filter.klassId === '' || a.klassId === filter.klassId);
+    const ut: Array<{ text: string; onKlick?: () => void }> = [];
+    for (const a of amnen) {
+      try {
+        const saknade = saknadeResultat(s, a.id, planForAmne(s, a.id), idag);
+        for (const x of saknade.slice(0, 3)) ut.push({ text: `${a.namn}: ${x.prov} (${kortDatum(x.datum)}) saknar resultat`, onKlick: () => setVy({ typ: 'resultat' }) });
+      } catch { /* ämne utan plan */ }
+    }
+    return ut.slice(0, 8);
+  }, [s, filter.klassId]);
+
+  if (layout === 'v3') {
+    const struktur = (
+      <div className="cols">
+        <nav className="tree" aria-label="Struktur"><Trad s={s} vald={vald} setVald={setVald} kor={kor} /></nav>
+        <main className="panel">
+          {(vald === null || !valdFinns(s, vald)) && <Start s={s} />}
+          {vald?.typ === 'skolar' && <SkolarPanel s={s} id={vald.id} kor={kor} />}
+          {vald?.typ === 'tjanst' && <TjanstPanel s={s} id={vald.id} kor={kor} setVald={setVald} />}
+          {vald?.typ === 'klass' && <KlassPanel s={s} id={vald.id} kor={kor} setVald={setVald} />}
+          {vald?.typ === 'amne' && <AmnePanel s={s} id={vald.id} kor={kor} setVald={setVald} />}
+          {vald?.typ === 'bok' && <BokPanel s={s} id={vald.id} kor={kor} />}
+          {vald?.typ === 'larare' && <LararePanel s={s} kor={kor} />}
+          {vald?.typ === 'nyttSkolar' && <NyttSkolarPanel kor={kor} setVald={setVald} />}
+          {vald?.typ === 'nyBok' && <NyBokPanel kor={kor} setVald={setVald} />}
+          {vald?.typ === 'github' && <GitHubPanel s={s} spara={spara} setMsg={setMsg} />}
+          {vald?.typ === 'schemaPdf' && <SchemaPdfPanel s={s} tolkat={vald.tolkat} kor={kor} setVald={setVald} />}
+        </main>
+      </div>
+    );
+    const larare = s.larare[0]?.namn ?? '';
+    return (
+      <div className="studio">
+        <Skal s={s} vy={vy} setVy={setVy} filter={filter} setFilter={setFilter} notiser={notiser} larareNamn={larare} verktyg={verktyg}>
+          {msg && <p className="status">{msg}</p>}
+          {vy.typ === 'oversikt' && <Oversikt s={s} filter={filter} setVy={setVy} struktur={struktur} />}
+          {vy.typ === 'planering' && (
+            <div className="v3-sida-innehall">
+              <Kort rubrik="Planering" under="årsplanering, veckoplanering, lektionskort och begrepp — samma verktyg som förut" hoger={<button className="v3-lank" onClick={() => setVy({ typ: 'kalender' })}>Kalender →</button>}>
+                <PlaneringVy s={s} kor={kor} setVald={setVald} hopp={lektionsHopp} amneIdIn={filter.amneId} />
+              </Kort>
+            </div>
+          )}
+          {vy.typ === 'amne' && <Amnessida s={s} amneNamn={vy.amneNamn} filter={filter} setVy={setVy}
+            planering={(amneId) => <Kort rubrik="Planering och lektioner" under="lektionsplan, detaljplanering, begrepp, filmer, Word"><PlaneringVy s={s} kor={kor} setVald={setVald} hopp={lektionsHopp} amneIdIn={amneId} dolAmnesval /></Kort>} />}
+          {vy.typ === 'kalender' && <Kort rubrik="Kalender" hoger={<button className="v3-lank" onClick={() => setVy({ typ: 'planering' })}>Planering →</button>}><KalenderVy s={s} onOppnaLektion={(amneId, i) => { setLektionsHopp({ amneId, i, n: Date.now() }); setVy({ typ: 'planering' }); }} /></Kort>}
+          {vy.typ === 'classroom' && <Classroom s={s} filter={filter} setVy={setVy} />}
+          {vy.typ === 'resultat' && <SuperTeachVy s={s} kor={kor} />}
+          {vy.typ === 'elever' && <RapportVy s={s} kor={kor} meddela={setMsg} />}
+          {vy.typ === 'foraldrakontakt' && <Foraldrakontakt s={s} filter={filter} setVy={setVy} />}
+        </Skal>
+      </div>
+    );
+  }
+
   return (
     <div className="studio">
       <header className="topbar">
@@ -126,6 +222,7 @@ export function App() {
             e.currentTarget.value = '';
           }} />
         </label>
+        <button className="btn sec" onClick={() => setLayout('v3')} title="Den nya layouten">✨ v3</button>
       </header>
       {huvudvy === 'kalender' || huvudvy === 'superteach' || huvudvy === 'rapporter' ? (
         <main className="panel full">
@@ -4970,9 +5067,12 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
   );
 }
 
-function PlaneringVy({ s, kor, setVald, hopp }: {
+function PlaneringVy({ s, kor, setVald, hopp, amneIdIn, dolAmnesval }: {
   s: Struktur; kor: (fn: () => Struktur, m: string) => void; setVald: (v: Vald) => void;
   hopp?: { amneId: string; i: number; n: number } | null;
+  /** v3: ämnessidan styr vilket ämne som visas. */
+  amneIdIn?: string;
+  dolAmnesval?: boolean;
 }) {
   const alternativ = s.amnen
     .map((a) => ({ a, klass: s.klasser.find((k) => k.id === a.klassId) }))
@@ -4980,6 +5080,7 @@ function PlaneringVy({ s, kor, setVald, hopp }: {
     .sort((x, y) => x.klass.namn.localeCompare(y.klass.namn, 'sv') || x.a.namn.localeCompare(y.a.namn, 'sv'));
   const [amneId, setAmneId] = useState<string>(() => s.planeringar[0]?.amneId ?? alternativ[0]?.a.id ?? '');
   useEffect(() => { if (hopp != null) setAmneId(hopp.amneId); }, [hopp?.n]);   // kalenderklick → rätt ämne
+  useEffect(() => { if (amneIdIn !== undefined && amneIdIn !== '') setAmneId(amneIdIn); }, [amneIdIn]); // v3: ämnessidan
   const valt = alternativ.some((x) => x.a.id === amneId) ? amneId : alternativ[0]?.a.id ?? '';
   if (alternativ.length === 0) {
     return <div className="card"><h2>📋 Planering</h2><p className="muted">Skapa skolår, tjänst, klass och ämne under 🗂 Struktur först.</p></div>;
@@ -4988,7 +5089,7 @@ function PlaneringVy({ s, kor, setVald, hopp }: {
   return (
     <>
       <div className="card" style={{ marginBottom: 10 }}>
-        <div className="rad" style={{ gap: 8 }}>
+        <div className="rad" style={{ gap: 8, display: dolAmnesval === true ? 'none' : undefined }}>
           <b>📋 Planera:</b>
           <select aria-label="Planera ämne" value={valt} onChange={(e) => setAmneId(e.target.value)} style={{ flex: 1, maxWidth: 420 }}>
             {alternativ.map(({ a, klass }) => (

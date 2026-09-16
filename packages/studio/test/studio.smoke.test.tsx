@@ -28,7 +28,8 @@ vi.mock('xlsx', () => ({
 
 afterEach(() => { vi.useRealTimers(); });
 
-beforeEach(() => { localStorage.clear(); resetIdRaknare(); document.body.innerHTML = ''; });
+// De befintliga testerna är skrivna mot v2-flikarna; v3-skalet testas separat nedan
+beforeEach(() => { localStorage.clear(); localStorage.setItem('cp.layout', JSON.stringify('v2')); resetIdRaknare(); document.body.innerHTML = ''; });
 
 function render(): HTMLElement {
   const host = document.createElement('div');
@@ -2225,5 +2226,53 @@ describe('🎨 Rapportdesign', () => {
     expect(host.querySelector('.rd-alla')).not.toBeNull();
     expect(host.textContent).toContain('utan resultat hoppas över');
     expect(knapp(host, '🖨 Skriv ut / spara som PDF')).not.toBeNull();
+  });
+});
+
+describe('✨ Studio v3', () => {
+  it('v3-skalet: sidopanel med Översikt/Planering/ämnen/Classroom/Resultat/Elever/Föräldrakontakt, filter i toppraden, struktur under Översikt, växling till v2', () => {
+    localStorage.setItem('cp.layout', JSON.stringify('v3'));
+    const host = render();
+    // Sidopanelen som i designen
+    for (const t of ['Översikt', 'Planering', 'Classroom', 'Resultat', 'Elever', 'Föräldrakontakt']) {
+      expect([...host.querySelectorAll('.v3-nav')].some((b) => b.textContent?.trim() === t), t).toBe(true);
+    }
+    expect(host.querySelector('.v3-nav.act')!.textContent).toContain('Översikt');
+    // Toppradens filter
+    expect(host.querySelector('select[aria-label="Filter klass"]')).not.toBeNull();
+    expect(host.querySelector('input[aria-label="Filter sök"]')).not.toBeNull();
+    // Översikt visar KPI-kort och "Data saknas" när inget finns, och strukturen (v2:s träd) ligger under
+    expect(host.querySelectorAll('.v3-kpi').length).toBeGreaterThanOrEqual(4);
+    expect(host.textContent).toContain('Data saknas');
+    expect(host.querySelector('.v3-struktur')).not.toBeNull();
+    expect(host.querySelector('.tree')).not.toBeNull(); // strukturträdet finns kvar
+    // Bygg upp klass + ämne via strukturen → ämnet dyker upp i sidopanelen med sin ikon
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    skriv(input(host, 'Tjänstens namn'), 'NO');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 NO').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Biologi');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    const bio = [...host.querySelectorAll('.v3-nav')].find((b) => b.textContent?.trim() === 'Biologi') as HTMLButtonElement;
+    expect(bio).not.toBeUndefined();
+    expect(bio.querySelector('svg')).not.toBeNull();
+    act(() => { bio.click(); });
+    expect(host.querySelector('.v3-nav.act')!.textContent).toContain('Biologi');
+    expect(host.textContent).toContain('Progression i kapitlet');
+    // Alla vyer går att öppna
+    for (const t of ['Planering', 'Classroom', 'Resultat', 'Elever', 'Föräldrakontakt']) {
+      act(() => { ([...host.querySelectorAll('.v3-nav')].find((b) => b.textContent?.trim() === t) as HTMLButtonElement).click(); });
+      expect(host.querySelector('.v3-nav.act')!.textContent, t).toContain(t);
+    }
+    // Användarmenyn: verktygen (Ångra, GitHub, Backup, Återställ) finns och v2 kan väljas
+    act(() => { (host.querySelector('.v3-anvandare') as HTMLButtonElement).click(); });
+    for (const t of ['↩ Ångra', '☁ GitHub', '⬇ Backup']) expect(knapp(host, t)).not.toBeNull();
+    act(() => { knapp(host, '🗂 Visa v2-flikarna').click(); });
+    expect(knapp(host, '🗂 Struktur')).not.toBeNull(); // v2-flikarna
+    act(() => { knapp(host, '✨ v3').click(); });
+    expect(host.querySelector('.v3-sida')).not.toBeNull();
   });
 });
