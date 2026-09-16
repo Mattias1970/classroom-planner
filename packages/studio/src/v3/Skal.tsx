@@ -135,7 +135,7 @@ export function Skal({ s, vy, setVy, filter, setFilter, notiser, larareNamn, ver
 /** KPI-kort som i designen: ikon, siffra, etikett och valfri underrad/badge. */
 export function Kpi({ ikon: I, varde, rubrik, under, badge, ton = 'bla', onKlick }: {
   ikon: (p: { storlek?: number }) => React.JSX.Element; varde: React.ReactNode; rubrik: string; under?: React.ReactNode;
-  badge?: { text: string; ton: 'gron' | 'bla' | 'gul' | 'rod' }; ton?: 'bla' | 'gron' | 'lila' | 'orange' | 'rod'; onKlick?: () => void;
+  badge?: { text: string; ton: 'gron' | 'bla' | 'gul' | 'rod' }; ton?: 'bla' | 'gron' | 'lila' | 'orange' | 'rod' | 'gul'; onKlick?: () => void;
 }) {
   const Tag = onKlick !== undefined ? 'button' : 'div';
   return (

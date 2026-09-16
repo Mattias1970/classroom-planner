@@ -23,7 +23,7 @@ export function Amnessida({ s, amneNamn, filter, setVy, planering }: {
   const klass = amne === undefined ? undefined : s.klasser.find((k) => k.id === amne.klassId);
 
   if (amne === undefined || klass === undefined) {
-    return <div className="v3-sida-innehall"><Kort rubrik={<><I storlek={18} /> {amnesNamn}</>}><DataSaknas text={`Inget ämne "${amnesNamn}" i vald klass.`} atgard={{ text: 'Öppna struktur', onKlick: () => setVy({ typ: 'oversikt' }) }} /></Kort></div>;
+    return <div className="v3-sida-innehall"><Kort rubrik={<><I storlek={18} /> {amneNamn}</>}><DataSaknas text={`Inget ämne "${amneNamn}" i vald klass.`} atgard={{ text: 'Öppna struktur', onKlick: () => setVy({ typ: 'oversikt' }) }} /></Kort></div>;
   }
 
   // Aktuellt kapitel = kapitlet för nästa lektion (eller det sista genomförda)

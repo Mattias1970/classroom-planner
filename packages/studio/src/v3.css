@@ -78,6 +78,7 @@ body[data-layout="v3"] .studio { max-width: none; padding: 0; }
 .v3-kpi.ton-lila .v3-kpi-ikon { background: var(--v3-lila-ljus); color: var(--v3-lila); }
 .v3-kpi.ton-orange .v3-kpi-ikon { background: var(--v3-orange-ljus); color: var(--v3-orange); }
 .v3-kpi.ton-rod .v3-kpi-ikon { background: var(--v3-rod-ljus); color: var(--v3-rod); }
+.v3-kpi.ton-gul .v3-kpi-ikon { background: var(--v3-gul-ljus); color: var(--v3-gul); }
 .v3-kpi-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .v3-kpi-text small { color: var(--v3-mut); font-size: 12px; }
 .v3-kpi-text b { font-size: 22px; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; }
