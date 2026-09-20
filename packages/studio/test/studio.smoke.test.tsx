@@ -2372,7 +2372,7 @@ describe('Del 127: halvklasspass är laborationer', () => {
     act(() => { knapp(host, '📝 Lektionsplan').click(); });
     expect(host.textContent).toContain('🧪 Mikroskopera celler');
     // Samma planering i kalendern (en plats för datat)
-    act(() => { knapp(host, '📅 Kalender').click(); });
+    act(() => { knapp(host, '📆 Kalender').click(); });
     expect(host.textContent).toContain('Mikroskopera celler');
   });
 });
