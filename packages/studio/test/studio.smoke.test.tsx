@@ -2339,12 +2339,14 @@ describe('Del 127: halvklasspass är laborationer', () => {
     act(() => { knapp(host, '➕ Lägg till klass').click(); });
     act(() => { treeKnapp(host, '👥 8B').click(); });
     valj(select(host, 'Ämne'), 'Biologi');
-    valj(select(host, 'Bok för ämnet'), 'gleerups-biologi-8');
     valj(select(host, 'Veckodag pass 1'), '2');   // A: tisdag
     valj(select(host, 'Veckodag pass 2'), '4');   // B: torsdag
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     const amne = lasStruktur().amnen[0];
     expect(amne).toMatchObject({ halvklass: true });
+    // Boken kopplas på ämnessidan (som i de andra Biologi-testerna) och planeringen skapas
+    valj(select(host, 'Bok för ämnet'), 'gleerups-biologi-8');
+    expect(lasStruktur().amnen[0].bokId).toBe('gleerups-biologi-8');
     act(() => { knapp(host, '▶ Skapa planering').click(); });
     // Lektionsplanen: halvklasspassen är laborationer — automatiskt
     expect(host.textContent).toContain('Laboration 1');
