@@ -1350,6 +1350,9 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
   // skapaHalvklassPlanering (samma funktion som kalender, kernel-plan och SuperTeach använder)
   const idag = new Date().toISOString().slice(0, 10);
   const halvklassPlan = useMemo(() => (a && la && bok && harLaborationsstandard(a) ? skapaHalvklassPlanering(la, a, bok, offset, idag) : null), [a, la, bok, offset, idag]);
+  const plan = useMemo(() => (halvklassPlan !== null ? halvklassPlan.a : (a && la && bok ? skapaPlanering(la, a.schema, bok, offset, a.egnaRader ?? []) : [])), [a, la, bok, offset, halvklassPlan]);
+  const planB = useMemo(() => (halvklassPlan !== null ? halvklassPlan.b : (a && la && bok && a.halvklass === true ? skapaPlanering(la, a.schemaB ?? [], bok, offset, a.egnaRader ?? []) : [])), [a, la, bok, offset, halvklassPlan]);
+  const harPlanering = s.planeringar.some((p) => p.amneId === id);
   // Genomförd planering rörs aldrig: första gången ett halvklassämne visas med laborationer
   // fryses allt före idag, så att frysdatumet inte glider med kalendern
   useEffect(() => {
@@ -1357,9 +1360,6 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
       kor(() => sattPlanFrystTill(lasStruktur(), a.id, idag), `${a.namn}: genomförd planering till och med igår är låst; laborationerna gäller från ${idag}.`);
     }
   }, [a?.id, a?.planFrystTill, a?.laborationsstandard, harPlanering]); // eslint-disable-line react-hooks/exhaustive-deps
-  const plan = useMemo(() => (halvklassPlan !== null ? halvklassPlan.a : (a && la && bok ? skapaPlanering(la, a.schema, bok, offset, a.egnaRader ?? []) : [])), [a, la, bok, offset, halvklassPlan]);
-  const planB = useMemo(() => (halvklassPlan !== null ? halvklassPlan.b : (a && la && bok && a.halvklass === true ? skapaPlanering(la, a.schemaB ?? [], bok, offset, a.egnaRader ?? []) : [])), [a, la, bok, offset, halvklassPlan]);
-  const harPlanering = s.planeringar.some((p) => p.amneId === id);
   const [flik, setFlik] = useState<'planering' | 'detalj' | 'oversikt' | 'uppgifter' | 'begrepp' | 'filmer' | 'magma' | 'anteckningar' | 'arsoversikt' | 'installningar' | 'laborationer'>('planering');
   // Om planen krymper (t.ex. laboration borttagen) får detaljindex inte peka utanför
   useEffect(() => { if (detaljIdxRef.current >= plan.length && plan.length > 0) setDetaljIdx(plan.length - 1); }, [plan.length]); // eslint-disable-line react-hooks/exhaustive-deps
