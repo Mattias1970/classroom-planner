@@ -52,14 +52,42 @@ function tillfallenFor(s: Struktur, f: DelkapitelFilter): Tillfalle[] {
   return ut;
 }
 
-function tillfallenForRaknad(s: Struktur, f: DelkapitelFilter): Tillfalle[] {
+/** Resultaten som filtret släpper igenom — oavsett om de har svar per fråga. */
+function resultatIFilter(s: Struktur, f: DelkapitelFilter): Resultat[] {
   const elevIds = new Set(s.elever.filter((e) => e.klassId === f.klassId).map((e) => e.id));
-  const rs = (s.resultat ?? []).filter((r) => elevIds.has(r.elevId)
+  return (s.resultat ?? []).filter((r) => elevIds.has(r.elevId)
     && amneMatchar(f, r.amneId)
     && kapitelMatchar(f.kapitel, r.prov, r.rum)
     && (f.kallor === undefined || f.kallor.includes(r.kalla))
-    && (f.fran === undefined || r.datum >= f.fran) && (f.till === undefined || r.datum <= f.till)
-    && (r.svar ?? []).length > 0);
+    && (f.fran === undefined || r.datum >= f.fran) && (f.till === undefined || r.datum <= f.till));
+}
+
+/** Ett tillfälle som inte kan visas fråga för fråga: resultaten saknar svar per fråga. */
+export interface TillfalleUtanSvar { nyckel: string; datum: string; tid?: string; kalla: ResultatKalla; prov: string; antal: number }
+
+/**
+ * Tillfällen i filtret vars resultat saknar svar per fråga (inklistrade resultat eller
+ * en import gjord innan svaren sparades). De syns i korten men inte i frågematrisen
+ * eller trendkollen — gränssnittet visar dem som en förklarande rad i stället för
+ * att tyst utelämna dem. Excel-filen kan importeras om, då kommer svaren med.
+ */
+export function tillfallenUtanSvar(s: Struktur, f: DelkapitelFilter): TillfalleUtanSvar[] {
+  const grupper = new Map<string, Resultat[]>();
+  for (const r of resultatIFilter(s, f)) {
+    const n = `${r.datum}|${r.kalla}|${r.prov}`;
+    grupper.set(n, [...(grupper.get(n) ?? []), r]);
+  }
+  return [...grupper.entries()]
+    .filter(([, rs]) => rs.every((r) => (r.svar ?? []).length === 0))
+    .map(([nyckel, rs]) => {
+      const tid = rs.map((r) => r.tid).filter((t): t is string => t !== undefined).sort()[0];
+      return { nyckel, datum: rs[0].datum, ...(tid !== undefined ? { tid } : {}), kalla: rs[0].kalla, prov: rs[0].prov, antal: rs.length };
+    })
+    .sort(jamforTillfalle);
+}
+
+function tillfallenForRaknad(s: Struktur, f: DelkapitelFilter): Tillfalle[] {
+  const rs = resultatIFilter(s, f).filter((r) => (r.svar ?? []).length > 0);
   const grupper = new Map<string, Resultat[]>();
   for (const r of rs) {
     const n = `${r.datum}|${r.kalla}|${r.prov}`;
@@ -295,6 +323,8 @@ export interface Fragematris {
   rader: FragaRad[];
   /** Kolumngrupper: delkapitlet och dess intervall av frågenummer. */
   grupper: Array<{ kod: string; etikett: string; ursprung: string; fran: number; till: number }>;
+  /** Tillfällen i filtret som inte kan visas fråga för fråga (resultaten saknar svar per fråga). */
+  utanSvar: TillfalleUtanSvar[];
 }
 
 /**
@@ -356,7 +386,7 @@ export function fragematris(s: Struktur, f: DelkapitelFilter): Fragematris {
     if (sista !== undefined && sista.kod === fr.kod) sista.till = fr.nr;
     else grupper.push({ kod: fr.kod, etikett: testEtikett([fr.kod], 'Test'), ursprung: fr.ursprung, fran: fr.nr, till: fr.nr });
   }
-  return { fragor, rader, grupper };
+  return { fragor, rader, grupper, utanSvar: tillfallenUtanSvar(s, f) };
 }
 
 export interface FragefilterVal {

@@ -410,3 +410,36 @@ describe('Del 122: övar eleven? och befästa delkapitel', async () => {
     expect([...befastaDelkapitel(delkapitelSegment(s, { ...f, elevId: 'b' }))].sort()).toEqual(['4.1', '4.2']); // 4.3 bara en gång rätt (4/9 fel)
   });
 });
+
+describe('Del 130: tillfällen utan svar per fråga syns — som förklaring, inte som tomrum', async () => {
+  const { fragematris, tillfallenUtanSvar } = await import('../src/domain/delkapiteltrend.js');
+
+  it('en exit ticket som klistrats in (utan svar) listas under utanSvar; förhören med svar ger rader som förut', () => {
+    let s = bygg();
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-exit', prov: '4.1 Exit', datum: '2026-08-21', rum: 'BIOLOGI8BB', tid: '09:55', rader: [
+      { namn: 'Anna Berg', poang: 3, maxPoang: 4 }, { namn: 'Omar Ali', poang: 2, maxPoang: 4 },
+    ] }).s;
+    const m = fragematris(s, f);
+    expect(m.rader).toHaveLength(3);
+    expect(m.utanSvar).toEqual([{ nyckel: '2026-08-21|socrative-exit|4.1 Exit', datum: '2026-08-21', tid: '09:55', kalla: 'socrative-exit', prov: '4.1 Exit', antal: 2 }]);
+    // Filtret gäller även här: bara läxförhör → exit-tillfället faller bort helt
+    expect(fragematris(s, { ...f, kallor: ['socrative-laxforhor'] }).utanSvar).toEqual([]);
+    expect(tillfallenUtanSvar(s, { ...f, kapitel: 5 })).toEqual([]);   // fel kapitel
+    expect(tillfallenUtanSvar(bygg(), f)).toEqual([]);                   // alla har svar
+  });
+
+  it('importeras Excel-filen om (samma elev, typ och prov) ersätts de svarslösa resultaten och tillfället får en riktig rad', () => {
+    let s = bygg();
+    const utan = { klassId: 'k' as const, amneId: 'bi', kalla: 'socrative-exit' as const, prov: '4.1 Exit', datum: '2026-08-21', rum: 'BIOLOGI8BB' };
+    s = importeraResultat(s, { ...utan, rader: [{ namn: 'Anna Berg', poang: 1, maxPoang: 2 }, { namn: 'Omar Ali', poang: 2, maxPoang: 2 }] }).s;
+    expect(fragematris(s, f).utanSvar).toHaveLength(1);
+    s = importeraResultat(s, { ...utan, rader: [
+      { namn: 'Anna Berg', poang: 1, maxPoang: 2, svar: sv([[A, true], [B, false]]) },
+      { namn: 'Omar Ali', poang: 2, maxPoang: 2, svar: sv([[A, true], [B, true]]) },
+    ] }).s;
+    const m = fragematris(s, f);
+    expect(m.utanSvar).toEqual([]);
+    expect(m.rader.map((r) => `${r.datum} ${r.kalla}`)).toContain('2026-08-21 socrative-exit');
+    expect((s.resultat ?? []).filter((r) => r.prov === '4.1 Exit')).toHaveLength(2);
+  });
+});

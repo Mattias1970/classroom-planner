@@ -1466,9 +1466,12 @@ describe('📊 SuperTeach', () => {
     const ordning = [...fmKort.querySelectorAll('.st-fmverktyg .chipbtn')].pop() as HTMLButtonElement;
     act(() => { ordning.click(); });
     expect(fmKort.textContent).toContain('↓ Senaste först');
-    const laxKnapp = [...fmKort.querySelectorAll('.st-fmverktyg .chipbtn')].find((b) => b.textContent === 'Läxförhör')!;
-    act(() => { (laxKnapp as HTMLButtonElement).click(); });
-    expect(laxKnapp.getAttribute('aria-pressed')).toBe('true');
+    // Del 130: under Alla lyser alla typer; ett klick på en tänd typ släcker just den
+    const typKnapp = (t: string) => [...fmKort.querySelectorAll('.st-fmverktyg .chipbtn')].find((b) => b.textContent === t) as HTMLButtonElement;
+    expect(typKnapp('Läxförhör').getAttribute('aria-pressed')).toBe('true');
+    act(() => { typKnapp('Läxförhör').click(); });
+    expect(typKnapp('Läxförhör').getAttribute('aria-pressed')).toBe('false');
+    expect(typKnapp('Exit').getAttribute('aria-pressed')).toBe('true');
     expect(fmKort.querySelector('.st-fmverktyg .chipbtn')!.getAttribute('aria-pressed')).toBe('false'); // 'Alla' släcks
 
     // Ordning: frågematris och trendkoll före de fällbara sektionerna; import högst upp
@@ -2509,5 +2512,62 @@ describe('Del 129: lektioner tas bort, ersätts och utökas i Lektionsplan', () 
     // Lektionsnumret i lektionskortet och detaljplaneringen följer tabellen
     act(() => { [...host.querySelectorAll('table.plan tbody tr')][3].querySelector('td.lekt-avsnitt')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
     expect(host.textContent).toContain('Lektion 4');
+  });
+});
+
+describe('Del 130: tillfällen utan svar per fråga förklaras i frågematrisen; Alla tänder alla typer', () => {
+  it('exit utan svar visas som förklarande rad, filregistret visar ✗ saknas, och typchipparna följer Alla', async () => {
+    const { importeraResultat, registreraFil, laggTillSkolar, laggTillTjanst, laggTillKlass, laggTillAmne, laggTillElev, tomStruktur } = await import('@planner/kernel');
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', schema: [{ dag: 5, start: '08:10', slut: '09:10' }] });
+    s = laggTillElev(s, { id: 'e1', klassId: 'k', namn: 'Anna Testsson', grupp: 'A' });
+    s = laggTillElev(s, { id: 'e2', klassId: 'k', namn: 'Omar Provlund', grupp: 'B' });
+    const svar = (a: boolean, b: boolean) => [{ fraga: 'Cellens chef?', svar: a ? 'D. • cellkärna' : 'A. • cellteorin', ratt: a, facit: 'D. • cellkärna' }, { fraga: 'Cellens hud?', svar: b ? 'C. • cellmembran' : 'B. • cellandning', ratt: b, facit: 'C. • cellmembran' }];
+    // Exit torsdag 17/9 — klistrad, utan svar per fråga
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-exit', prov: '6.1 Begrepp + cellens delar', datum: '2026-09-17', tid: '09:31', rum: 'BIOLOGI8BB', rader: [
+      { namn: 'Anna Testsson', poang: 1, maxPoang: 2 }, { namn: 'Omar Provlund', poang: 2, maxPoang: 2 }] }).s;
+    s = registreraFil(s, { amneId: 'bi', filnamn: 'exit.xlsx', importerad: '2026-09-20T10:00:00Z', kalla: 'socrative-exit', prov: '6.1 Begrepp + cellens delar', datum: '2026-09-17', traffar: 2, rum: 'BIOLOGI8BB' });
+    // Läxförhör fredag 18/9 — ur Excel, med svar
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-laxforhor', prov: '6.1 Begrepp + cellens delar', datum: '2026-09-18', tid: '08:32', rum: 'BIOLOGI8BB', rader: [
+      { namn: 'Anna Testsson', poang: 1, maxPoang: 2, svar: svar(true, false) }, { namn: 'Omar Provlund', poang: 2, maxPoang: 2, svar: svar(true, true) }] }).s;
+    s = registreraFil(s, { amneId: 'bi', filnamn: 'lax.xlsx', importerad: '2026-09-20T10:00:00Z', kalla: 'socrative-laxforhor', prov: '6.1 Begrepp + cellens delar', datum: '2026-09-18', traffar: 2, rum: 'BIOLOGI8BB' });
+    window.localStorage.setItem('classroom-planner.studio.v2', JSON.stringify(s));
+    localStorage.setItem('st.kallor', JSON.stringify(['socrative-laxforhor', 'socrative-exit']));
+
+    const host = render();
+    act(() => { knapp(host, '📊 SuperTeach').click(); });
+    valj(select(host, 'SuperTeach ämne'), 'bi');
+
+    // Matrisen: läxförhöret som vanlig rad, exit-tillfället som förklarande rad — inte tyst borta
+    const tabell = host.querySelector('.st-fmtabell')!;
+    expect(tabell.querySelectorAll('tbody tr')).toHaveLength(2);
+    const utan = tabell.querySelector('tr.st-fm-utansvar')!;
+    expect(utan.textContent).toContain('17 sep');
+    expect(utan.textContent).toContain('2 resultat utan svar per fråga');
+    expect(utan.textContent).toContain('importera om');
+    // Dagfiltret listar båda dagarna (samma som förut)
+    expect([...select(host, 'Lektionsdag').querySelectorAll('option')].map((o) => o.textContent)).toEqual(['alla', 'tor 17 sep · exit', 'fre 18 sep · läxförhör']);
+
+    // Typ-chipparna: Alla tänder alla; ett klick på Exit släcker bara Exit; tänds den igen är det Alla
+    const chip = (t: string) => [...host.querySelectorAll<HTMLButtonElement>('.st-fmverktyg .chipbtn')].find((b) => b.textContent === t)!;
+    expect(['Alla', 'Läxförhör', 'Exit', 'Övning'].map((t) => chip(t).classList.contains('act'))).toEqual([true, true, true, true]);
+    act(() => { chip('Exit').click(); });
+    expect(['Alla', 'Läxförhör', 'Exit', 'Övning'].map((t) => chip(t).classList.contains('act'))).toEqual([false, true, false, true]);
+    expect(tabell.querySelector('tr.st-fm-utansvar')).toBeNull();   // exit-raden följer typfiltret
+    act(() => { chip('Exit').click(); });
+    expect(chip('Alla').classList.contains('act')).toBe(true);
+    act(() => { chip('Läxförhör').click(); });                         // Alla → bara Läxförhör släckt
+    expect(['Alla', 'Läxförhör', 'Exit', 'Övning'].map((t) => chip(t).classList.contains('act'))).toEqual([false, false, true, true]);
+    act(() => { chip('Alla').click(); });
+    expect(chip('Läxförhör').classList.contains('act')).toBe(true);
+
+    // Filregistret: kolumnen Frågesvar
+    const filer = host.querySelector('.st-filer')!;
+    act(() => { (filer.querySelector('summary') as HTMLElement).click(); });
+    const rader = [...filer.querySelectorAll('tbody tr')].map((tr) => tr.textContent ?? '');
+    expect(rader.find((r) => r.includes('2026-09-17'))).toContain('✗ saknas');
+    expect(rader.find((r) => r.includes('2026-09-18'))).toContain('✓ 2 frågor');
   });
 });

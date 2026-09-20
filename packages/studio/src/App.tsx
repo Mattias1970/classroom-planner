@@ -2679,6 +2679,13 @@ const KORT_FARG: Record<KortKalla, string> = {
 };
 const KORT_IKON: Record<KortKalla, string> = { 'socrative-laxforhor': '✅', 'socrative-exit': '🎟', 'socrative-ovning': '✏️', magma: '🧠', digiexam: '📝', helhet: '📊' };
 const KORT_INFO: Record<KortKalla, ForklaringId> = { 'socrative-laxforhor': 'laxforhor', 'socrative-exit': 'exit', 'socrative-ovning': 'ovning', magma: 'helhet', digiexam: 'helhet', helhet: 'helhet' };
+/** Del 130: har filens resultat svar per fråga? (krävs för frågematris och trendkoll) */
+function svarStatus(s: Struktur, fp: { amneId: string; kalla: ResultatKalla; prov: string; datum?: string }): { antal: number; medSvar: number; fragor: number } {
+  const rs = (s.resultat ?? []).filter((r) => r.amneId === fp.amneId && r.kalla === fp.kalla && r.prov === fp.prov && (fp.datum === undefined || r.datum === fp.datum));
+  const med = rs.filter((r) => (r.svar ?? []).length > 0);
+  return { antal: rs.length, medSvar: med.length, fragor: Math.max(0, ...med.map((r) => r.svar!.length)) };
+}
+
 const KORT_RUBRIK: Record<KortKalla, string> = { 'socrative-laxforhor': 'Läxförhör', 'socrative-exit': 'Exit tickets', 'socrative-ovning': 'Övning', magma: 'Magma test', digiexam: 'DigiExam prov', helhet: 'Helhet' };
 const KLUSTER_FARG = { stigande: '#1B5E20', stabil: '#2f5aa8', riskzon: '#B71C1C', ojamn: '#E65100' } as const;
 function initialer(namn: string): string {
@@ -3472,6 +3479,8 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
   const fmRader = [...fm.rader]
     .filter((r) => fmTyper.length === 0 || fmTyper.includes(r.kalla))
     .sort((a, b) => (fmNyastForst ? -jamforTillfalle(a, b) : jamforTillfalle(a, b)));
+  // Tillfällen som filtret släpper igenom men som saknar svar per fråga — visas som förklarande rader
+  const fmUtanSvar = fm.utanSvar.filter((t) => fmTyper.length === 0 || fmTyper.includes(t.kalla));
   const traffar = useMemo(
     () => filtreraFragor({ ...fm, rader: fmRader }, { min: fMin, max: fMax, ...(valdaTest.length > 0 ? { tillfallen: valdaTest } : {}) }),
     [fm, fmTyper, fmNyastForst, fMin, fMax, valdaTest], // eslint-disable-line react-hooks/exhaustive-deps
@@ -3590,17 +3599,26 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
           <small className="muted">Typ:</small>
           <button className={`chipbtn ${fmTyper.length === 0 ? 'act' : ''}`} title="Visa alla typer" aria-pressed={fmTyper.length === 0}
             onClick={() => setFmTyper([])}>Alla</button>
-          {FM_TYPER.map((k) => (
-            <button key={k} className={`chipbtn ${fmTyper.includes(k) ? 'act' : ''}`} aria-pressed={fmTyper.includes(k)}
-              onClick={() => setFmTyper(fmTyper.includes(k) ? fmTyper.filter((x) => x !== k) : [...fmTyper, k])}>{TYPNAMN[k]}</button>
-          ))}
+          {FM_TYPER.map((k) => {
+            // Alla = alla typer tända; ett klick på en tänd typ släcker just den, tänds alla igen blir det Alla
+            const tand = fmTyper.length === 0 || fmTyper.includes(k);
+            const klick = () => {
+              const ny = fmTyper.length === 0 ? FM_TYPER.filter((x) => x !== k) : (fmTyper.includes(k) ? fmTyper.filter((x) => x !== k) : [...fmTyper, k]);
+              setFmTyper(ny.length === FM_TYPER.length ? [] : ny);
+            };
+            return (
+              <button key={k} className={`chipbtn ${tand ? 'act' : ''}`} aria-pressed={tand} onClick={klick}>{TYPNAMN[k]}</button>
+            );
+          })}
           <span className="spacer" />
           <small className="muted">Ordning:</small>
           <button className="chipbtn act" title="Byt sorteringsordning" onClick={() => setFmNyastForst(!fmNyastForst)}>
             {fmNyastForst ? '↓ Senaste först' : '↑ Äldsta först'}
           </button>
         </div>
-        {fm.fragor.length === 0 ? <p className="muted small">Kräver förhör med frågedata (filimport).</p> : (<>
+        {fm.fragor.length === 0 ? (
+          <p className="muted small">Kräver förhör med frågedata (filimport).{fmUtanSvar.length > 0 && <> ⚠ {fmUtanSvar.length} tillfälle{fmUtanSvar.length === 1 ? '' : 'n'} i urvalet saknar svar per fråga ({fmUtanSvar.map((t) => `${kortDatum(t.datum)} ${TYPNAMN[t.kalla]}`).join(', ')}) — importera Excel-filerna igen under 📥 Importera med "importera om" ibockat.</>}</p>
+        ) : (<>
           <div className="st-scroll">
             <table className="tbl st-fmtabell">
               <thead>
@@ -3634,6 +3652,15 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
                         onClick={() => setVald(vald?.nr === fr.nr ? null : fr)} />
                     );
                   })}
+                </tr>
+              ))}
+              {fmUtanSvar.map((t) => (
+                <tr key={`utan-${t.nyckel}`} className="st-fm-utansvar" title="Resultaten importerades utan svar per fråga — de räknas i korten men kan inte visas fråga för fråga">
+                  <td className="small muted">v{isoVeckaLbl(t.datum)}</td>
+                  <td className="small muted">{kortDatum(t.datum)}{t.tid !== undefined && <> <b>{t.tid}</b></>}</td>
+                  <td className="small"><span className={`st-typ ${t.kalla}`}>{TYPNAMN[t.kalla]}</span></td>
+                  <td className="st-fmprov">{t.prov}</td>
+                  <td colSpan={Math.max(1, fm.fragor.length)} className="small muted st-fm-utansvar-text">⚠ {t.antal} resultat utan svar per fråga — importera Excel-filen igen under 📥 Importera (bocka "importera om"), så kommer frågorna med.</td>
                 </tr>
               ))}</tbody>
             </table>
@@ -5217,11 +5244,16 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
             <details className="st-filer">
               <summary>📁 {filer.length} importerade filer <small className="muted">· ändra typ (t.ex. märk som Övning) eller ta bort filen och dess resultat</small></summary>
               <table className="tbl small">
-                <thead><tr><th>Datum</th><th>Ämne</th><th>Typ</th><th>Prov</th><th>Rum</th><th>Träffar</th><th>Ändra / ta bort</th></tr></thead>
-                <tbody>{filer.map((fp) => (
+                <thead><tr><th>Datum</th><th>Ämne</th><th>Typ</th><th>Prov</th><th>Rum</th><th>Träffar</th><th title="Svar per fråga — krävs för frågematris och trendkoll">Frågesvar</th><th>Ändra / ta bort</th></tr></thead>
+                <tbody>{filer.map((fp) => {
+                  const sv = svarStatus(s, fp);
+                  return (
                   <tr key={fp.id}>
                     <td>{fp.datum ?? '—'}</td><td>{amnen.find((a) => a.id === fp.amneId)?.namn ?? '—'}</td><td><span className={`st-typ ${fp.kalla}`}>{TYPNAMN[fp.kalla]}</span></td>
                     <td title={fp.filnamn}>{fp.prov}</td><td>{fp.rum ?? '—'}</td><td>{fp.traffar ?? '—'}</td>
+                    <td className="small">{sv.antal === 0 ? <span className="muted">—</span> : sv.medSvar === 0
+                      ? <span className="st-svar-saknas" title="Importera Excel-filen igen med 'importera om' ibockat">✗ saknas</span>
+                      : <span title={`${sv.medSvar} av ${sv.antal} resultat har svar per fråga`}>✓ {sv.fragor} frågor</span>}</td>
                     <td className="rad" style={{ gap: 4 }}>
                       <select aria-label={`Ändra typ för ${fp.prov}`} value={fp.kalla}
                         onChange={(e) => { const ny = e.target.value as ResultatKalla; if (ny !== fp.kalla) kor(() => andraKalla(lasStruktur(), { amneId: fp.amneId, prov: fp.prov, datum: fp.datum ?? '', franKalla: fp.kalla, tillKalla: ny }), `${fp.prov} är nu märkt som ${TYPNAMN[ny]}.`); }}>
@@ -5232,7 +5264,8 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
                         onClick={() => kor(() => taBortFil(lasStruktur(), fp.id), `${fp.filnamn} borttagen — resultaten för ${fp.prov} är raderade.`)}>🗑</button>
                     </td>
                   </tr>
-                ))}</tbody>
+                  );
+                })}</tbody>
               </table>
               <div className="rad"><span className="spacer" />
                 <button className="btn sm" onClick={() => { if (window.confirm(`Ta bort ALLA resultat och filposter för ${klass.namn}${amne !== undefined ? ` · ${amne.namn}` : ''}?`)) kor(() => rensaResultat(lasStruktur(), klass.id, amne?.id), `Alla resultat för ${klass.namn}${amne !== undefined ? ` · ${amne.namn}` : ''} är raderade.`); }}>🗑 Rensa alla</button>
@@ -5279,7 +5312,7 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
 
       {/* ── Import: klistra in ── */}
       <div className="uppg-kort">
-        <b>📥 Klistra in resultat</b> <small className="muted">Rader från valfri export: <code>Namn ⇥ Poäng ⇥ Max</code> (Max kan utelämnas — fältet nedan används).</small>
+        <b>📥 Klistra in resultat</b> <small className="muted">Rader från valfri export: <code>Namn ⇥ Poäng ⇥ Max</code> (Max kan utelämnas — fältet nedan används). Inklistrade resultat saknar svar per fråga: de räknas i korten men syns inte i frågematrisen eller trendkollen — för det krävs Excel-filen.</small>
         <div className="rad" style={{ flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
           <select aria-label="Källa" value={kalla} onChange={(e) => setKalla(e.target.value as ResultatKalla)}>
             {ALLA_KALLOR.map((k) => <option key={k} value={k}>{KALLNAMN[k]}</option>)}
