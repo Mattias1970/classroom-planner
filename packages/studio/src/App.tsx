@@ -1356,7 +1356,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
     if (a !== undefined && harLaborationsstandard(a) && a.planFrystTill === undefined && s.planeringar.some((p) => p.amneId === a.id)) {
       kor(() => sattPlanFrystTill(lasStruktur(), a.id, idag), `${a.namn}: genomförd planering till och med igår är låst; laborationerna gäller från ${idag}.`);
     }
-  }, [a?.id, a?.planFrystTill, a?.laborationsstandard]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [a?.id, a?.planFrystTill, a?.laborationsstandard, harPlanering]); // eslint-disable-line react-hooks/exhaustive-deps
   const plan = useMemo(() => (halvklassPlan !== null ? halvklassPlan.a : (a && la && bok ? skapaPlanering(la, a.schema, bok, offset, a.egnaRader ?? []) : [])), [a, la, bok, offset, halvklassPlan]);
   const planB = useMemo(() => (halvklassPlan !== null ? halvklassPlan.b : (a && la && bok && a.halvklass === true ? skapaPlanering(la, a.schemaB ?? [], bok, offset, a.egnaRader ?? []) : [])), [a, la, bok, offset, halvklassPlan]);
   const harPlanering = s.planeringar.some((p) => p.amneId === id);

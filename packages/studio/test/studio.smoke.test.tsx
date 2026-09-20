@@ -2377,16 +2377,21 @@ describe('Del 127: halvklasspass är laborationer', () => {
     // leta efter en viss laboration som kan ligga i en annan vecka.
     act(() => { knapp(host, '📆 Kalender').click(); });
     const st = lasStruktur();
-    const kal = kalenderHandelser(st, st.skolar[0].id).filter((x) => x.amneId === st.amnen[0].id);
+    // Genomförd planering är låst till och med igår (frysdatumet sattes när planeringen skapades)
+    const idag = new Date().toISOString().slice(0, 10);
+    expect(st.amnen[0].planFrystTill).toBe(idag);
+    const kal = kalenderHandelser(st, st.skolar[0].id, idag).filter((x) => x.amneId === st.amnen[0].id);
     expect(kal.some((x) => x.avsnitt === '🧪 Mikroskopera celler')).toBe(true);
-    const planRader = planForAmne(st, st.amnen[0].id).filter((r) => r.datum !== null);
+    const planRader = planForAmne(st, st.amnen[0].id, idag).filter((r) => r.datum !== null);
     expect(kal.length).toBe(planRader.length);
     for (const h of kal) expect(planRader.some((r) => r.datum === h.datum && r.lektion.avsnitt === h.avsnitt), `${h.datum} ${h.avsnitt}`).toBe(true);
-    // Det som syns i veckovyn just nu står också i planen: varje Biologi-rad i vyn har en
-    // händelse med samma rubrik i kernelns kalender (felmeddelandet listar båda om det skiljer)
+    // Veckovyn öppnar på dagens vecka: varje händelse kernelns kalender har den veckan syns i vyn
+    const d = new Date(`${idag}T12:00:00Z`);
+    const manDag = new Date(d); manDag.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+    const freDag = new Date(manDag); freDag.setUTCDate(manDag.getUTCDate() + 4);
+    const iso = (x: Date) => x.toISOString().slice(0, 10);
+    const veckans = kal.filter((h) => h.datum >= iso(manDag) && h.datum <= iso(freDag));
     const kalText = host.textContent ?? '';
-    const visadeRubriker = [...host.querySelectorAll('.kal-h, .kal-handelse, [title*="Biologi"]')].map((el) => el.textContent ?? '');
-    const kalRubriker = kal.map((h) => `${h.datum} ${h.avsnitt}`).join(' | ');
-    expect(kal.some((h) => kalText.includes(h.avsnitt)), `Vyn: ${visadeRubriker.join(' | ').slice(0, 300)} — Kernel: ${kalRubriker.slice(0, 300)}`).toBe(true);
+    for (const h of veckans) expect(kalText, `${h.datum} ${h.avsnitt} saknas i veckovyn`).toContain(h.avsnitt);
   });
 });
