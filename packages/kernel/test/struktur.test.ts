@@ -548,7 +548,7 @@ describe('Del 91: lektionsnamn och Socrative-QR', async () => {
 });
 
 describe('Del 127: halvklasspass som laborationer', async () => {
-  const { skapaHalvklassPlanering, vaxlaLabUndantag, sparaLaborationer, sattLaborationsstandard, harLaborationsstandard, sessionsNyckel } = await import('../src/domain/struktur.js');
+  const { skapaHalvklassPlanering, vaxlaLabUndantag, sparaLaborationer, sattLaborationsstandard, harLaborationsstandard, sessionsNyckel, sattPassVal, passValFor } = await import('../src/domain/struktur.js');
   const halvklassAmne = () => {
     let s = tomStruktur();
     s = laggTillSkolar(s, LA);
@@ -574,7 +574,9 @@ describe('Del 127: halvklasspass som laborationer', async () => {
     expect(h.b[0]).toMatchObject({ datum: '2026-08-17', lektion: { avsnitt: '1.1 Bråk', del: 1 } });
     expect(h.a[1]).toMatchObject({ datum: '2026-08-18', lektion: { typ: 'laboration', avsnitt: 'Laboration 1' } });
     expect(h.b[1]).toMatchObject({ datum: '2026-08-20', lektion: { typ: 'laboration', avsnitt: 'Laboration 1' } });
-    expect(h.sessioner[0]).toMatchObject({ nyckel: '2026-08-18|10:00', a: { datum: '2026-08-18' }, b: { datum: '2026-08-20' }, vanlig: false, laboration: null });
+    // Sessionerna listar alla pass: måndagen är helklass (teori), tisdag/torsdag halvklass (lab)
+    expect(h.sessioner[0]).toMatchObject({ nyckel: '2026-08-17|10:00', helklass: true, typ: 'teori', standard: true, rubrik: '1.1 Bråk' });
+    expect(h.sessioner[1]).toMatchObject({ nyckel: '2026-08-18|10:00', helklass: false, a: { datum: '2026-08-18' }, b: { datum: '2026-08-20' }, typ: 'lab', standard: true, laboration: null });
     // Bokens tre lektioner ryms på helklasspassen (måndagar) — inga rader med datum null
     expect(h.a.filter((r) => r.datum === null)).toHaveLength(0);
     // Andra helklasspasset (mån 24/8) får del 2, inte laborationen
@@ -585,7 +587,7 @@ describe('Del 127: halvklasspass som laborationer', async () => {
     let s = halvklassAmne();
     s = sparaLaborationer(s, 'bi', [{ id: 'l1', rubrik: 'Mikroskopera celler', delkapitel: '1.1', rapport: true }, { id: 'l2', rubrik: 'Osmos i potatis' }]);
     const h = skapaHalvklassPlanering(LA, s.amnen[0], BOK);
-    const labbar = h.sessioner.slice(0, 3);
+    const labbar = h.sessioner.filter((x) => !x.helklass).slice(0, 3);
     expect(labbar.map((x) => x.laboration?.rubrik ?? null)).toEqual(['Mikroskopera celler', 'Osmos i potatis', null]);
     expect(h.a[1].lektion).toMatchObject({ avsnitt: '🧪 Mikroskopera celler', laxa: 'Labbrapport', mal: 'Hör till 1.1' });
   });
@@ -593,20 +595,67 @@ describe('Del 127: halvklasspass som laborationer', async () => {
   it('ta bort laborationen på ett pass → nästa vanliga lektion laddas där, i båda grupperna', () => {
     let s = halvklassAmne();
     s = vaxlaLabUndantag(s, 'bi', sessionsNyckel('2026-08-18', '10:00'));
-    expect(s.amnen[0].labUndantag).toEqual(['2026-08-18|10:00']);
+    expect(passValFor(s.amnen[0], '2026-08-18|10:00')).toEqual({ typ: 'teori', kalla: 'nasta' });
     const h = skapaHalvklassPlanering(LA, s.amnen[0], BOK);
     // tis 18/8 (A) och tor 20/8 (B) får nu 1.1 Bråk del 2 — lektionen som kommer efter
     expect(h.a[1]).toMatchObject({ datum: '2026-08-18', lektion: { avsnitt: '1.1 Bråk', del: 2 } });
     expect(h.b[1]).toMatchObject({ datum: '2026-08-20', lektion: { avsnitt: '1.1 Bråk', del: 2 } });
-    expect(h.sessioner[0]).toMatchObject({ vanlig: true, laboration: undefined });
+    expect(h.sessioner[1]).toMatchObject({ typ: 'teori', standard: false, val: { typ: 'teori', kalla: 'nasta' } });
     // Måndagen efter får då provet (lektion 3), och nästa halvklasspass är laboration igen
     expect(h.a.find((r) => r.datum === '2026-08-24')!.lektion.typ).toBe('exam');
     expect(h.a.find((r) => r.datum === '2026-08-25')!.lektion.typ).toBe('laboration');
     // Slå på igen
     s = vaxlaLabUndantag(s, 'bi', sessionsNyckel('2026-08-18', '10:00'));
-    expect(s.amnen[0].labUndantag).toEqual([]);
+    expect(passValFor(s.amnen[0], sessionsNyckel('2026-08-18', '10:00'))).toBeNull();
     // Standarden kan stängas av → vanlig planering
     s = sattLaborationsstandard(s, 'bi', false);
     expect(harLaborationsstandard(s.amnen[0])).toBe(false);
+  });
+});
+
+describe('Del 127b: val per pass — laboration på helklasstid, teori på halvklasstid, egna lektioner', async () => {
+  const { skapaHalvklassPlanering, sattPassVal, sparaLaborationer, harLaborationsstandard } = await import('../src/domain/struktur.js');
+  const bygg2 = () => {
+    let s = tomStruktur();
+    s = laggTillSkolar(s, LA); s = sparaBok(s, BOK);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO 8' });
+    s = laggTillKlass(s, { id: 'k8b', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, {
+      id: 'bi', klassId: 'k8b', namn: 'Biologi', bokId: BOK.id, halvklass: true,
+      schema: [{ dag: 1, start: '10:00', slut: '11:00' }, { dag: 2, start: '10:00', slut: '11:00' }],
+      schemaB: [{ dag: 1, start: '10:00', slut: '11:00' }, { dag: 4, start: '10:00', slut: '11:00' }],
+    });
+    return sparaLaborationer(s, 'bi', [{ id: 'l1', rubrik: 'Celler' }, { id: 'l2', rubrik: 'Osmos' }]);
+  };
+  it('halvklass ger laborationer automatiskt — utan att något slagits på', () => {
+    const s = bygg2();
+    expect(s.amnen[0].laborationsstandard).toBeUndefined();
+    expect(harLaborationsstandard(s.amnen[0])).toBe(true);
+  });
+  it('laboration på helklasstid: nästa laboration ur listan; boken skjuts fram', () => {
+    let s = bygg2();
+    s = sattPassVal(s, 'bi', '2026-08-17|10:00', { typ: 'lab', kalla: 'nasta' });
+    const h = skapaHalvklassPlanering(LA, s.amnen[0], BOK);
+    expect(h.sessioner[0]).toMatchObject({ helklass: true, typ: 'lab', laboration: { rubrik: 'Celler' }, rubrik: '🧪 Celler' });
+    expect(h.sessioner[1]).toMatchObject({ helklass: false, typ: 'lab', laboration: { rubrik: 'Osmos' } }); // nästa i listan
+    expect(h.a.find((r) => r.datum === '2026-08-24')!.lektion).toMatchObject({ avsnitt: '1.1 Bråk', del: 1 }); // boken börjar först måndagen efter
+  });
+  it('egen lektion och egen laboration tar inget ur köerna', () => {
+    let s = bygg2();
+    s = sattPassVal(s, 'bi', '2026-08-18|10:00', { typ: 'teori', kalla: 'egen', rubrik: 'Repetition inför provet', beskrivning: 'Gå igenom begreppen' });
+    s = sattPassVal(s, 'bi', '2026-08-24|10:00', { typ: 'lab', kalla: 'egen', rubrik: 'Fältstudie vid dammen' });
+    const h = skapaHalvklassPlanering(LA, s.amnen[0], BOK);
+    expect(h.sessioner[1]).toMatchObject({ typ: 'teori', standard: false, rubrik: 'Repetition inför provet' });
+    expect(h.a[1].lektion).toMatchObject({ typ: 'regular', genomgang: 'Gå igenom begreppen' });
+    expect(h.b[1]).toMatchObject({ datum: '2026-08-20', lektion: { avsnitt: 'Repetition inför provet' } }); // grupp B samma innehåll
+    const man24 = h.sessioner.find((x) => x.nyckel === '2026-08-24|10:00')!;
+    expect(man24).toMatchObject({ typ: 'lab', rubrik: '🧪 Fältstudie vid dammen', laboration: null });
+    // Boken: 1.1 del 1 på 17/8, del 2 på 31/8 (24/8 var egen lab) — inget ur boken förbrukades av de egna
+    expect(h.a.find((r) => r.datum === '2026-08-31')!.lektion).toMatchObject({ avsnitt: '1.1 Bråk', del: 2 });
+    // Listans laborationer ligger orörda på nästa halvklasspass
+    expect(h.sessioner.find((x) => x.nyckel === '2026-08-25|10:00')!.laboration).toMatchObject({ rubrik: 'Celler' });
+    // Ta bort valet → standard igen
+    s = sattPassVal(s, 'bi', '2026-08-18|10:00', null);
+    expect(skapaHalvklassPlanering(LA, s.amnen[0], BOK).sessioner[1]).toMatchObject({ typ: 'lab', standard: true });
   });
 });

@@ -80,8 +80,14 @@ export interface Amne {
   laborationsstandard?: boolean;
   /** Laborationsplaneringen — läggs ut i ordning på halvklasspassen. */
   laborationer?: Laboration[];
-  /** Halvklasspass (nyckel 'YYYY-MM-DD|HH:MM' för grupp A:s pass) som i stället får nästa vanliga lektion. */
+  /** Äldre form av passVal: halvklasspass (nyckel 'YYYY-MM-DD|HH:MM') som i stället får nästa teorilektion. */
   labUndantag?: string[];
+  /**
+   * Val per pass (nyckel = grupp A:s 'YYYY-MM-DD|HH:MM'). Standard utan val: helklasspass →
+   * nästa teorilektion ur boken, halvklasspass → nästa laboration ur listan. Ett val byter:
+   * teori på halvklasstid, laboration på helklasstid, eller en helt egen lektion/laboration.
+   */
+  passVal?: Record<string, PassVal>;
   /** NO+Tk-blockkurs: gemensamt id för de fyra delämnena som läses i följd. */
   noGrupp?: string;
   /** Position 0–3 i NO+Tk-blockens läsordning. */
@@ -91,6 +97,20 @@ export interface Amne {
 }
 
 /** Egen rad som läraren infogar i ämnets planering utöver bokens lektioner. */
+/**
+ * Vad ett pass ska innehålla när standarden inte gäller.
+ *  - typ 'teori' + kalla 'nasta': nästa teorilektion i planeringen (ur boken)
+ *  - typ 'lab'   + kalla 'nasta': nästa laboration i planeringen (ur listan)
+ *  - kalla 'egen': en helt ny lektion/laboration med egen rubrik och egen detaljplanssida;
+ *    tar inte något ur bokens eller listans kö.
+ */
+export interface PassVal {
+  typ: 'teori' | 'lab';
+  kalla: 'nasta' | 'egen';
+  rubrik?: string;
+  beskrivning?: string;
+}
+
 /** En laboration i NO-ämnets laborationsplanering. */
 export interface Laboration {
   id: string;

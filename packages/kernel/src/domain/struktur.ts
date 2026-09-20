@@ -7,7 +7,7 @@ import { bokLektioner, NIVA_GRON_BLA_ROD, byggKapitel } from './bok.js';
 import { NO_TK_AMNEN } from './amnen.js';
 import { isoVecka, passSparr } from './skolar.js';
 import type {
-  Amne, Bok, EgenRad, Elev, Klass, Laboration, Larare, Lektion, LektionsPlan, Pass, PlaneradLektion,
+  Amne, Bok, EgenRad, Elev, Klass, Laboration, Larare, Lektion, LektionsPlan, Pass, PassVal, PlaneradLektion,
   Planering, Skolar, StodPass, Struktur, Tjanst } from './typer.js';
 
 let seq = 0;
@@ -604,23 +604,49 @@ export function laborationTillLektion(lab: Laboration | null, nr: number): Lekti
 export interface HalvklassSession {
   nyckel: string;
   vecka: number;
+  /** Samma tid i grupp A:s och B:s schema — hela klassen. */
+  helklass: boolean;
   a: { datum: string; start: string; slut: string };
   b: { datum: string; start: string; slut: string } | null;
-  /** Laborationen som ligger här (null = platshållare), eller undefined när passet gjorts till vanlig lektion. */
-  laboration: Laboration | null | undefined;
-  /** Vanlig lektion i stället för laboration (finns i labUndantag). */
-  vanlig: boolean;
+  /** Vad passet fick: 'teori' (ur boken eller egen) eller 'lab' (ur listan eller egen). */
+  typ: 'teori' | 'lab';
+  /** Standard för passet (helklass → teori, halvklass → lab) — true när inget val gjorts. */
+  standard: boolean;
+  /** Valet som gjorts, om något. */
+  val: PassVal | null;
+  /** Rubriken som ligger på passet. */
+  rubrik: string;
+  /** Laborationen ur listan när typ är lab och källan är listan; null = platshållare. */
+  laboration: Laboration | null;
 }
 
 export interface HalvklassPlanering { a: PlaneradLektion[]; b: PlaneradLektion[]; sessioner: HalvklassSession[] }
 
+/** Egen teorilektion/laboration som lagts på ett pass (kalla 'egen'). */
+function egenPassLektion(val: PassVal): Lektion {
+  const rubrik = val.rubrik?.trim() !== '' && val.rubrik !== undefined ? val.rubrik : (val.typ === 'lab' ? 'Egen laboration' : 'Egen lektion');
+  return {
+    id: 0, typ: val.typ === 'lab' ? 'laboration' : 'regular', avsnitt: val.typ === 'lab' ? `🧪 ${rubrik}` : rubrik, del: 1,
+    niva1: '—', niva2: '—', niva3: '—', sidorTeori: '—', begrepp: '—',
+    genomgang: val.beskrivning ?? '—', laxa: '—', ex: '—', socStart: '—', exit: '—',
+  };
+}
+
+/** Passets val: passVal först, annars äldre labUndantag (= nästa teorilektion). */
+export function passValFor(amne: Amne, nyckel: string): PassVal | null {
+  const v = amne.passVal?.[nyckel];
+  if (v !== undefined) return v;
+  return (amne.labUndantag ?? []).includes(nyckel) ? { typ: 'teori', kalla: 'nasta' } : null;
+}
+
 /**
  * Planering för ett halvklassämne där halvklasspassen är laborationer.
  *
- *  - Helklasspass (samma datum+tid i A och B): nästa lektion ur boken, i båda grupperna.
- *  - Halvklasspass: laboration för både A och B (A:s i:te halvklasspass paras med B:s
- *    i:te). Laborationerna läggs ut i ordning; saknas fler blir det en platshållare.
- *  - Halvklasspass i labUndantag: nästa lektion ur boken i båda grupperna i stället.
+ *  - Helklasspass (samma datum+tid i A och B): nästa teorilektion ur boken, i båda grupperna.
+ *  - Halvklasspass: laboration för både A och B (A:s i:te halvklasspass paras med B:s i:te).
+ *    Laborationerna läggs ut i ordning; saknas fler blir det en platshållare.
+ *  - Ett passVal byter innehåll på passet: nästa teorilektion, nästa laboration, eller en
+ *    egen lektion/laboration (som inte tar något ur köerna).
  *
  * Bokens lektioner som inte ryms får datum null som förut.
  */
@@ -631,7 +657,6 @@ export function skapaHalvklassPlanering(skolar: Skolar, amne: Amne, bok: Bok, of
   const bAvNyckel = new Map(slotsB.map((x) => [sessionsNyckel(x.datum, x.start), x]));
   const helklass = new Set(slotsA.filter((x) => bAvNyckel.has(sessionsNyckel(x.datum, x.start))).map((x) => sessionsNyckel(x.datum, x.start)));
   const halvB = slotsB.filter((x) => !helklass.has(sessionsNyckel(x.datum, x.start)));
-  const undantag = new Set(amne.labUndantag ?? []);
   const labbar = amne.laborationer ?? [];
   const a: PlaneradLektion[] = []; const b: PlaneradLektion[] = []; const sessioner: HalvklassSession[] = [];
   let nastaLektion = 0; let nastaLab = 0; let halvIdx = 0;
@@ -639,26 +664,27 @@ export function skapaHalvklassPlanering(skolar: Skolar, amne: Amne, bok: Bok, of
     lista.push({ kapitel, lektion, datum: x.datum, vecka: x.vecka, start: x.start, slutTid: x.slut });
   for (const x of slotsA) {
     const nyckel = sessionsNyckel(x.datum, x.start);
-    if (helklass.has(nyckel)) {
-      const l = lektioner[nastaLektion];
-      if (l !== undefined) { nastaLektion += 1; lagg(a, l.kapitel, l.lektion, x); lagg(b, l.kapitel, l.lektion, bAvNyckel.get(nyckel)!); }
-      continue;
-    }
-    const xb = halvB[halvIdx] ?? null; halvIdx += 1;
-    if (undantag.has(nyckel)) {
-      const l = lektioner[nastaLektion];
-      if (l !== undefined) {
-        nastaLektion += 1;
-        lagg(a, l.kapitel, l.lektion, x); if (xb !== null) lagg(b, l.kapitel, l.lektion, xb);
-      }
-      sessioner.push({ nyckel, vecka: x.vecka, a: x, b: xb, laboration: undefined, vanlig: true });
-      continue;
-    }
-    const lab = labbar[nastaLab] ?? null; nastaLab += 1;
-    const lektion = laborationTillLektion(lab, nastaLab);
+    const arHel = helklass.has(nyckel);
+    const xb = arHel ? bAvNyckel.get(nyckel)! : (halvB[halvIdx] ?? null);
+    if (!arHel) halvIdx += 1;
+    const val = passValFor(amne, nyckel);
+    const typ: 'teori' | 'lab' = val !== null ? val.typ : (arHel ? 'teori' : 'lab');
     const kapitel = a[a.length - 1]?.kapitel ?? lektioner[nastaLektion]?.kapitel ?? 1;
-    lagg(a, kapitel, lektion, x); if (xb !== null) lagg(b, kapitel, lektion, xb);
-    sessioner.push({ nyckel, vecka: x.vecka, a: x, b: xb, laboration: lab, vanlig: false });
+    let lektion: Lektion | null = null; let kap = kapitel; let laboration: Laboration | null = null;
+    if (val !== null && val.kalla === 'egen') {
+      lektion = egenPassLektion(val);
+    } else if (typ === 'teori') {
+      const l = lektioner[nastaLektion];
+      if (l !== undefined) { nastaLektion += 1; lektion = l.lektion; kap = l.kapitel; }
+    } else {
+      laboration = labbar[nastaLab] ?? null; nastaLab += 1;
+      lektion = laborationTillLektion(laboration, nastaLab);
+    }
+    if (lektion !== null) { lagg(a, kap, lektion, x); if (xb !== null) lagg(b, kap, lektion, xb); }
+    sessioner.push({
+      nyckel, vecka: x.vecka, helklass: arHel, a: x, b: xb, typ, standard: val === null, val, laboration,
+      rubrik: lektion?.avsnitt ?? (typ === 'teori' ? '(boken är slut)' : 'Laboration'),
+    });
   }
   // Bokens lektioner som inte fick plats
   for (let i = nastaLektion; i < lektioner.length; i += 1) {
@@ -668,22 +694,33 @@ export function skapaHalvklassPlanering(skolar: Skolar, amne: Amne, bok: Bok, of
   return { a, b, sessioner };
 }
 
-/** Ska ämnet planeras med laborationer på halvklasspassen? */
+/** Ska ämnet planeras med laborationer på halvklasspassen? Ja för alla halvklassämnen om det inte stängts av. */
 export function harLaborationsstandard(amne: Amne): boolean {
-  return amne.halvklass === true && amne.laborationsstandard === true;
+  return amne.halvklass === true && amne.laborationsstandard !== false;
 }
 
-/** Slår av/på 'vanlig lektion' för ett halvklasspass. */
-export function vaxlaLabUndantag(s: Struktur, amneId: string, nyckel: string): Struktur {
+/** Sätter (eller tar bort med null) valet för ett pass. */
+export function sattPassVal(s: Struktur, amneId: string, nyckel: string, val: PassVal | null): Struktur {
   return {
     ...s,
     amnen: s.amnen.map((a) => {
       if (a.id !== amneId) return a;
-      const u = new Set(a.labUndantag ?? []);
-      if (u.has(nyckel)) u.delete(nyckel); else u.add(nyckel);
-      return { ...a, labUndantag: [...u].sort() };
+      const pv = { ...(a.passVal ?? {}) };
+      if (val === null) delete pv[nyckel]; else pv[nyckel] = val;
+      // Äldre labUndantag för samma pass ersätts av passVal
+      const u = (a.labUndantag ?? []).filter((n) => n !== nyckel);
+      const { labUndantag: _gammal, ...rest } = a;
+      void _gammal;
+      return { ...rest, passVal: pv, ...(u.length > 0 ? { labUndantag: u } : {}) };
     }),
   };
+}
+
+/** Slår av/på 'nästa teorilektion' på ett halvklasspass (äldre gränssnitt). */
+export function vaxlaLabUndantag(s: Struktur, amneId: string, nyckel: string): Struktur {
+  const amne = s.amnen.find((a) => a.id === amneId);
+  const nu = amne === undefined ? null : passValFor(amne, nyckel);
+  return sattPassVal(s, amneId, nyckel, nu !== null && nu.typ === 'teori' && nu.kalla === 'nasta' ? null : { typ: 'teori', kalla: 'nasta' });
 }
 
 export function sparaLaborationer(s: Struktur, amneId: string, laborationer: Laboration[]): Struktur {

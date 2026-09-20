@@ -982,3 +982,4 @@ input.fel { border-color: #B71C1C; }
 .lab-detalj label { display: flex; flex-direction: column; gap: 2px; }
 .lab-detalj textarea { font: inherit; font-size: 13px; }
 .tbl tr.muted td { color: var(--muted-varm); }
+.tbl tr.st-vald-rad td { background: #FFF8E1; }

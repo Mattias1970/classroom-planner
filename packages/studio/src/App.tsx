@@ -34,7 +34,7 @@ import {
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
-  resultatProcent, saknadeResultat, planForAmne, harLaborationsstandard, skapaHalvklassPlanering, sattLaborationsstandard, sparaLaborationer, vaxlaLabUndantag, type HalvklassSession, type Laboration, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type Elev, type KalenderDagRuta, type KalenderHandelse,
+  resultatProcent, saknadeResultat, planForAmne, harLaborationsstandard, skapaHalvklassPlanering, sattLaborationsstandard, sparaLaborationer, sattPassVal, type HalvklassSession, type Laboration, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type Elev, type KalenderDagRuta, type KalenderHandelse,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
 } from '@planner/kernel';
@@ -1245,26 +1245,51 @@ function LaborationsPanel({ s, amne, sessioner, kor, oppnaLektion }: {
     const j = i + dir; if (j < 0 || j >= labbar.length) return;
     const ny = [...labbar]; [ny[i], ny[j]] = [ny[j], ny[i]]; spara(ny, 'Ordningen ändrad.');
   };
-  const labSessioner = sessioner.filter((x) => !x.vanlig);
+  const labSessioner = sessioner.filter((x) => x.typ === 'lab' && x.val?.kalla !== 'egen');
   const dag = (d: string) => `${DAGKORT_KORT[(new Date(`${d}T12:00:00Z`).getUTCDay() + 6) % 7] ?? ''} ${kortDatum(d)}`;
   return (
     <div className="card">
       <h3>🧪 Laborationer — {amne.namn}</h3>
-      <p className="note">Varje halvklasspass är en laboration för <b>grupp A och grupp B</b>. Laborationerna nedan läggs ut i ordning på passen; saknas fler visas en platshållare. Vill du ha en vanlig lektion på ett pass, ta bort laborationen där — då laddas nästa lektion ur boken för båda grupperna.</p>
+      <p className="note">Varje halvklasspass är en laboration för <b>grupp A och grupp B</b> — automatiskt, för alla halvklassämnen. Laborationerna nedan läggs ut i ordning på passen; saknas fler visas en platshållare.</p>
 
       <h4>Passen</h4>
+      <p className="note">Helklasspass får nästa teorilektion ur boken, halvklasspass nästa laboration ur listan. Vill du byta på ett pass — laboration på helklasstid eller teori på halvklasstid — välj i listan: nästa ur planeringen, eller en helt egen lektion/laboration med egen detaljplanssida.</p>
       <table className="tbl">
-        <thead><tr><th>V.</th><th>Grupp A</th><th>Grupp B</th><th>Innehåll</th><th></th></tr></thead>
-        <tbody>{sessioner.map((x) => (
-          <tr key={x.nyckel} className={x.vanlig ? 'muted' : ''}>
-            <td>{x.vecka}</td>
-            <td><button className="linkbtn" onClick={() => oppnaLektion(x.a.datum)}>{dag(x.a.datum)} {x.a.start}</button></td>
-            <td>{x.b !== null ? `${dag(x.b.datum)} ${x.b.start}` : <span className="muted">— (inget B-pass)</span>}</td>
-            <td>{x.vanlig ? <span className="muted">vanlig lektion (nästa ur boken)</span> : x.laboration !== null && x.laboration !== undefined ? <b>🧪 {x.laboration.rubrik}</b> : <span className="muted">🧪 laboration (inte planerad än)</span>}</td>
-            <td><button className="btn sec sm" onClick={() => kor(() => vaxlaLabUndantag(lasStruktur(), amne.id, x.nyckel), x.vanlig ? `${dag(x.a.datum)}: laboration igen.` : `${dag(x.a.datum)}: vanlig lektion — nästa lektion ur boken laddas för A och B.`)}>
-              {x.vanlig ? '🧪 Gör till laboration' : '✕ Ta bort laboration'}</button></td>
-          </tr>
-        ))}</tbody>
+        <thead><tr><th>V.</th><th>Pass</th><th>Grupp A</th><th>Grupp B</th><th>Innehåll</th><th>Val</th><th></th></tr></thead>
+        <tbody>{sessioner.map((x) => {
+          const valKod = x.val === null ? 'standard' : `${x.val.typ}-${x.val.kalla}`;
+          const satt = (kod: string) => {
+            if (kod === 'standard') { kor(() => sattPassVal(lasStruktur(), amne.id, x.nyckel, null), `${dag(x.a.datum)}: standard igen.`); return; }
+            const [typ, kalla] = kod.split('-') as ['teori' | 'lab', 'nasta' | 'egen'];
+            if (kalla === 'egen') {
+              const rubrik = window.prompt(typ === 'lab' ? 'Rubrik på den nya laborationen:' : 'Rubrik på den nya teorilektionen:', x.val?.rubrik ?? '');
+              if (rubrik === null || rubrik.trim() === '') return;
+              kor(() => sattPassVal(lasStruktur(), amne.id, x.nyckel, { typ, kalla, rubrik: rubrik.trim() }), `${dag(x.a.datum)}: ${typ === 'lab' ? 'ny laboration' : 'ny teorilektion'} "${rubrik.trim()}" — planera den under Detaljplanering.`);
+              return;
+            }
+            kor(() => sattPassVal(lasStruktur(), amne.id, x.nyckel, { typ, kalla }), `${dag(x.a.datum)}: ${typ === 'lab' ? 'nästa laboration ur planeringen' : 'nästa teorilektion ur planeringen'}.`);
+          };
+          return (
+            <tr key={x.nyckel} className={x.standard ? '' : 'st-vald-rad'}>
+              <td>{x.vecka}</td>
+              <td>{x.helklass ? 'Helklass' : 'Halvklass'}</td>
+              <td><button className="linkbtn" onClick={() => oppnaLektion(x.a.datum)}>{dag(x.a.datum)} {x.a.start}</button></td>
+              <td>{x.b !== null ? `${dag(x.b.datum)} ${x.b.start}` : <span className="muted">— (inget B-pass)</span>}</td>
+              <td>{x.typ === 'lab' ? <b>{x.rubrik}</b> : x.rubrik}{!x.standard && <small className="muted"> · {x.val?.kalla === 'egen' ? 'egen' : 'nästa i planeringen'}</small>}</td>
+              <td>
+                <select aria-label={`Val för ${x.nyckel}`} value={valKod} onChange={(e) => satt(e.target.value)}>
+                  <option value="standard">{x.helklass ? 'Standard: nästa teorilektion' : 'Standard: nästa laboration'}</option>
+                  {x.helklass
+                    ? <option value="lab-nasta">Nästa laboration i planeringen</option>
+                    : <option value="teori-nasta">Nästa teorilektion i planeringen</option>}
+                  <option value="lab-egen">Ny laboration…</option>
+                  <option value="teori-egen">Ny teorilektion…</option>
+                </select>
+              </td>
+              <td>{!x.standard && <button className="btn sec sm" onClick={() => oppnaLektion(x.a.datum)} title="Öppna detaljplanssidan">🧭</button>}</td>
+            </tr>
+          );
+        })}</tbody>
       </table>
       <p className="note">{labSessioner.length} laborationspass · {labbar.length} planerade laborationer{labbar.length < labSessioner.length ? ` · ${labSessioner.length - labbar.length} pass saknar planering` : ''}</p>
 
@@ -1384,7 +1409,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
           : <AmneSchemaRedigerare key={a.id} s={s} amne={a} kor={kor} falt="schema" rubrik="Schema" />}
         {halv && (
           <label className="small" style={{ display: 'block', marginTop: 8 }}>
-            <input type="checkbox" checked={a.laborationsstandard === true}
+            <input type="checkbox" checked={a.laborationsstandard !== false}
               onChange={(e) => kor(() => sattLaborationsstandard(lasStruktur(), a.id, e.target.checked), e.target.checked ? 'Halvklasspassen är laborationer för grupp A och B.' : 'Halvklasspassen följer bokens lektioner igen.')} />
             {' '}Halvklasspass är laborationer (grupp A och B) — bokens lektioner läggs på helklasspassen
           </label>
@@ -1396,7 +1421,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
       </>)}
       {flik === 'laborationer' && halv && bok && la && (
         halvklassPlan === null
-          ? <div className="card"><p className="note">Slå på <b>Halvklasspass är laborationer</b> under 🗓 Schema, så blir varje halvklasspass en laboration för grupp A och B. Bokens lektioner läggs då på helklasspassen.</p>
+          ? <div className="card"><p className="note">Laborationerna är avstängda för det här ämnet. Slå på <b>Halvklasspass är laborationer</b> under 🗓 Schema, så blir varje halvklasspass en laboration för grupp A och B.</p>
               <button className="btn" onClick={() => kor(() => sattLaborationsstandard(lasStruktur(), a.id, true), 'Halvklasspassen är laborationer för grupp A och B.')}>🧪 Slå på laborationer</button></div>
           : <LaborationsPanel s={s} amne={a} sessioner={halvklassPlan.sessioner} kor={kor} oppnaLektion={(datum) => { const i = plan.findIndex((r) => r.datum === datum); if (i >= 0) oppnaLektion(i); }} />
       )}

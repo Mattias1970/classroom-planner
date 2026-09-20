@@ -1665,6 +1665,10 @@ describe('Bokens nivåkonventioner följs', () => {
     skriv(input(host, 'Slut pass 2'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     valj(select(host, 'Bok för ämnet'), 'spektrum-biologi');
+    // Del 127b: halvklassämnen får laborationer automatiskt — det här testet gäller bokens lektioner, så stäng av
+    act(() => { knapp(host, '🗓 Schema').click(); });
+    act(() => { ([...host.querySelectorAll('input[type="checkbox"]')].find((c) => c.parentElement?.textContent?.includes('Halvklasspass är laborationer')) as HTMLInputElement).click(); });
+    act(() => { knapp(host, '📝 Lektionsplan').click(); });
     const panel = host.querySelector('.panel')!;
     expect(panel.textContent).not.toContain('Grön');
     expect(panel.textContent).not.toContain('ETT');
@@ -1852,6 +1856,10 @@ describe('Detaljplanering som egen flik', () => {
     skriv(input(host, 'Slut pass 2'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     valj(select(host, 'Bok för ämnet'), 'gleerups-biologi-8');
+    // Del 127b: halvklassämnen får laborationer automatiskt — det här testet gäller bokens lektioner, så stäng av
+    act(() => { knapp(host, '🗓 Schema').click(); });
+    act(() => { ([...host.querySelectorAll('input[type="checkbox"]')].find((c) => c.parentElement?.textContent?.includes('Halvklasspass är laborationer')) as HTMLInputElement).click(); });
+    act(() => { knapp(host, '📝 Lektionsplan').click(); });
     act(() => { knapp(host, '🧭 Detaljplanering').click(); });
     const panel = host.querySelector('.panel')!;
     // Lektionsmeny + formulär öppet direkt (utan fällknapp)
@@ -2321,26 +2329,39 @@ describe('Del 126: omfång i SuperTeach', () => {
 });
 
 describe('Del 127: halvklasspass är laborationer', () => {
-  it('nytt halvklassämne får laborationsstandard; 🧪-fliken visar passen; ta bort laboration → vanlig lektion; samma plan i kalendern', async () => {
+  it('halvklassämne får laborationer automatiskt; 🧪-fliken visar passen; teori på halvklasstid och ny laboration via valet; samma plan i kalendern', () => {
     const host = render();
-    await tillKlass(host);
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    skriv(input(host, 'Tjänstens namn'), 'NO');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 NO').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
     valj(select(host, 'Ämne'), 'Biologi');
     valj(select(host, 'Bok för ämnet'), 'gleerups-biologi-8');
     valj(select(host, 'Veckodag pass 1'), '2');   // A: tisdag
     valj(select(host, 'Veckodag pass 2'), '4');   // B: torsdag
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     const amne = lasStruktur().amnen[0];
-    expect(amne).toMatchObject({ halvklass: true, laborationsstandard: true });
+    expect(amne).toMatchObject({ halvklass: true });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
-    // Lektionsplanen: halvklasspassen är laborationer
+    // Lektionsplanen: halvklasspassen är laborationer — automatiskt
     expect(host.textContent).toContain('Laboration 1');
     act(() => { knapp(host, '🧪 Laborationer').click(); });
     expect(host.textContent).toContain('laborationspass');
-    const forsta = knapp(host, '✕ Ta bort laboration');
-    expect(forsta).not.toBeNull();
-    act(() => { forsta.click(); });
-    expect(lasStruktur().amnen[0].labUndantag).toHaveLength(1);
-    expect(host.textContent).toContain('vanlig lektion (nästa ur boken)');
+    // Teori på halvklasstid: nästa teorilektion i planeringen
+    const val = host.querySelector('select[aria-label^="Val för "]') as HTMLSelectElement;
+    expect(val).not.toBeNull();
+    valj(val, 'teori-nasta');
+    const nyckel = val.getAttribute('aria-label')!.replace('Val för ', '');
+    expect(lasStruktur().amnen[0].passVal![nyckel]).toEqual({ typ: 'teori', kalla: 'nasta' });
+    expect(host.textContent).toContain('nästa i planeringen');
+    // Ny laboration med egen rubrik på ett annat pass
+    window.prompt = () => 'Fältstudie vid dammen';
+    const val2 = host.querySelectorAll('select[aria-label^="Val för "]')[1] as HTMLSelectElement;
+    valj(val2, 'lab-egen');
+    expect(host.textContent).toContain('🧪 Fältstudie vid dammen');
     // Planera en laboration
     act(() => { knapp(host, '➕ Lägg till laboration').click(); });
     skriv(host.querySelector('input[aria-label="Laboration 1 rubrik"]') as HTMLInputElement, 'Mikroskopera celler');
