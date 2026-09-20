@@ -80,6 +80,12 @@ export interface Amne {
   laborationsstandard?: boolean;
   /** Laborationsplaneringen — läggs ut i ordning på halvklasspassen. */
   laborationer?: Laboration[];
+  /**
+   * Genomförd planering rörs aldrig: pass före detta datum behåller den vanliga
+   * lektionsföljden (bokens lektioner i tur och ordning i varje grupp), oavsett
+   * laborationer eller passval. Sätts när laborationerna slås på.
+   */
+  planFrystTill?: string;
   /** Äldre form av passVal: halvklasspass (nyckel 'YYYY-MM-DD|HH:MM') som i stället får nästa teorilektion. */
   labUndantag?: string[];
   /**

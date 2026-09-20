@@ -33,7 +33,7 @@ export function noAmnenIKlass(s: Struktur, klassId: string): string[] {
  */
 export function aktivtKapitel(s: Struktur, amneId: string, idag: string): number | null {
   try {
-    const plan = planForAmne(s, amneId).filter((p) => p.datum !== null && p.datum <= idag);
+    const plan = planForAmne(s, amneId, idag).filter((p) => p.datum !== null && p.datum <= idag);
     const sista = plan[plan.length - 1];
     if (sista !== undefined) return sista.kapitel;
   } catch { /* ingen plan */ }

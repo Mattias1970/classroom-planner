@@ -56,7 +56,7 @@ export interface Studieguide {
 }
 
 /** Planen för ett ämne med datum — samma logik som kalendern och SuperTeach. */
-export function planForAmne(s: Struktur, amneId: string): PlaneradLektion[] {
+export function planForAmne(s: Struktur, amneId: string, idag?: string): PlaneradLektion[] {
   const amne = s.amnen.find((a) => a.id === amneId);
   if (amne === undefined) return [];
   const klass = s.klasser.find((k) => k.id === amne.klassId);
@@ -65,7 +65,7 @@ export function planForAmne(s: Struktur, amneId: string): PlaneradLektion[] {
   const bok = s.bocker.find((b) => b.id === amne.bokId);
   if (skolar === undefined || bok === undefined || !s.planeringar.some((pl) => pl.amneId === amneId)) return [];
   const offset = amne.noGrupp !== undefined && amne.noOrder !== undefined ? amne.noOrder * noBudget(skolar, amne.schema) : 0;
-  if (harLaborationsstandard(amne)) { const h = skapaHalvklassPlanering(skolar, amne, bok, offset); return [...h.a, ...h.b]; }
+  if (harLaborationsstandard(amne)) { const h = skapaHalvklassPlanering(skolar, amne, bok, offset, idag); return [...h.a, ...h.b]; }
   const planA = skapaPlanering(skolar, amne.schema, bok, offset, amne.egnaRader ?? []);
   const planB = amne.halvklass === true && amne.schemaB !== undefined ? skapaPlanering(skolar, amne.schemaB, bok, offset, amne.egnaRader ?? []) : [];
   return [...planA, ...planB];

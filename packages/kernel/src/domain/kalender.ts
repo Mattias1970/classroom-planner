@@ -51,7 +51,7 @@ function veckodag(iso: IsoDatum): number {
  * Alla lektionshändelser i skolåret, per klass (och grupp för halvklass),
  * ur varje ämnes registrerade planering. Sorterade på datum + starttid.
  */
-export function kalenderHandelser(s: Struktur, skolarId: string): KalenderHandelse[] {
+export function kalenderHandelser(s: Struktur, skolarId: string, idag?: string): KalenderHandelse[] {
   const skolar = s.skolar.find((x) => x.id === skolarId);
   if (!skolar) return [];
   const ut: KalenderHandelse[] = [];
@@ -71,7 +71,7 @@ export function kalenderHandelser(s: Struktur, skolarId: string): KalenderHandel
       ? amne.noOrder * noBudget(skolar, amne.schema) : 0;
     // En plats för planeringen: halvklassämnen med laborationer räknas med samma
     // funktion som ämnessidan, så kalendern visar exakt det planeringen visar
-    const halv = harLaborationsstandard(amne) ? skapaHalvklassPlanering(skolar, amne, bok, offset) : null;
+    const halv = harLaborationsstandard(amne) ? skapaHalvklassPlanering(skolar, amne, bok, offset, idag) : null;
     const grupper: Array<{ grupp?: 'A' | 'B'; plan: PlaneradLektion[] }> = amne.halvklass === true
       ? [{ grupp: 'A', plan: halv !== null ? halv.a : skapaPlanering(skolar, amne.schema, bok, offset, amne.egnaRader ?? []) },
          { grupp: 'B', plan: halv !== null ? halv.b : skapaPlanering(skolar, amne.schemaB ?? [], bok, offset, amne.egnaRader ?? []) }]

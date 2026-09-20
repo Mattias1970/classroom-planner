@@ -659,3 +659,66 @@ describe('Del 127b: val per pass — laboration på helklasstid, teori på halvk
     expect(skapaHalvklassPlanering(LA, s.amnen[0], BOK).sessioner[1]).toMatchObject({ typ: 'lab', standard: true });
   });
 });
+
+describe('Del 128: genomförd planering rörs aldrig; bara ämnets egna pass', async () => {
+  const { skapaHalvklassPlanering, sattLaborationsstandard, sattPlanFrystTill, sattPassVal, sparaLaborationer, skapaPlanering, samlaSlots } = await import('../src/domain/struktur.js');
+  const bygg3 = () => {
+    let s = tomStruktur();
+    s = laggTillSkolar(s, LA); s = sparaBok(s, BOK);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO 8' });
+    s = laggTillKlass(s, { id: 'k8b', tjanstId: 'tj', namn: '8B' });
+    // Bara halvklasspass: A tisdag, B torsdag — så att skillnaden mot den gamla följden syns
+    s = laggTillAmne(s, {
+      id: 'bi', klassId: 'k8b', namn: 'Biologi', bokId: BOK.id, halvklass: true,
+      schema: [{ dag: 2, start: '10:00', slut: '11:00' }], schemaB: [{ dag: 4, start: '10:00', slut: '11:00' }],
+    });
+    return s;
+  };
+
+  it('pass före frysdatumet behåller den gamla följden i båda grupperna; laborationerna börjar vid datumet', () => {
+    let s = bygg3();
+    s = sattPlanFrystTill(s, 'bi', '2026-08-31'); // vecka 34–35 genomförda
+    const gammal = { a: skapaPlanering(LA, s.amnen[0].schema, BOK), b: skapaPlanering(LA, s.amnen[0].schemaB!, BOK) };
+    const h = skapaHalvklassPlanering(LA, s.amnen[0], BOK);
+    // Tisdag 18/8 och 25/8 (A), torsdag 20/8 och 27/8 (B): exakt som förut
+    for (const d of ['2026-08-18', '2026-08-25']) expect(h.a.find((r) => r.datum === d)!.lektion).toEqual(gammal.a.find((r) => r.datum === d)!.lektion);
+    for (const d of ['2026-08-20', '2026-08-27']) expect(h.b.find((r) => r.datum === d)!.lektion).toEqual(gammal.b.find((r) => r.datum === d)!.lektion);
+    expect(h.sessioner.slice(0, 2).every((x) => x.fryst && x.typ === 'teori')).toBe(true);
+    // Från 1/9: laboration för A (1/9) och B (3/9)
+    expect(h.a.find((r) => r.datum === '2026-09-01')!.lektion.typ).toBe('laboration');
+    expect(h.b.find((r) => r.datum === '2026-09-03')!.lektion.typ).toBe('laboration');
+    expect(h.sessioner[2]).toMatchObject({ nyckel: '2026-09-01|10:00', fryst: false, typ: 'lab' });
+    // Boken fortsätter där A stod (2 lektioner genomförda → nästa är provet) när teori väljs
+    s = sattPassVal(s, 'bi', '2026-09-01|10:00', { typ: 'teori', kalla: 'nasta' });
+    expect(skapaHalvklassPlanering(LA, s.amnen[0], BOK).a.find((r) => r.datum === '2026-09-01')!.lektion.typ).toBe('exam');
+  });
+
+  it('passval och laborationer i det förflutna ignoreras; idag-argumentet fryser när inget datum sparats', () => {
+    let s = bygg3();
+    s = sparaLaborationer(s, 'bi', [{ id: 'l1', rubrik: 'Celler' }]);
+    s = sattPassVal(s, 'bi', '2026-08-18|10:00', { typ: 'lab', kalla: 'egen', rubrik: 'Skulle inte synas' });
+    const h = skapaHalvklassPlanering(LA, s.amnen[0], BOK, 0, '2026-09-01');
+    expect(h.a.find((r) => r.datum === '2026-08-18')!.lektion).toMatchObject({ avsnitt: '1.1 Bråk', del: 1 });
+    expect(h.a.find((r) => r.datum === '2026-09-01')!.lektion.avsnitt).toBe('🧪 Celler'); // listans första på första kommande pass
+    // Utan datum och utan idag: inget fryst (deterministiskt i tester)
+    expect(skapaHalvklassPlanering(LA, s.amnen[0], BOK).sessioner[0].fryst).toBe(false);
+  });
+
+  it('att slå på laborationer sätter frysdatumet en gång', () => {
+    let s = bygg3();
+    s = sattLaborationsstandard(s, 'bi', true, '2026-09-20');
+    expect(s.amnen[0].planFrystTill).toBe('2026-09-20');
+    s = sattLaborationsstandard(s, 'bi', false, '2026-10-01');
+    s = sattLaborationsstandard(s, 'bi', true, '2026-10-01');
+    expect(s.amnen[0].planFrystTill).toBe('2026-09-20'); // ändras inte av att slå av/på
+  });
+
+  it('delämne i NO-blocket: bara budgetens pass används', () => {
+    let s = bygg3();
+    s = { ...s, amnen: s.amnen.map((a) => ({ ...a, noGrupp: 'no', noOrder: 0 })) };
+    const budget = Math.floor(samlaSlots(LA, s.amnen[0].schema).length / 4);
+    const h = skapaHalvklassPlanering(LA, s.amnen[0], BOK);
+    expect(h.sessioner.length).toBe(budget);
+    expect(h.a.filter((r) => r.datum !== null).length).toBeLessThanOrEqual(budget);
+  });
+});

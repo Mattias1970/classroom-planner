@@ -606,6 +606,8 @@ export interface HalvklassSession {
   vecka: number;
   /** Samma tid i grupp A:s och B:s schema — hela klassen. */
   helklass: boolean;
+  /** Passet ligger före planFrystTill — genomförd planering som inte ändras. */
+  fryst: boolean;
   a: { datum: string; start: string; slut: string };
   b: { datum: string; start: string; slut: string } | null;
   /** Vad passet fick: 'teori' (ur boken eller egen) eller 'lab' (ur listan eller egen). */
@@ -642,27 +644,52 @@ export function passValFor(amne: Amne, nyckel: string): PassVal | null {
 /**
  * Planering för ett halvklassämne där halvklasspassen är laborationer.
  *
+ *  - Pass före `fryst` (amne.planFrystTill, annars `idag`): genomförd planering. De
+ *    behåller den vanliga följden — bokens lektioner i tur och ordning i varje grupp —
+ *    och påverkas inte av laborationer eller passval. Det som redan hänt ändras aldrig.
  *  - Helklasspass (samma datum+tid i A och B): nästa teorilektion ur boken, i båda grupperna.
  *  - Halvklasspass: laboration för både A och B (A:s i:te halvklasspass paras med B:s i:te).
  *    Laborationerna läggs ut i ordning; saknas fler blir det en platshållare.
  *  - Ett passVal byter innehåll på passet: nästa teorilektion, nästa laboration, eller en
  *    egen lektion/laboration (som inte tar något ur köerna).
+ *  - Delämne i NO+Tk-blocket: bara budgetens pass används, inte hela läsåret.
  *
  * Bokens lektioner som inte ryms får datum null som förut.
  */
-export function skapaHalvklassPlanering(skolar: Skolar, amne: Amne, bok: Bok, offset = 0): HalvklassPlanering {
+export function skapaHalvklassPlanering(skolar: Skolar, amne: Amne, bok: Bok, offset = 0, idag?: string): HalvklassPlanering {
   const lektioner = medEgnaRader(bokLektioner(bok), amne.egnaRader ?? []);
-  const slotsA = samlaSlots(skolar, amne.schema).slice(offset);
-  const slotsB = samlaSlots(skolar, amne.schemaB ?? []).slice(offset);
+  const budget = amne.noGrupp !== undefined ? noBudget(skolar, amne.schema) : Number.POSITIVE_INFINITY;
+  const slotsA = samlaSlots(skolar, amne.schema).slice(offset, budget === Number.POSITIVE_INFINITY ? undefined : offset + budget);
+  const slotsB = samlaSlots(skolar, amne.schemaB ?? []).slice(offset, budget === Number.POSITIVE_INFINITY ? undefined : offset + budget);
+  const fryst = amne.planFrystTill ?? idag ?? '';
   const bAvNyckel = new Map(slotsB.map((x) => [sessionsNyckel(x.datum, x.start), x]));
   const helklass = new Set(slotsA.filter((x) => bAvNyckel.has(sessionsNyckel(x.datum, x.start))).map((x) => sessionsNyckel(x.datum, x.start)));
   const halvB = slotsB.filter((x) => !helklass.has(sessionsNyckel(x.datum, x.start)));
   const labbar = amne.laborationer ?? [];
   const a: PlaneradLektion[] = []; const b: PlaneradLektion[] = []; const sessioner: HalvklassSession[] = [];
-  let nastaLektion = 0; let nastaLab = 0; let halvIdx = 0;
   const lagg = (lista: PlaneradLektion[], kapitel: number, lektion: Lektion, x: { datum: string; vecka: number; start: string; slut: string }) =>
     lista.push({ kapitel, lektion, datum: x.datum, vecka: x.vecka, start: x.start, slutTid: x.slut });
-  for (const x of slotsA) {
+
+  // ── Genomförd del: den vanliga följden, grupp för grupp ──
+  const frystaA = slotsA.filter((x) => x.datum < fryst);
+  const frystaB = slotsB.filter((x) => x.datum < fryst);
+  frystaA.forEach((x, i) => { const l = lektioner[i]; if (l !== undefined) lagg(a, l.kapitel, l.lektion, x); });
+  frystaB.forEach((x, i) => { const l = lektioner[i]; if (l !== undefined) lagg(b, l.kapitel, l.lektion, x); });
+  const frystaHalvB = frystaB.filter((x) => !helklass.has(sessionsNyckel(x.datum, x.start))).length;
+  for (const x of frystaA) {
+    const nyckel = sessionsNyckel(x.datum, x.start);
+    const arHel = helklass.has(nyckel);
+    const idx = frystaA.indexOf(x);
+    const l = lektioner[idx];
+    sessioner.push({
+      nyckel, vecka: x.vecka, helklass: arHel, fryst: true, a: x, b: arHel ? (bAvNyckel.get(nyckel) ?? null) : null, typ: 'teori',
+      standard: true, val: null, laboration: null, rubrik: l?.lektion.avsnitt ?? '(boken är slut)',
+    });
+  }
+
+  // ── Kommande del: laborationer på halvklasspassen ──
+  let nastaLektion = frystaA.length; let nastaLab = 0; let halvIdx = frystaHalvB;
+  for (const x of slotsA.filter((x) => x.datum >= fryst)) {
     const nyckel = sessionsNyckel(x.datum, x.start);
     const arHel = helklass.has(nyckel);
     const xb = arHel ? bAvNyckel.get(nyckel)! : (halvB[halvIdx] ?? null);
@@ -680,9 +707,9 @@ export function skapaHalvklassPlanering(skolar: Skolar, amne: Amne, bok: Bok, of
       laboration = labbar[nastaLab] ?? null; nastaLab += 1;
       lektion = laborationTillLektion(laboration, nastaLab);
     }
-    if (lektion !== null) { lagg(a, kap, lektion, x); if (xb !== null) lagg(b, kap, lektion, xb); }
+    if (lektion !== null) { lagg(a, kap, lektion, x); if (xb !== null && xb.datum >= fryst) lagg(b, kap, lektion, xb); }
     sessioner.push({
-      nyckel, vecka: x.vecka, helklass: arHel, a: x, b: xb, typ, standard: val === null, val, laboration,
+      nyckel, vecka: x.vecka, helklass: arHel, fryst: false, a: x, b: xb, typ, standard: val === null, val, laboration,
       rubrik: lektion?.avsnitt ?? (typ === 'teori' ? '(boken är slut)' : 'Laboration'),
     });
   }
@@ -691,6 +718,7 @@ export function skapaHalvklassPlanering(skolar: Skolar, amne: Amne, bok: Bok, of
     const l = lektioner[i];
     a.push({ kapitel: l.kapitel, lektion: l.lektion, datum: null, vecka: null, start: null, slutTid: null });
   }
+  b.sort((p, q) => p.datum!.localeCompare(q.datum!) || p.start!.localeCompare(q.start!));
   return { a, b, sessioner };
 }
 
@@ -727,6 +755,16 @@ export function sparaLaborationer(s: Struktur, amneId: string, laborationer: Lab
   return { ...s, amnen: s.amnen.map((a) => (a.id === amneId ? { ...a, laborationer } : a)) };
 }
 
-export function sattLaborationsstandard(s: Struktur, amneId: string, pa: boolean): Struktur {
-  return { ...s, amnen: s.amnen.map((a) => (a.id === amneId ? { ...a, laborationsstandard: pa } : a)) };
+export function sattLaborationsstandard(s: Struktur, amneId: string, pa: boolean, idag?: string): Struktur {
+  return {
+    ...s,
+    amnen: s.amnen.map((a) => (a.id === amneId
+      ? { ...a, laborationsstandard: pa, ...(pa && a.planFrystTill === undefined && idag !== undefined ? { planFrystTill: idag } : {}) }
+      : a)),
+  };
+}
+
+/** Fryser den genomförda planeringen till och med dagen före `datum` — pass före datumet ändras aldrig. */
+export function sattPlanFrystTill(s: Struktur, amneId: string, datum: string): Struktur {
+  return { ...s, amnen: s.amnen.map((a) => (a.id === amneId ? { ...a, planFrystTill: datum } : a)) };
 }

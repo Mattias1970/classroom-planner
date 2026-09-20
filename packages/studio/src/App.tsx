@@ -34,7 +34,7 @@ import {
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
-  resultatProcent, saknadeResultat, planForAmne, harLaborationsstandard, skapaHalvklassPlanering, sattLaborationsstandard, sparaLaborationer, sattPassVal, type HalvklassSession, type Laboration, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type Elev, type KalenderDagRuta, type KalenderHandelse,
+  resultatProcent, saknadeResultat, planForAmne, harLaborationsstandard, skapaHalvklassPlanering, sattLaborationsstandard, sattPlanFrystTill, sparaLaborationer, sattPassVal, type HalvklassSession, type Laboration, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type Elev, type KalenderDagRuta, type KalenderHandelse,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
 } from '@planner/kernel';
@@ -141,7 +141,7 @@ export function App() {
     const ut: Array<{ text: string; onKlick?: () => void }> = [];
     for (const a of amnen) {
       try {
-        const saknade = saknadeResultat(s, a.id, planForAmne(s, a.id), idag);
+        const saknade = saknadeResultat(s, a.id, planForAmne(s, a.id, idag), idag);
         for (const x of saknade.slice(0, 3)) ut.push({ text: `${a.namn}: ${x.prov} (${kortDatum(x.datum)}) saknar resultat`, onKlick: () => setVy({ typ: 'resultat' }) });
       } catch { /* ämne utan plan */ }
     }
@@ -1245,7 +1245,7 @@ function LaborationsPanel({ s, amne, sessioner, kor, oppnaLektion }: {
     const j = i + dir; if (j < 0 || j >= labbar.length) return;
     const ny = [...labbar]; [ny[i], ny[j]] = [ny[j], ny[i]]; spara(ny, 'Ordningen ändrad.');
   };
-  const labSessioner = sessioner.filter((x) => x.typ === 'lab' && x.val?.kalla !== 'egen');
+  const labSessioner = sessioner.filter((x) => !x.fryst && x.typ === 'lab' && x.val?.kalla !== 'egen');
   const dag = (d: string) => `${DAGKORT_KORT[(new Date(`${d}T12:00:00Z`).getUTCDay() + 6) % 7] ?? ''} ${kortDatum(d)}`;
   return (
     <div className="card">
@@ -1253,7 +1253,9 @@ function LaborationsPanel({ s, amne, sessioner, kor, oppnaLektion }: {
       <p className="note">Varje halvklasspass är en laboration för <b>grupp A och grupp B</b> — automatiskt, för alla halvklassämnen. Laborationerna nedan läggs ut i ordning på passen; saknas fler visas en platshållare.</p>
 
       <h4>Passen</h4>
-      <p className="note">Helklasspass får nästa teorilektion ur boken, halvklasspass nästa laboration ur listan. Vill du byta på ett pass — laboration på helklasstid eller teori på halvklasstid — välj i listan: nästa ur planeringen, eller en helt egen lektion/laboration med egen detaljplanssida.</p>
+      <p className="note">Helklasspass får nästa teorilektion ur boken, halvklasspass nästa laboration ur listan. Vill du byta på ett pass — laboration på helklasstid eller teori på halvklasstid — välj i listan: nästa ur planeringen, eller en helt egen lektion/laboration med egen detaljplanssida.
+        {amne.planFrystTill !== undefined && <> Pass före <b>{amne.planFrystTill}</b> är genomförda och ändras aldrig.</>}
+        {amne.noGrupp !== undefined && <> Bara ämnets egna pass i NO-blocket ingår.</>}</p>
       <table className="tbl">
         <thead><tr><th>V.</th><th>Pass</th><th>Grupp A</th><th>Grupp B</th><th>Innehåll</th><th>Val</th><th></th></tr></thead>
         <tbody>{sessioner.map((x) => {
@@ -1269,6 +1271,18 @@ function LaborationsPanel({ s, amne, sessioner, kor, oppnaLektion }: {
             }
             kor(() => sattPassVal(lasStruktur(), amne.id, x.nyckel, { typ, kalla }), `${dag(x.a.datum)}: ${typ === 'lab' ? 'nästa laboration ur planeringen' : 'nästa teorilektion ur planeringen'}.`);
           };
+          if (x.fryst) {
+            return (
+              <tr key={x.nyckel} className="muted">
+                <td>{x.vecka}</td>
+                <td>{x.helklass ? 'Helklass' : 'Halvklass'}</td>
+                <td><button className="linkbtn" onClick={() => oppnaLektion(x.a.datum)}>{dag(x.a.datum)} {x.a.start}</button></td>
+                <td>{x.b !== null ? `${dag(x.b.datum)} ${x.b.start}` : ''}</td>
+                <td>{x.rubrik}</td>
+                <td colSpan={2}><small className="muted">genomförd — ändras inte</small></td>
+              </tr>
+            );
+          }
           return (
             <tr key={x.nyckel} className={x.standard ? '' : 'st-vald-rad'}>
               <td>{x.vecka}</td>
@@ -1334,7 +1348,15 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
   const offset = a?.noGrupp !== undefined && a.noOrder !== undefined ? a.noOrder * budget : 0;
   // En plats för planeringen: halvklassämnen med laborationsstandard räknas via
   // skapaHalvklassPlanering (samma funktion som kalender, kernel-plan och SuperTeach använder)
-  const halvklassPlan = useMemo(() => (a && la && bok && harLaborationsstandard(a) ? skapaHalvklassPlanering(la, a, bok, offset) : null), [a, la, bok, offset]);
+  const idag = new Date().toISOString().slice(0, 10);
+  const halvklassPlan = useMemo(() => (a && la && bok && harLaborationsstandard(a) ? skapaHalvklassPlanering(la, a, bok, offset, idag) : null), [a, la, bok, offset, idag]);
+  // Genomförd planering rörs aldrig: första gången ett halvklassämne visas med laborationer
+  // fryses allt före idag, så att frysdatumet inte glider med kalendern
+  useEffect(() => {
+    if (a !== undefined && harLaborationsstandard(a) && a.planFrystTill === undefined && s.planeringar.some((p) => p.amneId === a.id)) {
+      kor(() => sattPlanFrystTill(lasStruktur(), a.id, idag), `${a.namn}: genomförd planering till och med igår är låst; laborationerna gäller från ${idag}.`);
+    }
+  }, [a?.id, a?.planFrystTill, a?.laborationsstandard]); // eslint-disable-line react-hooks/exhaustive-deps
   const plan = useMemo(() => (halvklassPlan !== null ? halvklassPlan.a : (a && la && bok ? skapaPlanering(la, a.schema, bok, offset, a.egnaRader ?? []) : [])), [a, la, bok, offset, halvklassPlan]);
   const planB = useMemo(() => (halvklassPlan !== null ? halvklassPlan.b : (a && la && bok && a.halvklass === true ? skapaPlanering(la, a.schemaB ?? [], bok, offset, a.egnaRader ?? []) : [])), [a, la, bok, offset, halvklassPlan]);
   const harPlanering = s.planeringar.some((p) => p.amneId === id);
@@ -1410,7 +1432,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
         {halv && (
           <label className="small" style={{ display: 'block', marginTop: 8 }}>
             <input type="checkbox" checked={a.laborationsstandard !== false}
-              onChange={(e) => kor(() => sattLaborationsstandard(lasStruktur(), a.id, e.target.checked), e.target.checked ? 'Halvklasspassen är laborationer för grupp A och B.' : 'Halvklasspassen följer bokens lektioner igen.')} />
+              onChange={(e) => kor(() => sattLaborationsstandard(lasStruktur(), a.id, e.target.checked, new Date().toISOString().slice(0, 10)), e.target.checked ? 'Halvklasspassen är laborationer för grupp A och B — från idag; det som redan genomförts ändras inte.' : 'Halvklasspassen följer bokens lektioner igen.')} />
             {' '}Halvklasspass är laborationer (grupp A och B) — bokens lektioner läggs på helklasspassen
           </label>
         )}
@@ -1422,7 +1444,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
       {flik === 'laborationer' && halv && bok && la && (
         halvklassPlan === null
           ? <div className="card"><p className="note">Laborationerna är avstängda för det här ämnet. Slå på <b>Halvklasspass är laborationer</b> under 🗓 Schema, så blir varje halvklasspass en laboration för grupp A och B.</p>
-              <button className="btn" onClick={() => kor(() => sattLaborationsstandard(lasStruktur(), a.id, true), 'Halvklasspassen är laborationer för grupp A och B.')}>🧪 Slå på laborationer</button></div>
+              <button className="btn" onClick={() => kor(() => sattLaborationsstandard(lasStruktur(), a.id, true, new Date().toISOString().slice(0, 10)), 'Halvklasspassen är laborationer för grupp A och B — från idag.')}>🧪 Slå på laborationer</button></div>
           : <LaborationsPanel s={s} amne={a} sessioner={halvklassPlan.sessioner} kor={kor} oppnaLektion={(datum) => { const i = plan.findIndex((r) => r.datum === datum); if (i >= 0) oppnaLektion(i); }} />
       )}
       {flik === 'planering' && (<>
@@ -4912,7 +4934,7 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
     const bok = s.bocker.find((b) => b.id === a2.bokId);
     if (!skolar || !bok || !s.planeringar.some((pl) => pl.amneId === a2.id)) return [];
     const offset = a2.noGrupp !== undefined && a2.noOrder !== undefined ? a2.noOrder * noBudget(skolar, a2.schema) : 0;
-    if (harLaborationsstandard(a2)) { const h = skapaHalvklassPlanering(skolar, a2, bok, offset); return [...h.a, ...h.b]; }
+    if (harLaborationsstandard(a2)) { const h = skapaHalvklassPlanering(skolar, a2, bok, offset, new Date().toISOString().slice(0, 10)); return [...h.a, ...h.b]; }
     const planA = skapaPlanering(skolar, a2.schema, bok, offset, a2.egnaRader ?? []);
     const planB = a2.halvklass === true && a2.schemaB !== undefined
       ? skapaPlanering(skolar, a2.schemaB, bok, offset, a2.egnaRader ?? []) : [];
@@ -5263,7 +5285,7 @@ function KalenderVy({ s, onOppnaLektion }: { s: Struktur; onOppnaLektion?: (amne
   const [utskriftLage, setUtskriftLage] = useState<'manader' | 'veckor'>('manader');
   const [ankare, setAnkare] = useState<string>(startAnkare(skolar));
 
-  const handelser = useMemo(() => (skolar ? kalenderHandelser(s, skolar.id) : []), [s, skolar]);
+  const handelser = useMemo(() => (skolar ? kalenderHandelser(s, skolar.id, new Date().toISOString().slice(0, 10)) : []), [s, skolar]);
   const filtrerade = useMemo(() => handelser.filter((h) =>
     (klassFilter === '__alla__' || h.klassId === klassFilter)
     && (amnesFilter === '__alla__' || h.amnesNamn === amnesFilter)), [handelser, klassFilter, amnesFilter]);

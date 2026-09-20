@@ -24,7 +24,7 @@ export function Classroom({ s, filter, setVy }: { s: Struktur; filter: Filter; s
   // Rum per ämne: klassrummet + varje unikt läxförhörs-/exit-rum i planen
   const perAmne = amnen.map((a) => {
     const klass = s.klasser.find((k) => k.id === a.klassId)!;
-    const plan = planForAmne(s, a.id);
+    const plan = planForAmne(s, a.id, idag);
     const rum = new Map<string, { typ: string; forsta: string | null }>();
     rum.set(socrativeRum(a.namn, klass.namn), { typ: 'klassrum', forsta: null });
     for (const p of plan) {

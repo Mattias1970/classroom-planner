@@ -315,7 +315,7 @@ export function elevanalys(sIn: Struktur, elevId: string, f: DashboardFilter & {
   const nastaLax = (() => {
     if (f.amneId === undefined) return null;
     try {
-      const plan = planForAmne(s, f.amneId);
+      const plan = planForAmne(s, f.amneId, new Date().toISOString().slice(0, 10));
       const idag = new Date().toISOString().slice(0, 10);
       const n = plan.filter((p) => p.datum !== null && p.datum > idag && p.lektion.socStart !== '—' && p.lektion.socStart.trim() !== '').sort((a, b) => a.datum!.localeCompare(b.datum!))[0];
       return n === undefined ? null : n.datum;

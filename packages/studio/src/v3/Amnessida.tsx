@@ -19,7 +19,7 @@ export function Amnessida({ s, amneNamn, filter, setVy, planering }: {
   const amne = kandidater[0];
   const I = amnesIkon(amneNamn);
   const idag = new Date().toISOString().slice(0, 10);
-  const plan = useMemo(() => (amne === undefined ? [] : planForAmne(s, amne.id)), [s, amne?.id]);
+  const plan = useMemo(() => (amne === undefined ? [] : planForAmne(s, amne.id, idag)), [s, amne?.id, idag]);
   const klass = amne === undefined ? undefined : s.klasser.find((k) => k.id === amne.klassId);
 
   if (amne === undefined || klass === undefined) {
