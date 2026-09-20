@@ -6,8 +6,8 @@
  */
 import { amneBakgrund } from './amnen.js';
 import { isoVecka } from './skolar.js';
-import { noBudget, samlaSlots, skapaPlanering } from './struktur.js';
-import type { IsoDatum, Skolar, Struktur } from './typer.js';
+import { harLaborationsstandard, noBudget, samlaSlots, skapaHalvklassPlanering, skapaPlanering } from './struktur.js';
+import type { IsoDatum, PlaneradLektion, Skolar, Struktur } from './typer.js';
 
 export interface KalenderHandelse {
   datum: IsoDatum;
@@ -69,11 +69,15 @@ export function kalenderHandelser(s: Struktur, skolarId: string): KalenderHandel
     // NO+Tk: delämnet börjar efter föregående delämnens block (offset).
     const offset = amne.noGrupp !== undefined && amne.noOrder !== undefined
       ? amne.noOrder * noBudget(skolar, amne.schema) : 0;
-    const grupper: Array<{ grupp?: 'A' | 'B'; schema: typeof amne.schema }> = amne.halvklass === true
-      ? [{ grupp: 'A', schema: amne.schema }, { grupp: 'B', schema: amne.schemaB ?? [] }]
-      : [{ grupp: undefined, schema: amne.schema }];
+    // En plats för planeringen: halvklassämnen med laborationer räknas med samma
+    // funktion som ämnessidan, så kalendern visar exakt det planeringen visar
+    const halv = harLaborationsstandard(amne) ? skapaHalvklassPlanering(skolar, amne, bok, offset) : null;
+    const grupper: Array<{ grupp?: 'A' | 'B'; plan: PlaneradLektion[] }> = amne.halvklass === true
+      ? [{ grupp: 'A', plan: halv !== null ? halv.a : skapaPlanering(skolar, amne.schema, bok, offset, amne.egnaRader ?? []) },
+         { grupp: 'B', plan: halv !== null ? halv.b : skapaPlanering(skolar, amne.schemaB ?? [], bok, offset, amne.egnaRader ?? []) }]
+      : [{ grupp: undefined, plan: skapaPlanering(skolar, amne.schema, bok, offset, amne.egnaRader ?? []) }];
     for (const g of grupper) {
-      for (const [lektionsIndex, p] of skapaPlanering(skolar, g.schema, bok, offset, amne.egnaRader ?? []).entries()) {
+      for (const [lektionsIndex, p] of g.plan.entries()) {
         if (p.datum === null || p.start === null || p.slutTid === null || p.vecka === null) continue;
         ut.push({
           datum: p.datum, start: p.start, slut: p.slutTid,

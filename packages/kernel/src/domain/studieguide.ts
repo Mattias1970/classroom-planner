@@ -12,7 +12,7 @@ import type { Elev, PlaneradLektion, Struktur } from './typer.js';
 import type { DashboardFilter } from './dashboard.js';
 import { harmoniseraOvningar, nulage, type FragaNu } from './delkapiteltrend.js';
 import { begreppForFraga, elevrapport, socrativeElevLank, type Elevrapport, type RapportDelkapitel } from './elevrapport.js';
-import { noBudget, skapaPlanering } from './struktur.js';
+import { harLaborationsstandard, noBudget, skapaHalvklassPlanering, skapaPlanering } from './struktur.js';
 
 export interface StudieDel {
   kod: string;
@@ -65,6 +65,7 @@ export function planForAmne(s: Struktur, amneId: string): PlaneradLektion[] {
   const bok = s.bocker.find((b) => b.id === amne.bokId);
   if (skolar === undefined || bok === undefined || !s.planeringar.some((pl) => pl.amneId === amneId)) return [];
   const offset = amne.noGrupp !== undefined && amne.noOrder !== undefined ? amne.noOrder * noBudget(skolar, amne.schema) : 0;
+  if (harLaborationsstandard(amne)) { const h = skapaHalvklassPlanering(skolar, amne, bok, offset); return [...h.a, ...h.b]; }
   const planA = skapaPlanering(skolar, amne.schema, bok, offset, amne.egnaRader ?? []);
   const planB = amne.halvklass === true && amne.schemaB !== undefined ? skapaPlanering(skolar, amne.schemaB, bok, offset, amne.egnaRader ?? []) : [];
   return [...planA, ...planB];

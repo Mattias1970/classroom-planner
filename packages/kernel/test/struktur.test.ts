@@ -546,3 +546,67 @@ describe('Del 91: lektionsnamn och Socrative-QR', async () => {
     expect(sattSocrativeQr(s, '  ', bild)).toBe(s); // tomt rum ignoreras
   });
 });
+
+describe('Del 127: halvklasspass som laborationer', async () => {
+  const { skapaHalvklassPlanering, vaxlaLabUndantag, sparaLaborationer, sattLaborationsstandard, harLaborationsstandard, sessionsNyckel } = await import('../src/domain/struktur.js');
+  const halvklassAmne = () => {
+    let s = tomStruktur();
+    s = laggTillSkolar(s, LA);
+    s = sparaBok(s, BOK);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO 8' });
+    s = laggTillKlass(s, { id: 'k8b', tjanstId: 'tj', namn: '8B' });
+    // Måndag 10:00 helklass (i båda scheman), tisdag 10:00 bara A, torsdag 10:00 bara B
+    s = laggTillAmne(s, {
+      id: 'bi', klassId: 'k8b', namn: 'Biologi', bokId: BOK.id, halvklass: true, laborationsstandard: true,
+      schema: [{ dag: 1, start: '10:00', slut: '11:00' }, { dag: 2, start: '10:00', slut: '11:00' }],
+      schemaB: [{ dag: 1, start: '10:00', slut: '11:00' }, { dag: 4, start: '10:00', slut: '11:00' }],
+    });
+    return s;
+  };
+
+  it('helklasspass får bokens lektioner, halvklasspassen blir laborationer för både A och B', () => {
+    const s = halvklassAmne();
+    const amne = s.amnen[0];
+    expect(harLaborationsstandard(amne)).toBe(true);
+    const h = skapaHalvklassPlanering(LA, amne, BOK);
+    // Första veckan (v.34): mån 17/8 helklass = 1.1 Bråk del 1; tis 18/8 (A) + tor 20/8 (B) = Laboration 1
+    expect(h.a[0]).toMatchObject({ datum: '2026-08-17', lektion: { avsnitt: '1.1 Bråk', del: 1 } });
+    expect(h.b[0]).toMatchObject({ datum: '2026-08-17', lektion: { avsnitt: '1.1 Bråk', del: 1 } });
+    expect(h.a[1]).toMatchObject({ datum: '2026-08-18', lektion: { typ: 'laboration', avsnitt: 'Laboration 1' } });
+    expect(h.b[1]).toMatchObject({ datum: '2026-08-20', lektion: { typ: 'laboration', avsnitt: 'Laboration 1' } });
+    expect(h.sessioner[0]).toMatchObject({ nyckel: '2026-08-18|10:00', a: { datum: '2026-08-18' }, b: { datum: '2026-08-20' }, vanlig: false, laboration: null });
+    // Bokens tre lektioner ryms på helklasspassen (måndagar) — inga rader med datum null
+    expect(h.a.filter((r) => r.datum === null)).toHaveLength(0);
+    // Andra helklasspasset (mån 24/8) får del 2, inte laborationen
+    expect(h.a.find((r) => r.datum === '2026-08-24')!.lektion.del).toBe(2);
+  });
+
+  it('planerade laborationer läggs ut i ordning med sina rubriker', () => {
+    let s = halvklassAmne();
+    s = sparaLaborationer(s, 'bi', [{ id: 'l1', rubrik: 'Mikroskopera celler', delkapitel: '1.1', rapport: true }, { id: 'l2', rubrik: 'Osmos i potatis' }]);
+    const h = skapaHalvklassPlanering(LA, s.amnen[0], BOK);
+    const labbar = h.sessioner.slice(0, 3);
+    expect(labbar.map((x) => x.laboration?.rubrik ?? null)).toEqual(['Mikroskopera celler', 'Osmos i potatis', null]);
+    expect(h.a[1].lektion).toMatchObject({ avsnitt: '🧪 Mikroskopera celler', laxa: 'Labbrapport', mal: 'Hör till 1.1' });
+  });
+
+  it('ta bort laborationen på ett pass → nästa vanliga lektion laddas där, i båda grupperna', () => {
+    let s = halvklassAmne();
+    s = vaxlaLabUndantag(s, 'bi', sessionsNyckel('2026-08-18', '10:00'));
+    expect(s.amnen[0].labUndantag).toEqual(['2026-08-18|10:00']);
+    const h = skapaHalvklassPlanering(LA, s.amnen[0], BOK);
+    // tis 18/8 (A) och tor 20/8 (B) får nu 1.1 Bråk del 2 — lektionen som kommer efter
+    expect(h.a[1]).toMatchObject({ datum: '2026-08-18', lektion: { avsnitt: '1.1 Bråk', del: 2 } });
+    expect(h.b[1]).toMatchObject({ datum: '2026-08-20', lektion: { avsnitt: '1.1 Bråk', del: 2 } });
+    expect(h.sessioner[0]).toMatchObject({ vanlig: true, laboration: undefined });
+    // Måndagen efter får då provet (lektion 3), och nästa halvklasspass är laboration igen
+    expect(h.a.find((r) => r.datum === '2026-08-24')!.lektion.typ).toBe('exam');
+    expect(h.a.find((r) => r.datum === '2026-08-25')!.lektion.typ).toBe('laboration');
+    // Slå på igen
+    s = vaxlaLabUndantag(s, 'bi', sessionsNyckel('2026-08-18', '10:00'));
+    expect(s.amnen[0].labUndantag).toEqual([]);
+    // Standarden kan stängas av → vanlig planering
+    s = sattLaborationsstandard(s, 'bi', false);
+    expect(harLaborationsstandard(s.amnen[0])).toBe(false);
+  });
+});

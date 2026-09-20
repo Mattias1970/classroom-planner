@@ -7,7 +7,7 @@ import { bokLektioner, NIVA_GRON_BLA_ROD, byggKapitel } from './bok.js';
 import { NO_TK_AMNEN } from './amnen.js';
 import { isoVecka, passSparr } from './skolar.js';
 import type {
-  Amne, Bok, EgenRad, Elev, Klass, Larare, Lektion, LektionsPlan, Pass, PlaneradLektion,
+  Amne, Bok, EgenRad, Elev, Klass, Laboration, Larare, Lektion, LektionsPlan, Pass, PlaneradLektion,
   Planering, Skolar, StodPass, Struktur, Tjanst } from './typer.js';
 
 let seq = 0;
@@ -586,3 +586,110 @@ export function socrativeLank(s: Struktur, rum: string): string {
   return egen ?? `https://b.socrative.com/student/#joinRoom/${encodeURIComponent(rum.trim().toUpperCase())}`;
 }
 
+// ── Del 127: halvklasspass som laborationer ──────────────────
+
+/** Nyckel för ett halvklasspass: grupp A:s datum och starttid. */
+export function sessionsNyckel(datum: string, start: string): string { return `${datum}|${start}`; }
+
+export function laborationTillLektion(lab: Laboration | null, nr: number): Lektion {
+  return {
+    id: 0, typ: 'laboration', avsnitt: lab === null ? `Laboration ${nr}` : `🧪 ${lab.rubrik}`, del: 1,
+    niva1: '—', niva2: '—', niva3: '—', sidorTeori: '—', begrepp: '—',
+    genomgang: lab === null ? 'Laboration — planera under 🧪 Laborationer.' : [lab.syfte, lab.genomforande].filter((x) => x !== undefined && x !== '').join('\n'),
+    laxa: lab?.rapport === true ? 'Labbrapport' : '—', ex: lab?.material ?? '—', socStart: '—', exit: '—',
+    ...(lab?.delkapitel !== undefined && lab.delkapitel !== '' ? { mal: `Hör till ${lab.delkapitel}` } : {}),
+  };
+}
+
+export interface HalvklassSession {
+  nyckel: string;
+  vecka: number;
+  a: { datum: string; start: string; slut: string };
+  b: { datum: string; start: string; slut: string } | null;
+  /** Laborationen som ligger här (null = platshållare), eller undefined när passet gjorts till vanlig lektion. */
+  laboration: Laboration | null | undefined;
+  /** Vanlig lektion i stället för laboration (finns i labUndantag). */
+  vanlig: boolean;
+}
+
+export interface HalvklassPlanering { a: PlaneradLektion[]; b: PlaneradLektion[]; sessioner: HalvklassSession[] }
+
+/**
+ * Planering för ett halvklassämne där halvklasspassen är laborationer.
+ *
+ *  - Helklasspass (samma datum+tid i A och B): nästa lektion ur boken, i båda grupperna.
+ *  - Halvklasspass: laboration för både A och B (A:s i:te halvklasspass paras med B:s
+ *    i:te). Laborationerna läggs ut i ordning; saknas fler blir det en platshållare.
+ *  - Halvklasspass i labUndantag: nästa lektion ur boken i båda grupperna i stället.
+ *
+ * Bokens lektioner som inte ryms får datum null som förut.
+ */
+export function skapaHalvklassPlanering(skolar: Skolar, amne: Amne, bok: Bok, offset = 0): HalvklassPlanering {
+  const lektioner = medEgnaRader(bokLektioner(bok), amne.egnaRader ?? []);
+  const slotsA = samlaSlots(skolar, amne.schema).slice(offset);
+  const slotsB = samlaSlots(skolar, amne.schemaB ?? []).slice(offset);
+  const bAvNyckel = new Map(slotsB.map((x) => [sessionsNyckel(x.datum, x.start), x]));
+  const helklass = new Set(slotsA.filter((x) => bAvNyckel.has(sessionsNyckel(x.datum, x.start))).map((x) => sessionsNyckel(x.datum, x.start)));
+  const halvB = slotsB.filter((x) => !helklass.has(sessionsNyckel(x.datum, x.start)));
+  const undantag = new Set(amne.labUndantag ?? []);
+  const labbar = amne.laborationer ?? [];
+  const a: PlaneradLektion[] = []; const b: PlaneradLektion[] = []; const sessioner: HalvklassSession[] = [];
+  let nastaLektion = 0; let nastaLab = 0; let halvIdx = 0;
+  const lagg = (lista: PlaneradLektion[], kapitel: number, lektion: Lektion, x: { datum: string; vecka: number; start: string; slut: string }) =>
+    lista.push({ kapitel, lektion, datum: x.datum, vecka: x.vecka, start: x.start, slutTid: x.slut });
+  for (const x of slotsA) {
+    const nyckel = sessionsNyckel(x.datum, x.start);
+    if (helklass.has(nyckel)) {
+      const l = lektioner[nastaLektion];
+      if (l !== undefined) { nastaLektion += 1; lagg(a, l.kapitel, l.lektion, x); lagg(b, l.kapitel, l.lektion, bAvNyckel.get(nyckel)!); }
+      continue;
+    }
+    const xb = halvB[halvIdx] ?? null; halvIdx += 1;
+    if (undantag.has(nyckel)) {
+      const l = lektioner[nastaLektion];
+      if (l !== undefined) {
+        nastaLektion += 1;
+        lagg(a, l.kapitel, l.lektion, x); if (xb !== null) lagg(b, l.kapitel, l.lektion, xb);
+      }
+      sessioner.push({ nyckel, vecka: x.vecka, a: x, b: xb, laboration: undefined, vanlig: true });
+      continue;
+    }
+    const lab = labbar[nastaLab] ?? null; nastaLab += 1;
+    const lektion = laborationTillLektion(lab, nastaLab);
+    const kapitel = a[a.length - 1]?.kapitel ?? lektioner[nastaLektion]?.kapitel ?? 1;
+    lagg(a, kapitel, lektion, x); if (xb !== null) lagg(b, kapitel, lektion, xb);
+    sessioner.push({ nyckel, vecka: x.vecka, a: x, b: xb, laboration: lab, vanlig: false });
+  }
+  // Bokens lektioner som inte fick plats
+  for (let i = nastaLektion; i < lektioner.length; i += 1) {
+    const l = lektioner[i];
+    a.push({ kapitel: l.kapitel, lektion: l.lektion, datum: null, vecka: null, start: null, slutTid: null });
+  }
+  return { a, b, sessioner };
+}
+
+/** Ska ämnet planeras med laborationer på halvklasspassen? */
+export function harLaborationsstandard(amne: Amne): boolean {
+  return amne.halvklass === true && amne.laborationsstandard === true;
+}
+
+/** Slår av/på 'vanlig lektion' för ett halvklasspass. */
+export function vaxlaLabUndantag(s: Struktur, amneId: string, nyckel: string): Struktur {
+  return {
+    ...s,
+    amnen: s.amnen.map((a) => {
+      if (a.id !== amneId) return a;
+      const u = new Set(a.labUndantag ?? []);
+      if (u.has(nyckel)) u.delete(nyckel); else u.add(nyckel);
+      return { ...a, labUndantag: [...u].sort() };
+    }),
+  };
+}
+
+export function sparaLaborationer(s: Struktur, amneId: string, laborationer: Laboration[]): Struktur {
+  return { ...s, amnen: s.amnen.map((a) => (a.id === amneId ? { ...a, laborationer } : a)) };
+}
+
+export function sattLaborationsstandard(s: Struktur, amneId: string, pa: boolean): Struktur {
+  return { ...s, amnen: s.amnen.map((a) => (a.id === amneId ? { ...a, laborationsstandard: pa } : a)) };
+}

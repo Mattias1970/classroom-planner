@@ -2319,3 +2319,36 @@ describe('Del 126: omfång i SuperTeach', () => {
     expect(JSON.parse(localStorage.getItem('st.omfang')!)).toBe('no-termin');
   });
 });
+
+describe('Del 127: halvklasspass är laborationer', () => {
+  it('nytt halvklassämne får laborationsstandard; 🧪-fliken visar passen; ta bort laboration → vanlig lektion; samma plan i kalendern', async () => {
+    const host = render();
+    await tillKlass(host);
+    valj(select(host, 'Ämne'), 'Biologi');
+    valj(select(host, 'Bok för ämnet'), 'gleerups-biologi-8');
+    valj(select(host, 'Veckodag pass 1'), '2');   // A: tisdag
+    valj(select(host, 'Veckodag pass 2'), '4');   // B: torsdag
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    const amne = lasStruktur().amnen[0];
+    expect(amne).toMatchObject({ halvklass: true, laborationsstandard: true });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+    // Lektionsplanen: halvklasspassen är laborationer
+    expect(host.textContent).toContain('Laboration 1');
+    act(() => { knapp(host, '🧪 Laborationer').click(); });
+    expect(host.textContent).toContain('laborationspass');
+    const forsta = knapp(host, '✕ Ta bort laboration');
+    expect(forsta).not.toBeNull();
+    act(() => { forsta.click(); });
+    expect(lasStruktur().amnen[0].labUndantag).toHaveLength(1);
+    expect(host.textContent).toContain('vanlig lektion (nästa ur boken)');
+    // Planera en laboration
+    act(() => { knapp(host, '➕ Lägg till laboration').click(); });
+    skriv(host.querySelector('input[aria-label="Laboration 1 rubrik"]') as HTMLInputElement, 'Mikroskopera celler');
+    expect(lasStruktur().amnen[0].laborationer![0].rubrik).toBe('Mikroskopera celler');
+    act(() => { knapp(host, '📝 Lektionsplan').click(); });
+    expect(host.textContent).toContain('🧪 Mikroskopera celler');
+    // Samma planering i kalendern (en plats för datat)
+    act(() => { knapp(host, '📅 Kalender').click(); });
+    expect(host.textContent).toContain('Mikroskopera celler');
+  });
+});

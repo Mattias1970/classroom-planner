@@ -73,6 +73,15 @@ export interface Amne {
   halvklass?: boolean;
   /** Grupp B:s schema (krävs när halvklass är satt). */
   schemaB?: Pass[];
+  /**
+   * Halvklasspass är laborationer för både A och B (NO-ämnen). Bokens lektioner läggs
+   * bara på helklasspass — och på halvklasspass där laborationen tagits bort (labUndantag).
+   */
+  laborationsstandard?: boolean;
+  /** Laborationsplaneringen — läggs ut i ordning på halvklasspassen. */
+  laborationer?: Laboration[];
+  /** Halvklasspass (nyckel 'YYYY-MM-DD|HH:MM' för grupp A:s pass) som i stället får nästa vanliga lektion. */
+  labUndantag?: string[];
   /** NO+Tk-blockkurs: gemensamt id för de fyra delämnena som läses i följd. */
   noGrupp?: string;
   /** Position 0–3 i NO+Tk-blockens läsordning. */
@@ -82,6 +91,20 @@ export interface Amne {
 }
 
 /** Egen rad som läraren infogar i ämnets planering utöver bokens lektioner. */
+/** En laboration i NO-ämnets laborationsplanering. */
+export interface Laboration {
+  id: string;
+  rubrik: string;
+  /** Delkapitel laborationen hör till ('4.2'), om något. */
+  delkapitel?: string;
+  syfte?: string;
+  material?: string;
+  genomforande?: string;
+  sakerhet?: string;
+  /** Eleverna lämnar in labbrapport. */
+  rapport?: boolean;
+}
+
 export interface EgenRad {
   id: string;
   /** Infogas på denna position i planeringen (0-baserad). Efterföljande lektioner skjuts framåt. */
@@ -96,7 +119,7 @@ export interface EgenRad {
 /** Bokens namn på de tre uppgiftsnivåerna (intro / E / C–A). */
 export interface NivaEtiketter { niva1: string; niva2: string; niva3: string; }
 
-export type LektionsTyp = 'regular' | 'test' | 'repetition' | 'review' | 'ovaformagor' | 'exam';
+export type LektionsTyp = 'regular' | 'test' | 'repetition' | 'review' | 'ovaformagor' | 'exam' | 'laboration';
 
 export interface Lektion {
   id: number;
