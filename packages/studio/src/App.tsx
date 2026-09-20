@@ -18,7 +18,6 @@ import {
   kalendariumFromIcs, laggTillAmne, laggTillElev, laggTillKlass, laggTillLarare,
   laggTillSkolar, laggTillTjanst, larareSchema, normaliseraDagar, nyttId, parseKalendarium,
   ledigtStandardpass, passKonflikter, registreraPlanering, sattLarare, schemaKonflikter,
-  skapaPlanering,
   socrativeRum, sparaBok, lektionsNamn, sattSocrativeQr, socrativeQr, sattSocrativeLank, socrativeLank, rumUrLektion,
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
@@ -34,7 +33,8 @@ import {
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
-  resultatProcent, saknadeResultat, planForAmne, harLaborationsstandard, skapaHalvklassPlanering, sattLaborationsstandard, sattPlanFrystTill, sparaLaborationer, sattPassVal, type HalvklassSession, type Laboration, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type Elev, type KalenderDagRuta, type KalenderHandelse,
+  resultatProcent, saknadeResultat, planForAmne, harLaborationsstandard, amnesPlan, amnesOffset, sattLaborationsstandard, sattPlanFrystTill, sparaLaborationer, sattPassVal, type HalvklassSession, type Laboration, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type Elev, type KalenderDagRuta, type KalenderHandelse,
+  gruppNyckel, grundRader, planeringsRader, antalIBoken, lektionerPerDelkapitel, sattLektionerPerDelkapitel, sattAntalLektioner, sattLektionsVal, laggTillEgenRad, taBortEgenRad, bokLektioner, type LektionsVal,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
 } from '@planner/kernel';
@@ -52,6 +52,7 @@ import {
 } from './github.js';
 
 const DAGNAMN = ['', 'Måndag', 'Tisdag', 'Onsdag', 'Torsdag', 'Fredag'];
+const TOM_PLAN: PlaneradLektion[] = [];
 type Vald =
   | { typ: 'skolar'; id: string } | { typ: 'tjanst'; id: string }
   | { typ: 'klass'; id: string } | { typ: 'amne'; id: string }
@@ -1245,7 +1246,7 @@ function LaborationsPanel({ s, amne, sessioner, kor, oppnaLektion }: {
     const j = i + dir; if (j < 0 || j >= labbar.length) return;
     const ny = [...labbar]; [ny[i], ny[j]] = [ny[j], ny[i]]; spara(ny, 'Ordningen ändrad.');
   };
-  const labSessioner = sessioner.filter((x) => !x.fryst && x.typ === 'lab' && x.val?.kalla !== 'egen');
+  const labSessioner = sessioner.filter((x) => !x.fryst && !x.genomford && x.typ === 'lab' && x.val?.kalla !== 'egen');
   const dag = (d: string) => `${DAGKORT_KORT[(new Date(`${d}T12:00:00Z`).getUTCDay() + 6) % 7] ?? ''} ${kortDatum(d)}`;
   return (
     <div className="card">
@@ -1271,7 +1272,7 @@ function LaborationsPanel({ s, amne, sessioner, kor, oppnaLektion }: {
             }
             kor(() => sattPassVal(lasStruktur(), amne.id, x.nyckel, { typ, kalla }), `${dag(x.a.datum)}: ${typ === 'lab' ? 'nästa laboration ur planeringen' : 'nästa teorilektion ur planeringen'}.`);
           };
-          if (x.fryst) {
+          if (x.fryst || x.genomford) {
             return (
               <tr key={x.nyckel} className="muted">
                 <td>{x.vecka}</td>
@@ -1345,13 +1346,13 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
   const la = s.skolar.find((x) => x.id === tjanst?.skolarId);
   const bok = s.bocker.find((b) => b.id === a?.bokId);
   const budget = useMemo(() => (a && la && a.noGrupp !== undefined ? noBudget(la, a.schema) : 0), [a, la]);
-  const offset = a?.noGrupp !== undefined && a.noOrder !== undefined ? a.noOrder * budget : 0;
-  // En plats för planeringen: halvklassämnen med laborationsstandard räknas via
-  // skapaHalvklassPlanering (samma funktion som kalender, kernel-plan och SuperTeach använder)
+  // En plats för planeringen: amnesPlan är samma funktion som kalendern, SuperTeach och
+  // studieguiden använder — ändras planeringen här ändras den överallt
   const idag = new Date().toISOString().slice(0, 10);
-  const halvklassPlan = useMemo(() => (a && la && bok && harLaborationsstandard(a) ? skapaHalvklassPlanering(la, a, bok, offset, idag) : null), [a, la, bok, offset, idag]);
-  const plan = useMemo(() => (halvklassPlan !== null ? halvklassPlan.a : (a && la && bok ? skapaPlanering(la, a.schema, bok, offset, a.egnaRader ?? []) : [])), [a, la, bok, offset, halvklassPlan]);
-  const planB = useMemo(() => (halvklassPlan !== null ? halvklassPlan.b : (a && la && bok && a.halvklass === true ? skapaPlanering(la, a.schemaB ?? [], bok, offset, a.egnaRader ?? []) : [])), [a, la, bok, offset, halvklassPlan]);
+  const ap = useMemo(() => (a && la && bok ? amnesPlan(la, a, bok, amnesOffset(la, a), idag) : null), [a, la, bok, idag]);
+  const plan = ap?.a ?? TOM_PLAN;
+  const planB = ap?.b ?? TOM_PLAN;
+  const halvklassPlan = ap?.sessioner ?? null;
   const harPlanering = s.planeringar.some((p) => p.amneId === id);
   // Genomförd planering rörs aldrig: första gången ett halvklassämne visas med laborationer
   // fryses allt före idag, så att frysdatumet inte glider med kalendern
@@ -1370,7 +1371,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
   useEffect(() => { if (hopp != null && hopp.amneId === id) { setDetaljIdx(hopp.i); setFlik('detalj'); } }, [hopp?.n]);   // kalenderklick → lektionssidan
   if (!a || !klass || !la) return null;
   const halv = a.halvklass === true;
-  const overBudget = a.noGrupp !== undefined && bok !== undefined && noOverBudget(bok, budget);
+  const overBudget = a.noGrupp !== undefined && bok !== undefined && noOverBudget(bok, budget, a);
   const noSyskon = a.noGrupp !== undefined ? s.amnen.filter((x) => x.noGrupp === a.noGrupp).sort((x, y) => (x.noOrder ?? 0) - (y.noOrder ?? 0)) : [];
   const rum = socrativeRum(a.namn, klass.namn);
   return (
@@ -1429,6 +1430,23 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
         {halv
           ? <HalvklassSchemaRedigerare key={a.id} s={s} amne={a} kor={kor} />
           : <AmneSchemaRedigerare key={a.id} s={s} amne={a} kor={kor} falt="schema" rubrik="Schema" />}
+        {bok && (
+          <div className="uppg-kort" style={{ marginTop: 8 }}>
+            <b>📚 Lektioner per delkapitel</b>{' '}
+            <select aria-label="Lektioner per delkapitel" value={lektionerPerDelkapitel(a)} disabled={!harPlanering}
+              title={!harPlanering ? 'Skapa planeringen först' : 'Gäller lektioner som inte genomförts'}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                const fran = franForInstallning(plan, idag);
+                if (fran === null) { window.alert('Alla lektioner är genomförda — inget att ändra.'); return; }
+                kor(() => sattLektionerPerDelkapitel(lasStruktur(), a.id, n, fran.fran, idag),
+                  `${a.namn}: ${n} lektion${n === 1 ? '' : 'er'} per delkapitel${fran.fran !== undefined ? ' — från nästa lektion som inte är genomförd' : ''}.`);
+              }}>
+              {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+            <p className="note">Varje delkapitel får så här många lektioner automatiskt (Del 1, Del 2 …). Har boken redan fler behålls de. Ändringen gäller framåt — det som redan genomförts rörs inte. Ett enskilt delkapitel kan få ett annat antal i Lektionsplan.</p>
+          </div>
+        )}
         {halv && (
           <label className="small" style={{ display: 'block', marginTop: 8 }}>
             <input type="checkbox" checked={a.laborationsstandard !== false}
@@ -1445,7 +1463,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
         halvklassPlan === null
           ? <div className="card"><p className="note">Laborationerna är avstängda för det här ämnet. Slå på <b>Halvklasspass är laborationer</b> under 🗓 Schema, så blir varje halvklasspass en laboration för grupp A och B.</p>
               <button className="btn" onClick={() => kor(() => sattLaborationsstandard(lasStruktur(), a.id, true, new Date().toISOString().slice(0, 10)), 'Halvklasspassen är laborationer för grupp A och B — från idag.')}>🧪 Slå på laborationer</button></div>
-          : <LaborationsPanel s={s} amne={a} sessioner={halvklassPlan.sessioner} kor={kor} oppnaLektion={(datum) => { const i = plan.findIndex((r) => r.datum === datum); if (i >= 0) oppnaLektion(i); }} />
+          : <LaborationsPanel s={s} amne={a} sessioner={halvklassPlan} kor={kor} oppnaLektion={(datum) => { const i = plan.findIndex((r) => r.datum === datum); if (i >= 0) oppnaLektion(i); }} />
       )}
       {flik === 'planering' && (<>
       {!arStodAmne(a.namn) && <label>Bok:{' '}
@@ -1469,7 +1487,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
             : `Planering skapad: ${bok!.titel} utlagd på ${klass.namn}s schema — ${plan.filter((p) => p.datum !== null).length} lektioner får datum.`)}>
         {harPlanering ? '➕ Spara ny planeringsversion' : '▶ Skapa planering'}
       </button>
-      {bok && harPlanering && <EgnaRaderRedigerare amne={a} plan={plan} kor={kor} />}
+      {bok && harPlanering && <EgnaRaderRedigerare amne={a} bok={bok} kor={kor} idag={idag} />}
       {(s.planeringsarkiv ?? []).some((x) => x.amneId === a.id) && (
         <div className="uppg-kort no-print">
           <b>🗂 Tidigare planeringsversioner</b> <small className="muted">Sparade planeringar skrivs aldrig över — återställ vid behov.</small>
@@ -1483,10 +1501,10 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
         </div>
       )}
       {bok && !halv && <GruppPlanering plan={plan} bok={bok} amnesNamn={a.namn} klassNamn={klass.namn} rum={rum}
-        s={s} amneId={a.id} kor={kor} />}
+        s={s} amneId={a.id} kor={kor} amne={harPlanering ? a : undefined} idag={idag} />}
       {bok && halv && (
         <GruppPlanering plan={plan} planB={planB} bok={bok} amnesNamn={a.namn} klassNamn={klass.namn}
-          rum={rum} rubrik={`${klass.namn} · rum ${rum} — en klass, gemensam planering`} s={s} amneId={a.id} kor={kor} />
+          rum={rum} rubrik={`${klass.namn} · rum ${rum} — en klass, gemensam planering`} s={s} amneId={a.id} kor={kor} amne={harPlanering ? a : undefined} idag={idag} />
       )}
       </>)}
       <div className="modal-actions">
@@ -1500,29 +1518,69 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
   );
 }
 
-/** ➕ Egna rader: prov, diagnoser och övningar som infogas i planeringen (bokens lektioner skjuts framåt). */
-function EgnaRaderRedigerare({ amne, plan, kor }: {
-  amne: Amne; plan: PlaneradLektion[]; kor: (fn: () => Struktur, m: string) => void;
+/**
+ * Startpunkt för en ny ämnesinställning: den första boklektionen som inte är genomförd
+ * (undefined = inget genomfört, gäller från början). null = allt är genomfört.
+ */
+function franForInstallning(plan: PlaneradLektion[], idag: string): { fran?: string } | null {
+  if (!plan.some((r) => r.datum !== null && r.datum < idag)) return {};
+  const kommande = plan.find((r) => (r.datum === null || r.datum >= idag) && r.nyckel !== undefined
+    && !r.nyckel.startsWith('lab:') && !r.nyckel.startsWith('pass:') && !r.nyckel.startsWith('er:'));
+  return kommande?.nyckel === undefined ? null : { fran: kommande.nyckel.split('#')[0] };
+}
+
+/**
+ * Positionen i grundföljden som ligger efter planens rad i: bokens lektion (eller dess
+ * förlaga för en extra lektion) + 1; för laborationer och passlektioner nästa boklektion.
+ */
+function grundPositionEfter(grund: Array<{ nyckel: string }>, plan: PlaneradLektion[], i: number): number {
+  const bas = (n: string) => n.split('#')[0];
+  const egen = plan[i]?.nyckel;
+  if (egen !== undefined) {
+    const idx = grund.findIndex((g) => g.nyckel === bas(egen));
+    if (idx >= 0) return idx + 1;
+  }
+  for (let j = i + 1; j < plan.length; j += 1) {
+    const n = plan[j].nyckel;
+    if (n === undefined) continue;
+    const idx = grund.findIndex((g) => g.nyckel === bas(n));
+    if (idx >= 0) return idx;
+  }
+  return grund.length;
+}
+
+/**
+ * ➕ Egna rader: prov, diagnoser och övningar som infogas i planeringen (bokens lektioner
+ * skjuts framåt). Positionen avser grundföljden — bokens lektioner med tidigare egna rader —
+ * så raden hamnar före den lektion man pekar på oavsett extra lektioner och laborationer.
+ * Lektionsplanerna följer sina lektioner (Del 129).
+ */
+function EgnaRaderRedigerare({ amne, bok, kor, idag }: {
+  amne: Amne; bok: Bok; kor: (fn: () => Struktur, m: string) => void; idag: string;
 }) {
+  const grund = grundRader(bok, amne);
   const [rubrik, setRubrik] = useState('');
   const [typ, setTyp] = useState<EgenRad['typ']>('prov');
-  const [pos, setPos] = useState(plan.length);
+  const [pos, setPos] = useState(grund.length);
   const [beskrivning, setBeskrivning] = useState('');
   const rader = amne.egnaRader ?? [];
   const TYPNAMN: Record<EgenRad['typ'], string> = { prov: 'Prov', diagnos: 'Diagnos', ovning: 'Övning', annat: 'Annat' };
+  const namn = (r: (typeof grund)[number]) => `${r.lektion.avsnitt}${delkapitelUrAvsnitt(r.lektion.avsnitt) !== null ? ` · Del ${r.lektion.del}` : ''}`;
   return (
     <div className="uppg-kort no-print">
       <b>➕ Egna rader</b> <small className="muted">Prov, diagnoser och övningar infogas i planeringen — bokens lektioner skjuts framåt.</small>
       {rader.length > 0 && (
         <div style={{ margin: '6px 0' }}>
-          {[...rader].sort((x, y) => x.position - y.position).map((r) => (
-            <div key={r.id} className="rad film-rad">
-              <span><TypChip typ={r.typ === 'prov' ? 'exam' : r.typ === 'diagnos' ? 'test' : r.typ === 'ovning' ? 'repetition' : 'regular'} /> <b>{r.rubrik}</b> <span className="muted small">— lektion {r.position + 1}{r.beskrivning !== undefined && r.beskrivning !== '' ? ` · ${r.beskrivning}` : ''}</span></span>
-              <button className="icon-btn" title="Ta bort raden" onClick={() => kor(() => uppdateraAmne(lasStruktur(), amne.id, {
-                egnaRader: (lasStruktur().amnen.find((x) => x.id === amne.id)?.egnaRader ?? []).filter((x) => x.id !== r.id),
-              }), `Raden "${r.rubrik}" borttagen.`)}>✕</button>
-            </div>
-          ))}
+          {[...rader].sort((x, y) => x.position - y.position).map((r) => {
+            const i = grund.findIndex((g) => g.nyckel === `er:${r.id}`);
+            const fore = grund[i + 1];
+            return (
+              <div key={r.id} className="rad film-rad">
+                <span><TypChip typ={r.typ === 'prov' ? 'exam' : r.typ === 'diagnos' ? 'test' : r.typ === 'ovning' ? 'repetition' : 'regular'} /> <b>{r.rubrik}</b> <span className="muted small">— {fore !== undefined ? `före ${namn(fore)}` : 'sist i planeringen'}{r.beskrivning !== undefined && r.beskrivning !== '' ? ` · ${r.beskrivning}` : ''}</span></span>
+                <button className="icon-btn" title="Ta bort raden" onClick={() => kor(() => taBortEgenRad(lasStruktur(), amne.id, r.id, idag), `Raden "${r.rubrik}" borttagen.`)}>✕</button>
+              </div>
+            );
+          })}
         </div>
       )}
       <div className="rad" style={{ flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
@@ -1531,18 +1589,18 @@ function EgnaRaderRedigerare({ amne, plan, kor }: {
         </select>
         <input aria-label="Radrubrik" placeholder="T.ex. Prov i Tal / Diagnos kap 2" value={rubrik}
           onChange={(e) => setRubrik(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
-        <select aria-label="Radposition" value={pos} onChange={(e) => setPos(Number(e.target.value))}>
-          {plan.map((r, i) => <option key={i} value={i}>Före lektion {i + 1} — {r.lektion.avsnitt}</option>)}
-          <option value={plan.length}>Sist i planeringen</option>
+        <select aria-label="Radposition" value={Math.min(pos, grund.length)} onChange={(e) => setPos(Number(e.target.value))}>
+          {grund.map((r, i) => <option key={r.nyckel} value={i}>Före {namn(r)}</option>)}
+          <option value={grund.length}>Sist i planeringen</option>
         </select>
         <input aria-label="Radbeskrivning" placeholder="Beskrivning (valfri)" value={beskrivning}
           onChange={(e) => setBeskrivning(e.target.value)} style={{ flex: 1, minWidth: 140 }} />
         <button className="btn sec sm" disabled={rubrik.trim() === ''} onClick={() => {
-          const ny: EgenRad = { id: nyttId('er'), position: pos, rubrik: rubrik.trim(), typ,
+          const p = Math.min(pos, grund.length);
+          const ny: EgenRad = { id: nyttId('er'), position: p, rubrik: rubrik.trim(), typ,
             ...(beskrivning.trim() !== '' ? { beskrivning: beskrivning.trim() } : {}) };
-          kor(() => uppdateraAmne(lasStruktur(), amne.id, {
-            egnaRader: [...(lasStruktur().amnen.find((x) => x.id === amne.id)?.egnaRader ?? []), ny],
-          }), `${TYPNAMN[typ]} "${ny.rubrik}" infogad som lektion ${pos + 1}.`);
+          kor(() => laggTillEgenRad(lasStruktur(), amne.id, ny, idag),
+            `${TYPNAMN[typ]} "${ny.rubrik}" infogad ${grund[p] !== undefined ? `före ${namn(grund[p])}` : 'sist i planeringen'}.`);
           setRubrik(''); setBeskrivning('');
         }}>+ Infoga rad</button>
       </div>
@@ -1800,9 +1858,9 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
         const rubrik = window.prompt('Rubrik för den nya lektionen (t.ex. Repetition, Diagnos, Prov):', 'Extra övning');
         if (rubrik === null || rubrik.trim() === '') return;
         const amne = lasStruktur().amnen.find((x) => x.id === amneId);
-        kor(() => uppdateraAmne(lasStruktur(), amneId, {
-          egnaRader: [...(amne?.egnaRader ?? []), { id: nyttId('er'), position: i + 1, rubrik: rubrik.trim(), typ: 'ovning' as const }],
-        }), `\"${rubrik.trim()}\" infogad efter lektion ${i + 1} — bokens lektioner skjuts framåt.`);
+        const position = amne === undefined ? i + 1 : grundPositionEfter(grundRader(bok, amne), plan, i);
+        kor(() => laggTillEgenRad(lasStruktur(), amneId, { id: nyttId('er'), position, rubrik: rubrik.trim(), typ: 'ovning' as const }, new Date().toISOString().slice(0, 10)),
+          `\"${rubrik.trim()}\" infogad efter lektion ${i + 1} — bokens lektioner skjuts framåt.`);
       }}>➕ Lägg till lektion efter denna</button>
       {arHalvklass(amnesNamn) && (
         <NoPlanering key={`${amneId}-${i}`} s={s} amneId={amneId} lektionsIndex={i} kor={kor}
@@ -2219,10 +2277,45 @@ function GruppPlanering(props: {
   plan: PlaneradLektion[]; planB?: PlaneradLektion[]; bok: Bok; amnesNamn: string; klassNamn: string;
   rum: string; rubrik?: string;
   s?: Struktur; amneId?: string; kor?: (fn: () => Struktur, m: string) => void;
+  /** Del 129: med ämnet och dagens datum kan lektioner tas bort, ersättas och utökas (bara framåt i tiden). */
+  amne?: Amne; idag?: string;
 }) {
-  const { plan, planB, bok, amnesNamn, klassNamn, rum, rubrik, s, amneId, kor } = props;
+  const { plan, planB, bok, amnesNamn, klassNamn, rum, rubrik, s, amneId, kor, amne, idag } = props;
   const [valdRad, setValdRad] = useState<number | null>(null);
   const halvklassAmne = planB !== undefined;
+  const kanAndra = s !== undefined && amneId !== undefined && kor !== undefined && amne !== undefined && idag !== undefined;
+  const genomford = (r: PlaneradLektion) => idag !== undefined && r.datum !== null && r.datum < idag;
+  const bokRad = (r: PlaneradLektion) => r.nyckel !== undefined && !r.nyckel.startsWith('lab:') && !r.nyckel.startsWith('pass:');
+  // Antal lektioner per delkapitel just nu (utan borttag) och hur många av dem som är genomförda
+  const antalNu = useMemo(() => {
+    const ut = new Map<string, number>();
+    if (amne === undefined) return ut;
+    for (const r of planeringsRader(bok, { ...amne, lektionsVal: undefined })) { const g = gruppNyckel(r); ut.set(g, (ut.get(g) ?? 0) + 1); }
+    return ut;
+  }, [bok, amne]);
+  const genomfordaIGrupp = (g: string) => plan.filter((r) => bokRad(r) && gruppNyckel(r) === g && genomford(r)).length;
+  const bokensLektioner = useMemo(() => bokLektioner(bok), [bok]);
+  const atgard = (r: PlaneradLektion, i: number, kod: string) => {
+    if (!kanAndra || r.nyckel === undefined) return;
+    const nyckel = r.nyckel;
+    const namn = lektionsNamn(r.lektion, hamtaLektionsplan(s, amneId, i));
+    if (kod === 'bort') {
+      const harPlan = hamtaLektionsplan(s, amneId, i) !== null;
+      if (!window.confirm(`Ta bort lektion ${i + 1} (${namn}) ur planeringen?${harPlan ? ' Lektionens detaljplanering försvinner.' : ''} Efterföljande lektioner flyttas fram ett pass.`)) return;
+      kor(() => sattLektionsVal(lasStruktur(), amneId, nyckel, { bort: true }, idag), `Lektion ${i + 1} (${namn}) borttagen — efterföljande lektioner flyttade fram.`);
+    } else if (kod === 'egen') {
+      const rubrik = window.prompt('Rubrik på lektionen som ersätter:', '');
+      if (rubrik === null || rubrik.trim() === '') return;
+      kor(() => sattLektionsVal(lasStruktur(), amneId, nyckel, { ersatt: { rubrik: rubrik.trim(), typ: 'annat' } }, idag), `Lektion ${i + 1} ersatt med "${rubrik.trim()}".`);
+    } else if (kod === 'aterstall') {
+      kor(() => sattLektionsVal(lasStruktur(), amneId, nyckel, null, idag), `Lektion ${i + 1}: bokens lektion igen.`);
+    } else if (kod.startsWith('bok:')) {
+      const [, kap, id] = kod.split(':');
+      const ur = bokensLektioner.find((x) => x.kapitel === Number(kap) && x.lektion.id === Number(id));
+      if (ur === undefined) return;
+      kor(() => sattLektionsVal(lasStruktur(), amneId, nyckel, { ersatt: { kapitel: ur.kapitel, lektionId: ur.lektion.id } }, idag), `Lektion ${i + 1} ersatt med ${ur.lektion.avsnitt} · Del ${ur.lektion.del}.`);
+    }
+  };
   /**
    * En klass — en planering: Grupp A:s och B:s rader slås ihop per (datum, tid).
    * Samma lektion i båda grupperna på samma slot visas EN gång som Helklass;
@@ -2237,7 +2330,8 @@ function GruppPlanering(props: {
     for (const [index, r] of plan.entries()) {
       const nyckel = `${r.datum}|${r.start}`;
       const b = bNyckel.get(nyckel);
-      if (r.datum !== null && b !== undefined && b.r.lektion.id === r.lektion.id && b.r.kapitel === r.kapitel) {
+      const samma = b !== undefined && (r.nyckel !== undefined && b.r.nyckel !== undefined ? b.r.nyckel === r.nyckel : (b.r.lektion.id === r.lektion.id && b.r.kapitel === r.kapitel));
+      if (r.datum !== null && b !== undefined && samma) {
         ut.push({ r, index, klassTyp: 'Helklass' }); tagna.add(nyckel);
       } else {
         ut.push({ r, index, klassTyp: 'Grupp A' });
@@ -2252,12 +2346,18 @@ function GruppPlanering(props: {
   return (
     <>
       {rubrik !== undefined && <h3 className="grupp-h">{rubrik}</h3>}
+      {kanAndra && <p className="note no-print">Lektioner som ligger framåt i tiden kan tas bort, ersättas eller få fler lektioner på delkapitlet (Del 1, Del 2 …). Genomförda lektioner ändras aldrig. Lektionsplanerna följer sina lektioner när följden ändras.</p>}
       <table className="tbl plan clickable">
-        <thead><tr><th title="Avklarad">✓</th><th>Datum</th><th>Dag</th><th>V.</th><th>Tid</th>{halvklassAmne && <th>Klass</th>}<th>Kap</th><th>Avsnitt</th>{bokHarNivaer(bok) && <><th>{bok.nivaer.niva1}</th><th>{bok.nivaer.niva2}</th><th>{bok.nivaer.niva3}</th></>}</tr></thead>
+        <thead><tr><th title="Avklarad">✓</th><th>Nr</th><th>Datum</th><th>Dag</th><th>V.</th><th>Tid</th>{halvklassAmne && <th>Klass</th>}<th>Kap</th><th>Avsnitt</th>{bokHarNivaer(bok) && <><th>{bok.nivaer.niva1}</th><th>{bok.nivaer.niva2}</th><th>{bok.nivaer.niva3}</th></>}{kanAndra && <><th title="Antal lektioner på delkapitlet">Lekt.</th><th></th></>}</tr></thead>
         <tbody>{rader.map(({ r, index: i, klassTyp }, radNr) => {
           const klar = s !== undefined && amneId !== undefined && hamtaLektionsplan(s, amneId, i)?.klar === true;
+          const val: LektionsVal | undefined = r.nyckel !== undefined ? amne?.lektionsVal?.[r.nyckel] : undefined;
+          const ersatt = val?.ersatt !== undefined;
+          const grupp = bokRad(r) ? gruppNyckel(r) : null;
+          const iBoken = grupp !== null && amne !== undefined && !r.nyckel!.startsWith('er:') && r.lektion.typ !== 'exam' && !ersatt ? antalIBoken(bok, amne, grupp) : null;
+          const minst = grupp !== null && iBoken !== null ? Math.max(iBoken, genomfordaIGrupp(grupp)) : 0;
           return (
-          <tr key={radNr} className={`${r.datum === null ? 'saknas' : ''} ${valdRad === radNr ? 'vald' : ''} ${klar ? 'klar' : ''}`}
+          <tr key={radNr} className={`${r.datum === null ? 'saknas' : ''} ${valdRad === radNr ? 'vald' : ''} ${klar ? 'klar' : ''} ${ersatt ? 'ersatt' : ''}`}
             onClick={() => setValdRad(valdRad === radNr ? null : radNr)} title="Öppna lektionskort">
             <td onClick={(e) => e.stopPropagation()}>
               {s !== undefined && amneId !== undefined && kor !== undefined && (
@@ -2268,13 +2368,45 @@ function GruppPlanering(props: {
                   }), e.target.checked ? `Lektion ${i + 1} avklarad ✓` : `Lektion ${i + 1} markerad som ej klar.`)} />
               )}
             </td>
+            <td className="lekt-nr"><b>{i + 1}</b></td>
             <td>{r.datum ?? 'ryms ej'}</td>
             <td>{r.datum !== null ? DAGNAMN[new Date(`${r.datum}T00:00:00Z`).getUTCDay()] ?? '' : ''}</td>
             <td>{r.vecka ?? ''}</td>
             <td>{r.start !== null ? `${r.start}–${r.slutTid}` : ''}</td>
             {halvklassAmne && <td><span className={`omf-chip ${klassTyp === 'Helklass' ? 'omf-hel' : 'omf-halv'}`}>{klassTyp}</span></td>}
-            <td>{r.kapitel}</td><td>{r.lektion.avsnitt} · Del {r.lektion.del}</td>
+            <td>{r.kapitel}</td><td className="lekt-avsnitt">{r.lektion.avsnitt} · Del {r.lektion.del}{ersatt && <small className="muted"> · ersatt</small>}</td>
             {bokHarNivaer(bok) && <><td>{r.lektion.niva1}</td><td>{r.lektion.niva2}</td><td>{r.lektion.niva3}</td></>}
+            {kanAndra && (
+              <td onClick={(e) => e.stopPropagation()}>
+                {grupp !== null && iBoken !== null && !genomford(r) && (
+                  iBoken >= 4
+                    ? <span className="muted small" title="Boken har redan fyra lektioner på delkapitlet">{iBoken}</span>
+                    : <select aria-label={`Antal lektioner ${i + 1}`} title="Antal lektioner på delkapitlet — extra lektioner läggs efter den sista" value={antalNu.get(grupp) ?? iBoken}
+                        onChange={(e) => { const n = Number(e.target.value); kor(() => sattAntalLektioner(lasStruktur(), amneId, grupp, n, idag), `${r.lektion.avsnitt}: ${n} lektion${n === 1 ? '' : 'er'} på delkapitlet.`); }}>
+                        {[1, 2, 3, 4].filter((n) => n >= minst).map((n) => <option key={n} value={n}>{n}{n === iBoken ? ' (boken)' : ''}</option>)}
+                      </select>
+                )}
+              </td>
+            )}
+            {kanAndra && (
+              <td onClick={(e) => e.stopPropagation()}>
+                {genomford(r)
+                  ? <small className="muted">genomförd</small>
+                  : !bokRad(r)
+                    ? <small className="muted" title="Laborationer och passlektioner ändras under 🧪 Laborationer">🧪</small>
+                    : (
+                      <select aria-label={`Åtgärd lektion ${i + 1}`} value="" onChange={(e) => atgard(r, i, e.target.value)} title="Ta bort eller ersätt lektionen">
+                        <option value="">…</option>
+                        <option value="bort">🗑 Ta bort lektionen</option>
+                        <option value="egen">✏ Ersätt med egen lektion…</option>
+                        {ersatt && <option value="aterstall">↺ Bokens lektion igen</option>}
+                        <optgroup label="Ersätt med lektion ur boken">
+                          {bokensLektioner.map((x) => <option key={`${x.kapitel}:${x.lektion.id}`} value={`bok:${x.kapitel}:${x.lektion.id}`}>{x.lektion.avsnitt} · Del {x.lektion.del}</option>)}
+                        </optgroup>
+                      </select>
+                    )}
+              </td>
+            )}
           </tr>
           );
         })}</tbody>
@@ -4926,20 +5058,9 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
     setRadText(''); setProv('');
   };
 
-  /** Ämnets plan (grupp A + ev. grupp B) — för varningar och filklassificering. */
-  const planFor = (a2: (typeof amnen)[number] | undefined): PlaneradLektion[] => {
-    if (a2 === undefined) return [];
-    const tjanst = s.tjanster.find((t) => t.id === klass.tjanstId);
-    const skolar = s.skolar.find((x) => x.id === tjanst?.skolarId);
-    const bok = s.bocker.find((b) => b.id === a2.bokId);
-    if (!skolar || !bok || !s.planeringar.some((pl) => pl.amneId === a2.id)) return [];
-    const offset = a2.noGrupp !== undefined && a2.noOrder !== undefined ? a2.noOrder * noBudget(skolar, a2.schema) : 0;
-    if (harLaborationsstandard(a2)) { const h = skapaHalvklassPlanering(skolar, a2, bok, offset, new Date().toISOString().slice(0, 10)); return [...h.a, ...h.b]; }
-    const planA = skapaPlanering(skolar, a2.schema, bok, offset, a2.egnaRader ?? []);
-    const planB = a2.halvklass === true && a2.schemaB !== undefined
-      ? skapaPlanering(skolar, a2.schemaB, bok, offset, a2.egnaRader ?? []) : [];
-    return [...planA, ...planB];
-  };
+  /** Ämnets plan (grupp A + ev. grupp B) — samma plan som ämnessidan och kalendern. */
+  const planFor = (a2: (typeof amnen)[number] | undefined): PlaneradLektion[] =>
+    a2 === undefined ? [] : planForAmne(s, a2.id, new Date().toISOString().slice(0, 10));
 
   // Varningar: förväntade läxförhör/exits utan resultat (kräver planering + bok)
   const varningar = amne !== undefined

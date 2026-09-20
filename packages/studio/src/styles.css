@@ -334,7 +334,11 @@ body[data-tema="klassisk"] .tema-valj { border-color: var(--ram); background: #f
 .kap-badge strong { display: block; font-size: 16px; line-height: 1.2; font-weight: 800; }
 /* Avklarade lektioner */
 .tbl.plan tr.klar td { opacity: .55; }
-.tbl.plan tr.klar td:nth-child(6) { text-decoration: line-through; }
+.tbl.plan tr.klar td.lekt-avsnitt { text-decoration: line-through; }
+/* Del 129: lektionsnummer, ersatta lektioner och radåtgärder */
+.tbl.plan td.lekt-nr { text-align: right; color: var(--text-varm); }
+.tbl.plan tr.ersatt td.lekt-avsnitt { font-style: italic; }
+.tbl.plan td select { font-size: 12px; max-width: 150px; }
 .tbl.plan input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--bla); cursor: pointer; }
 
 /* ═══ Del 36: Lektionssidan (förlagans sektioner) ═══ */

@@ -6,7 +6,7 @@
  */
 import { amneBakgrund } from './amnen.js';
 import { isoVecka } from './skolar.js';
-import { harLaborationsstandard, noBudget, samlaSlots, skapaHalvklassPlanering, skapaPlanering } from './struktur.js';
+import { amnesOffset, amnesPlan, samlaSlots } from './struktur.js';
 import type { IsoDatum, PlaneradLektion, Skolar, Struktur } from './typer.js';
 
 export interface KalenderHandelse {
@@ -66,16 +66,12 @@ export function kalenderHandelser(s: Struktur, skolarId: string, idag?: string):
     if (!bok) continue;
     const farg = (kap: number) => bok.kapitel.find((k) => k.nr === kap)?.farg ?? '#5c6b7a';
     const amnesFarg = amneBakgrund(amne.namn);
-    // NO+Tk: delämnet börjar efter föregående delämnens block (offset).
-    const offset = amne.noGrupp !== undefined && amne.noOrder !== undefined
-      ? amne.noOrder * noBudget(skolar, amne.schema) : 0;
-    // En plats för planeringen: halvklassämnen med laborationer räknas med samma
-    // funktion som ämnessidan, så kalendern visar exakt det planeringen visar
-    const halv = harLaborationsstandard(amne) ? skapaHalvklassPlanering(skolar, amne, bok, offset, idag) : null;
+    // En plats för planeringen: samma funktion som ämnessidan, SuperTeach och
+    // studieguiden, så kalendern visar exakt det planeringen visar
+    const ap = amnesPlan(skolar, amne, bok, amnesOffset(skolar, amne), idag);
     const grupper: Array<{ grupp?: 'A' | 'B'; plan: PlaneradLektion[] }> = amne.halvklass === true
-      ? [{ grupp: 'A', plan: halv !== null ? halv.a : skapaPlanering(skolar, amne.schema, bok, offset, amne.egnaRader ?? []) },
-         { grupp: 'B', plan: halv !== null ? halv.b : skapaPlanering(skolar, amne.schemaB ?? [], bok, offset, amne.egnaRader ?? []) }]
-      : [{ grupp: undefined, plan: skapaPlanering(skolar, amne.schema, bok, offset, amne.egnaRader ?? []) }];
+      ? [{ grupp: 'A', plan: ap.a }, { grupp: 'B', plan: ap.b }]
+      : [{ grupp: undefined, plan: ap.a }];
     for (const g of grupper) {
       for (const [lektionsIndex, p] of g.plan.entries()) {
         if (p.datum === null || p.start === null || p.slutTid === null || p.vecka === null) continue;

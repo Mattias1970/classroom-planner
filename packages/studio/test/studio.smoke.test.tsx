@@ -1673,8 +1673,8 @@ describe('Bokens nivåkonventioner följs', () => {
     const panel = host.querySelector('.panel')!;
     expect(panel.textContent).not.toContain('Grön');
     expect(panel.textContent).not.toContain('ETT');
-    // Plantabellen saknar nivåkolumner (✓/Datum/Dag/V./Tid/Klass/Kap/Avsnitt = 8 för halvklassämne)
-    expect(panel.querySelector('table.plan')!.querySelectorAll('thead th')).toHaveLength(8);
+    // Plantabellen saknar nivåkolumner (✓/Nr/Datum/Dag/V./Tid/Klass/Kap/Avsnitt = 9 för halvklassämne utan planering)
+    expect(panel.querySelector('table.plan')!.querySelectorAll('thead th')).toHaveLength(9);
     expect(panel.textContent).toContain('Grupp A');     // omfattningen syns per rad (inga helklasspass i schemat)
     act(() => { knapp(host, '✏ Uppgifter').click(); });
     expect(host.querySelector('.regel')!.textContent).toContain('Testa dig själv');
@@ -2393,5 +2393,121 @@ describe('Del 127: halvklasspass är laborationer', () => {
     const veckans = kal.filter((h) => h.datum >= iso(manDag) && h.datum <= iso(freDag));
     const kalText = host.textContent ?? '';
     for (const h of veckans) expect(kalText, `${h.datum} ${h.avsnitt} saknas i veckovyn`).toContain(h.avsnitt);
+  });
+});
+
+describe('Del 129: lektioner tas bort, ersätts och utökas i Lektionsplan', () => {
+  const BOK129 = JSON.stringify({
+    schema: 'classroom-planner-bok', version: 1,
+    bok: { id: 'bok-129', titel: 'Matematik Z', förlag: 'Test', ämne: 'Matematik', årskurs: 8, kapitelMeta: { '1': { name: 'Tal', col: '#2f5aa8' } } },
+    lektioner: { '1': [
+      { id: 1, type: 'regular', avsnitt: '1.1 Tal', del: 1, ett: '1–8', två: '9–16', tre: '17–20' },
+      { id: 2, type: 'regular', avsnitt: '1.2 Potenser', del: 1, ett: '1–6', två: '7–12', tre: '13–15' },
+      { id: 3, type: 'exam', avsnitt: 'Prov kap 1', del: 1 },
+    ] },
+  });
+  const avsnitten = (host: HTMLElement) => [...host.querySelectorAll('table.plan tbody tr')].map((tr) => tr.querySelector('td.lekt-avsnitt')?.textContent ?? '');
+  const nummer = (host: HTMLElement) => [...host.querySelectorAll('table.plan tbody tr')].map((tr) => tr.querySelector('td.lekt-nr')?.textContent ?? '');
+
+  it('lektionsnummer, ämnesinställning 1–4, eget antal per delkapitel, ersätt, ta bort — genomförda lektioner låses och planerna följer lektionen', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-18T10:00:00Z'));   // tisdag — första lektionen (ons 19/8) ligger framåt
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host, BOK129);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'bok-129');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '📋 Planering').click(); });
+
+    // Lektionsnummer i Lektionsplan
+    expect(nummer(host)).toEqual(['1', '2', '3']);
+    expect(avsnitten(host)).toEqual(['1.1 Tal · Del 1', '1.2 Potenser · Del 1', 'Prov kap 1 · Del 1']);
+
+    // Ämnesinställning: 2 lektioner per delkapitel (under 🗓 Schema) → Del 2 på varje delkapitel, inte på provet
+    act(() => { knapp(host, '🗓 Schema').click(); });
+    expect(select(host, 'Lektioner per delkapitel').value).toBe('1');
+    valj(select(host, 'Lektioner per delkapitel'), '2');
+    act(() => { knapp(host, '📝 Lektionsplan').click(); });
+    expect(avsnitten(host)).toEqual(['1.1 Tal · Del 1', '1.1 Tal · Del 2', '1.2 Potenser · Del 1', '1.2 Potenser · Del 2', 'Prov kap 1 · Del 1']);
+    expect(nummer(host)).toEqual(['1', '2', '3', '4', '5']);
+    expect(lasStruktur().amnen[0].lektionerPerDelkapitel).toEqual([{ antal: 2 }]);
+
+    // Ett enskilt delkapitel: 1.1 får tre lektioner, sedan två igen
+    expect(select(host, 'Antal lektioner 1').value).toBe('2');
+    valj(select(host, 'Antal lektioner 1'), '3');
+    expect(avsnitten(host).slice(0, 3)).toEqual(['1.1 Tal · Del 1', '1.1 Tal · Del 2', '1.1 Tal · Del 3']);
+    valj(select(host, 'Antal lektioner 1'), '2');
+    expect(avsnitten(host)).toHaveLength(5);
+    expect(select(host, 'Antal lektioner 5')).toBeNull();   // provet utökas inte
+
+    // Ersätt lektion 2 med en egen lektion, och tillbaka till bokens
+    const prompt = vi.spyOn(window, 'prompt').mockReturnValue('Fältstudie');
+    valj(select(host, 'Åtgärd lektion 2'), 'egen');
+    expect(avsnitten(host)[1]).toBe('Fältstudie · Del 1 · ersatt');
+    expect(select(host, 'Antal lektioner 2')).toBeNull();   // en ersatt lektion har inget delkapitel att utöka
+    valj(select(host, 'Åtgärd lektion 2'), 'aterstall');
+    expect(avsnitten(host)[1]).toBe('1.1 Tal · Del 2');
+    // Ersätt med en lektion ur boken
+    valj(select(host, 'Åtgärd lektion 4'), 'bok:1:1');
+    expect(avsnitten(host)[3]).toBe('1.1 Tal · Del 1 · ersatt');
+    valj(select(host, 'Åtgärd lektion 4'), 'aterstall');
+
+    // Lektionsplanen följer sin lektion: kryssa lektion 3 avklarad, ta bort lektion 2 → 1.2 Del 1 är nu lektion 2 och fortfarande kryssad
+    act(() => { input(host, 'Lektion 3 avklarad').click(); });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    valj(select(host, 'Åtgärd lektion 2'), 'bort');
+    expect(avsnitten(host)).toEqual(['1.1 Tal · Del 1', '1.2 Potenser · Del 1', '1.2 Potenser · Del 2', 'Prov kap 1 · Del 1']);
+    expect(input(host, 'Lektion 2 avklarad').checked).toBe(true);
+    expect(input(host, 'Lektion 3 avklarad').checked).toBe(false);
+    expect(lasStruktur().amnen[0].lektionsVal).toEqual({ '1:1#2': { bort: true } });
+    // Avbrutet borttag ändrar inget
+    confirm.mockReturnValueOnce(false);
+    valj(select(host, 'Åtgärd lektion 3'), 'bort');
+    expect(avsnitten(host)).toHaveLength(4);
+    prompt.mockRestore(); confirm.mockRestore();
+
+    // Tiden går: ons 19/8 och 26/8 är genomförda — de kan inte ändras, det som kommer kan
+    vi.setSystemTime(new Date('2026-08-27T10:00:00Z'));
+    act(() => { knapp(host, '📆 Kalender').click(); });
+    expect(host.textContent).toContain('1.2 Potenser');   // veckovyn (24–30/8) visar samma plan
+    act(() => { knapp(host, '📋 Planering').click(); });
+    expect(select(host, 'Åtgärd lektion 1')).toBeNull();
+    expect(select(host, 'Åtgärd lektion 2')).toBeNull();
+    expect(select(host, 'Åtgärd lektion 3')).not.toBeNull();
+    expect(select(host, 'Antal lektioner 2')).toBeNull();   // 1.2 Del 1 är genomförd …
+    expect(select(host, 'Antal lektioner 3')).not.toBeNull(); // … men delkapitlet kan utökas från Del 2
+    expect([...select(host, 'Antal lektioner 3').querySelectorAll('option')].map((o) => o.value)).toEqual(['1', '2', '3', '4']); // bara Del 1 är genomförd — 1 är tillåtet
+    const fore = avsnitten(host);
+    act(() => { knapp(host, '🗓 Schema').click(); });
+    valj(select(host, 'Lektioner per delkapitel'), '3');
+    act(() => { knapp(host, '📝 Lektionsplan').click(); });
+    // 1.1 (genomförd) behåller sin ena lektion, 1.2 får en tredje — lektion 1–2 orörda
+    expect(avsnitten(host)).toEqual(['1.1 Tal · Del 1', '1.2 Potenser · Del 1', '1.2 Potenser · Del 2', '1.2 Potenser · Del 3', 'Prov kap 1 · Del 1']);
+    expect(avsnitten(host).slice(0, 2)).toEqual(fore.slice(0, 2));
+    expect(lasStruktur().amnen[0].lektionerPerDelkapitel).toEqual([{ antal: 2 }, { fran: '1:2', antal: 3 }]);
+    const datum = [...host.querySelectorAll('table.plan tbody tr')].map((tr) => tr.querySelectorAll('td')[2].textContent);
+    expect(datum.slice(0, 2)).toEqual(['2026-08-19', '2026-08-26']);
+
+    // Ännu senare: 1.2 Del 1 och Del 2 är genomförda — delkapitlet kan aldrig få färre än två
+    vi.setSystemTime(new Date('2026-09-03T10:00:00Z'));
+    act(() => { knapp(host, '📆 Kalender').click(); });
+    act(() => { knapp(host, '📋 Planering').click(); });
+    expect(select(host, 'Antal lektioner 3')).toBeNull();
+    expect([...select(host, 'Antal lektioner 4').querySelectorAll('option')].map((o) => o.value)).toEqual(['2', '3', '4']);
+    expect(select(host, 'Åtgärd lektion 4')).not.toBeNull();
+    // Lektionsnumret i lektionskortet och detaljplaneringen följer tabellen
+    act(() => { [...host.querySelectorAll('table.plan tbody tr')][3].querySelector('td.lekt-avsnitt')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    expect(host.textContent).toContain('Lektion 4');
   });
 });

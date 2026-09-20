@@ -100,6 +100,29 @@ export interface Amne {
   noOrder?: number;
   /** Egna rader (prov, diagnoser, övningar …) infogade i planeringen. */
   egnaRader?: EgenRad[];
+  /**
+   * Del 129: antal lektioner per delkapitel — som en logg med giltighet framåt. Varje
+   * post gäller från lektionen `fran` (radnyckel) och framåt; saknas `fran` gäller den
+   * från början. Senaste posten är ämnets inställning (1–4, standard 1). Delkapitel
+   * som redan har fler lektioner i boken behåller dem. Loggen gör att det som redan
+   * genomförts med en tidigare inställning aldrig ändras.
+   */
+  lektionerPerDelkapitel?: Array<{ fran?: string; antal: number }>;
+  /** Del 129: antal lektioner för ett enskilt delkapitel (nyckel 'kapitel:kod', t.ex. '4:4.2'). */
+  antalLektioner?: Record<string, number>;
+  /** Del 129: borttagna och ersatta lektioner, per radnyckel ('kapitel:lektionsId', 'er:<id>' eller '…#2'). */
+  lektionsVal?: Record<string, LektionsVal>;
+}
+
+/**
+ * Del 129: vad som hänt med en lektion i planeringen.
+ *  - bort: lektionen tas bort — efterföljande lektioner flyttas fram ett pass
+ *  - ersatt: lektionen byts mot en egen lektion (rubrik/typ/beskrivning) eller en
+ *    annan lektion ur boken (kapitel + lektionsId); den behåller sin plats
+ */
+export interface LektionsVal {
+  bort?: boolean;
+  ersatt?: { rubrik: string; typ?: EgenRad['typ']; beskrivning?: string } | { kapitel: number; lektionId: number };
 }
 
 /** Egen rad som läraren infogar i ämnets planering utöver bokens lektioner. */
@@ -236,6 +259,13 @@ export interface PlaneradLektion {
   vecka: number | null;
   start: string | null;
   slutTid: string | null;
+  /**
+   * Stabil nyckel för raden (Del 129): 'kapitel:lektionsId' för bokens lektioner,
+   * '…#2' för extra lektioner på ett delkapitel, 'er:<id>' för egna rader,
+   * 'lab:<id>' för laborationer, 'pass:<nyckel>' för egna passlektioner.
+   * Lektionsplaner följer nyckeln när planeringen ändras.
+   */
+  nyckel?: string;
 }
 
 // ── Aggregat ─────────────────────────────────────────────────

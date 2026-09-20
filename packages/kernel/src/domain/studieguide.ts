@@ -12,7 +12,7 @@ import type { Elev, PlaneradLektion, Struktur } from './typer.js';
 import type { DashboardFilter } from './dashboard.js';
 import { harmoniseraOvningar, nulage, type FragaNu } from './delkapiteltrend.js';
 import { begreppForFraga, elevrapport, socrativeElevLank, type Elevrapport, type RapportDelkapitel } from './elevrapport.js';
-import { harLaborationsstandard, noBudget, skapaHalvklassPlanering, skapaPlanering } from './struktur.js';
+import { amnesPlanFor } from './struktur.js';
 
 export interface StudieDel {
   kod: string;
@@ -55,20 +55,10 @@ export interface Studieguide {
   tips: string[];
 }
 
-/** Planen för ett ämne med datum — samma logik som kalendern och SuperTeach. */
+/** Planen för ett ämne med datum (grupp A följt av grupp B) — samma plan som ämnessidan, kalendern och SuperTeach. */
 export function planForAmne(s: Struktur, amneId: string, idag?: string): PlaneradLektion[] {
-  const amne = s.amnen.find((a) => a.id === amneId);
-  if (amne === undefined) return [];
-  const klass = s.klasser.find((k) => k.id === amne.klassId);
-  const tjanst = s.tjanster.find((t) => t.id === klass?.tjanstId);
-  const skolar = s.skolar.find((x) => x.id === tjanst?.skolarId);
-  const bok = s.bocker.find((b) => b.id === amne.bokId);
-  if (skolar === undefined || bok === undefined || !s.planeringar.some((pl) => pl.amneId === amneId)) return [];
-  const offset = amne.noGrupp !== undefined && amne.noOrder !== undefined ? amne.noOrder * noBudget(skolar, amne.schema) : 0;
-  if (harLaborationsstandard(amne)) { const h = skapaHalvklassPlanering(skolar, amne, bok, offset, idag); return [...h.a, ...h.b]; }
-  const planA = skapaPlanering(skolar, amne.schema, bok, offset, amne.egnaRader ?? []);
-  const planB = amne.halvklass === true && amne.schemaB !== undefined ? skapaPlanering(skolar, amne.schemaB, bok, offset, amne.egnaRader ?? []) : [];
-  return [...planA, ...planB];
+  const p = amnesPlanFor(s, amneId, idag);
+  return p === null ? [] : [...p.a, ...p.b];
 }
 
 /** Nästa prov i planen på eller efter `idag`: bokens provlektion eller en egen rad av typen prov. */
