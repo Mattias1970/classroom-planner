@@ -2329,9 +2329,10 @@ describe('Del 126: omfång i SuperTeach', () => {
 });
 
 describe('Del 127: halvklasspass är laborationer', () => {
-  it('halvklassämne får laborationer automatiskt; 🧪-fliken visar passen; teori på halvklasstid och ny laboration via valet; samma plan i kalendern', () => {
+  it('halvklassämne får laborationer automatiskt; 🧪-fliken visar passen; teori på halvklasstid och ny laboration via valet; samma plan i kalendern', async () => {
     const host = render();
     skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host, BIOJSON); // boken måste finnas i biblioteket innan den kan kopplas
     skriv(input(host, 'Tjänstens namn'), 'NO');
     act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
     act(() => { treeKnapp(host, '💼 NO').click(); });
