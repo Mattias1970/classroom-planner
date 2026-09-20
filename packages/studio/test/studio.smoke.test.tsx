@@ -2305,6 +2305,7 @@ describe('Del 126: omfång i SuperTeach', () => {
     act(() => { treeKnapp(host, '👥 8B').click(); });
     valj(select(host, 'Ämne'), 'Biologi');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); }); // tillbaka till klassen — elevfältet finns där
     skriv(input(host, 'Elevens namn'), 'Anna Berg');
     act(() => { knapp(host, '➕ Lägg till elev').click(); });
     act(() => { knapp(host, '📊 SuperTeach').click(); });
