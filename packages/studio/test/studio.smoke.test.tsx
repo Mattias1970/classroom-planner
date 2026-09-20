@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from '../src/App';
+import { kalenderHandelser, planForAmne } from '@planner/kernel';
 import { lasStruktur } from '../src/store';
 import { resetIdRaknare } from '@planner/kernel';
 
@@ -2371,8 +2372,21 @@ describe('Del 127: halvklasspass är laborationer', () => {
     expect(lasStruktur().amnen[0].laborationer![0].rubrik).toBe('Mikroskopera celler');
     act(() => { knapp(host, '📝 Lektionsplan').click(); });
     expect(host.textContent).toContain('🧪 Mikroskopera celler');
-    // Samma planering i kalendern (en plats för datat)
+    // Samma planering i kalendern (en plats för datat). Kalendern öppnar på dagens vecka,
+    // så jämför den vecka som visas med planens rader för samma datum i stället för att
+    // leta efter en viss laboration som kan ligga i en annan vecka.
     act(() => { knapp(host, '📆 Kalender').click(); });
-    expect(host.textContent).toContain('Mikroskopera celler');
+    const st = lasStruktur();
+    const kal = kalenderHandelser(st, st.skolar[0].id).filter((x) => x.amneId === st.amnen[0].id);
+    expect(kal.some((x) => x.avsnitt === '🧪 Mikroskopera celler')).toBe(true);
+    const planRader = planForAmne(st, st.amnen[0].id).filter((r) => r.datum !== null);
+    expect(kal.length).toBe(planRader.length);
+    for (const h of kal) expect(planRader.some((r) => r.datum === h.datum && r.lektion.avsnitt === h.avsnitt), `${h.datum} ${h.avsnitt}`).toBe(true);
+    // Det som syns i veckovyn just nu står också i planen: varje Biologi-rad i vyn har en
+    // händelse med samma rubrik i kernelns kalender (felmeddelandet listar båda om det skiljer)
+    const kalText = host.textContent ?? '';
+    const visadeRubriker = [...host.querySelectorAll('.kal-h, .kal-handelse, [title*="Biologi"]')].map((el) => el.textContent ?? '');
+    const kalRubriker = kal.map((h) => `${h.datum} ${h.avsnitt}`).join(' | ');
+    expect(kal.some((h) => kalText.includes(h.avsnitt)), `Vyn: ${visadeRubriker.join(' | ').slice(0, 300)} — Kernel: ${kalRubriker.slice(0, 300)}`).toBe(true);
   });
 });

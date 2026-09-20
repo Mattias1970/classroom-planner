@@ -110,3 +110,38 @@ describe('stödpass i kalendern (Ma/NO-stöd)', () => {
     expect(() => sattStodPass(bygg(), 'fel', [])).toThrow('Okänd tjänst.');
   });
 });
+
+describe('Del 127f: kalendern visar samma plan som ämnessidan för halvklassämnen med laborationer', async () => {
+  const { sparaLaborationer, sattPassVal, skapaHalvklassPlanering } = await import('../src/domain/struktur.js');
+  const { planForAmne } = await import('../src/domain/studieguide.js');
+  it('laborationer, egna pass och teori på halvklasstid syns med samma rubriker på samma datum i kalendern', () => {
+    let s = tomStruktur();
+    s = laggTillSkolar(s, LA);
+    s = sparaBok(s, BOK);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k8b', tjanstId: 'tj', namn: '8B' });
+    // A: tisdag, B: torsdag — bara halvklasspass (som i studions test)
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k8b', namn: 'Biologi', bokId: 'b', halvklass: true,
+      schema: [{ dag: 2, start: '08:10', slut: '09:10' }], schemaB: [{ dag: 4, start: '08:10', slut: '09:10' }] });
+    s = registreraPlanering(s, { id: 'pl', amneId: 'bi', bokId: 'b', skapad: 'nu' });
+    s = sattPassVal(s, 'bi', '2026-08-18|08:10', { typ: 'teori', kalla: 'nasta' });
+    s = sattPassVal(s, 'bi', '2026-08-25|08:10', { typ: 'lab', kalla: 'egen', rubrik: 'Fältstudie vid dammen' });
+    s = sparaLaborationer(s, 'bi', [{ id: 'l1', rubrik: 'Mikroskopera celler' }]);
+
+    const amne = s.amnen[0];
+    const h = skapaHalvklassPlanering(LA, amne, BOK);
+    const kal = kalenderHandelser(s, 'la').filter((x) => x.amneId === 'bi');
+    const plan = planForAmne(s, 'bi');
+    // Kalendern har exakt de rader ämnessidan har (datum + grupp + rubrik), inget annat
+    const nyckel = (datum: string, grupp: string | undefined, avsnitt: string) => `${datum}|${grupp ?? ''}|${avsnitt}`;
+    const fran = (rader: typeof h.a, grupp: 'A' | 'B') => rader.filter((r) => r.datum !== null).map((r) => nyckel(r.datum!, grupp, r.lektion.avsnitt));
+    expect(kal.map((x) => nyckel(x.datum, x.grupp, x.avsnitt)).sort()).toEqual([...fran(h.a, 'A'), ...fran(h.b, 'B')].sort());
+    expect(plan.filter((r) => r.datum !== null).length).toBe(kal.length);
+    // …och de konkreta raderna: teori 18/8, egen laboration 25/8 (A) + 27/8 (B), listans laboration 1/9 + 3/9
+    expect(kal.find((x) => x.datum === '2026-08-18')!.avsnitt).toBe('1.1 Bråk');
+    expect(kal.find((x) => x.datum === '2026-08-25')!.avsnitt).toBe('🧪 Fältstudie vid dammen');
+    expect(kal.find((x) => x.datum === '2026-08-27')!.avsnitt).toBe('🧪 Fältstudie vid dammen');
+    expect(kal.find((x) => x.datum === '2026-09-01')!.avsnitt).toBe('🧪 Mikroskopera celler');
+    expect(kal.find((x) => x.datum === '2026-09-08')!.avsnitt).toBe('Laboration 2'); // platshållare efter listan
+  });
+});
