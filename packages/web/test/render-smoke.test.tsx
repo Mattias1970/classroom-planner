@@ -19,8 +19,10 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let container: HTMLDivElement;
 let root: Root;
 
-function clickButtonByText(text: string, scope = 'body'): boolean {
-  const btns = [...document.querySelectorAll(`${scope} button`)];
+function clickButtonByText(text: string, scope = ''): boolean {
+  // Sök bara i testets egen container — inte i hela body, som kan innehålla
+  // rester från andra testfiler när sviten körs i en enda process (singleFork).
+  const btns = [...container.querySelectorAll(`${scope} button`.trim())];
   const b = btns.find((x) => (x.textContent ?? '').trim().includes(text));
   if (!b) return false;
   act(() => { b.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
