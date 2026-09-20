@@ -992,3 +992,6 @@ input.fel { border-color: #B71C1C; }
 .st-fmtabell tr.st-fm-utansvar td { background: #FFF8E6; }
 .st-fmtabell td.st-fm-utansvar-text { text-align: left; white-space: normal; }
 .st-svar-saknas { color: #b02a2a; font-weight: 700; }
+/* Del 133: dagens/nästa lektion i Lektionsplan */
+.tbl.plan tr.aktuell td.lekt-nr b { color: var(--bla); }
+.tbl.plan tr.aktuell td { box-shadow: inset 3px 0 0 var(--bla); }

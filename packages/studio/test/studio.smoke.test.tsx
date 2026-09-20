@@ -1912,6 +1912,7 @@ describe('Lektionssidans redigerbara ytor', () => {
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
     act(() => { knapp(host, '🧭 Detaljplanering').click(); });
+    valj(select(host, 'Välj lektion'), '0');   // Del 133: förvalet är dagens lektion — testet gäller lektion 1
 
     const area = (t: string) => host.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${t}"]`)!;
     skriv(area('Vad ska vi göra'), 'Placera tal på tallinjen');
@@ -1954,6 +1955,7 @@ describe('Funktionsparitet med v1: Ångra + uppgiftsintervall', () => {
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '🧭 Detaljplanering').click(); });
+    valj(select(host, 'Välj lektion'), '0');
     skriv(input(host, 'Uppgifter ETT'), '1–8');
     expect(lasStruktur().lektionsplaner[0]?.uppgNiva1).toBe('1–8');
     act(() => { knapp(host, '✏ Uppgifter').click(); });
@@ -2506,6 +2508,11 @@ describe('Del 129: lektioner tas bort, ersätts och utökas i Lektionsplan', () 
     vi.setSystemTime(new Date('2026-09-03T10:00:00Z'));
     act(() => { knapp(host, '📆 Kalender').click(); });
     act(() => { knapp(host, '📋 Planering').click(); });
+    // Del 133: dagens/nästa lektion är markerad i Lektionsplan och förvald i Detaljplanering (ons 9/9 = lektion 4)
+    expect(host.querySelector('table.plan tbody tr.aktuell td.lekt-nr')!.textContent).toBe('4');
+    act(() => { knapp(host, '🧭 Detaljplanering').click(); });
+    expect(select(host, 'Välj lektion').value).toBe('3');
+    act(() => { knapp(host, '📝 Lektionsplan').click(); });
     expect(select(host, 'Antal lektioner 3')).toBeNull();
     expect([...select(host, 'Antal lektioner 4').querySelectorAll('option')].map((o) => o.value)).toEqual(['2', '3', '4']);
     expect(select(host, 'Åtgärd lektion 4')).not.toBeNull();

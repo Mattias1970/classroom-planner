@@ -1364,7 +1364,8 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
   const [flik, setFlik] = useState<'planering' | 'detalj' | 'oversikt' | 'uppgifter' | 'begrepp' | 'filmer' | 'magma' | 'anteckningar' | 'arsoversikt' | 'installningar' | 'laborationer'>('planering');
   // Om planen krymper (t.ex. laboration borttagen) får detaljindex inte peka utanför
   useEffect(() => { if (detaljIdxRef.current >= plan.length && plan.length > 0) setDetaljIdx(plan.length - 1); }, [plan.length]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [detaljIdx, setDetaljIdx] = useState(0);
+  // Del 133: detaljplaneringen öppnar på dagens/nästa lektion, inte lektion 1
+  const [detaljIdx, setDetaljIdx] = useState(() => aktuellLektionsIndex(plan, idag));
   const detaljIdxRef = useRef(0); detaljIdxRef.current = detaljIdx;
   /** Öppnar en lektion i detaljplaneringen — används av alla flikars klickbara lektioner. */
   const oppnaLektion = (i: number) => { setDetaljIdx(i); setFlik('detalj'); };
@@ -1516,6 +1517,15 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
       </div>
     </div>
   );
+}
+
+/** Index för dagens lektion, annars nästa kommande; är allt genomfört den sista. 0 utan plan. */
+function aktuellLektionsIndex(plan: PlaneradLektion[], idag: string): number {
+  if (plan.length === 0) return 0;
+  const i = plan.findIndex((r) => r.datum !== null && r.datum >= idag);
+  if (i >= 0) return i;
+  const sista = plan.map((r, k) => (r.datum !== null ? k : -1)).filter((k) => k >= 0).pop();
+  return sista ?? 0;
 }
 
 /**
@@ -2357,7 +2367,7 @@ function GruppPlanering(props: {
           const iBoken = grupp !== null && amne !== undefined && !r.nyckel!.startsWith('er:') && r.lektion.typ !== 'exam' && !ersatt ? antalIBoken(bok, amne, grupp) : null;
           const minst = grupp !== null && iBoken !== null ? Math.max(iBoken, genomfordaIGrupp(grupp)) : 0;
           return (
-          <tr key={radNr} className={`${r.datum === null ? 'saknas' : ''} ${valdRad === radNr ? 'vald' : ''} ${klar ? 'klar' : ''} ${ersatt ? 'ersatt' : ''}`}
+          <tr key={radNr} className={`${r.datum === null ? 'saknas' : ''} ${valdRad === radNr ? 'vald' : ''} ${klar ? 'klar' : ''} ${ersatt ? 'ersatt' : ''} ${idag !== undefined && i === aktuellLektionsIndex(plan, idag) ? 'aktuell' : ''}`}
             onClick={() => setValdRad(valdRad === radNr ? null : radNr)} title="Öppna lektionskort">
             <td onClick={(e) => e.stopPropagation()}>
               {s !== undefined && amneId !== undefined && kor !== undefined && (
