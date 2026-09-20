@@ -148,6 +148,14 @@ export const FORKLARINGAR = {
       'Delkapitel med alla rätt de två senaste läxförhören räknas som befästa och märks aldrig "öva" eller "ej godkänt", oavsett äldre resultat.',
     ],
   },
+  omfang: {
+    rubrik: 'Omfång',
+    kort: 'Vilka resultat som analyseras: aktivt kapitel (standard), hela terminen, alla NO-ämnen i terminen, eller hela läsåret.',
+    lang: [
+      'Aktivt kapitel är kapitlet för den senaste planerade lektionen — läxförhören där visar hur begreppen sitter just nu. Prov utan delkapitelkod (till exempel Magma-diagnoser) ingår inte i kapitelurvalet.',
+      'Hela terminen ger utvecklingen i ämnet över tid. Alla NO-ämnen lägger Biologi, Fysik, Kemi och Teknik i samma bild, för terminen eller hela läsåret — det är årskursnivån. Ett periodfält som fyllts i går före omfångets datum.',
+    ],
+  },
   elevProv: {
     rubrik: 'Elev × provtillfälle',
     kort: 'Varje elevs procent per prov. Färg mot förhörsgränsen: grönt nådd, orange nära, rött under. Rött kryss = inget quizsvar.',

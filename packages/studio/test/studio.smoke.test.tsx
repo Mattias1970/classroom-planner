@@ -29,7 +29,14 @@ vi.mock('xlsx', () => ({
 afterEach(() => { vi.useRealTimers(); });
 
 // De befintliga testerna är skrivna mot v2-flikarna; v3-skalet testas separat nedan
-beforeEach(() => { localStorage.clear(); localStorage.setItem('cp.layout', JSON.stringify('v2')); resetIdRaknare(); document.body.innerHTML = ''; });
+beforeEach(() => {
+  localStorage.clear();
+  localStorage.setItem('cp.layout', JSON.stringify('v2'));
+  // Testerna är skrivna mot 'alla källor, allt' — standardvalet för användaren är läxförhör i aktivt kapitel
+  localStorage.setItem('st.kallor', JSON.stringify([]));
+  localStorage.setItem('st.omfang', JSON.stringify('allt'));
+  resetIdRaknare(); document.body.innerHTML = '';
+});
 
 function render(): HTMLElement {
   const host = document.createElement('div');
@@ -2282,5 +2289,32 @@ describe('✨ Studio v3', () => {
     expect(knapp(host, '🗂 Struktur')).not.toBeNull(); // v2-flikarna
     act(() => { knapp(host, '✨ v3').click(); });
     expect(host.querySelector('.v3-sida')).not.toBeNull();
+  });
+});
+
+describe('Del 126: omfång i SuperTeach', () => {
+  it('chipparna finns, standard är aktivt kapitel och läxförhör, och omfånget syns i rubriken', () => {
+    localStorage.removeItem('st.kallor'); localStorage.removeItem('st.omfang');
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    skriv(input(host, 'Tjänstens namn'), 'NO');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 NO').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Biologi');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    skriv(input(host, 'Elevens namn'), 'Anna Berg');
+    act(() => { knapp(host, '➕ Lägg till elev').click(); });
+    act(() => { knapp(host, '📊 SuperTeach').click(); });
+    const radio = [...host.querySelectorAll('[role="radiogroup"][aria-label="Omfång"] [role="radio"]')] as HTMLButtonElement[];
+    expect(radio.map((b) => b.textContent?.split(' ·')[0].trim())).toEqual(['Aktivt kapitel', 'Hela terminen', 'Alla NO-ämnen', 'Alla NO-ämnen', 'Allt']);
+    expect(radio[0].getAttribute('aria-checked')).toBe('true');
+    // Läxförhör förvalt bland källchipparna
+    expect(host.querySelector('.chipbtn.act')!.textContent).toContain('Läxförhör');
+    act(() => { radio[2].click(); }); // alla NO · terminen
+    expect(host.querySelector('h2')!.textContent).toMatch(/HT 20\d\d · Biologi/);
+    expect(JSON.parse(localStorage.getItem('st.omfang')!)).toBe('no-termin');
   });
 });

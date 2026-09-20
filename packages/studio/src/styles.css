@@ -969,3 +969,8 @@ input.fel { border-color: #B71C1C; }
 .rd-tabell th { color: #465060; font-weight: 700; }
 .rd-ovar-helalxan { color: #1B5E20; font-weight: 700; }
 .rd-ovar-intevat { color: #B71C1C; font-weight: 700; }
+
+/* Del 126: omfång i SuperTeach */
+.st-omfang { gap: 6px; flex-wrap: wrap; margin: 6px 0 10px; }
+.st-omfang .chipbtn small { font-weight: 400; }
+.st-omfang .chipbtn:disabled { opacity: .45; cursor: default; }

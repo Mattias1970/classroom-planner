@@ -24,7 +24,8 @@ import {
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   arFilImporterad, arRatt, andraKalla, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
-  delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, enkelRapport, studieguide, rapportOversikt, forklaring, niva, type ForklaringId, begreppForFraga, harmoniseraOvningar, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
+  delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, enkelRapport, studieguide, rapportOversikt, forklaring, niva, type ForklaringId,
+  omfangFilter, OMFANG_NAMN, type Omfang, type OmfangResultat, begreppForFraga, harmoniseraOvningar, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
@@ -3085,8 +3086,10 @@ function SittplatsWidget({ s, f, klassId, klassNamn, kor, onElev }: {
 }
 
 /** Dashboarden: frågekort → klassens utveckling → elev × prov-heatmap → elevvy. */
-function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVisaProv, kor }: {
+function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfang, onVisaProv, kor }: {
   s: Struktur; klassId: string; klassNamn: string; amneId: string; kallor: ResultatKalla[] | undefined;
+  /** Omfångets filterfält (kapitel, amneIds, datum) och etikett — från omfangFilter. */
+  omfang?: OmfangResultat;
   onVisaProv: (prov: string) => void; kor: (fn: () => Struktur, m: string) => void;
 }) {
   const [periodText, setPeriodText] = useState('');
@@ -3153,17 +3156,19 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, onVis
   const [klusterPa, setKlusterPa] = useState<Kluster[]>(['stigande', 'stabil', 'riskzon', 'ojamn']);
   const period = tolkaVeckor(periodText);
   const [dag, setDag] = useState('');
-  const grundF: DashboardFilter = { klassId, ...(amneId !== '' ? { amneId } : {}), ...(kallor !== undefined ? { kallor } : {}), ...(period ?? {}) };
+  // Omfånget (kapitel / termin / alla NO) läggs under periodfältet: skriver man en period gäller den
+  const omfF = omfang?.filter ?? {};
+  const grundF: DashboardFilter = { klassId, ...(amneId !== '' ? { amneId } : {}), ...omfF, ...(kallor !== undefined ? { kallor } : {}), ...(period ?? {}) };
   const dagar = useMemo(() => lektionsDagar(s, grundF), [s, klassId, amneId, kallor, periodText]); // eslint-disable-line react-hooks/exhaustive-deps
   const valdDag = dagar.find((d) => d.datum === dag) ?? null;
   // Dagfilter: läxförhör + exit ticket samma lektionsdag; vid halvklass täcker intervallet båda sessionerna
   const f: DashboardFilter = valdDag === null ? grundF : { ...grundF, fran: valdDag.datum, till: valdDag.datumTill };
-  const tkFilter = { klassId, ...(amneId !== '' ? { amneId } : {}), ...(kallor !== undefined ? { kallor } : {}), ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) };
+  const tkFilter = { klassId, ...(amneId !== '' ? { amneId } : {}), ...(omfF.amneIds !== undefined ? { amneIds: omfF.amneIds } : {}), ...(omfF.kapitel !== undefined ? { kapitel: omfF.kapitel } : {}), ...(kallor !== undefined ? { kallor } : {}), ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) };
 
   // ── Klassnivå: räknas om bara när struktur eller filter ändras ──
   // Tidigare kördes ett tjugotal kernel-funktioner vid varje omritning, även när
   // man bara skrev i sökrutan eller klickade en knapp. Nu ligger de i ett memo.
-  const filterNyckel = `${klassId}|${amneId}|${(kallor ?? []).join(',')}|${periodText}|${dag}`;
+  const filterNyckel = `${klassId}|${amneId}|${(kallor ?? []).join(',')}|${periodText}|${dag}|${JSON.stringify(omfF)}`;
   const klassData = useMemo(() => {
     const kurva = klassKurva(s, f);
     const samband = sambandsanalys(s, f);
@@ -4748,7 +4753,12 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
   const [datum, setDatum] = useState(() => new Date().toISOString().slice(0, 10));
   const [maxP, setMaxP] = useState('10');
   const [radText, setRadText] = useState('');
-  const [filter, setFilter] = useState<ResultatKalla[]>([]);
+  // Läxförhören är standardurvalet — det som säger mest om hur begreppen sitter
+  const [filter, setFilterRaw] = useState<ResultatKalla[]>(() => lasInstallning<ResultatKalla[]>('st.kallor', ['socrative-laxforhor']));
+  const setFilter = (k: ResultatKalla[]) => { setFilterRaw(k); sparaInstallning('st.kallor', k); };
+  // Omfång: aktivt kapitel (standard) → terminen → alla NO-ämnen → läsåret
+  const [omfang, setOmfangRaw] = useState<Omfang>(() => lasInstallning<Omfang>('st.omfang', 'kapitel'));
+  const setOmfang = (o: Omfang) => { setOmfangRaw(o); sparaInstallning('st.omfang', o); };
   const [visaProv, setVisaProv] = useState('');
 
   if (klass === undefined) return <div className="card"><h2>📊 SuperTeach</h2><p className="muted">Skapa klasser och elever under 🗂 Struktur först.</p></div>;
@@ -4872,6 +4882,8 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
     setFilRader([]);
   };
 
+  const idag = new Date().toISOString().slice(0, 10);
+  const omf = omfangFilter(s, klass.id, amne?.id ?? '', omfang, idag);
   // Ämnets källor (Biologi: inte Magma) begränsar alltid; chipparna väljer inom dem
   const tillatna = amnesKallor(amne?.namn);
   const kallor = filter.filter((k) => tillatna.includes(k)).length > 0 ? filter.filter((k) => tillatna.includes(k)) : (amne === undefined ? undefined : tillatna);
@@ -4882,7 +4894,7 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
 
   return (
     <div className="card superteach">
-      <h2>📊 SuperTeach — resultat</h2>
+      <h2>📊 SuperTeach — resultat <small className="muted" style={{ fontWeight: 400 }}>· {omf.etikett}</small></h2>
       <div className="rad" style={{ flexWrap: 'wrap', gap: 8 }}>
         <label>Klass:{' '}
           <select aria-label="SuperTeach klass" value={klass.id} onChange={(e) => { setKlassId(e.target.value); setAmneId(''); }}>
@@ -4898,6 +4910,18 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
           <button key={k} className={`chipbtn ${filter.includes(k) ? 'act' : ''}`}
             onClick={() => setFilter(filter.includes(k) ? filter.filter((x) => x !== k) : [...filter, k])}>{KALLNAMN[k]}</button>
         ))}
+      </div>
+      <div className="rad st-omfang" role="radiogroup" aria-label="Omfång">
+        <b className="small">Omfång:</b>
+        {(['kapitel', 'termin', 'no-termin', 'no-lasar', 'allt'] as Omfang[]).map((o) => {
+          const r = omfangFilter(s, klass.id, amne?.id ?? '', o, idag);
+          return (
+            <button key={o} role="radio" aria-checked={omfang === o} className={`chipbtn ${omfang === o ? 'act' : ''}`} title={r.etikett}
+              disabled={(o === 'kapitel' || o === 'termin') && amne === undefined}
+              onClick={() => setOmfang(o)}>{OMFANG_NAMN[o]}<small className="muted"> · {r.etikett}</small></button>
+          );
+        })}
+        <InfoKnapp id="omfang" />
       </div>
 
       {varningar.length > 0 && (
@@ -5015,7 +5039,7 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
 
       </details>
 
-      <SuperTeachDashboard s={s} klassId={klass.id} klassNamn={klass.namn} amneId={amne?.id ?? ''} kallor={kallor}
+      <SuperTeachDashboard s={s} klassId={klass.id} klassNamn={klass.namn} amneId={amne?.id ?? ''} kallor={kallor} omfang={omf}
         onVisaProv={(p) => setVisaProv(p)} kor={kor} />
 
       {/* ── Översikt ── */}

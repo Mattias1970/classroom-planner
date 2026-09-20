@@ -8,11 +8,16 @@
  */
 import { isoVecka } from './skolar.js';
 import { klaratKrav, kravFor, resultatProcent, type Resultat, type ResultatKalla } from './resultat.js';
+import { koderForProv } from './delkapitelkoder.js';
 import type { Elev, Struktur } from './typer.js';
 
 export interface DashboardFilter {
   klassId: string;
   amneId?: string;
+  /** Flera ämnen på en gång (alla NO-ämnen). Tar över amneId när det är satt. */
+  amneIds?: string[];
+  /** Bara prov vars delkapitelkoder hör till kapitlet (4 → 4.1, 4.2 …); prov utan koder utesluts. */
+  kapitel?: number;
   /** Tom/undefined = alla källor. */
   kallor?: ResultatKalla[];
   /** Veckointervall (ISO-veckor); till < från tolkas som årsskifte (v.35–3). */
@@ -51,7 +56,19 @@ const resultatCache = new WeakMap<Struktur, Map<string, Resultat[]>>();
 const indexCache = new WeakMap<Resultat[], ReturnType<typeof tillfalleIndex>>();
 
 function filterNyckel(f: DashboardFilter): string {
-  return JSON.stringify([f.klassId, f.amneId ?? '', f.kallor ?? null, f.veckaFran ?? null, f.veckaTill ?? null, f.fran ?? null, f.till ?? null]);
+  return JSON.stringify([f.klassId, f.amneId ?? '', f.amneIds ?? null, f.kapitel ?? null, f.kallor ?? null, f.veckaFran ?? null, f.veckaTill ?? null, f.fran ?? null, f.till ?? null]);
+}
+
+/** Matchar resultatets ämne mot amneIds (om satt) annars amneId. */
+export function amneMatchar(f: Pick<DashboardFilter, 'amneId' | 'amneIds'>, amneId: string | undefined): boolean {
+  if (f.amneIds !== undefined && f.amneIds.length > 0) return amneId !== undefined && f.amneIds.includes(amneId);
+  return f.amneId === undefined || f.amneId === '' || amneId === f.amneId;
+}
+
+/** Hör provet till kapitlet? Läses ur delkapitelkoderna (rum/quiznamn). */
+export function kapitelMatchar(kapitel: number | undefined, prov: string, rum: string | undefined): boolean {
+  if (kapitel === undefined) return true;
+  return koderForProv(prov, rum).some((k) => k.split('.')[0] === String(kapitel));
 }
 
 export function dashboardResultat(s: Struktur, f: DashboardFilter): Resultat[] {
@@ -69,7 +86,8 @@ function dashboardResultatRaknad(s: Struktur, f: DashboardFilter): Resultat[] {
   const elevIds = new Set(s.elever.filter((e) => e.klassId === f.klassId).map((e) => e.id));
   return (s.resultat ?? [])
     .filter((r) => elevIds.has(r.elevId))
-    .filter((r) => f.amneId === undefined || f.amneId === '' || r.amneId === f.amneId)
+    .filter((r) => amneMatchar(f, r.amneId))
+    .filter((r) => kapitelMatchar(f.kapitel, r.prov, r.rum))
     .filter((r) => f.kallor === undefined || f.kallor.length === 0 || f.kallor.includes(r.kalla))
     .filter((r) => inomVeckor(r.datum, f))
     .filter((r) => (f.fran === undefined || r.datum >= f.fran) && (f.till === undefined || r.datum <= f.till))

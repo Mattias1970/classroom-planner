@@ -13,8 +13,9 @@ import type { Elev, Struktur } from './typer.js';
 import { begreppUrFacit, type Resultat, type ResultatKalla } from './resultat.js';
 import { fragenyckel, svarText } from './trendkoll.js';
 import { koderForProv } from './elevrapport.js';
+import { amneMatchar, kapitelMatchar } from './dashboard.js';
 
-export interface DelkapitelFilter { klassId: string; amneId?: string; kallor?: ResultatKalla[]; fran?: string; till?: string; elevId?: string; }
+export interface DelkapitelFilter { klassId: string; amneId?: string; amneIds?: string[]; kapitel?: number; kallor?: ResultatKalla[]; fran?: string; till?: string; elevId?: string; }
 
 /** Ett tillfälle med frågor grupperade per delkapitel. */
 export interface Tillfalle { nyckel: string; prov: string; datum: string; tid?: string; kalla: ResultatKalla; rum?: string; resultat: Resultat[] }
@@ -43,7 +44,7 @@ function tillfallenFor(s: Struktur, f: DelkapitelFilter): Tillfalle[] {
   let per = tillfallenCache.get(s);
   if (per === undefined) { per = new Map(); tillfallenCache.set(s, per); }
   // elevId påverkar inte urvalet av tillfällen — bara hur de sedan läses
-  const nyckel = JSON.stringify([f.klassId, f.amneId ?? '', f.kallor ?? null, f.fran ?? null, f.till ?? null]);
+  const nyckel = JSON.stringify([f.klassId, f.amneId ?? '', f.amneIds ?? null, f.kapitel ?? null, f.kallor ?? null, f.fran ?? null, f.till ?? null]);
   const cachad = per.get(nyckel);
   if (cachad !== undefined) return cachad;
   const ut = tillfallenForRaknad(s, f);
@@ -54,7 +55,8 @@ function tillfallenFor(s: Struktur, f: DelkapitelFilter): Tillfalle[] {
 function tillfallenForRaknad(s: Struktur, f: DelkapitelFilter): Tillfalle[] {
   const elevIds = new Set(s.elever.filter((e) => e.klassId === f.klassId).map((e) => e.id));
   const rs = (s.resultat ?? []).filter((r) => elevIds.has(r.elevId)
-    && (f.amneId === undefined || r.amneId === f.amneId)
+    && amneMatchar(f, r.amneId)
+    && kapitelMatchar(f.kapitel, r.prov, r.rum)
     && (f.kallor === undefined || f.kallor.includes(r.kalla))
     && (f.fran === undefined || r.datum >= f.fran) && (f.till === undefined || r.datum <= f.till)
     && (r.svar ?? []).length > 0);
