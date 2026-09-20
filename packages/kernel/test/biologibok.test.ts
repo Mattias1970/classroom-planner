@@ -64,6 +64,27 @@ describe('bokFromBiologiImport', () => {
     expect(l.mal).toBe('Förstå vad ett ekosystem är.\nKunna förklara population och nisch.');
   });
 
+  it('Del 132: genomgångens punkter blir genomgångstext; flera filmer per delkapitel blir bokens filmresurser', () => {
+    const json = JSON.stringify({ id: 'b', titel: 'B', kapitel: [{ nummer: 6, titel: 'Kroppen', delkapitel: [
+      { nummer: '6.1', titel: 'Celler', sidor: 's. 230', begrepp: ['cellteorin'], extraBegrepp: [],
+        genomgang: ['Cellteorin: alla organismer består av celler.', 'Cellandning: glukos + syre → koldioxid + vatten + energi.'],
+        filmer: ['Cellens specialisering|https://app.binogi.se/l/cellens-specialisering', { titel: 'Celldelning', url: 'https://app.binogi.se/l/celldelning' }, 'ogiltig|inte-en-url'] },
+      { nummer: '6.2', titel: 'Matspjälkningen', sidor: 's. 238', begrepp: ['enzym'], extraBegrepp: [], genomgang: 'En rad', genomgangLank: 'https://app.binogi.se/l/x', filmer: ['Tarmarna|https://app.binogi.se/l/matspjaelkningen-tarmarna'] },
+    ] }] });
+    const bok = bokFromBiologiImport(json);
+    const [l1, l2] = bok.kapitel[0].delkapitel.map((d) => d.lektioner[0]);
+    expect(l1.genomgang).toBe('Cellteorin: alla organismer består av celler.\nCellandning: glukos + syre → koldioxid + vatten + energi.');
+    expect(l1.genomgangLank).toBe('https://app.binogi.se/l/cellens-specialisering');   // första filmen blir genomgångslänk
+    expect(l2.genomgang).toBe('En rad');
+    expect(l2.genomgangLank).toBe('https://app.binogi.se/l/x');                          // egen länk går före
+    expect(bok.kapitel[0].resurser.filmer).toEqual([
+      { titel: '6.1 Celler — genomgång', url: 'https://app.binogi.se/l/cellens-specialisering' },
+      { titel: '6.1 · Celldelning', url: 'https://app.binogi.se/l/celldelning' },
+      { titel: '6.2 Matspjälkningen — genomgång', url: 'https://app.binogi.se/l/x' },
+      { titel: '6.2 · Tarmarna', url: 'https://app.binogi.se/l/matspjaelkningen-tarmarna' },
+    ]);
+  });
+
   it('kastar svenska fel för trasiga filer', () => {
     expect(() => bokFromBiologiImport('inte json')).toThrow('Filen är inte giltig JSON.');
     expect(() => bokFromBiologiImport('{"id":"x","titel":"T"}')).toThrow('"kapitel" saknas');

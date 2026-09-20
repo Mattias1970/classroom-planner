@@ -51,6 +51,25 @@ interface RawDelkapitel {
   begrepp: string[]; extraBegrepp: string[]; testaFragor: number;
   genomgangLank?: string; forklaringar: Record<string, string>;
   mal: string[];
+  /** Del 132: genomgångens punkter (centralt innehåll) — blir lektionens genomgångstext. */
+  genomgang: string[];
+  /** Del 132: filmer för delkapitlet ('Titel|https://…' eller { titel, url }) — bokens filmresurser. */
+  filmer: Array<{ titel: string; url: string }>;
+}
+
+function lasFilmer(raw: unknown): Array<{ titel: string; url: string }> {
+  if (!Array.isArray(raw)) return [];
+  const ut: Array<{ titel: string; url: string }> = [];
+  for (const f of raw) {
+    if (typeof f === 'string' && f.includes('|')) {
+      const [titel, ...rest] = f.split('|'); const url = rest.join('|').trim();
+      if (titel.trim() !== '' && url.startsWith('http')) ut.push({ titel: titel.trim(), url });
+    } else if (f !== null && typeof f === 'object') {
+      const o = f as { titel?: unknown; url?: unknown };
+      if (typeof o.titel === 'string' && o.titel.trim() !== '' && typeof o.url === 'string' && o.url.startsWith('http')) ut.push({ titel: o.titel.trim(), url: o.url });
+    }
+  }
+  return ut;
 }
 
 function lasDelkapitel(raw: unknown, kapNr: number, index: number): RawDelkapitel {
@@ -64,13 +83,18 @@ function lasDelkapitel(raw: unknown, kapNr: number, index: number): RawDelkapite
       if (typeof v === 'string' && k.trim() !== '' && v.trim() !== '') forklaringar[k.trim()] = v.trim();
     }
   }
+  const filmer = lasFilmer(r.filmer);
+  // Egen genomgångslänk går före; annars blir delkapitlets första film genomgångslänk
+  const genomgangLank = typeof r.genomgangLank === 'string' && r.genomgangLank.startsWith('http') ? r.genomgangLank : filmer[0]?.url;
   return {
     nummer, titel: kravStrang(r.titel, `delkapitel ${nummer}: titel`), sidor: txt(r.sidor),
     begrepp: strangLista(r.begrepp), extraBegrepp: strangLista(r.extraBegrepp),
     testaFragor: tds && typeof tds === 'object' ? strangLista(tds.fragor).length : 0,
-    ...(typeof r.genomgangLank === 'string' && r.genomgangLank.startsWith('http') ? { genomgangLank: r.genomgangLank } : {}),
+    ...(genomgangLank !== undefined ? { genomgangLank } : {}),
     forklaringar,
     mal: strangLista(r.mal),
+    genomgang: typeof r.genomgang === 'string' ? [r.genomgang.trim()].filter((x) => x !== '') : strangLista(r.genomgang),
+    filmer,
   };
 }
 
@@ -83,7 +107,7 @@ function delkapitelLektion(d: RawDelkapitel, index1: number, prefix: string, kap
     id: index1, typ: 'regular', avsnitt: `${d.nummer} ${d.titel}`, del: 1, ...TOM,
     sidorTeori: d.sidor,
     begrepp: d.begrepp.length > 0 ? d.begrepp.join(', ') : '—',
-    genomgang: d.titel,
+    genomgang: d.genomgang.length > 0 ? d.genomgang.join('\n') : d.titel,
     ...(d.genomgangLank !== undefined ? { genomgangLank: d.genomgangLank } : {}),
     laxa: `Alla begrepp t.o.m. ${d.nummer} – ${socrativeLaxforhorRum(prefix, kapNr, index1)} ≥ ${NO_KRAV_LAXFORHOR} %`,
     ex: d.testaFragor > 0 ? `Testa dig själv ${d.nummer} · uppgift 1–${d.testaFragor}` : '—',
@@ -142,9 +166,10 @@ function lasKapitel(raw: unknown, index: number, prefix: string): Kapitel {
 
   const kap = byggKapitel(nummer, titel, NO_KAPITELFARGER[index % NO_KAPITELFARGER.length], lektioner);
   kap.resurser.forklaringar = Object.assign({}, ...delkapitel.map((d) => d.forklaringar)) as Record<string, string>;
-  kap.resurser.filmer = delkapitel
-    .filter((d) => d.genomgangLank !== undefined)
-    .map((d) => ({ titel: `${d.nummer} ${d.titel} — genomgång`, url: d.genomgangLank ?? '' }));
+  kap.resurser.filmer = delkapitel.flatMap((d) => [
+    ...(d.genomgangLank !== undefined ? [{ titel: `${d.nummer} ${d.titel} — genomgång`, url: d.genomgangLank }] : []),
+    ...d.filmer.filter((f) => f.url !== d.genomgangLank).map((f) => ({ titel: `${d.nummer} · ${f.titel}`, url: f.url })),
+  ]);
   return kap;
 }
 
