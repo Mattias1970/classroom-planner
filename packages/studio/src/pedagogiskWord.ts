@@ -72,7 +72,7 @@ function provOchBedomning(pl: PedagogiskPlanering): Paragraph[] {
     p('Gå igenom laborationerna och se till att du förstår allt, samt hur man skriver en laborationsplanering med resultattabell, vilka svar man kan få ut och vad de betyder.'),
     tom(),
     h2('Studieteknik – hur man läser en text'),
-    numrerad('Läs vad du ska lära dig på kapitlets första uppslag (Syfte högst upp i denna planering). Frågorna på provet testar om du har lärt dig detta. Tips! Skriv ner det så du enkelt ser vilka förväntningar som finns.'),
+    numrerad(`Läs vad du ska lära dig på kapitlets första uppslag${pl.syfteSidor !== null ? ` (${pl.syfteSidor})` : ''} – det står som Syfte högst upp i denna planering. Frågorna på provet testar om du har lärt dig detta. Tips! Skriv ner det så du enkelt ser vilka förväntningar som finns.`),
     numrerad('Läs sammanfattningen. Den innehåller allt du måste kunna för att fördjupa dig. Tips! Bryt ner sammanfattningen i meningar/punkter, eller skriv om dem som frågor och svar (flashcards).'),
     numrerad('Läs rubrikerna. De visar vad du ska kunna och vilka frågeställningar du ska kunna besvara. Tips! Skriv ner varje rubrik och sammanfatta innehållet under med korta punkter eller tankekartor. Om rubriken är en frågeställning – besvara den utifrån texten.'),
     numrerad('Läs bildtexterna. Där hittar du ofta fördjupningar och beskrivningar på högre nivå som du ska kunna redogöra för.'),
@@ -199,7 +199,11 @@ export function byggPedagogiskPlanering(pl: PedagogiskPlanering): Document {
     h1('Pedagogisk planering och provlapp'),
     h1(`${pl.amne} ${pl.klass} · Kap ${pl.kapitel.nr} – ${pl.kapitel.namn}${pl.kapitel.sidor !== '—' ? ` (${pl.kapitel.sidor})` : ''}`),
     h2('Syfte'),
-    p('I detta kapitel ska du lära dig följande.'),
+    p(`Här får du lära dig följande${pl.syfteSidor !== null ? ` (${pl.syfteSidor})` : ''}.`),
+    // Kapitlets "Här får du lära dig" saknas i bokfilen — då visas delkapitlens mål, tydligt märkt
+    ...(pl.syfteFranDelkapitel
+      ? [p('⚠ kontrollera: kapitlets "Här får du lära dig" saknas i bokfilen — nedan står delkapitlens mål.', { italics: true })]
+      : []),
     ...pl.syfte.map((m) => punkt(m)),
     h2('Viktiga begrepp'),
     ...(() => { const ut: Paragraph[] = []; for (let i = 0; i < pl.begrepp.length; i += 3) ut.push(p(pl.begrepp.slice(i, i + 3).join(' – '))); return ut; })(),

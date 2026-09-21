@@ -50,8 +50,12 @@ export interface PedagogiskPlanering {
   amne: string;
   klass: string;
   kapitel: { nr: number; namn: string; sidor: string };
-  /** Kapitlets mål — "I detta kapitel ska du lära dig följande". */
+  /** Syftet: kapitlets "Här får du lära dig" (öppningsuppslaget). Saknas det i boken används delkapitlens mål. */
   syfte: string[];
+  /** Sidan där "Här får du lära dig" står, t.ex. 's. 229'. */
+  syfteSidor: string | null;
+  /** true när syftet är delkapitlens mål — kapitlets egna saknas i bokfilen. */
+  syfteFranDelkapitel: boolean;
   /** Viktiga begrepp i bokordning. */
   begrepp: string[];
   /** Innehåll per delkapitel: kod, namn, sidor, sammanfattning (lektionsplanens, annars genomgångens punkter). */
@@ -189,7 +193,12 @@ export function pedagogiskPlanering(s: Struktur, amneId: string, kapitelNr?: num
   }
 
   const alla = [...kap.delkapitel.flatMap((d) => d.lektioner), ...kap.extraLektioner];
-  const syfte = [...new Set(alla.flatMap((l) => (l.mal ?? '').split('\n').map((x) => x.trim()).filter((x) => x !== '')))];
+  // Syftet står på kapitlets öppningsuppslag ("Här får du lära dig", t.ex. s. 229).
+  // Saknas det i bokfilen faller vi tillbaka på delkapitlens mål (sammanfattningarna).
+  const kapitelMal = (kap.mal ?? []).filter((x) => x.trim() !== '');
+  const delkapitelMal = [...new Set(alla.flatMap((l) => (l.mal ?? '').split('\n').map((x) => x.trim()).filter((x) => x !== '')))];
+  const syfte = kapitelMal.length > 0 ? kapitelMal : delkapitelMal;
+  const syfteFranDelkapitel = kapitelMal.length === 0;
   const innehall = kap.delkapitel.map((d) => {
     const forsta = d.lektioner[0];
     const idx = ap.a.findIndex((r) => r.kapitel === nr && r.lektion.id === forsta?.id);
@@ -209,6 +218,6 @@ export function pedagogiskPlanering(s: Struktur, amneId: string, kapitelNr?: num
   const sammanfattningSidor = provLektion !== undefined && har(provLektion.sidorTeori) ? provLektion.sidorTeori : (kap.sidor !== '—' ? kap.sidor : null);
   return {
     amne: amne.namn, klass: klass.namn, kapitel: { nr, namn: kap.namn, sidor: kap.sidor },
-    syfte, begrepp: kap.begreppslista, innehall, filmer, ovaRum, klassRum, prov, sammanfattningSidor, veckor,
+    syfte, syfteSidor: kap.malSidor ?? null, syfteFranDelkapitel, begrepp: kap.begreppslista, innehall, filmer, ovaRum, klassRum, prov, sammanfattningSidor, veckor,
   };
 }

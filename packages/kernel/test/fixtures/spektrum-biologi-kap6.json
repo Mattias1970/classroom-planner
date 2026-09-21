@@ -1,5 +1,5 @@
 {
-  "_om": "Spektrum Biologi kapitel 6 (s. 230–266) i classroom-planners NO-format, byggt ur de åtta Word-filerna biologi6.1–6.8 (sammanfattning, centralt innehåll, begrepp, Testa dig själv). Filmerna är Binogis lektioner; adresserna kommer ur sökindex eftersom Binogi var under underhåll när de skulle kontrolleras – öppna varje länk en gång innan eleverna får den. Importera som egen bok, eller lägg in kapitlet i den befintliga boken med laggTillKapitel.mjs.",
+  "_om": "Spektrum Biologi kapitel 6 (s. 230–266) i classroom-planners NO-format, byggt ur de åtta Word-filerna biologi6.1–6.8 (sammanfattning, centralt innehåll, begrepp, Testa dig själv). SYFTET i den pedagogiska planeringen ska vara kapitlets \"Här får du lära dig\" från öppningsuppslaget (s. 229) — lägg in den som \"mal\": [\"...\"] och \"malSidor\": \"s. 229\" direkt på kapitelobjektet. Saknas de används delkapitlens mål, markerat med ⚠ kontrollera i dokumentet. Filmerna är Binogis lektioner; adresserna kommer ur sökindex eftersom Binogi var under underhåll när de skulle kontrolleras – öppna varje länk en gång innan eleverna får den. Importera som egen bok, eller lägg in kapitlet i den befintliga boken med laggTillKapitel.mjs.",
   "id": "spektrum-biologi-kap6",
   "titel": "Spektrum Biologi – kapitel 6",
   "forlag": "Liber",

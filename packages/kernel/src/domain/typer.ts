@@ -225,6 +225,13 @@ export interface Kapitel {
   extraLektioner: Lektion[];
   /** Kapitlets alla begrepp i bokordning (härledd, dedupad). */
   begreppslista: string[];
+  /**
+   * Kapitlets mål ur öppningsuppslagets "Här får du lära dig" — syftet i den
+   * pedagogiska planeringen. Skilt från delkapitlens mål (sammanfattningarna).
+   */
+  mal?: string[];
+  /** Sidan där "Här får du lära dig" står, t.ex. 's. 229'. */
+  malSidor?: string;
   resurser: KapitelResurser;
 }
 

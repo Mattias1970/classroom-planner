@@ -37,6 +37,7 @@ function txt(v: unknown): string {
   const s = String(v).trim();
   return s === '' ? '—' : s;
 }
+function har(v: string): boolean { return v !== '—' && v.trim() !== ''; }
 function kravStrang(v: unknown, falt: string): string {
   if (typeof v !== 'string' || v.trim() === '') throw new Error(`Fältet "${falt}" saknas eller är tomt.`);
   return v.trim();
@@ -168,6 +169,10 @@ function lasKapitel(raw: unknown, index: number, prefix: string): Kapitel {
   });
 
   const kap = byggKapitel(nummer, titel, NO_KAPITELFARGER[index % NO_KAPITELFARGER.length], lektioner);
+  // Kapitlets "Här får du lära dig" (öppningsuppslaget) — syftet i den pedagogiska planeringen
+  const kapMal = strangLista(r.mal);
+  if (kapMal.length > 0) kap.mal = kapMal;
+  if (har(txt(r.malSidor))) kap.malSidor = txt(r.malSidor);
   kap.resurser.forklaringar = Object.assign({}, ...delkapitel.map((d) => d.forklaringar)) as Record<string, string>;
   // Filmernas egna titlar behålls ('6.1 · Celldelning'); en uttrycklig genomgångslänk får '— genomgång'
   kap.resurser.filmer = delkapitel.flatMap((d) => [

@@ -29,8 +29,11 @@ describe('Del 134: pedagogisk planering och provlapp ur planeringen', () => {
     expect(p).not.toBeNull();
     expect(p.amne).toBe('Biologi'); expect(p.klass).toBe('8B');
     expect(p.kapitel).toEqual({ nr: 6, namn: 'Kroppen', sidor: 's. 230–266' });
+    // Utan kapitlets "Här får du lära dig" i bokfilen faller syftet tillbaka på delkapitlens mål — märkt
     expect(p.syfte[0]).toBe('Alla organismer består av celler, livets minsta levande byggstenar.');
     expect(p.syfte).toHaveLength(40);                         // 8 delkapitel × 5 mål
+    expect(p.syfteFranDelkapitel).toBe(true);
+    expect(p.syfteSidor).toBeNull();
     expect(p.begrepp.slice(0, 3)).toEqual(['cellteorin', 'cellandning', 'cellmembran']);
     expect(p.innehall[1]).toMatchObject({ kod: '6.2', namn: 'Matspjälkningen', sidor: 's. 238–241' });
     expect(p.innehall[1].text).toContain('Vid matspjälkningen sönderdelas maten');
@@ -85,6 +88,25 @@ describe('Del 134: pedagogisk planering och provlapp ur planeringen', () => {
     expect(v38.map((d) => `${d.dag} ${d.typ}${d.grupp !== undefined ? ` ${d.grupp}` : ''}`)).toEqual(['Måndag lektion', 'Torsdag laboration A', 'Torsdag laboration B']);
     expect(v38[1].avsnitt).toContain('Laboration');
     expect(v38[1].laxa).toBeNull();
+  });
+
+  it('syftet är kapitlets "Här får du lära dig" (öppningsuppslaget) när boken har det — inte delkapitlens mål', async () => {
+    const { bokFromValfriImport } = await import('../src/domain/biologibok.js');
+    const rad = JSON.parse(readFileSync(join(HAR, 'fixtures', 'spektrum-biologi-kap6.json'), 'utf8')) as { kapitel: Array<Record<string, unknown>> };
+    rad.kapitel[0].malSidor = 's. 229';
+    rad.kapitel[0].mal = ['beskriva cellens delar och hur celler bildar vävnader, organ och organsystem',
+      'förklara hur kroppen tar upp näring, syre och gör sig av med avfall',
+      'resonera om hur kroppens organsystem samarbetar'];
+    const medMal = bokFromValfriImport(JSON.stringify(rad));
+    expect(medMal.kapitel[0].mal).toHaveLength(3);
+    expect(medMal.kapitel[0].malSidor).toBe('s. 229');
+    let s = bygg();
+    s = sparaBok(s, medMal);
+    const p = pedagogiskPlanering(s, 'bi', 6, '2026-09-14')!;
+    expect(p.syfte).toEqual(medMal.kapitel[0].mal);            // kapitlets mål, inte de 40 delkapitelmålen
+    expect(p.syfteSidor).toBe('s. 229');
+    expect(p.syfteFranDelkapitel).toBe(false);
+    expect(p.innehall[0].text).toContain('Alla organismer består av celler');   // delkapitlens mål finns kvar under Innehåll
   });
 
   it('null utan bok eller planering; okänt kapitel ger null', () => {
