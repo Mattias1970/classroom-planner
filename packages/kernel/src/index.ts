@@ -23,3 +23,4 @@ export * from './domain/dashboard.js';
 export * from './domain/kalender.js';
 export * from './domain/schemapdf.js';
 export * from './export/sidregister.js';
+export * from './domain/pedagogiskplanering.js';

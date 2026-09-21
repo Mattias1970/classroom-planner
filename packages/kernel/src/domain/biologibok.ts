@@ -55,6 +55,8 @@ interface RawDelkapitel {
   genomgang: string[];
   /** Del 132: filmer för delkapitlet ('Titel|https://…' eller { titel, url }) — bokens filmresurser. */
   filmer: Array<{ titel: string; url: string }>;
+  /** genomgangLank angavs uttryckligen (inte härledd ur första filmen). */
+  egenGenomgangLank: boolean;
 }
 
 function lasFilmer(raw: unknown): Array<{ titel: string; url: string }> {
@@ -95,6 +97,7 @@ function lasDelkapitel(raw: unknown, kapNr: number, index: number): RawDelkapite
     mal: strangLista(r.mal),
     genomgang: typeof r.genomgang === 'string' ? [r.genomgang.trim()].filter((x) => x !== '') : strangLista(r.genomgang),
     filmer,
+    egenGenomgangLank: typeof r.genomgangLank === 'string' && r.genomgangLank.startsWith('http'),
   };
 }
 
@@ -166,9 +169,10 @@ function lasKapitel(raw: unknown, index: number, prefix: string): Kapitel {
 
   const kap = byggKapitel(nummer, titel, NO_KAPITELFARGER[index % NO_KAPITELFARGER.length], lektioner);
   kap.resurser.forklaringar = Object.assign({}, ...delkapitel.map((d) => d.forklaringar)) as Record<string, string>;
+  // Filmernas egna titlar behålls ('6.1 · Celldelning'); en uttrycklig genomgångslänk får '— genomgång'
   kap.resurser.filmer = delkapitel.flatMap((d) => [
-    ...(d.genomgangLank !== undefined ? [{ titel: `${d.nummer} ${d.titel} — genomgång`, url: d.genomgangLank }] : []),
-    ...d.filmer.filter((f) => f.url !== d.genomgangLank).map((f) => ({ titel: `${d.nummer} · ${f.titel}`, url: f.url })),
+    ...(d.egenGenomgangLank && d.genomgangLank !== undefined ? [{ titel: `${d.nummer} ${d.titel} — genomgång`, url: d.genomgangLank }] : []),
+    ...d.filmer.filter((f) => !(d.egenGenomgangLank && f.url === d.genomgangLank)).map((f) => ({ titel: `${d.nummer} · ${f.titel}`, url: f.url })),
   ]);
   return kap;
 }

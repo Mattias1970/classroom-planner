@@ -1,0 +1,481 @@
+{
+  "_om": "Spektrum Biologi kapitel 6 (s. 230–266) i classroom-planners NO-format, byggt ur de åtta Word-filerna biologi6.1–6.8 (sammanfattning, centralt innehåll, begrepp, Testa dig själv). Filmerna är Binogis lektioner; adresserna kommer ur sökindex eftersom Binogi var under underhåll när de skulle kontrolleras – öppna varje länk en gång innan eleverna får den. Importera som egen bok, eller lägg in kapitlet i den befintliga boken med laggTillKapitel.mjs.",
+  "id": "spektrum-biologi-kap6",
+  "titel": "Spektrum Biologi – kapitel 6",
+  "forlag": "Liber",
+  "amne": "Biologi",
+  "arskurs": 8,
+  "kapitel": [
+    {
+      "nummer": 6,
+      "titel": "Kroppen",
+      "sidor": "s. 230–266",
+      "delkapitel": [
+        {
+          "nummer": "6.1",
+          "titel": "Celler, vävnader och organ",
+          "sidor": "s. 230–235",
+          "mal": [
+            "Alla organismer består av celler, livets minsta levande byggstenar.",
+            "Cellens delar har olika uppgifter, och genom cellandning frigörs energi ur glukos.",
+            "Celler delar sig och specialiseras; de bygger tillsammans upp vävnader, organ och organsystem.",
+            "Organsystemen samarbetar för att förse cellerna med syre och näring samt transportera bort avfall.",
+            "Cellerna kommunicerar med signalämnen, exempelvis hormoner, som hjälper till att samordna kroppens funktioner."
+          ],
+          "genomgang": [
+            "Cellteorin: alla organismer består av celler. Mikroskop och forskning har utvecklat kunskapen om celler.",
+            "Encelliga och flercelliga organismer: flercellighet kräver specialisering, transport och kommunikation mellan celler.",
+            "Cellens delar och funktioner: cellmembran, cellplasma, cellkärna, mitokondrier, ribosomer och lysosomer.",
+            "DNA och gener: arvsanlagen innehåller information som styr vilka proteiner cellen tillverkar.",
+            "Cellandning: glukos + syre → koldioxid + vatten + energi.",
+            "Celldelning och specialisering: från befruktad äggcell till olika celltyper; cellernas livslängd och förnyelse.",
+            "Stamceller: celler som kan dela sig och utvecklas till specialiserade celler.",
+            "Kroppens organisation: celler bygger upp vävnader, vävnader bygger upp organ och organ samarbetar i organsystem.",
+            "Organsystemens uppgifter: andning, matspjälkning, cirkulation, utsöndring, immunförsvar, rörelse, hud, nervsystem och sinnen, hormonsystem samt fortplantning.",
+            "Samarbete och kommunikation: transport av syre, näring och avfall samt signalämnen som förmedlar meddelanden mellan celler."
+          ],
+          "begrepp": ["cellteorin", "cellandning", "cellmembran", "cellkärna", "celldelning", "stamcell", "vävnad", "organ", "organsystem", "signalämne"],
+          "extraBegrepp": ["cellplasma", "mitokondrie", "ribosom", "lysosom", "DNA", "gen", "hormon"],
+          "forklaringar": {
+            "cellteorin": "Teorin om att alla organismer är uppbyggda av celler.",
+            "cellandning": "Den kemiska reaktion i cellen som omvandlar glukos och syre till koldioxid, vatten och energi.",
+            "cellmembran": "Cellens \"hud\" – skyddar cellens inre och är cellens kontakt med omgivningen; styr vad som släpps in och ut.",
+            "cellkärna": "Cellens \"chef\" – innehåller DNA och styr det mesta som händer i cellen.",
+            "celldelning": "När en cell delar sig och bildar två exakt likadana celler.",
+            "stamcell": "En omogen cell som kan dela sig och bilda nya omogna celler, men också utvecklas till specialiserade celler.",
+            "vävnad": "Celler av samma sort som slår sig samman, till exempel muskelvävnad.",
+            "organ": "Flera vävnader som tillsammans utför en uppgift, till exempel hjärtat eller levern.",
+            "organsystem": "Flera organ som samarbetar, till exempel matspjälkningen eller blodomloppet.",
+            "signalämne": "Ämne, till exempel ett hormon, som celler använder för att skicka meddelanden till varandra.",
+            "cellplasma": "Den vätska som fyller cellen och där cellens delar ligger.",
+            "mitokondrie": "Cellens kraftverk – där cellandningen sker och energi frigörs.",
+            "ribosom": "Cellens proteinfabrik – bygger proteiner enligt informationen i DNA.",
+            "lysosom": "Cellens återvinningsstation – bryter ner avfall och gamla delar.",
+            "DNA": "Arvsanlagen i cellkärnan – informationen som styr vilka proteiner cellen tillverkar.",
+            "gen": "En bit av DNA som är ett recept på ett protein.",
+            "hormon": "Signalämne som transporteras med blodet och styr kroppens funktioner."
+          },
+          "testaDigSjalv": {
+            "sida": 235,
+            "fragor": [
+              "Hur får cellen sin energi?",
+              "Vilka uppgifter har cellmembranet?",
+              "Nämn några olika sorters celler i din kropp.",
+              "Vad är det som bestämmer vilka proteiner som ska tillverkas i cellen?",
+              "Vad händer med cellens avfall?",
+              "Beskriv några organsystem och deras uppgifter.",
+              "a) Hur kan cellerna skicka meddelanden till varandra? b) Ge exempel på vilka order ett sådant meddelande kan innehålla."
+            ]
+          },
+          "filmer": [
+            "Cellens specialisering|https://app.binogi.se/l/cellens-specialisering",
+            "Celldelning|https://app.binogi.se/l/celldelning",
+            "Organ och organsystem|https://app.binogi.se/l/organ-och-organsystem"
+          ]
+        },
+        {
+          "nummer": "6.2",
+          "titel": "Matspjälkningen",
+          "sidor": "s. 238–241",
+          "mal": [
+            "Maten ger cellerna energi och byggmaterial i form av olika näringsämnen.",
+            "Vid matspjälkningen sönderdelas maten mekaniskt och kemiskt med hjälp av enzymer.",
+            "Saliv, magsaft, bukspott och galla hjälper till att bearbeta maten på vägen genom kroppen.",
+            "I tunntarmen tas näringen upp och transporteras vidare till kroppens celler.",
+            "I tjocktarmen tas vatten och salter upp, och resterna lämnar kroppen som avföring."
+          ],
+          "genomgang": [
+            "Näringsämnen: kroppen behöver vatten, kolhydrater, fetter, proteiner, vitaminer och mineralämnen. Maten ger energi och byggmaterial.",
+            "Matspjälkningskanalen: matens väg genom munnen, svalget, matstrupen, magsäcken, tunntarmen, tjocktarmen och ändtarmen till analöppningen.",
+            "Mekanisk och kemisk sönderdelning: tänder och muskler finfördelar och knådar maten. Enzymer bryter ner stora molekyler till mindre.",
+            "Näringsämnenas nedbrytning: stärkelse bryts ner till glukos, proteiner till aminosyror och fetter till bland annat glycerol och fettsyror.",
+            "Munnen och sväljningen: saliv gör maten lättare att svälja och innehåller enzymer som börjar bryta ner stärkelse. Struplocket hindrar maten från att hamna i luftstrupen.",
+            "Magsäcken: muskler knådar maten. Magsaft innehåller pepsin som bryter ner proteiner och saltsyra som dödar många bakterier. Slem skyddar magsäckens vägg.",
+            "Bukspott och galla: bukspott tillför enzymer och neutraliserar syra i tolvfingertarmen. Galla bildas i levern, lagras i gallblåsan och finfördelar fett. Galla är inte ett enzym.",
+            "Tunntarmen och tarmluddet: nedbrytningen slutförs och näringsämnen tas upp. Tarmluddet ger en stor yta som gör upptaget effektivt.",
+            "Tjocktarmen och tarmbakterierna: vatten och salter tas upp. Bakterier hjälper till att bearbeta rester och bildar bland annat vitaminer.",
+            "Ändtarmen och avföringen: rester som inte tagits upp förs till ändtarmen, lagras där och lämnar kroppen genom anus."
+          ],
+          "begrepp": ["matspjälkning", "enzym", "magsaft", "bukspott", "galla", "tarmludd"],
+          "extraBegrepp": ["näringsämne", "saliv", "struplock", "pepsin", "tolvfingertarm", "tarmbakterier"],
+          "forklaringar": {
+            "matspjälkning": "Nedbrytningen av maten till så små delar att näringen kan tas upp av blodet.",
+            "enzym": "Protein som får en kemisk reaktion att gå fortare, till exempel nedbrytningen av stärkelse till glukos.",
+            "magsaft": "Vätska i magsäcken med pepsin som bryter ner proteiner och saltsyra som dödar bakterier.",
+            "bukspott": "Vätska från bukspottkörteln med enzymer som bryter ner maten och som neutraliserar syran i tolvfingertarmen.",
+            "galla": "Vätska som bildas i levern och lagras i gallblåsan; finfördelar fett – galla är inte ett enzym.",
+            "tarmludd": "Tunntarmens små utskott som ger en mycket stor yta så att näringen tas upp effektivt.",
+            "näringsämne": "Ämne i maten som kroppen behöver: vatten, kolhydrater, fetter, proteiner, vitaminer och mineralämnen.",
+            "saliv": "Spott – gör maten lättare att svälja och innehåller enzym som börjar bryta ner stärkelse.",
+            "struplock": "Lock som stänger luftstrupen när vi sväljer så att maten inte hamnar fel.",
+            "pepsin": "Enzymet i magsaften som bryter ner proteiner.",
+            "tolvfingertarm": "Tunntarmens första del där bukspott och galla blandas med maten.",
+            "tarmbakterier": "Bakterier i tjocktarmen som hjälper till att bryta ner rester och bildar vitaminer."
+          },
+          "testaDigSjalv": {
+            "sida": 241,
+            "fragor": [
+              "Vilka är de näringsämnen vi behöver för att må bra?",
+              "Hur bearbetas maten i magsäcken?",
+              "Var sugs näringsämnena från maten upp av blodet?",
+              "Var i matspjälkningskanalen sugs det mesta vattnet upp?",
+              "Beskriv översiktligt matens väg från munnen till ändtarmen.",
+              "Förklara var och hur kolhydrater, proteiner och fetter sönderdelas till mindre molekyler under färden genom matspjälkningskanalen."
+            ]
+          },
+          "filmer": [
+            "Matspjälkningen: Från munnen till magen|https://app.binogi.se/l/matspjaelkningen-fraan-munnen-till-magen",
+            "Matspjälkningen: Tarmarna|https://app.binogi.se/l/matspjaelkningen-tarmarna",
+            "Näringsämnen|https://app.binogi.se/l/naeringsaemnen",
+            "Kolhydrater i maten|https://app.binogi.se/l/kolhydrater-i-maten"
+          ]
+        },
+        {
+          "nummer": "6.3",
+          "titel": "Andningen",
+          "sidor": "s. 242–244",
+          "mal": [
+            "Andningen ger cellerna syre till cellandningen och för bort koldioxid.",
+            "I lungblåsorna utbyts syre och koldioxid mellan luften och blodet.",
+            "Hjärnans andningscentrum styr diafragman och musklerna mellan revbenen.",
+            "Vid ansträngning andas vi snabbare och djupare eftersom cellerna behöver mer syre.",
+            "Stämbanden skapar ljud genom vibrationer, och tungan och läpparna formar orden."
+          ],
+          "genomgang": [
+            "Andningens uppgift: tillföra syre till cellandningen och föra bort koldioxid som bildas i cellerna.",
+            "Luftens väg: näshåla eller mun → svalg → struphuvud → luftstrupe → luftrör → lungblåsor.",
+            "Lungblåsorna: små blåsor med tunna väggar, omgivna av små blodkärl. Deras stora sammanlagda yta gör gasutbytet effektivt.",
+            "Gasutbytet: syre går från lungblåsorna till blodet. Koldioxid går från blodet till lungblåsorna och andas ut.",
+            "Andningsrörelser: diafragman och musklerna mellan revbenen ändrar bröstkorgens volym så att luft strömmar in och ut.",
+            "Andningens styrning: andningscentrum i hjärnan skickar signaler till andningsmusklerna och styr andningen automatiskt.",
+            "Andning vid ansträngning: ökat syrebehov gör att vi andas snabbare och tar djupare andetag.",
+            "Olika organismers andning: syre kan tas upp genom cellmembran, hud, insekters andningsrör, gälar eller lungor. Fåglars luftsäckar bidrar till effektiv andning.",
+            "Röst och tal: stämbanden i struphuvudet vibrerar när luft passerar. Deras spänning påverkar tonhöjden, och tungan och läpparna formar orden."
+          ],
+          "begrepp": ["luftrör", "lungblåsor", "andningscentrum", "diafragma", "stämband"],
+          "extraBegrepp": ["luftstrupe", "gasutbyte", "struphuvud"],
+          "forklaringar": {
+            "luftrör": "De grenar från luftstrupen som leder luften vidare ut i lungorna.",
+            "lungblåsor": "Små tunnväggiga blåsor längst ut i lungorna där syre och koldioxid byts mellan luft och blod.",
+            "andningscentrum": "Den del av hjärnan som automatiskt styr andningen.",
+            "diafragma": "Den stora andningsmuskeln under lungorna som ändrar bröstkorgens volym.",
+            "stämband": "Två band i struphuvudet som vibrerar när luft passerar och skapar ljud.",
+            "luftstrupe": "Röret som leder luften från svalget ner mot lungorna.",
+            "gasutbyte": "Utbytet i lungblåsorna: syre in i blodet, koldioxid ut ur blodet.",
+            "struphuvud": "Övre delen av luftstrupen där stämbanden sitter."
+          },
+          "testaDigSjalv": {
+            "sida": 244,
+            "fragor": [
+              "Vilka är våra andningsorgan?",
+              "Vad händer i lungblåsorna?",
+              "Beskriv hur in- och utandning går till.",
+              "Hur och var uppstår vårt tal?",
+              "Hur tror du att lungvolymen påverkar möjligheten att bli en bra långdistanslöpare eller skidåkare?"
+            ]
+          },
+          "filmer": [
+            "Andningen|https://app.binogi.se/l/andningen",
+            "Sjukdomar i lungorna och problem med andningen|https://app.binogi.se/l/sjukdomar-i-lungorna-och-problem-med-andningen"
+          ]
+        },
+        {
+          "nummer": "6.4",
+          "titel": "Blodomloppet, njurarna och levern",
+          "sidor": "s. 245–252",
+          "mal": [
+            "Hjärtat pumpar blod genom lilla och stora kretsloppet och försörjer cellerna med syre och näring.",
+            "Artärer, kapillärer och vener leder blodet, medan klaffar hindrar det från att rinna bakåt.",
+            "Blodet transporterar ämnen, bekämpar smittämnen och hjälper till att stoppa blödningar.",
+            "Puls, blodtryck och blodflöde anpassas efter kroppens behov, exempelvis vid fysisk aktivitet.",
+            "Njurarna avlägsnar avfall och reglerar vätska och salter; levern avgiftar och lagrar näring."
+          ],
+          "genomgang": [
+            "Upptäckten av blodomloppet: William Harvey beskrev 1628 hur hjärtat pumpar runt samma blod. Slutsatserna byggde på observationer och experiment.",
+            "Blodkärlen: artärer leder blod från hjärtat, vener tillbaka till hjärtat. I kapillärerna utbyts syre, näring och avfall mellan blodet och vävnaderna.",
+            "Lilla och stora kretsloppet: höger hjärthalva pumpar blod till lungorna. Vänster hjärthalva pumpar syrerikt blod genom aortan till kroppen; blodet återvänder via hålvenerna.",
+            "Hjärtats byggnad: två förmak och två kammare bildar en dubbelpump. Vänster kammare har tjockare muskelvägg. Kranskärlen ger hjärtmuskeln syre och näring.",
+            "Hjärtats klaffar: segelklaffar och fickklaffar hindrar blodet från att rinna bakåt. Hjärtljuden uppstår när klaffarna stängs.",
+            "Blodtryck och puls: hjärtats arbete skapar tryck och pulsvågor i artärerna. Blodet rör sig långsamt i kapillärerna, vilket underlättar ämnesutbytet.",
+            "Muskelpumpen: benmuskler pressar blodet i venerna mot hjärtat. Venklaffar hindrar återflöde. Långvarigt stillastående kan bidra till svimning.",
+            "Kondition och blodfördelning: vid arbete ökar hjärtats pumpning och mer blod går till musklerna. Träning stärker hjärtat och förbättrar syreförsörjningen.",
+            "Blodets innehåll och bildning: blod består av plasma, röda och vita blodkroppar samt blodplättar. Blodceller utvecklas från stamceller i röd benmärg.",
+            "Syretransport och hemoglobin: röda blodkroppars järnhaltiga hemoglobin binder syre. Bloddopning och EPO samt risken för blodproppar.",
+            "Koagulation och immunförsvar: blodplättar och ett nät av fibrin stoppar blödningar. Vita blodkroppar deltar i försvaret mot smittämnen.",
+            "Njurarna och urinvägarna: njurarna renar blodet och reglerar vatten och salter. Urinen går via urinledarna till urinblåsan och lämnar kroppen genom urinröret.",
+            "Leverns uppgifter: levern omvandlar skadliga ämnen, bildar galla och lagrar bland annat glykogen, vitaminer och järn. Glykogen kan omvandlas till glukos."
+          ],
+          "begrepp": ["blodomlopp", "artär", "ven", "kapillär", "lilla och stora kretsloppet", "segelklaff", "fickklaff", "blodtryck", "muskelpump", "blodplasma", "hemoglobin"],
+          "extraBegrepp": ["förmak", "kammare", "kranskärl", "puls", "röd blodkropp", "vit blodkropp", "blodplätt", "njure", "lever", "glykogen"],
+          "forklaringar": {
+            "blodomlopp": "Hjärtat och blodkärlen som tillsammans för blodet runt i kroppen.",
+            "artär": "Blodkärl som leder blod från hjärtat.",
+            "ven": "Blodkärl som leder blod tillbaka till hjärtat.",
+            "kapillär": "Det finaste blodkärlet, där syre, näring och avfall byts mellan blodet och vävnaderna.",
+            "lilla och stora kretsloppet": "Lilla: höger hjärthalva → lungorna → vänster hjärthalva. Stora: vänster hjärthalva → aortan → kroppen → hålvenerna → höger hjärthalva.",
+            "segelklaff": "Klaff mellan förmak och kammare som hindrar blodet från att rinna bakåt.",
+            "fickklaff": "Klaff vid utgången från kammaren (mot aortan och lungartären) som hindrar återflöde.",
+            "blodtryck": "Trycket som hjärtats pumpning skapar i artärerna.",
+            "muskelpump": "Benmusklerna som pressar blodet i venerna uppåt mot hjärtat; venklaffarna hindrar återflöde.",
+            "blodplasma": "Blodets vätska som blodkropparna flyter i och som transporterar näring, avfall och signalämnen.",
+            "hemoglobin": "Det järnhaltiga ämnet i röda blodkroppar som binder syre.",
+            "förmak": "Hjärtats två övre hålrum som tar emot blodet.",
+            "kammare": "Hjärtats två nedre hålrum som pumpar ut blodet.",
+            "kranskärl": "Blodkärlen som ger hjärtmuskeln själv syre och näring.",
+            "puls": "Tryckvågen i artärerna vid varje hjärtslag.",
+            "röd blodkropp": "Blodcell med hemoglobin som transporterar syre.",
+            "vit blodkropp": "Blodcell som deltar i försvaret mot smittämnen.",
+            "blodplätt": "Cellfragment i blodet som hjälper till att stoppa blödningar.",
+            "njure": "Organ som renar blodet från avfall och reglerar vatten och salter; bildar urin.",
+            "lever": "Organ som omvandlar skadliga ämnen, bildar galla och lagrar glykogen, vitaminer och järn.",
+            "glykogen": "Kroppens lagringsform av glukos, i levern och musklerna."
+          },
+          "testaDigSjalv": {
+            "sida": 252,
+            "fragor": [
+              "Beskriv blodets väg i de båda kretsloppen.",
+              "Ge exempel på hur blodet kan fördelas mellan olika organ.",
+              "Vad kallas hjärtats fyra hålrum?",
+              "Vad menas med att hjärtat är en dubbelpump?",
+              "Vilken uppgift har hjärtats kranskärl?",
+              "Hur kan blodet ta sig från benen tillbaks till hjärtat?",
+              "Vilka är njurarnas viktigaste uppgifter?",
+              "Vilka uppgifter har levern?",
+              "Nämn några ämnen som kan lagras i levern."
+            ]
+          },
+          "filmer": [
+            "Hjärtat|https://app.binogi.se/l/hjaertat",
+            "Hjärt- och kärlsystemet|https://app.binogi.se/l/hjaert-och-kaerlsystemet",
+            "Blodet|https://app.binogi.se/l/blodet",
+            "Njurarna|https://app.binogi.se/l/njurarna",
+            "Hjärt- och kärlsjukdomar|https://app.binogi.se/l/hjaert-och-kaerlsjukdomar"
+          ]
+        },
+        {
+          "nummer": "6.5",
+          "titel": "Immunförsvaret",
+          "sidor": "s. 253–256",
+          "mal": [
+            "Hud, slemhinnor och olika kroppsvätskor hindrar smittämnen från att ta sig in i kroppen.",
+            "Vita blodkroppar samarbetar för att bekämpa smittämnen som passerat det yttre försvaret.",
+            "Ätarceller tar hand om inkräktare, medan T-celler och B-celler deltar i ett riktat försvar.",
+            "Minnesceller gör att immunförsvaret kan reagera snabbare mot ett smittämne det mött tidigare.",
+            "Vaccination förbereder immunförsvaret; tillförda färdiga antikroppar ger ett tillfälligt skydd."
+          ],
+          "genomgang": [
+            "Kroppens yttre försvar: huden är en barriär. Saliv och tårvätska innehåller bakteriehämmande ämnen, och magsäckens saltsyra dödar många mikroorganismer.",
+            "Luftvägarnas skydd: slem fångar partiklar och smittämnen. Flimmerhår transporterar slem mot svalget. Hosta och nysningar rensar luftvägarna.",
+            "Immunförsvarets organ: benmärg, lymfkörtlar, mjälte och tymus. Vita blodkroppar bildas i benmärgen, och T-celler mognar i tymus.",
+            "Lymfa och lymfkörtlar: lymfkärl tar upp vätska från vävnaderna. Lymfan passerar lymfkörtlar med många vita blodkroppar. Körtlarna kan svullna vid infektion.",
+            "Vita blodkroppar: olika försvarsceller samarbetar för att upptäcka och bekämpa smittämnen och onormala celler. De finns i blod, lymfa och vävnader.",
+            "Ätarceller: omsluter och bryter ner bakterier. Var i ett infekterat sår innehåller döda försvarsceller och bakterier.",
+            "T-celler och B-celler: T-hjälparceller samordnar försvaret och aktiverar B-celler. Andra T-celler dödar virusinfekterade celler och cancerceller.",
+            "Antikroppar: aktiverade B-celler kan utvecklas till celler som producerar antikroppar. Antikropparna binder till specifika mål och hjälper försvaret att oskadliggöra smittämnen.",
+            "Immunitet och minnesceller: vissa T- och B-celler blir minnesceller. Svaret blir snabbare vid ny kontakt med samma smittämne. Många olika förkylningsvirus gör att vi kan bli förkylda igen.",
+            "Vaccination och färdiga antikroppar: vaccination tränar immunförsvaret och kan ge långvarigt skydd. Gammaglobulin innehåller färdiga antikroppar och ger kortvarigt skydd.",
+            "Antibiotika och hiv: antibiotika hjälper vid vissa bakterieinfektioner. Hiv angriper T-hjälparceller och kan försvaga immunförsvaret kraftigt."
+          ],
+          "begrepp": ["flimmerhår", "immunförsvar", "vit blodkropp", "lymfa", "lymfkörtel", "mjälte", "tymus", "antikropp", "vaccination"],
+          "extraBegrepp": ["ätarcell", "T-cell", "B-cell", "minnescell", "immunitet", "antibiotika"],
+          "forklaringar": {
+            "flimmerhår": "Små hår i luftvägarna som transporterar slem med fångade partiklar upp mot svalget.",
+            "immunförsvar": "Kroppens försvar mot smittämnen: yttre barriärer och vita blodkroppar som samarbetar.",
+            "vit blodkropp": "Försvarscell i blod, lymfa och vävnader som upptäcker och bekämpar smittämnen.",
+            "lymfa": "Vätska som lymfkärlen tar upp från vävnaderna och för tillbaka till blodet via lymfkörtlarna.",
+            "lymfkörtel": "Knut på lymfkärlen med många vita blodkroppar; kan svullna vid infektion.",
+            "mjälte": "Organ i immunförsvaret som filtrerar blodet och innehåller vita blodkroppar.",
+            "tymus": "Brässen – organet där T-cellerna mognar.",
+            "antikropp": "Protein från B-celler som binder till ett visst smittämne och hjälper försvaret att oskadliggöra det.",
+            "vaccination": "Att träna immunförsvaret med ett försvagat eller dött smittämne så att minnesceller bildas – ger långvarigt skydd.",
+            "ätarcell": "Vit blodkropp som omsluter och bryter ner bakterier.",
+            "T-cell": "Vit blodkropp som samordnar försvaret (T-hjälparcell) eller dödar infekterade celler.",
+            "B-cell": "Vit blodkropp som kan utvecklas till en antikroppsproducerande cell.",
+            "minnescell": "T- eller B-cell som minns ett smittämne så att svaret blir snabbare nästa gång.",
+            "immunitet": "Skydd mot ett smittämne som kroppen mött tidigare, tack vare minnesceller.",
+            "antibiotika": "Läkemedel som dödar eller hämmar bakterier – hjälper inte mot virus."
+          },
+          "testaDigSjalv": {
+            "sida": 256,
+            "fragor": [
+              "Hur bekämpar din munhåla och magsäck bakterier?",
+              "Beskriv hur din näsa och dina luftvägar kan rena den luft du andas in.",
+              "Nämn några organ som ingår i immunförsvaret.",
+              "Vad menas med att vi blir immuna efter en infektion?",
+              "Beskriv hur olika typer av vita blodkroppar samarbetar för att bekämpa en bakterieinfektion.",
+              "Hur fungerar en vaccination?"
+            ]
+          },
+          "filmer": [
+            "Immunförsvaret|https://app.binogi.se/l/immunfoersvaret",
+            "Vaccin i världen|https://app.binogi.se/l/vaccin-i-vaerlden"
+          ]
+        },
+        {
+          "nummer": "6.6",
+          "titel": "Skelettet – lätt men starkt som stål",
+          "sidor": "s. 257–259",
+          "mal": [
+            "Skelettet ger kroppen stadga, skyddar inre organ och möjliggör rörelse tillsammans med musklerna.",
+            "Benens kompakta utsida och porösa insida med benbalkar gör dem både starka och lätta.",
+            "Skelettet lagrar mineraler, och i den röda benmärgen bildas blodkroppar.",
+            "Benvävnaden förnyas ständigt, och under uppväxten växer benen och blir hårdare.",
+            "Leder, ledbrosk, ledvätska, ledband och ryggens diskar gör rörelser smidiga och stabila."
+          ],
+          "genomgang": [
+            "Skelettets uppgifter: ger stadga, skyddar hjärna, hjärta och lungor samt möjliggör rörelse tillsammans med muskler och leder.",
+            "Olika typer av ben: en vuxen har vanligen 206 ben. Rörben i armar och ben, platta ben i skallen och skulderbladen, korta ben i handleder och vrister samt oregelbundna ryggkotor.",
+            "Skelettets delar: kranium, nyckelben, skulderblad, revben, bröstben, ryggrad, höftben, överarmsben, strålben, armbågsben, lårben, knäskål, skenben och vadben.",
+            "Benets uppbyggnad: en hård, kompakt utsida omger en porös insida med benbalkar och hålrum – styrka utan onödigt stor vikt.",
+            "Röd och gul benmärg: i den röda benmärgen bildas blodkroppar. Den gula benmärgen består till stor del av fett.",
+            "Benhinnan: omger benet och innehåller blodkärl och nerver som försörjer benet med syre och näring.",
+            "Mineraler och tillväxt: skelettet lagrar kalcium och fosfat. Under uppväxten ersätts brosk av ben och mineralsalter gör benet hårt. Rörben växer på längden i tillväxtområden.",
+            "Skelettets förnyelse: ben är levande vävnad. Vissa celler bryter ner ben medan andra bygger upp nytt.",
+            "Ledernas uppbyggnad: ledbrosk skyddar benändarna, ledvätska minskar friktionen och ledband (ligament) håller ihop och stabiliserar leden.",
+            "Olika typer av leder: kulleder (flera riktningar, höften), gångjärnsleder (böjning och sträckning, fingrarna) och vridleder (rotation, övre nacken).",
+            "Ryggens diskar: elastiska skivor mellan ryggkotorna som dämpar stötar, fördelar tryck och låter ryggen böjas och vridas."
+          ],
+          "begrepp": ["rörben", "röd och gul benmärg", "benhinna", "brosk", "ledband", "disk"],
+          "extraBegrepp": ["ledbrosk", "ledvätska", "kulled", "gångjärnsled", "vridled", "benbalk"],
+          "forklaringar": {
+            "rörben": "Långa ben, till exempel i armar och ben, med kompakt utsida och porös insida.",
+            "röd och gul benmärg": "Röd benmärg bildar blodkroppar; gul benmärg består mest av fett.",
+            "benhinna": "Hinnan runt benet med blodkärl och nerver som försörjer benet.",
+            "brosk": "Mjukare, elastisk stödjevävnad – finns i leder och ersätts av ben under uppväxten.",
+            "ledband": "Ligament – band som håller ihop och stabiliserar en led.",
+            "disk": "Elastisk skiva mellan ryggkotorna som dämpar stötar och fördelar tryck.",
+            "ledbrosk": "Broskskikt som skyddar benändarna i en led.",
+            "ledvätska": "Vätska i leden som minskar friktionen.",
+            "kulled": "Led som tillåter rörelse i flera riktningar, till exempel höften.",
+            "gångjärnsled": "Led som tillåter böjning och sträckning, till exempel fingrarna.",
+            "vridled": "Led som tillåter rotation, till exempel övre delen av nacken.",
+            "benbalk": "Tunna balkar i benets porösa insida som ger styrka med låg vikt."
+          },
+          "testaDigSjalv": {
+            "sida": 259,
+            "fragor": [
+              "Vilka är skelettets viktigaste funktioner?",
+              "Hur kan skelettet både vara starkt och lätt?",
+              "Nämn några olika typer av leder i kroppen.",
+              "Vilka uppgifter har ledbrosket, ledvätskan och ledbanden?",
+              "Hur förnyas skelettet?"
+            ]
+          },
+          "filmer": [
+            "Skelettet|https://app.binogi.se/l/skelettet"
+          ]
+        },
+        {
+          "nummer": "6.7",
+          "titel": "Musklerna",
+          "sidor": "s. 260–263",
+          "mal": [
+            "Muskler, skelett och leder samarbetar och gör att kroppen kan röra sig.",
+            "Skelettmuskler kan styras med viljan, medan hjärtmuskeln och glatta muskler arbetar automatiskt.",
+            "Muskler består av muskelfibrer och drar i skelettet via senor när de spänns.",
+            "Muskelarbete kräver energi, och träning förbättrar musklernas förmåga att använda syre.",
+            "Snabba och långsamma muskelfibrer, mjölksyra, träningsvärk och stretching."
+          ],
+          "genomgang": [
+            "Kroppens rörelseorgan: musklerna drar ihop sig och skapar rörelse tillsammans med skelettet och lederna. Många muskler samordnas för mjuka och precisa rörelser.",
+            "Tre typer av muskler: skelettmuskler fäster vid skelettet och styrs med viljan. Hjärtmuskeln och glatta muskler arbetar oberoende av viljan.",
+            "Glatta musklers uppgifter: finns i magsäcken, tarmarna och blodkärlens väggar. De för maten framåt och reglerar blodkärlens diameter.",
+            "Böjmuskel och sträckmuskel: muskler med motsatta uppgifter samarbetar. Biceps böjer armen i armbågen och triceps sträcker den.",
+            "Senor: fäster musklerna vid skelettets ben och överför kraften när muskeln drar ihop sig. Hälsenan är en stor och stark sena.",
+            "Muskelns uppbyggnad: en skelettmuskel består av buntar av muskelfibrer. Varje fiber är en lång muskelcell med proteintrådar som medverkar i sammandragningen.",
+            "Nervsignaler och energi: nervsignaler aktiverar skelettmusklerna. Blodet tillför syre och glukos; musklerna kan även använda fett. Mitokondrierna är viktiga för cellandningen.",
+            "Snabba och långsamma muskelfibrer: snabba fibrer för snabba, kraftfulla rörelser. Långsamma fibrer är mer uthålliga. Arv och träning påverkar musklernas egenskaper.",
+            "Träning och kondition: vid ansträngning ökar andningen och hjärtats arbete. Uthållighetsträning ökar mängden mitokondrier och förbättrar syreupptaget.",
+            "Hårt muskelarbete och återhämtning: mjölksyra vid hård ansträngning, trötthet och återhämtning efter muskelarbete.",
+            "Träningsvärk och stretching: fördröjd värk efter hårt eller ovant muskelarbete. Stretching ökar smidighet och rörelseomfång."
+          ],
+          "begrepp": ["skelettmuskel", "hjärtmuskel", "glatt muskel", "böj- och sträckmuskel", "sena", "muskelfiber", "mitokondrie", "mjölksyra"],
+          "extraBegrepp": ["biceps", "triceps", "hälsena", "kondition", "träningsvärk"],
+          "forklaringar": {
+            "skelettmuskel": "Muskel som fäster vid skelettet och som vi styr med viljan.",
+            "hjärtmuskel": "Muskeln i hjärtats vägg – arbetar oberoende av viljan.",
+            "glatt muskel": "Muskel i inre organ och blodkärl som arbetar automatiskt, till exempel för maten framåt i tarmen.",
+            "böj- och sträckmuskel": "Muskelpar med motsatta uppgifter: biceps böjer armen, triceps sträcker den.",
+            "sena": "Fäster muskeln vid benet och överför kraften när muskeln drar ihop sig.",
+            "muskelfiber": "En lång muskelcell med proteintrådar som gör att muskeln kan dra ihop sig.",
+            "mitokondrie": "Cellens kraftverk där cellandningen sker – fler mitokondrier ger bättre uthållighet.",
+            "mjölksyra": "Ämne som bildas i musklerna vid hårt arbete när syret inte räcker till.",
+            "biceps": "Böjmuskeln på överarmens framsida.",
+            "triceps": "Sträckmuskeln på överarmens baksida.",
+            "hälsena": "Den stora, starka senan som fäster vadmuskeln i hälbenet.",
+            "kondition": "Kroppens förmåga att ta upp och använda syre vid arbete.",
+            "träningsvärk": "Fördröjd värk i musklerna efter hårt eller ovant muskelarbete."
+          },
+          "testaDigSjalv": {
+            "sida": 263,
+            "fragor": [
+              "Vilka muskler styr vi med vår vilja och vilka fungerar oberoende av viljan?",
+              "Beskriv hur biceps- och tricepsmusklerna samarbetar.",
+              "Vad är det för skillnad på snabba och långsamma muskelfibrer?",
+              "Beskriv hur konditionen kan förbättras när vi tränar.",
+              "Varför får vi mjölksyra i musklerna när vi tränar hårt?",
+              "Hur kan vi motverka träningsvärk?"
+            ]
+          },
+          "filmer": [
+            "Muskler|https://app.binogi.se/l/muskler"
+          ]
+        },
+        {
+          "nummer": "6.8",
+          "titel": "Huden – skydd och luftkonditionering",
+          "sidor": "s. 264–266",
+          "mal": [
+            "Huden skyddar kroppen, registrerar sinnesintryck och hjälper till att reglera kroppstemperaturen.",
+            "Överhudens hornlager bildar en barriär, och nya celler bildas i tillväxtlagret.",
+            "Läderhuden innehåller bland annat blodkärl, nerver, känselreceptorer samt talg- och svettkörtlar.",
+            "Underhuden lagrar fett och vätska, dämpar stötar och isolerar mot kyla.",
+            "Hår och naglar består till stor del av döda, keratinrika celler och växer från sina rötter."
+          ],
+          "genomgang": [
+            "Hudens uppgifter: huden är kroppens största organ. Den skyddar mot omgivningen, minskar vattenförlusten, förmedlar känsel och bidrar till temperaturregleringen.",
+            "Hudens lager: överhuden ytterst, läderhuden under den och underhuden djupast. Lagren har olika uppbyggnad och uppgifter.",
+            "Hornlager och tillväxtlager: hornlagret innehåller döda celler med keratin och skyddar. I tillväxtlagret bildas nya celler som ersätter dem som nöts bort.",
+            "Pigmentceller och UV-strålning: pigment ger huden färg och skyddar mot solens ultravioletta strålning. Fräknar och albinism.",
+            "Hudfärg och D-vitamin: sambandet mellan pigment, solstrålning och hudens bildning av D-vitamin samt hudfärgens evolutionära anpassning.",
+            "Läderhudens byggnad: bindväv och elastiska fibrer ger styrka och smidighet. Här finns blodkärl, nerver, känselreceptorer, hårsäckar och körtlar.",
+            "Känsel och talg: känselreceptorer och nervändar registrerar beröring, tryck och smärta. Talgkörtlar bildar fett som håller huden mjuk.",
+            "Svett och temperaturreglering: svett är främst vatten och salter. När svetten avdunstar kyls kroppen. Vid värme vidgas hudens blodkärl; vid kyla dras de ihop.",
+            "Underhudens funktion: fettvävnaden lagrar energi, isolerar mot kyla och dämpar stötar. Underhuden innehåller också vävnadsvätska.",
+            "Hudens åldrande: elasticiteten minskar med åldern och rynkor bildas. Rökning och mycket sol påskyndar åldrandet.",
+            "Hår och naglar: det vi klipper består av döda, keratinrika celler utan nerver. Nya celler bildas vid hår- och nagelrötterna. Pigment ger håret färg, hårsäckens form ger hårets form.",
+            "Fingeravtryck: hudens upphöjningar på fingertopparna bildar mönster som kan identifiera personer."
+          ],
+          "begrepp": ["hornlager", "tillväxtlager", "pigmentcell"],
+          "extraBegrepp": ["överhud", "läderhud", "underhud", "keratin", "talgkörtel", "svettkörtel", "känselreceptor"],
+          "forklaringar": {
+            "hornlager": "Överhudens yttersta lager av döda celler med keratin – hudens skyddande barriär.",
+            "tillväxtlager": "Överhudens innersta lager där nya hudceller bildas.",
+            "pigmentcell": "Cell i överhuden som bildar pigment som ger huden färg och skyddar mot UV-strålning.",
+            "överhud": "Hudens yttersta lager, med hornlager och tillväxtlager.",
+            "läderhud": "Hudens mellersta lager med blodkärl, nerver, känselreceptorer, hårsäckar och körtlar.",
+            "underhud": "Hudens djupaste lager – fettvävnad som lagrar energi, isolerar och dämpar stötar.",
+            "keratin": "Det hårda proteinet i hornlager, hår och naglar.",
+            "talgkörtel": "Körtel i läderhuden som bildar fett som håller huden mjuk.",
+            "svettkörtel": "Körtel som bildar svett – när svetten avdunstar kyls kroppen.",
+            "känselreceptor": "Nervända i huden som registrerar beröring, tryck, värme, kyla eller smärta."
+          },
+          "testaDigSjalv": {
+            "sida": 266,
+            "fragor": [
+              "Vilka tre lager består huden av?",
+              "Rita och beskriv funktionen hos de olika delarna i de tre hudlagren.",
+              "Hur kan huden reglera vår kroppstemperatur?",
+              "Var lagras det mesta av vårt fett?",
+              "Varför gör det inte ont att klippa naglar och hår?"
+            ]
+          },
+          "filmer": [
+            "Huden|https://app.binogi.se/l/huden"
+          ]
+        }
+      ],
+      "sammanfattning": { "sidor": "s. 230–266" }
+    }
+  ]
+}

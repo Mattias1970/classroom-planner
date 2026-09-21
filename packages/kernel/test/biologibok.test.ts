@@ -78,7 +78,7 @@ describe('bokFromBiologiImport', () => {
     expect(l2.genomgang).toBe('En rad');
     expect(l2.genomgangLank).toBe('https://app.binogi.se/l/x');                          // egen länk går före
     expect(bok.kapitel[0].resurser.filmer).toEqual([
-      { titel: '6.1 Celler — genomgång', url: 'https://app.binogi.se/l/cellens-specialisering' },
+      { titel: '6.1 · Cellens specialisering', url: 'https://app.binogi.se/l/cellens-specialisering' },   // filmens egen titel behålls
       { titel: '6.1 · Celldelning', url: 'https://app.binogi.se/l/celldelning' },
       { titel: '6.2 Matspjälkningen — genomgång', url: 'https://app.binogi.se/l/x' },
       { titel: '6.2 · Tarmarna', url: 'https://app.binogi.se/l/matspjaelkningen-tarmarna' },
