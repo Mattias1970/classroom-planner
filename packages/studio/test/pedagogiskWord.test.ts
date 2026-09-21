@@ -29,6 +29,9 @@ describe('Del 134: Word-dokumentet Pedagogisk planering och provlapp', () => {
     for (const t of ['Pedagogisk planering och provlapp', 'Syfte', 'Viktiga begrepp', 'Innehåll', 'Binogi – filmer', 'Prov och bedömning', 'Studieteknik', 'Kort om förmågorna', 'Planering', '6.2 Matspjälkningen', 'Läxförhör:', 'Exit ticket', 'Biologi612', 'v38', 'Måndag', 'PROV']) {
       expect(xml, t).toContain(t.replace(/&/g, '&amp;'));
     }
+    expect(xml).toContain('Binogifilm');
+    expect(xml).not.toMatch(/>Binogi</);                       // rubriken heter Binogifilm
+    expect(xml).toContain('Begrepp 6.1\u2013\u0036.2');       // läxan är kumulativ (6.1–6.2)
     expect(rels).toContain('https://app.binogi.se/l/cellens-specialisering');
     expect((rels.match(/app\.binogi\.se/g) ?? []).length).toBeGreaterThanOrEqual(19);
   });

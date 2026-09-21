@@ -34,6 +34,8 @@ export interface PlanDag {
   /** Läxförhör som inleder lektionen: vilka begrepp och i vilket rum. */
   laxforhor: { begrepp: string; rum: string; ovaRum: string | null } | null;
   genomgang: string | null;
+  /** 'lektionsplan' = lärarens egen text för lektionen, 'bok' = bokens centrala innehåll. */
+  genomgangKalla: 'lektionsplan' | 'bok' | null;
   arbete: string | null;
   exit: { rum: string; begrepp: string } | null;
   begrepp: string[];
@@ -73,6 +75,12 @@ function har(v: string | undefined): v is string { return v !== undefined && v.t
 function rumUr(text: string): string | null {
   const m = /^([A-Za-zÅÄÖåäö]+\d+)/.exec(text.trim());
   return m === null ? null : m[1];
+}
+
+/** Rummet var som helst i en text: 'Alla begrepp t.o.m. 6.2 – Biologi612 ≥ 90 %' → 'Biologi612'. */
+function rumITexten(text: string): string | null {
+  const m = /[A-Za-zÅÄÖåäö]{3,}\d{2,}/.exec(text);
+  return m === null ? null : m[0];
 }
 
 /** Delkapitlen ett rum täcker: Biologi612 → '6.1–6.2', Biologi61 → '6.1'. */
@@ -151,17 +159,26 @@ export function pedagogiskPlanering(s: Struktur, amneId: string, kapitelNr?: num
       ? { rum: klassRum, begrepp: kod !== null ? `Begrepp ${kod}` : (lp?.exitQuiz ?? r.lektion.exit) }
       : null;
     const nastaRad = rader.slice(i + 1).find((x) => x.grupp === grupp || x.grupp === undefined || grupp === undefined);
+    // Läxan är ALLTID kumulativ: alla begrepp till och med det här delkapitlet, i det
+    // kumulativa rummet (Biologi612) — samma begrepp och rum som nästa lektions läxförhör.
+    const laxaRum = (har(r.lektion.laxa) ? rumITexten(r.lektion.laxa) : null) ?? exitRum;
+    const laxaKoder = laxaRum !== null ? rumTillKoder(laxaRum) : null;
     const laxa = typ === 'lektion' && begrepp.length > 0 && nastaRad !== undefined && nastaRad.r.datum !== null
-      ? { till: `${veckodag(nastaRad.r.datum).toLowerCase()} v${isoVecka(nastaRad.r.datum)}`, text: har(lp?.laxa) ? lp!.laxa! : `Begrepp${kod !== null ? ` ${kod}` : ''}`, ovaRum: exitRum }
+      ? {
+        till: `${veckodag(nastaRad.r.datum).toLowerCase()} v${isoVecka(nastaRad.r.datum)}`,
+        text: har(lp?.laxa) ? lp!.laxa! : `Begrepp ${laxaKoder ?? kod ?? ''}`.trim(),
+        ovaRum: laxaRum,
+      }
       : null;
     const genomgang = har(lp?.genomgang) ? lp!.genomgang! : (har(r.lektion.genomgang) && r.lektion.genomgang !== r.lektion.avsnitt ? r.lektion.genomgang : null);
+    const genomgangKalla = genomgang === null ? null : (har(lp?.genomgang) ? 'lektionsplan' as const : 'bok' as const);
     const arbete = har(lp?.uppgNiva1) ? lp!.uppgNiva1! : (har(r.lektion.ex) ? r.lektion.ex : (har(r.lektion.niva1) ? `Uppgifter ${r.lektion.niva1}` : null));
     return {
       datum: r.datum!, dag: veckodag(r.datum!), vecka: r.vecka ?? isoVecka(r.datum!), nr: index + 1, typ,
       ...(grupp !== undefined ? { grupp } : {}),
       kod, avsnitt: lektionsNamn(r.lektion, lp),
       sidor: har(lp?.sidorTeori) ? lp!.sidorTeori! : (har(r.lektion.sidorTeori) ? r.lektion.sidorTeori : null),
-      laxforhor, genomgang, arbete: typ === 'lektion' || typ === 'repetition' ? arbete : null, exit, begrepp, laxa,
+      laxforhor, genomgang, genomgangKalla, arbete: typ === 'lektion' || typ === 'repetition' ? arbete : null, exit, begrepp, laxa,
       filmer: filmerFor(bok, nr, kod, lp?.filmer ?? []),
     };
   });

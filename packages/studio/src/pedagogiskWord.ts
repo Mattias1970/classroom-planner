@@ -127,34 +127,55 @@ function cell(children: Array<Paragraph | Table>, procent: number, fill?: string
   });
 }
 
+/** Cellens delar (Läxa, Inlämning, Genomgång, Läxa till, Binogifilm …) skiljs åt med en tom rad. */
+function medLuft(delar: Paragraph[][]): Paragraph[] {
+  const fyllda = delar.filter((d) => d.length > 0);
+  return fyllda.flatMap((d, i) => (i === 0 ? d : [tom(), ...d]));
+}
+
 /** En dag i planeringstabellen — fyra kolumner som förlagan. */
 function dagRad(d: PlanDag, pl: PlanDag[]): TableRow {
-  const kol1: Paragraph[] = [p(`${d.dag}${d.grupp !== undefined ? ` · Grupp ${d.grupp}` : ''}`, { bold: true })];
-  if (d.laxforhor !== null) {
-    kol1.push(p('Läxa:', { bold: true }), p(d.laxforhor.begrepp));
-    if (d.laxforhor.ovaRum !== null) kol1.push(p(`Begrepp övas i Socrative: ${d.laxforhor.ovaRum}`));
-  }
   const inlamning = pl.filter((x) => x !== d && x.datum < d.datum && x.kod !== null).slice(-1)[0];
-  if (d.typ === 'lektion' && inlamning !== undefined && inlamning.kod !== null) {
-    kol1.push(p('Inlämning:', { bold: true }), p(`Kap ${inlamning.kod} Begrepp`), p(`Kap ${inlamning.kod} Frågor`));
-  }
-  const kol2: Paragraph[] = [p(d.typ === 'laboration' ? 'Laboration' : d.typ === 'prov' ? 'Prov' : d.kod !== null ? `Kap ${d.kod}` : d.avsnitt, { bold: true })];
-  if (d.typ !== 'prov') kol2.push(p(d.avsnitt.replace(/^🧪\s*/, '')));
-  if (d.sidor !== null) kol2.push(p(`Bok ${d.sidor}`));
-  const kol3: Paragraph[] = [];
-  if (d.typ === 'prov') kol3.push(p(`Prov – ${d.avsnitt}`, { bold: true }));
-  if (d.laxforhor !== null) kol3.push(p('Läxförhör:', { bold: true }), p(`${d.laxforhor.begrepp} · Socrative: ${d.laxforhor.rum}`), p('(börja med frågorna när du är klar med förhöret)', { italics: true }));
-  if (d.typ === 'lektion' && d.kod !== null) kol3.push(p(`Genomgång ${d.kod}:`, { bold: true }), p('Skriv ner begreppens betydelse under genomgången.', { italics: true }));
-  if (d.genomgang !== null && d.typ !== 'prov') for (const rad of d.genomgang.split('\n').filter((x) => x.trim() !== '')) kol3.push(punkt(rad));
-  if (d.arbete !== null) kol3.push(p('Arbete:', { bold: true }), p(d.arbete));
-  if (d.exit !== null) kol3.push(p('Avslut:', { bold: true }), p(`Exit ticket · Socrative: ${d.exit.rum} (${d.exit.begrepp})`));
-  const kol4: Paragraph[] = [];
-  if (d.begrepp.length > 0) kol4.push(p('Begrepp', { bold: true }), p(d.begrepp.join(', ')));
-  if (d.laxa !== null) {
-    kol4.push(p(`Läxa till ${d.laxa.till}`, { bold: true }), p(d.laxa.text, { bold: true }));
-    if (d.laxa.ovaRum !== null) kol4.push(p(`Öva i Socrative: ${d.laxa.ovaRum}`, { bold: true }));
-  }
-  if (d.filmer.length > 0) { kol4.push(p('Binogi', { bold: true })); for (const f of d.filmer) kol4.push(new Paragraph({ children: [lank(f)] })); }
+  const kol1 = medLuft([
+    [p(`${d.dag}${d.grupp !== undefined ? ` · Grupp ${d.grupp}` : ''}`, { bold: true })],
+    d.laxforhor !== null
+      ? [p('Läxa:', { bold: true }), p(d.laxforhor.begrepp),
+        ...(d.laxforhor.ovaRum !== null ? [p(`Begrepp övas i Socrative: ${d.laxforhor.ovaRum}`)] : [])]
+      : [],
+    d.typ === 'lektion' && inlamning !== undefined && inlamning.kod !== null
+      ? [p('Inlämning:', { bold: true }), p(`Kap ${inlamning.kod} Begrepp`), p(`Kap ${inlamning.kod} Frågor`)]
+      : [],
+  ]);
+  const kol2 = medLuft([
+    [p(d.typ === 'laboration' ? 'Laboration' : d.typ === 'prov' ? 'Prov' : d.kod !== null ? `Kap ${d.kod}` : d.avsnitt, { bold: true }),
+      ...(d.typ !== 'prov' ? [p(d.avsnitt.replace(/^🧪\s*/, ''))] : [])],
+    d.sidor !== null ? [p(`Bok ${d.sidor}`)] : [],
+  ]);
+  const kol3 = medLuft([
+    d.typ === 'prov' ? [p(`Prov – ${d.avsnitt}`, { bold: true })] : [],
+    d.laxforhor !== null
+      ? [p('Läxförhör:', { bold: true }), p(`${d.laxforhor.begrepp} · Socrative: ${d.laxforhor.rum}`),
+        p('(börja med frågorna när du är klar med förhöret)', { italics: true })]
+      : [],
+    [
+      ...(d.typ === 'lektion' && d.kod !== null
+        ? [p(`Genomgång ${d.kod}:`, { bold: true }), p('Skriv ner begreppens betydelse under genomgången.', { italics: true })]
+        : []),
+      // Bokens centrala innehåll står under Innehåll längre upp — i tabellen bara lärarens egen text
+      ...(d.genomgang !== null && d.genomgangKalla === 'lektionsplan' && d.typ !== 'prov'
+        ? d.genomgang.split('\n').filter((x) => x.trim() !== '').map((rad) => punkt(rad)) : []),
+    ],
+    d.arbete !== null ? [p('Arbete:', { bold: true }), p(d.arbete)] : [],
+    d.exit !== null ? [p('Avslut:', { bold: true }), p(`Exit ticket · Socrative: ${d.exit.rum} (${d.exit.begrepp})`)] : [],
+  ]);
+  const kol4 = medLuft([
+    d.begrepp.length > 0 ? [p('Begrepp', { bold: true }), p(d.begrepp.join(', '))] : [],
+    d.laxa !== null
+      ? [p(`Läxa till ${d.laxa.till}`, { bold: true }), p(d.laxa.text, { bold: true }),
+        ...(d.laxa.ovaRum !== null ? [p(`Öva i Socrative: ${d.laxa.ovaRum}`, { bold: true })] : [])]
+      : [],
+    d.filmer.length > 0 ? [p('Binogifilm', { bold: true }), ...d.filmer.map((f) => new Paragraph({ children: [lank(f)] }))] : [],
+  ]);
   return new TableRow({ children: [cell(kol1, 18), cell(kol2, 14), cell(kol3, 40), cell(kol4, 28)] });
 }
 

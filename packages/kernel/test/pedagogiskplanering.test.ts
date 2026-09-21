@@ -46,13 +46,19 @@ describe('Del 134: pedagogisk planering och provlapp ur planeringen', () => {
     expect(d1.exit).toEqual({ rum: 'Biologi8BB', begrepp: 'Begrepp 6.1' });
     expect(d1.arbete).toBe('Testa dig själv 6.1 · uppgift 1–7');
     expect(d1.genomgang).toContain('Cellteorin: alla organismer består av celler.');
+    expect(d1.genomgangKalla).toBe('bok');                    // bokens innehåll — står under Innehåll, inte i tabellen
     expect(d1.begrepp).toContain('stamcell');
-    expect(d1.laxa).toEqual({ till: 'fredag v38', text: 'Begrepp 6.1', ovaRum: 'Biologi61' });
+    expect(d1.laxa).toEqual({ till: 'fredag v38', text: 'Begrepp 6.1', ovaRum: 'Biologi61' });   // kumulativ läxa: hittills = 6.1
     expect(d1.filmer).toHaveLength(3);
     const d2 = p.veckor[0].dagar[1];
     expect(d2.laxforhor).toEqual({ begrepp: 'Begrepp 6.1', rum: 'Biologi8BB', ovaRum: 'Biologi61' });
+    // Läxan är alltid kumulativ och är samma begrepp/rum som NÄSTA lektions läxförhör
+    expect(d2.laxa).toEqual({ till: 'måndag v39', text: 'Begrepp 6.1–6.2', ovaRum: 'Biologi612' });
     const d3 = p.veckor[1].dagar[0];
     expect(d3.laxforhor).toEqual({ begrepp: 'Begrepp 6.1–6.2', rum: 'Biologi8BB', ovaRum: 'Biologi612' });
+    expect(d3.laxforhor!.ovaRum).toBe(d2.laxa!.ovaRum);
+    expect(d3.laxforhor!.begrepp).toBe(d2.laxa!.text);
+    expect(p.veckor[1].dagar[1].laxa!.text).toBe('Begrepp 6.1–6.4');   // växer delkapitel för delkapitel
     const prov = p.veckor[4].dagar[0];
     expect(prov).toMatchObject({ typ: 'prov', avsnitt: 'PROV', laxa: null, exit: null, arbete: null });
   });
@@ -64,6 +70,7 @@ describe('Del 134: pedagogisk planering och provlapp ur planeringen', () => {
     const d1 = p.veckor[0].dagar[0];
     expect(d1.avsnitt).toBe('6.1 Cellen');
     expect(d1.genomgang).toBe('Vi tittar i mikroskop.');
+    expect(d1.genomgangKalla).toBe('lektionsplan');           // lärarens egen text — visas i tabellen
     expect(d1.laxa?.text).toBe('Läs s. 230–235 och begreppen');
     expect(d1.filmer.map((f) => f.titel)).toEqual(['Cellens specialisering', 'Celldelning', 'Organ och organsystem', 'Egen film']);
     expect(p.innehall[0].text).toBe('Cellen är livets byggsten.');
