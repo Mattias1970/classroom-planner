@@ -1023,3 +1023,8 @@ input.fel { border-color: #B71C1C; }
 .sparameny-version { font-weight: 400; color: var(--muted); }
 .sparameny-post-knappar { display: flex; gap: 4px; flex: none; }
 .sparameny-andra > summary { cursor: pointer; }
+
+/* Del 139: redigerbara lektionsregler */
+.regler-redigera { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; }
+.regler-redigera > .rad { grid-column: 1 / -1; }
+.regel-red input, .regel-red textarea { font: inherit; padding: 5px 7px; border: 1px solid var(--ram); border-radius: 6px; }

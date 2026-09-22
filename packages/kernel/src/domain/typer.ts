@@ -347,6 +347,8 @@ export interface Struktur {
   socrativeLankar?: Record<string, string>;
   /** Arkiverade planeringsversioner — skrivs aldrig över, kan återställas. */
   planeringsarkiv?: Planering[];
+  /** Del 139: lärarens lektionsregler per bok (overlay — bokdata rörs inte). */
+  lektionsregler?: Record<string, import('./lektionsregler.js').Lektionsregel[]>;
   /** Del 138: namngivna sparade planeringar (namn + version) — kan öppnas igen eller ligga i datarepot. */
   sparadePlaneringar?: import('./sparat.js').SparadPlanering[];
   /** Del 138: namngivna sparade SuperTeach-data (resultat + filregister) med koppling till planering. */

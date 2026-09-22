@@ -12,6 +12,7 @@ import {
   NO_TK, NO_TK_AMNEN, STANDARD_AMNEN, amneBakgrund, antalSlots, arbetsNivaer, arHalvklass,
   begreppsRum, delaHalvklassPass, delkapitelUrAvsnitt, foreslagnaRum, hamtaLektionsplan,
   effektivaNivaer, kombineraHalvklassPass, skapaTjanstFranSchema, tolkaSchemaPdf,
+  aterstallLektionsregler, harEgnaLektionsregler, lektionsreglerFor, sattLektionsregler, type Lektionsregel,
   handelserPerDatum, kalenderHandelser, klassFarg, noBudget, noOverBudget, sattLektionsplan,
   kapitelKort, manadsRutor, skolarManader, veckaRutor, viktigaDatum, bamTidslinje, begreppForLektion, bokBegrepp,
   bokFromValfriImport, bokSidregister, bokSidregisterCsv, elevSchema, exitStart, giltigtPass,
@@ -1426,7 +1427,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
             void import('./pedagogiskWord.js').then(({ exporteraPedagogiskPlanering }) => exporteraPedagogiskPlanering(pl));
           }}>👨‍👩‍👧 Elev/vårdnadshavare → Word</button>
       </div>
-      {flik === 'arsoversikt' && bok && <Arsoversikt bok={bok} plan={plan} nivaText={`${bok.nivaer.niva1} = introduktion · ${bok.nivaer.niva2} = E-nivå · ${bok.nivaer.niva3} = C/A-nivå`} />}
+      {flik === 'arsoversikt' && bok && <Arsoversikt s={s} bok={bok} plan={plan} kor={kor} />}
       {flik === 'arsoversikt' && !bok && <p className="muted">Koppla en bok för att se årsöversikten.</p>}
       {flik === 'detalj' && bok && <DetaljFlik s={s} amneId={a.id} plan={plan} bok={bok} amnesNamn={a.namn} kor={kor} idx={detaljIdx} setIdx={setDetaljIdx} />}
       {flik === 'detalj' && !bok && <p className="muted">Koppla en bok till ämnet för att använda detaljplaneringen.</p>}
@@ -1454,7 +1455,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
               }}>
               {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
-            <p className="note">Varje delkapitel får så här många lektioner automatiskt (Del 1, Del 2 …). Har boken redan fler behålls de. Ändringen gäller framåt — det som redan genomförts rörs inte. Ett enskilt delkapitel kan få ett annat antal i Lektionsplan.</p>
+            <p className="note">Varje delkapitel får så här många lektioner automatiskt. Har boken redan fler behålls de. Ändringen gäller framåt — det som redan genomförts rörs inte. Ett enskilt delkapitel kan få ett annat antal i Lektionsplan.</p>
           </div>
         )}
         {halv && (
@@ -1584,7 +1585,7 @@ function EgnaRaderRedigerare({ amne, bok, kor, idag }: {
   const [beskrivning, setBeskrivning] = useState('');
   const rader = amne.egnaRader ?? [];
   const TYPNAMN: Record<EgenRad['typ'], string> = { prov: 'Prov', diagnos: 'Diagnos', ovning: 'Övning', annat: 'Annat' };
-  const namn = (r: (typeof grund)[number]) => `${r.lektion.avsnitt}${delkapitelUrAvsnitt(r.lektion.avsnitt) !== null ? ` · Del ${r.lektion.del}` : ''}`;
+  const namn = (r: (typeof grund)[number]) => r.lektion.avsnitt;
   return (
     <div className="uppg-kort no-print">
       <b>➕ Egna rader</b> <small className="muted">Prov, diagnoser och övningar infogas i planeringen — bokens lektioner skjuts framåt.</small>
@@ -1697,7 +1698,7 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
       <div className="rad" style={{ gap: 8 }}>
         <span>Välj lektion:</span>
         <select aria-label="Välj lektion" value={i} onChange={(e) => setIdx(Number(e.target.value))} style={{ flex: 1 }}>
-          {plan.map((r, ri) => <option key={ri} value={ri}>Lektion {ri + 1} — {lektionsNamn(r.lektion, hamtaLektionsplan(s, amneId, ri))} · Del {r.lektion.del}</option>)}
+          {plan.map((r, ri) => <option key={ri} value={ri}>Lektion {ri + 1} — {lektionsNamn(r.lektion, hamtaLektionsplan(s, amneId, ri))}</option>)}
         </select>
         <button className="btn sec sm" disabled={i === 0} onClick={() => setIdx(i - 1)}>◀</button>
         <button className="btn sec sm" disabled={i === plan.length - 1} onClick={() => setIdx(i + 1)}>▶</button>
@@ -1808,7 +1809,7 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
         <div className="ls-sek-rubrik">✏ {rad.start !== null ? `${genomSlut}–${exitTid ?? rad.slutTid} · ` : ''}ARBETE</div>
         {arNo
           ? <p className="small"><b>Kap {rad.kapitel} · {lektionsNamn(rad.lektion, lp)}</b> — läs {lp?.sidorTeori !== undefined && lp.sidorTeori !== '' ? lp.sidorTeori : rad.lektion.sidorTeori} och besvara skriftligt: <b>{har(rad.lektion.ex) ? rad.lektion.ex : 'Testa dig själv'}</b>.</p>
-          : <p className="small"><b>Lektion {rad.lektion.del} av 2 – {lektionsNamn(rad.lektion, lp)}</b> · minimum: <b>{minimum === 1 ? N.niva1 : N.niva2}</b> klar och inlämnad.</p>}
+          : <p className="small"><b>{lektionsNamn(rad.lektion, lp)}</b> · minimum: <b>{minimum === 1 ? N.niva1 : N.niva2}</b> klar och inlämnad.</p>}
         <div className="uppg-rad">
           {har(eff.niva1) && <div className={`uppg-niva ${farg ? 'niva-gron' : 'niva-neutral'}`}><div className="un-rubrik">{N.niva1} – introduktion</div><div className="un-uppg">Uppg. <b><input aria-label={`Uppgifter ${N.niva1}`} value={lp?.uppgNiva1 ?? ''} placeholder={rad.lektion.niva1} onChange={(e) => satt('uppgNiva1', e.target.value)} style={{ width: 80 }} /></b></div><div className="un-obl">Obligatorisk</div></div>}
           {har(eff.niva2) && <div className={`uppg-niva ${farg ? 'niva-bla' : 'niva-neutral'}`}><div className="un-rubrik">{N.niva2} – E-nivå</div><div className="un-uppg">Uppg. <b><input aria-label={`Uppgifter ${N.niva2}`} value={lp?.uppgNiva2 ?? ''} placeholder={rad.lektion.niva2} onChange={(e) => satt('uppgNiva2', e.target.value)} style={{ width: 80 }} /></b></div><div className="un-obl">Obligatorisk</div></div>}
@@ -1940,7 +1941,7 @@ function UppgifterFlik({ plan, bok, s, amneId, oppnaLektion }: { plan: PlaneradL
         return (
           <div key={i} className="uppg-kort">
             <div className="rad"><b>Lektion {i + 1} — {r.lektion.avsnitt}</b><span className="spacer" />
-              {nivaer && <span className="pillm">Lek {r.lektion.del}: min. {minimum === 1 ? N.niva1 : N.niva2}</span>}
+              {nivaer && <span className="pillm">min. {minimum === 1 ? N.niva1 : N.niva2}</span>}
               {r.lektion.sidorTeori !== '' && <span className="muted small">📖 {r.lektion.sidorTeori}</span>}
               <button className="btn sec sm" onClick={() => oppnaLektion(i)}>Öppna lektion →</button></div>
             {kort.length === 0 ? <p className="muted small">Inga uppgiftsintervall (repetition/diagnos/prov).</p> : (
@@ -2151,7 +2152,7 @@ function NoOrdningRedigerare({ s, syskon, kor }: {
 }
 
 // ── Årsöversikt per klass/ämne (kapitelkort + viktiga datum) ──
-function Arsoversikt({ bok, plan, nivaText }: { bok: Bok; plan: PlaneradLektion[]; nivaText: string }) {
+function Arsoversikt({ s, bok, plan, kor }: { s: Struktur; bok: Bok; plan: PlaneradLektion[]; kor: (fn: () => Struktur, m: string) => void }) {
   const kort = kapitelKort(bok, plan);
   const vd = viktigaDatum(plan);
   const dat = (d: string | null, v: number | null) => (d !== null ? `v.${v} · ${d.slice(8)}/${Number(d.slice(5, 7))}` : 'ryms ej');
@@ -2183,14 +2184,53 @@ function Arsoversikt({ bok, plan, nivaText }: { bok: Bok; plan: PlaneradLektion[
           ))}</tbody>
         </table>
       </>)}
-      <h3>Lektionsregler — {bok.amne} (gemensam grund)</h3>
-      <div className="regler">
-        <div className="regel"><h4>Lektionsstruktur (BAM)</h4><p>Tavlan högst upp: [Ämne] [starttid]–[sluttid]. Läxförhör via Socrative → Genomgång → Arbete → Exit ticket i slutet (Socrative).</p></div>
-        <div className="regel"><h4>Uppgiftsnivåer</h4><p>{nivaText}. Varje delkapitel har två lektioner: del 1 arbetar {bok.nivaer.niva1}/{bok.nivaer.niva2} (minimum {bok.nivaer.niva1} klart), del 2 arbetar {bok.nivaer.niva2}/{bok.nivaer.niva3}.</p></div>
-        <div className="regel"><h4>Inlämning</h4><p>{bok.nivaer.niva1}- och {bok.nivaer.niva2}-uppgifter är obligatoriska: fotografera och ladda upp i klassens inlämningsyta (Teams, Classroom m.fl.). {bok.nivaer.niva3} är frivillig fördjupning.</p></div>
-        <div className="regel"><h4>Läxor</h4><p>Läxa till varje delkapitel: alla begrepp som hör till delkapitlet. Läxförhör i början av nästa lektion via Socrative.</p></div>
-      </div>
+      <LektionsreglerPanel s={s} bok={bok} kor={kor} />
     </div>
+  );
+}
+
+/** Del 139: lektionsreglerna kan skrivas om per bok och sparas (overlay — boken rörs inte). */
+function LektionsreglerPanel({ s, bok, kor }: { s: Struktur; bok: Bok; kor: (fn: () => Struktur, m: string) => void }) {
+  const sparade = lektionsreglerFor(s, bok);
+  const egna = harEgnaLektionsregler(s, bok.id);
+  const [redigerar, setRedigerar] = useState(false);
+  const [utkast, setUtkast] = useState<Lektionsregel[]>(sparade);
+  const borja = () => { setUtkast(sparade.map((r) => ({ ...r }))); setRedigerar(true); };
+  const andra = (i: number, patch: Partial<Lektionsregel>) => setUtkast(utkast.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  return (
+    <>
+      <div className="rad" style={{ gap: 8, alignItems: 'baseline' }}>
+        <h3 style={{ margin: 0 }}>Lektionsregler — {bok.amne} (gemensam grund)</h3>
+        {egna && !redigerar && <span className="pillm">egna regler</span>}
+        <span className="spacer" />
+        {!redigerar && <button className="btn sec sm no-print" onClick={borja}>✏ Ändra regler</button>}
+        {!redigerar && egna && <button className="btn sec sm no-print" onClick={() => { if (window.confirm('Återställa standardreglerna för boken? Dina egna regler tas bort.')) kor(() => aterstallLektionsregler(lasStruktur(), bok.id), 'Standardreglerna gäller igen.'); }}>↺ Standard</button>}
+      </div>
+      {!redigerar && (
+        <div className="regler">
+          {sparade.map((r, i) => <div key={i} className="regel"><h4>{r.rubrik}</h4><p>{r.text}</p></div>)}
+        </div>
+      )}
+      {redigerar && (
+        <div className="regler-redigera no-print">
+          {utkast.map((r, i) => (
+            <div key={i} className="regel regel-red">
+              <div className="rad" style={{ gap: 6 }}>
+                <input aria-label={`Regel ${i + 1} rubrik`} value={r.rubrik} onChange={(e) => andra(i, { rubrik: e.target.value })} placeholder="Rubrik" style={{ flex: 1, fontWeight: 700 }} />
+                <button className="btn sec sm" aria-label={`Ta bort regel ${i + 1}`} title="Ta bort regeln" onClick={() => setUtkast(utkast.filter((_, j) => j !== i))}>🗑</button>
+              </div>
+              <textarea aria-label={`Regel ${i + 1} text`} value={r.text} onChange={(e) => andra(i, { text: e.target.value })} rows={3} style={{ width: '100%' }} />
+            </div>
+          ))}
+          <div className="rad" style={{ gap: 6 }}>
+            <button className="btn sec sm" onClick={() => setUtkast([...utkast, { rubrik: '', text: '' }])}>➕ Ny regel</button>
+            <span className="spacer" />
+            <button className="btn sec sm" onClick={() => setRedigerar(false)}>Avbryt</button>
+            <button className="btn sm" onClick={() => { kor(() => sattLektionsregler(lasStruktur(), bok.id, utkast), `Lektionsreglerna för ${bok.titel} sparade.`); setRedigerar(false); }}>💾 Spara regler</button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -2332,7 +2372,7 @@ function GruppPlanering(props: {
       const [, kap, id] = kod.split(':');
       const ur = bokensLektioner.find((x) => x.kapitel === Number(kap) && x.lektion.id === Number(id));
       if (ur === undefined) return;
-      kor(() => sattLektionsVal(lasStruktur(), amneId, nyckel, { ersatt: { kapitel: ur.kapitel, lektionId: ur.lektion.id } }, idag), `Lektion ${i + 1} ersatt med ${ur.lektion.avsnitt} · Del ${ur.lektion.del}.`);
+      kor(() => sattLektionsVal(lasStruktur(), amneId, nyckel, { ersatt: { kapitel: ur.kapitel, lektionId: ur.lektion.id } }, idag), `Lektion ${i + 1} ersatt med ${ur.lektion.avsnitt}.`);
     }
   };
   /**
@@ -2365,7 +2405,7 @@ function GruppPlanering(props: {
   return (
     <>
       {rubrik !== undefined && <h3 className="grupp-h">{rubrik}</h3>}
-      {kanAndra && <p className="note no-print">Lektioner som ligger framåt i tiden kan tas bort, ersättas eller få fler lektioner på delkapitlet (Del 1, Del 2 …). Genomförda lektioner ändras aldrig. Lektionsplanerna följer sina lektioner när följden ändras.</p>}
+      {kanAndra && <p className="note no-print">Lektioner som ligger framåt i tiden kan tas bort, ersättas eller få fler lektioner på delkapitlet. Genomförda lektioner ändras aldrig. Lektionsplanerna följer sina lektioner när följden ändras.</p>}
       <table className="tbl plan clickable">
         <thead><tr><th title="Avklarad">✓</th><th>Nr</th><th>Datum</th><th>Dag</th><th>V.</th><th>Tid</th>{halvklassAmne && <th>Klass</th>}<th>Kap</th><th>Avsnitt</th>{bokHarNivaer(bok) && <><th>{bok.nivaer.niva1}</th><th>{bok.nivaer.niva2}</th><th>{bok.nivaer.niva3}</th></>}{kanAndra && <><th title="Antal lektioner på delkapitlet">Lekt.</th><th></th></>}</tr></thead>
         <tbody>{rader.map(({ r, index: i, klassTyp }, radNr) => {
@@ -2393,7 +2433,7 @@ function GruppPlanering(props: {
             <td>{r.vecka ?? ''}</td>
             <td>{r.start !== null ? `${r.start}–${r.slutTid}` : ''}</td>
             {halvklassAmne && <td><span className={`omf-chip ${klassTyp === 'Helklass' ? 'omf-hel' : 'omf-halv'}`}>{klassTyp}</span></td>}
-            <td>{r.kapitel}</td><td className="lekt-avsnitt">{r.lektion.avsnitt} · Del {r.lektion.del}{ersatt && <small className="muted"> · ersatt</small>}</td>
+            <td>{r.kapitel}</td><td className="lekt-avsnitt">{r.lektion.avsnitt}{ersatt && <small className="muted"> · ersatt</small>}</td>
             {bokHarNivaer(bok) && <><td>{r.lektion.niva1}</td><td>{r.lektion.niva2}</td><td>{r.lektion.niva3}</td></>}
             {kanAndra && (
               <td onClick={(e) => e.stopPropagation()}>
@@ -2420,7 +2460,7 @@ function GruppPlanering(props: {
                         <option value="egen">✏ Ersätt med egen lektion…</option>
                         {ersatt && <option value="aterstall">↺ Bokens lektion igen</option>}
                         <optgroup label="Ersätt med lektion ur boken">
-                          {bokensLektioner.map((x) => <option key={`${x.kapitel}:${x.lektion.id}`} value={`bok:${x.kapitel}:${x.lektion.id}`}>{x.lektion.avsnitt} · Del {x.lektion.del}</option>)}
+                          {bokensLektioner.map((x) => <option key={`${x.kapitel}:${x.lektion.id}`} value={`bok:${x.kapitel}:${x.lektion.id}`}>{x.lektion.avsnitt}{x.lektion.del > 1 ? ` (lektion ${x.lektion.del})` : ''}</option>)}
                         </optgroup>
                       </select>
                     )}
@@ -2556,7 +2596,9 @@ function Lektionskort(props: {
       </div>
 
       <div className="lkort-sekt">
-        <h4>✏️ 3 · Arbete — {l.del === 2 ? `${N.niva2}/${N.niva3}` : `${N.niva1}/${N.niva2}`} <small className="muted">minimum: {nivaNamn[minimum - 1]}</small></h4>
+        {bokHarNivaer(bok)
+          ? <h4>✏️ 3 · Arbete — {l.del === 2 ? `${N.niva2}/${N.niva3}` : `${N.niva1}/${N.niva2}`} <small className="muted">minimum: {nivaNamn[minimum - 1]}</small></h4>
+          : <h4>✏️ 3 · Arbete — läs {har(l.sidorTeori) ? l.sidorTeori : 'delkapitlet'} och besvara <i>{har(l.ex) ? l.ex : 'Testa dig själv'}</i> skriftligt</h4>}
         <div className="nivaer">
           {[0, 1, 2].map((i) => har(nivaUppg[i]) && (
             <div key={i} className={`niva n${i + 1}`}>

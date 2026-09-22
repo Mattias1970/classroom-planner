@@ -2414,6 +2414,53 @@ describe('Del 138: ämnesikoner i v3-Planering', () => {
   });
 });
 
+describe('Del 139: lektionsregler och inga Del-etiketter', () => {
+  it('Prio: reglerna visas utan "del 1/del 2", kan ändras, sparas som overlay och återställas; inga "· Del N" i Lektionsplan', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+    expect(host.querySelector('.panel')!.textContent).not.toContain('· Del 1');
+    act(() => { knapp(host, '📊 Årsöversikt').click(); });
+    const panel = () => host.querySelector('.panel')!;
+    expect(panel().textContent).toContain('Lektionsregler');
+    expect(panel().textContent).toContain('Uppgiftsnivåer');
+    expect(panel().textContent).not.toMatch(/del 1 arbetar|del 2 arbetar/);
+    expect(panel().textContent).not.toContain('egna regler');
+    // Ändra: skriv om Läxor-regeln, ta bort Inlämning, lägg till en ny
+    act(() => { knapp(host, '✏ Ändra regler').click(); });
+    skriv(input(host, 'Regel 4 rubrik'), 'Läxor');
+    skrivArea(host.querySelector('textarea[aria-label="Regel 4 text"]') as HTMLTextAreaElement, 'Begreppen övas i Quizlet.');
+    act(() => { (host.querySelector('button[aria-label="Ta bort regel 3"]') as HTMLButtonElement).click(); });
+    act(() => { knapp(host, '➕ Ny regel').click(); });
+    skriv(input(host, 'Regel 4 rubrik'), 'Mobiler');
+    skrivArea(host.querySelector('textarea[aria-label="Regel 4 text"]') as HTMLTextAreaElement, 'Mobilen i skåpet.');
+    act(() => { knapp(host, '💾 Spara regler').click(); });
+    const bokId = lasStruktur().bocker[0].id;
+    expect(lasStruktur().lektionsregler![bokId].map((r) => r.rubrik)).toEqual(['Lektionsstruktur (BAM)', 'Uppgiftsnivåer', 'Läxor', 'Mobiler']);
+    expect(panel().textContent).toContain('Begreppen övas i Quizlet.');
+    expect(panel().textContent).toContain('egna regler');
+    expect(lasStruktur().bocker[0]).not.toHaveProperty('lektionsregler');   // boken rörs inte
+    // Återställ
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    act(() => { knapp(host, '↺ Standard').click(); });
+    expect(lasStruktur().lektionsregler![bokId]).toBeUndefined();
+    expect(panel().textContent).toContain('Inlämning');
+  });
+});
+
 describe('Del 126: omfång i SuperTeach', () => {
   it('chipparna finns, standard är aktivt kapitel och läxförhör, och omfånget syns i rubriken', () => {
     localStorage.removeItem('st.kallor'); localStorage.removeItem('st.omfang');
@@ -2545,21 +2592,21 @@ describe('Del 129: lektioner tas bort, ersätts och utökas i Lektionsplan', () 
 
     // Lektionsnummer i Lektionsplan
     expect(nummer(host)).toEqual(['1', '2', '3']);
-    expect(avsnitten(host)).toEqual(['1.1 Tal · Del 1', '1.2 Potenser · Del 1', 'Prov kap 1 · Del 1']);
+    expect(avsnitten(host)).toEqual(['1.1 Tal', '1.2 Potenser', 'Prov kap 1']);
 
     // Ämnesinställning: 2 lektioner per delkapitel (under 🗓 Schema) → Del 2 på varje delkapitel, inte på provet
     act(() => { knapp(host, '🗓 Schema').click(); });
     expect(select(host, 'Lektioner per delkapitel').value).toBe('1');
     valj(select(host, 'Lektioner per delkapitel'), '2');
     act(() => { knapp(host, '📝 Lektionsplan').click(); });
-    expect(avsnitten(host)).toEqual(['1.1 Tal · Del 1', '1.1 Tal · Del 2', '1.2 Potenser · Del 1', '1.2 Potenser · Del 2', 'Prov kap 1 · Del 1']);
+    expect(avsnitten(host)).toEqual(['1.1 Tal', '1.1 Tal', '1.2 Potenser', '1.2 Potenser', 'Prov kap 1']);
     expect(nummer(host)).toEqual(['1', '2', '3', '4', '5']);
     expect(lasStruktur().amnen[0].lektionerPerDelkapitel).toEqual([{ antal: 2 }]);
 
     // Ett enskilt delkapitel: 1.1 får tre lektioner, sedan två igen
     expect(select(host, 'Antal lektioner 1').value).toBe('2');
     valj(select(host, 'Antal lektioner 1'), '3');
-    expect(avsnitten(host).slice(0, 3)).toEqual(['1.1 Tal · Del 1', '1.1 Tal · Del 2', '1.1 Tal · Del 3']);
+    expect(avsnitten(host).slice(0, 3)).toEqual(['1.1 Tal', '1.1 Tal', '1.1 Tal']);
     valj(select(host, 'Antal lektioner 1'), '2');
     expect(avsnitten(host)).toHaveLength(5);
     expect(select(host, 'Antal lektioner 5')).toBeNull();   // provet utökas inte
@@ -2567,20 +2614,20 @@ describe('Del 129: lektioner tas bort, ersätts och utökas i Lektionsplan', () 
     // Ersätt lektion 2 med en egen lektion, och tillbaka till bokens
     const prompt = vi.spyOn(window, 'prompt').mockReturnValue('Fältstudie');
     valj(select(host, 'Åtgärd lektion 2'), 'egen');
-    expect(avsnitten(host)[1]).toBe('Fältstudie · Del 1 · ersatt');
+    expect(avsnitten(host)[1]).toBe('Fältstudie · ersatt');
     expect(select(host, 'Antal lektioner 2')).toBeNull();   // en ersatt lektion har inget delkapitel att utöka
     valj(select(host, 'Åtgärd lektion 2'), 'aterstall');
-    expect(avsnitten(host)[1]).toBe('1.1 Tal · Del 2');
+    expect(avsnitten(host)[1]).toBe('1.1 Tal');
     // Ersätt med en lektion ur boken
     valj(select(host, 'Åtgärd lektion 4'), 'bok:1:1');
-    expect(avsnitten(host)[3]).toBe('1.1 Tal · Del 1 · ersatt');
+    expect(avsnitten(host)[3]).toBe('1.1 Tal · ersatt');
     valj(select(host, 'Åtgärd lektion 4'), 'aterstall');
 
     // Lektionsplanen följer sin lektion: kryssa lektion 3 avklarad, ta bort lektion 2 → 1.2 Del 1 är nu lektion 2 och fortfarande kryssad
     act(() => { input(host, 'Lektion 3 avklarad').click(); });
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     valj(select(host, 'Åtgärd lektion 2'), 'bort');
-    expect(avsnitten(host)).toEqual(['1.1 Tal · Del 1', '1.2 Potenser · Del 1', '1.2 Potenser · Del 2', 'Prov kap 1 · Del 1']);
+    expect(avsnitten(host)).toEqual(['1.1 Tal', '1.2 Potenser', '1.2 Potenser', 'Prov kap 1']);
     expect(input(host, 'Lektion 2 avklarad').checked).toBe(true);
     expect(input(host, 'Lektion 3 avklarad').checked).toBe(false);
     expect(lasStruktur().amnen[0].lektionsVal).toEqual({ '1:1#2': { bort: true } });
@@ -2606,7 +2653,7 @@ describe('Del 129: lektioner tas bort, ersätts och utökas i Lektionsplan', () 
     valj(select(host, 'Lektioner per delkapitel'), '3');
     act(() => { knapp(host, '📝 Lektionsplan').click(); });
     // 1.1 (genomförd) behåller sin ena lektion, 1.2 får en tredje — lektion 1–2 orörda
-    expect(avsnitten(host)).toEqual(['1.1 Tal · Del 1', '1.2 Potenser · Del 1', '1.2 Potenser · Del 2', '1.2 Potenser · Del 3', 'Prov kap 1 · Del 1']);
+    expect(avsnitten(host)).toEqual(['1.1 Tal', '1.2 Potenser', '1.2 Potenser', '1.2 Potenser', 'Prov kap 1']);
     expect(avsnitten(host).slice(0, 2)).toEqual(fore.slice(0, 2));
     expect(lasStruktur().amnen[0].lektionerPerDelkapitel).toEqual([{ antal: 2 }, { fran: '1:2', antal: 3 }]);
     const datum = [...host.querySelectorAll('table.plan tbody tr')].map((tr) => tr.querySelectorAll('td')[2].textContent);
