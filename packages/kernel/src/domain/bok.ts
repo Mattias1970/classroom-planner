@@ -68,6 +68,12 @@ function lasLektion(raw: RawLektion, kap: number, idx: number): Lektion {
     ...(typeof raw['genomgang_lank'] === 'string' && (raw['genomgang_lank'] as string).startsWith('http')
       ? { genomgangLank: raw['genomgang_lank'] as string } : {}),
     laxa: txt(raw['laxa'] ?? raw['läxa']),
+    // Del 140: lektionens mål ('Det här ska eleven lära sig') — radbrutna punkter
+    ...(typeof raw['mal'] === 'string' && (raw['mal'] as string).trim() !== '' && (raw['mal'] as string).trim() !== '—'
+      ? { mal: (raw['mal'] as string).trim() }
+      : Array.isArray(raw['mal']) && (raw['mal'] as unknown[]).some((x) => typeof x === 'string' && x.trim() !== '')
+        ? { mal: (raw['mal'] as unknown[]).filter((x): x is string => typeof x === 'string' && x.trim() !== '').map((x) => x.trim()).join('\n') }
+        : {}),
     ex: txt(raw['ex'] ?? raw['bam_ex']),
     socStart: txt(raw['soc_start'] ?? raw['socStart']),
     exit: txt(raw['exit']),
@@ -137,7 +143,7 @@ export function bokFromImport(json: string): Bok {
   const id = txt(b['id']); const titel = txt(b['titel']);
   if (!har(id)) throw new Error('bok.id saknas.');
   if (!har(titel)) throw new Error('bok.titel saknas.');
-  const kapMeta = (b['kapitelMeta'] ?? {}) as Record<string, { name?: unknown; col?: unknown; filmer?: unknown; forklaringar?: unknown }>;
+  const kapMeta = (b['kapitelMeta'] ?? {}) as Record<string, { name?: unknown; col?: unknown; filmer?: unknown; forklaringar?: unknown; mal?: unknown; malSidor?: unknown }>;
   const lekRaw = raw.lektioner ?? {};
   const kapNrs = Object.keys(kapMeta).map(Number).filter((n) => Number.isInteger(n) && n > 0).sort((a, c) => a - c);
   if (kapNrs.length === 0) throw new Error('bok.kapitelMeta är tom — minst ett kapitel krävs.');
@@ -157,6 +163,12 @@ export function bokFromImport(json: string): Bok {
     const kap = byggKapitel(nr, namn, farg, lektioner);
     kap.resurser.filmer = lasKapitelFilmer(m.filmer);
     kap.resurser.forklaringar = lasForklaringar(m.forklaringar);
+    // Del 140: kapitlets mål ('Det här ska du lära dig') även för matteböcker
+    if (Array.isArray(m.mal)) {
+      const mal = (m.mal as unknown[]).filter((x): x is string => typeof x === 'string' && x.trim() !== '').map((x) => x.trim());
+      if (mal.length > 0) kap.mal = mal;
+    }
+    if (typeof m.malSidor === 'string' && m.malSidor.trim() !== '') kap.malSidor = m.malSidor.trim();
     return kap;
   });
   if (kapitel.every((k) => k.delkapitel.length === 0 && k.extraLektioner.length === 0)) {

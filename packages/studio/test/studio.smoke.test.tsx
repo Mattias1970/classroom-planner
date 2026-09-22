@@ -2461,6 +2461,44 @@ describe('Del 139: lektionsregler och inga Del-etiketter', () => {
   });
 });
 
+describe('Del 140: planeringsmall', () => {
+  it('📥 Planeringsmall slår ihop lektionsantal och lektionsplaner från terminsstart; lärarens texter behålls', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+    const amneId = lasStruktur().amnen[0].id;
+    expect(host.querySelectorAll('table.plan tbody tr').length).toBe(2);
+    const mall = JSON.stringify({
+      schema: 'classroom-planner-planeringsmall', version: 1, namn: 'Testmall', bokId: 'liber-matematik-y',
+      lektionerPerDelkapitel: [{ antal: 3 }],
+      lektionsplaner: { '1:1': { mal: 'Grunderna' }, '1:2#3': { mal: 'Repetition', uppgNiva1: 'Träna 1–5' }, '7:7': { mal: 'saknas' } },
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    const fil = new File([mall], 'mall.json', { type: 'application/json' });
+    const inp = host.querySelector('input[aria-label="Planeringsmall"]') as HTMLInputElement;
+    Object.defineProperty(inp, 'files', { value: [fil] });
+    await act(async () => { inp.dispatchEvent(new Event('change', { bubbles: true })); await new Promise((r) => setTimeout(r, 20)); });
+    const planer = lasStruktur().lektionsplaner.filter((p) => p.amneId === amneId);
+    expect(planer.map((p) => `${p.lektionsIndex}:${p.mal}`).sort()).toEqual(['0:Grunderna', '2:Repetition']);
+    expect(host.querySelectorAll('table.plan tbody tr').length).toBe(3);      // 3 lektioner på 1.1
+    expect(alert.mock.calls.some((c) => String(c[0]).includes('7:7'))).toBe(true);
+  });
+});
+
 describe('Del 126: omfång i SuperTeach', () => {
   it('chipparna finns, standard är aktivt kapitel och läxförhör, och omfånget syns i rubriken', () => {
     localStorage.removeItem('st.kallor'); localStorage.removeItem('st.omfang');

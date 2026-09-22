@@ -13,6 +13,7 @@ import {
   begreppsRum, delaHalvklassPass, delkapitelUrAvsnitt, foreslagnaRum, hamtaLektionsplan,
   effektivaNivaer, kombineraHalvklassPass, skapaTjanstFranSchema, tolkaSchemaPdf,
   aterstallLektionsregler, harEgnaLektionsregler, lektionsreglerFor, sattLektionsregler, type Lektionsregel,
+  slaIhopPlaneringsmall, tolkaPlaneringsmall,
   handelserPerDatum, kalenderHandelser, klassFarg, noBudget, noOverBudget, sattLektionsplan,
   kapitelKort, manadsRutor, skolarManader, veckaRutor, viktigaDatum, bamTidslinje, begreppForLektion, bokBegrepp,
   bokFromValfriImport, bokSidregister, bokSidregisterCsv, elevSchema, exitStart, giltigtPass,
@@ -1426,6 +1427,25 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
             if (pl === null) { window.alert('Kunde inte bygga planeringen — ämnet behöver bok och planering.'); return; }
             void import('./pedagogiskWord.js').then(({ exporteraPedagogiskPlanering }) => exporteraPedagogiskPlanering(pl));
           }}>👨‍👩‍👧 Elev/vårdnadshavare → Word</button>
+        <label className="flik file-btn no-print" title="Del 140: slå ihop en planeringsmall (lektionsantal + lektionsplaner per rad) med planeringen — räknar om från terminsstart">📥 Planeringsmall
+          <input type="file" accept="application/json" hidden aria-label="Planeringsmall" onChange={(e) => {
+            const f = e.target.files?.[0]; e.currentTarget.value = '';
+            if (!f || !bok) return;
+            void f.text().then((text) => {
+              try {
+                const mall = tolkaPlaneringsmall(text);
+                const ersatt = window.confirm(`Slå ihop "${mall.namn}" med planeringen för ${a.namn} ${klass.namn}?\n\nOBS: lektionsantalet räknas om FRÅN TERMINSSTART (även genomförda lektioner) och lektionsplanerna läggs på sina rader.\n\nOK = fyll bara tomma fält (dina egna texter behålls)\nAvbryt = avbryt`);
+                if (!ersatt) return;
+                const skrivOver = window.confirm('Ska mallens texter även ERSÄTTA fält du redan fyllt i?\n\nOK = ersätt mina texter\nAvbryt = behåll mina texter, fyll bara tomma');
+                kor(() => {
+                  const ut = slaIhopPlaneringsmall(lasStruktur(), a.id, mall, { ersattTexter: skrivOver });
+                  if (ut.saknade.length > 0) window.setTimeout(() => window.alert(`${ut.saknade.length} rader i mallen finns inte i planeringen: ${ut.saknade.slice(0, 8).join(', ')}${ut.saknade.length > 8 ? ' …' : ''}`), 0);
+                  return ut.s;
+                }, `Planeringsmall "${mall.namn}" ihopslagen.`);
+              } catch (err) { window.alert(`✗ ${(err as Error).message}`); }
+            });
+          }} />
+        </label>
       </div>
       {flik === 'arsoversikt' && bok && <Arsoversikt s={s} bok={bok} plan={plan} kor={kor} />}
       {flik === 'arsoversikt' && !bok && <p className="muted">Koppla en bok för att se årsöversikten.</p>}
