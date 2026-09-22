@@ -995,3 +995,31 @@ input.fel { border-color: #B71C1C; }
 /* Del 133: dagens/nästa lektion i Lektionsplan */
 .tbl.plan tr.aktuell td.lekt-nr b { color: var(--bla); }
 .tbl.plan tr.aktuell td { box-shadow: inset 3px 0 0 var(--bla); }
+
+/* Del 138: ämnesflikar i Planering + 💾 Spara / 📂 Hämta-menyer */
+.amnesflikar { display: flex; flex-wrap: wrap; gap: 6px; }
+.amnesflik { display: inline-flex; align-items: center; gap: 8px; border: 1.5px solid var(--ram); border-radius: 12px; background: #fff;
+  padding: 6px 12px 6px 10px; cursor: pointer; font: inherit; color: var(--text, #223); }
+.amnesflik svg { color: var(--bla); }
+.amnesflik-text { display: flex; flex-direction: column; line-height: 1.1; text-align: left; }
+.amnesflik-text small { opacity: .7; font-size: 11px; }
+.amnesflik.act { background: var(--bla); color: #fff; border-color: var(--bla); }
+.amnesflik.act svg { color: #fff; }
+.amnesflik.utan-plan { border-style: dashed; }
+.amnesflik:hover:not(.act) { background: var(--warm, #f4f1ea); }
+.sparameny { position: relative; display: inline-flex; gap: 6px; }
+.sparameny-antal { display: inline-block; margin-left: 6px; background: var(--bla); color: #fff; border-radius: 10px; font-size: 11px; padding: 0 6px; }
+.sparameny-panel { position: absolute; right: 0; top: calc(100% + 6px); background: #fff; border: 1px solid var(--ram); border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(11,42,91,.16); padding: 12px; min-width: 320px; z-index: 30; display: flex; flex-direction: column; gap: 8px; }
+.sparameny-panel.bred { min-width: 440px; max-width: 560px; max-height: 70vh; overflow: auto; }
+.sparameny-falt { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.sparameny-falt input { font: inherit; padding: 6px 8px; border: 1px solid var(--ram); border-radius: 8px; }
+.sparameny-val { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.sparameny-val select { font: inherit; font-size: 13px; }
+.sparameny-koppling { margin: 0; }
+.sparameny-post { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 8px; border-radius: 8px; border: 1px solid var(--ram); }
+.sparameny-post-text { display: flex; flex-direction: column; min-width: 0; }
+.sparameny-post-text small { white-space: normal; }
+.sparameny-version { font-weight: 400; color: var(--muted); }
+.sparameny-post-knappar { display: flex; gap: 4px; flex: none; }
+.sparameny-andra > summary { cursor: pointer; }

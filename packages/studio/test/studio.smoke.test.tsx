@@ -62,6 +62,12 @@ function knapp(host: HTMLElement, text: string): HTMLButtonElement {
   if (!b) throw new Error(`Hittar inte knappen "${text}"`);
   return b;
 }
+/** Del 138: knapp med exakt text inuti en öppen 💾/📂-dialog. */
+function dialogKnapp(host: HTMLElement, text: string): HTMLButtonElement {
+  const b = [...host.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((x) => x.textContent === text);
+  if (!b) throw new Error(`Hittar inte dialogknappen "${text}"`);
+  return b;
+}
 // Trädknapp (nav eller "Lägg till"-panelöppnare) — söker i vänstermenyn.
 function treeKnapp(host: HTMLElement, text: string): HTMLButtonElement {
   const tree = host.querySelector('.tree')!;
@@ -480,14 +486,63 @@ describe('Kalenderutskrift och Planering-huvudfliken', () => {
     expect(host.querySelector('.kal-utskrift')).toBeNull();
   });
 
-  it('📋 Planering-fliken väljer klass · ämne och visar hela planeringsvyn', async () => {
+  it('📋 Planering-fliken visar ämnena som ikonflikar (Del 138) och hela planeringsvyn', async () => {
     const host = render();
     await medPlanering2(host);
     act(() => { knapp(host, '📋 Planering').click(); });
-    const val = select(host, 'Planera ämne');
-    expect([...val.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['8B · Matematik']);
+    const flikar = [...host.querySelectorAll('[role="tablist"][aria-label="Planera ämne"] [role="tab"]')];
+    expect(flikar.map((f) => f.textContent)).toEqual(['Matematik8B']);
+    expect(flikar[0].getAttribute('aria-selected')).toBe('true');
+    expect(flikar[0].querySelector('svg')).not.toBeNull();           // ämnesikon (π)
+    expect(host.querySelector('select[aria-label="Planera ämne"]')).toBeNull();   // rullgardinen är borta
     expect(host.textContent).toContain('🧭 Detaljplanering');
     expect(host.querySelector('table.plan')).not.toBeNull();
+  });
+
+  it('Del 138: 💾 Spara planering (nytt namn → ny version → ersätt) och 📂 Hämta öppnar en sparad version', async () => {
+    const host = render();
+    await medPlanering2(host);
+    act(() => { knapp(host, '📋 Planering').click(); });
+    const amneId = lasStruktur().amnen[0].id;
+    expect(JSON.parse(localStorage.getItem('cp.planeringAmne') ?? '""')).toBe('');   // inget val gjort än
+
+    // Spara som nytt namn (förslag ur ämne · klass · bok)
+    act(() => { knapp(host, '💾 Spara').click(); });
+    const namn = input(host, 'Namn på planering');
+    expect(namn.value).toBe('Matematik 8B · Matematik Y');
+    expect(host.querySelector('[role="dialog"][aria-label="Spara planeringen"]')!.textContent).toContain('Spara som nytt namn');
+    skriv(namn, 'Höstplanering');
+    act(() => { dialogKnapp(host, 'Spara').click(); });
+    expect(lasStruktur().sparadePlaneringar!.map((p) => `${p.namn} v${p.version}`)).toEqual(['Höstplanering v1']);
+    expect(host.querySelector('[role="dialog"]')).toBeNull();
+
+    // Samma namn igen: standard är Ny version → v2; Ersätt finns som val
+    act(() => { knapp(host, '💾 Spara').click(); });
+    expect(input(host, 'Namn på planering').value).toBe('Höstplanering');
+    const dialog = host.querySelector('[role="dialog"][aria-label="Spara planeringen"]')!;
+    expect(dialog.textContent).toContain('Ny version'); expect(dialog.textContent).toContain('→ v2');
+    expect(dialog.textContent).toContain('Ersätt version');
+    act(() => { dialogKnapp(host, 'Spara').click(); });
+    expect(lasStruktur().sparadePlaneringar!.map((p) => p.version)).toEqual([1, 2]);
+
+    // Ersätt v2
+    act(() => { knapp(host, '💾 Spara').click(); });
+    act(() => { [...host.querySelectorAll<HTMLInputElement>('input[name="sparlage"]')][1].click(); });
+    valj(select(host, 'Version att ersätta'), lasStruktur().sparadePlaneringar![1].id);
+    act(() => { dialogKnapp(host, 'Ersätt').click(); });
+    expect(lasStruktur().sparadePlaneringar!.map((p) => p.version)).toEqual([1, 2]);
+
+    // Hämta: listan visar båda versionerna; Öppna gör den till aktiv planering (ny aktiv version)
+    act(() => { knapp(host, '📂 Hämta').click(); });
+    const poster = [...host.querySelectorAll('.sparameny-post')];
+    expect(poster.map((p) => p.querySelector('b')?.textContent)).toEqual(['Höstplanering v2', 'Höstplanering v1']);
+    expect(poster[0].textContent).toContain('Matematik Y');
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    act(() => { [...poster[1].querySelectorAll('button')].find((b) => b.textContent === 'Öppna')!.click(); });
+    const aktiv = lasStruktur().planeringar.find((p) => p.amneId === amneId)!;
+    expect(aktiv.namn).toBe('Höstplanering v1'); expect(aktiv.version).toBe(2);
+    expect(lasStruktur().planeringsarkiv).toHaveLength(1);
+    expect(host.querySelector('[role="dialog"]')).toBeNull();
   });
 
   it('egna rader: ett prov infogas i planeringen och bokens lektioner skjuts framåt', async () => {
@@ -1295,6 +1350,20 @@ describe('📊 SuperTeach', () => {
     act(() => { knapp(host, '💾 Spara resultat').click(); });
     expect(lasStruktur().resultat).toHaveLength(2);
     expect(lasStruktur().resultat![0].amneId).toBe(lasStruktur().amnen[0].id);
+
+    // Del 138: SuperTeach-data sparas separat från planeringen, med koppling (ingen planering här → visas)
+    act(() => { knapp(host, '💾 Spara ▾').click(); });
+    const stDialog = host.querySelector('[role="dialog"][aria-label="Spara SuperTeach-data"]')!;
+    expect(input(host, 'Namn på SuperTeach-data').value).toMatch(/^Resultat Matematik 8B (HT|VT)\d\d$/);
+    expect(stDialog.textContent).toContain('ingen planering på ämnet');
+    act(() => { dialogKnapp(host, 'Spara').click(); });
+    const [sparad] = lasStruktur().sparadSuperTeach!;
+    expect(sparad.resultat).toHaveLength(2); expect(sparad.koppling).toBeNull(); expect(sparad.version).toBe(1);
+    expect(lasStruktur().sparadePlaneringar ?? []).toHaveLength(0);           // planeringar rörs inte
+    act(() => { knapp(host, '📂 Hämta ▾').click(); });
+    expect(host.querySelector('.sparameny-post')!.textContent).toContain('2 resultat · 1 prov');
+    act(() => { dialogKnapp(host, 'Lägg till').click(); });
+    expect(lasStruktur().resultat).toHaveLength(2);                          // inga dubbletter
 
     // Översikten: Annas exit 90 % klarar 70-kravet; Omars 60 % gör det inte
     const tabell = [...host.querySelectorAll('.st-tabell')].find((t) => t.textContent?.includes('Anna Berg'))!;
@@ -2303,6 +2372,45 @@ describe('✨ Studio v3', () => {
     expect(knapp(host, '🗂 Struktur')).not.toBeNull(); // v2-flikarna
     act(() => { knapp(host, '✨ v3').click(); });
     expect(host.querySelector('.v3-sida')).not.toBeNull();
+  });
+});
+
+describe('Del 138: ämnesikoner i v3-Planering', () => {
+  it('ikonflik → toppradens ämnesfilter följer med; senast använda ämnet öppnas nästa gång', () => {
+    localStorage.setItem('cp.layout', JSON.stringify('v3'));
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    skriv(input(host, 'Tjänstens namn'), 'NO');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 NO').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Biologi');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Kemi');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    const [bio, kemi] = lasStruktur().amnen;
+    act(() => { ([...host.querySelectorAll('.v3-nav')].find((b) => b.textContent?.trim() === 'Planering') as HTMLButtonElement).click(); });
+    const flik = (namn: string) => [...host.querySelectorAll<HTMLButtonElement>('[aria-label="Planera ämne"] [role="tab"]')].find((f) => f.textContent?.startsWith(namn))!;
+    expect(flik('Biologi').getAttribute('aria-selected')).toBe('true');
+    expect(flik('Kemi').className).toContain('utan-plan');
+    // Klick på Kemi-ikonen: fliken blir aktiv OCH toppradens ämnesfilter pekar på Kemi
+    act(() => { flik('Kemi').click(); });
+    expect(flik('Kemi').getAttribute('aria-selected')).toBe('true');
+    expect(select(host, 'Filter ämne').value).toBe(kemi.id);
+    expect(JSON.parse(localStorage.getItem('cp.planeringAmne')!)).toBe(kemi.id);
+    // Toppradens filter → fliken följer
+    valj(select(host, 'Filter ämne'), bio.id);
+    expect(flik('Biologi').getAttribute('aria-selected')).toBe('true');
+    // Ny sida: senast använda (Biologi via filtret) öppnas som standard
+    act(() => { flik('Kemi').click(); });
+    document.body.innerHTML = '';
+    const host2 = render();
+    act(() => { ([...host2.querySelectorAll('.v3-nav')].find((b) => b.textContent?.trim() === 'Planering') as HTMLButtonElement).click(); });
+    const aktiv = host2.querySelector('[aria-label="Planera ämne"] [role="tab"][aria-selected="true"]')!;
+    expect(aktiv.textContent).toContain('Kemi');
   });
 });
 

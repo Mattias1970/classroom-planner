@@ -347,6 +347,10 @@ export interface Struktur {
   socrativeLankar?: Record<string, string>;
   /** Arkiverade planeringsversioner — skrivs aldrig över, kan återställas. */
   planeringsarkiv?: Planering[];
+  /** Del 138: namngivna sparade planeringar (namn + version) — kan öppnas igen eller ligga i datarepot. */
+  sparadePlaneringar?: import('./sparat.js').SparadPlanering[];
+  /** Del 138: namngivna sparade SuperTeach-data (resultat + filregister) med koppling till planering. */
+  sparadSuperTeach?: import('./sparat.js').SparadSuperTeach[];
   /** SuperTeach: importerade provresultat (läxförhör, exit tickets, Magma, DigiExam). */
   resultat?: import('./resultat.js').Resultat[];
   /** SuperTeach: register över importerade resultatfiler per ämne. */

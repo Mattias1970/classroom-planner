@@ -46,6 +46,8 @@ import { Amnessida } from './v3/Amnessida.js';
 import { Classroom } from './v3/Classroom.js';
 import { Foraldrakontakt } from './v3/Foraldrakontakt.js';
 import { Datarepo } from './v3/Datarepo.js';
+import { amnesIkon } from './v3/ikoner.js';
+import { SparaMeny } from './SparaMeny.js';
 import {
   hamtaBockerFranGitHub, konfigKomplett, laddaFranGitHub, lasGitHubConfig, sparaGitHubConfig, sparaTillGitHub,
   type GitHubConfig,
@@ -177,15 +179,16 @@ export function App() {
           {vy.typ === 'planering' && (
             <div className="v3-sida-innehall">
               <Kort rubrik="Planering" under="årsplanering, veckoplanering, lektionskort och begrepp — samma verktyg som förut" hoger={<button className="v3-lank" onClick={() => setVy({ typ: 'kalender' })}>Kalender →</button>}>
-                <PlaneringVy s={s} kor={kor} setVald={setVald} hopp={lektionsHopp} amneIdIn={filter.amneId} />
+                <PlaneringVy s={s} kor={kor} setVald={setVald} hopp={lektionsHopp} amneIdIn={filter.amneId} meddela={setMsg}
+                  onAmneVald={(id) => { const a = s.amnen.find((x) => x.id === id); setFilter({ ...filter, amneId: id, klassId: a?.klassId ?? filter.klassId }); }} />
               </Kort>
             </div>
           )}
           {vy.typ === 'amne' && <Amnessida s={s} amneNamn={vy.amneNamn} filter={filter} setVy={setVy}
-            planering={(amneId) => <Kort rubrik="Planering och lektioner" under="lektionsplan, detaljplanering, begrepp, filmer, Word"><PlaneringVy s={s} kor={kor} setVald={setVald} hopp={lektionsHopp} amneIdIn={amneId} dolAmnesval /></Kort>} />}
+            planering={(amneId) => <Kort rubrik="Planering och lektioner" under="lektionsplan, detaljplanering, begrepp, filmer, Word"><PlaneringVy s={s} kor={kor} setVald={setVald} hopp={lektionsHopp} amneIdIn={amneId} dolAmnesval meddela={setMsg} /></Kort>} />}
           {vy.typ === 'kalender' && <Kort rubrik="Kalender" hoger={<button className="v3-lank" onClick={() => setVy({ typ: 'planering' })}>Planering →</button>}><KalenderVy s={s} onOppnaLektion={(amneId, i) => { setLektionsHopp({ amneId, i, n: Date.now() }); setVy({ typ: 'planering' }); }} /></Kort>}
           {vy.typ === 'classroom' && <Classroom s={s} filter={filter} setVy={setVy} />}
-          {vy.typ === 'resultat' && <SuperTeachVy s={s} kor={kor} />}
+          {vy.typ === 'resultat' && <SuperTeachVy s={s} kor={kor} meddela={setMsg} />}
           {vy.typ === 'elever' && <RapportVy s={s} kor={kor} meddela={setMsg} />}
           {vy.typ === 'foraldrakontakt' && <Foraldrakontakt s={s} filter={filter} setVy={setVy} />}
           {vy.typ === 'datarepo' && <Datarepo s={s} spara={spara} kor={kor} meddela={setMsg} />}
@@ -5054,7 +5057,7 @@ function SocrativeLankPanel({ s, klass, amnen, planFor, kor }: {
   );
 }
 
-function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: string) => void }) {
+function SuperTeachVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur, m: string) => void; meddela?: (m: string) => void }) {
   const klasser = [...s.klasser].sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
   const [klassId, setKlassId] = useState(klasser[0]?.id ?? '');
   const klass = klasser.find((k) => k.id === klassId) ?? klasser[0];
@@ -5208,6 +5211,7 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
             <option value="">— alla ämnen (aggregerat) —</option>
             {amnen.map((a) => <option key={a.id} value={a.id}>{a.namn}</option>)}
           </select></label>
+        {amne !== undefined && <SparaMeny typ="superteach" s={s} amneId={amne.id} kor={kor} meddela={meddela} />}
         <span className="spacer" />
         {amnesKallor(amne?.namn).map((k) => (
           <button key={k} className={`chipbtn ${filter.includes(k) ? 'act' : ''}`}
@@ -5402,18 +5406,26 @@ function SuperTeachVy({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m: st
   );
 }
 
-function PlaneringVy({ s, kor, setVald, hopp, amneIdIn, dolAmnesval }: {
+function PlaneringVy({ s, kor, setVald, hopp, amneIdIn, dolAmnesval, meddela, onAmneVald }: {
   s: Struktur; kor: (fn: () => Struktur, m: string) => void; setVald: (v: Vald) => void;
   hopp?: { amneId: string; i: number; n: number } | null;
   /** v3: ämnessidan styr vilket ämne som visas. */
   amneIdIn?: string;
   dolAmnesval?: boolean;
+  meddela?: (m: string) => void;
+  /** Del 138: ämnesikonerna håller toppradens ämnesfilter i synk. */
+  onAmneVald?: (amneId: string) => void;
 }) {
   const alternativ = s.amnen
     .map((a) => ({ a, klass: s.klasser.find((k) => k.id === a.klassId) }))
     .filter((x): x is { a: Amne; klass: Klass } => x.klass !== undefined)
     .sort((x, y) => x.klass.namn.localeCompare(y.klass.namn, 'sv') || x.a.namn.localeCompare(y.a.namn, 'sv'));
-  const [amneId, setAmneId] = useState<string>(() => s.planeringar[0]?.amneId ?? alternativ[0]?.a.id ?? '');
+  // Del 138: senast använda ämnet öppnas som standard (sparas per webbläsare)
+  const [amneId, setAmneIdRaw] = useState<string>(() => {
+    const senaste = lasInstallning<string>('cp.planeringAmne', '');
+    return alternativ.some((x) => x.a.id === senaste) ? senaste : s.planeringar[0]?.amneId ?? alternativ[0]?.a.id ?? '';
+  });
+  const setAmneId = (id: string) => { setAmneIdRaw(id); sparaInstallning('cp.planeringAmne', id); };
   useEffect(() => { if (hopp != null) setAmneId(hopp.amneId); }, [hopp?.n]);   // kalenderklick → rätt ämne
   useEffect(() => { if (amneIdIn !== undefined && amneIdIn !== '') setAmneId(amneIdIn); }, [amneIdIn]); // v3: ämnessidan
   const valt = alternativ.some((x) => x.a.id === amneId) ? amneId : alternativ[0]?.a.id ?? '';
@@ -5421,16 +5433,28 @@ function PlaneringVy({ s, kor, setVald, hopp, amneIdIn, dolAmnesval }: {
     return <div className="card"><h2>📋 Planering</h2><p className="muted">Skapa skolår, tjänst, klass och ämne under 🗂 Struktur först.</p></div>;
   }
   const harPlan = new Set(s.planeringar.map((pl) => pl.amneId));
+  const valtAlt = alternativ.find((x) => x.a.id === valt);
   return (
     <>
       <div className="card" style={{ marginBottom: 10 }}>
-        <div className="rad" style={{ gap: 8, display: dolAmnesval === true ? 'none' : undefined }}>
-          <b>📋 Planera:</b>
-          <select aria-label="Planera ämne" value={valt} onChange={(e) => setAmneId(e.target.value)} style={{ flex: 1, maxWidth: 420 }}>
-            {alternativ.map(({ a, klass }) => (
-              <option key={a.id} value={a.id}>{klass.namn} · {a.namn}{harPlan.has(a.id) ? '' : ' — (ingen planering ännu)'}</option>
-            ))}
-          </select>
+        <div className="rad amnesflikar-rad" style={{ gap: 8, flexWrap: 'wrap' }}>
+          {dolAmnesval !== true && (
+            <div className="amnesflikar" role="tablist" aria-label="Planera ämne">
+              {alternativ.map(({ a, klass }) => {
+                const I = amnesIkon(a.namn);
+                const akt = a.id === valt;
+                return (
+                  <button key={a.id} role="tab" aria-selected={akt} className={`amnesflik${akt ? ' act' : ''}${harPlan.has(a.id) ? '' : ' utan-plan'}`}
+                    title={`${klass.namn} · ${a.namn}${harPlan.has(a.id) ? '' : ' — ingen planering ännu'}`} onClick={() => { setAmneId(a.id); onAmneVald?.(a.id); }}>
+                    <I storlek={18} /><span className="amnesflik-text"><b>{a.namn}</b><small>{klass.namn}</small></span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {dolAmnesval === true && valtAlt !== undefined && <b>📋 {valtAlt.klass.namn} · {valtAlt.a.namn}</b>}
+          <span className="spacer" />
+          {valt !== '' && <SparaMeny typ="planering" s={s} amneId={valt} kor={kor} meddela={meddela} />}
         </div>
       </div>
       {valt !== '' && <AmnePanel key={valt} s={s} id={valt} kor={kor} setVald={setVald} hopp={hopp} />}
