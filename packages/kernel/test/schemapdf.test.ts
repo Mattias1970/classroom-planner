@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { skapaTjanstFranSchema, tolkaSchemaPdf, type PdfTextItem } from '../src/domain/schemapdf.js';
+import { skapaTjanstFranSchema, slaIhopSchema, tolkaSchemaPdf, type PdfTextItem } from '../src/domain/schemapdf.js';
 import { laggTillSkolar, larareSchema, resetIdRaknare, saneraIdn, schemaKonflikter } from '../src/domain/struktur.js';
 import { tomStruktur } from '../src/domain/typer.js';
 
@@ -65,6 +65,29 @@ describe('skapaTjanstFranSchema', () => {
       { dag: 5, start: '08:25', slut: '09:35' },
     ]);
     expect(s.amnen.filter((a) => a.klassId === s.klasser[0].id)).toHaveLength(5); // Ma + 4 NO-delämnen
+  });
+
+  it('Del 142: en andra import ger inga dubbletter — allt som finns hoppas över, det som saknas läggs till', () => {
+    let s = tomStruktur();
+    s = laggTillSkolar(s, { id: 'la', namn: 'Läsåret 2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    const t = tolkaSchemaPdf(items);
+    const forsta = slaIhopSchema(s, t, 'la');
+    expect(forsta.skapade).toContain('klass 8B');
+    expect(forsta.hoppade).toEqual([]);
+    const andra = slaIhopSchema(forsta.s, t, 'la');
+    expect(andra.skapade).toEqual([]);
+    expect(andra.kompletterade).toEqual([]);
+    expect(andra.hoppade).toEqual(['8A · Matematik', '8A · Biologi', '8A · Fysik', '8A · Kemi', '8A · Teknik', '8B · Matematik', '8B · Biologi', '8B · Fysik', '8B · Kemi', '8B · Teknik']);
+    expect(andra.s.tjanster).toHaveLength(1);
+    expect(andra.s.klasser).toHaveLength(2);
+    expect(andra.s.amnen).toHaveLength(10);
+    expect(andra.s.larare).toHaveLength(1);
+    // Bara 8A i ett tidigare schema → 8B och dess ämnen läggs till, 8A hoppas över
+    const bara8A = { ...t, lektioner: t.lektioner.filter((l) => l.klass === '8A') };
+    const tredje = slaIhopSchema(slaIhopSchema(s, bara8A, 'la').s, t, 'la');
+    expect(tredje.skapade).toEqual(['klass 8B', '8B · Matematik', '8B · Biologi', '8B · Fysik', '8B · Kemi', '8B · Teknik']);
+    expect(tredje.hoppade).toHaveLength(5);
+    expect(tredje.s.klasser.map((k) => k.namn)).toEqual(['8A', '8B']);
   });
 });
 

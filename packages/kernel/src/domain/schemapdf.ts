@@ -5,7 +5,7 @@
  * själva PDF-läsningen (pdf.js) bor i studio; här tolkas bara items.
  */
 import { delaHalvklassPass } from './struktur.js';
-import { laggTillAmne, laggTillKlass, laggTillLarare, laggTillTjanst, nyttId, sattLarare } from './struktur.js';
+import { laggTillAmne, laggTillKlass, laggTillLarare, laggTillTjanst, nyttId, sattLarare, uppdateraAmne } from './struktur.js';
 import { NO_TK, NO_TK_AMNEN } from './amnen.js';
 import type { Pass, Struktur } from './typer.js';
 import type { OmfattningsPass } from './struktur.js';
@@ -97,41 +97,85 @@ export function tolkaSchemaPdf(items: PdfTextItem[]): TolkatSchema {
   return { larareNamn, signatur, lasar, lektioner, ovrigt };
 }
 
+export interface SchemaImportUtfall {
+  s: Struktur;
+  /** Det som skapades: 'tjänst MatTe Ma/NO+Tk', 'klass 8F', '8F · Matematik' … */
+  skapade: string[];
+  /** Fanns redan med schema — rördes inte. */
+  hoppade: string[];
+  /** Fanns men saknade schema — fick schemat ur PDF:en. */
+  kompletterade: string[];
+}
+
 /**
- * Skapar lärare + tjänst + klasser + ämnen (Matematik och NO+Tk med hel-/
- * halvklasspass) ur ett tolkat schema, kopplat till ett befintligt skolår.
+ * Del 142 · Slår ihop ett tolkat schema med strukturen. Kan köras hur många gånger
+ * som helst: lärare, tjänst (samma lärare på samma skolår), klass (samma namn i
+ * tjänsten) och ämne (samma namn i klassen) återanvänds. Ett ämne som redan har
+ * schema hoppas över; ett ämne utan schema kompletteras; det som saknas skapas.
  */
-export function skapaTjanstFranSchema(s: Struktur, t: TolkatSchema, skolarId: string): Struktur {
+export function slaIhopSchema(s: Struktur, t: TolkatSchema, skolarId: string): SchemaImportUtfall {
   let ut = s;
-  // Återanvänd befintlig lärare med samma signatur (dubbel import ger EN lärare).
+  const skapade: string[] = []; const hoppade: string[] = []; const kompletterade: string[] = [];
+  // Lärare: samma signatur = samma lärare
   const befintlig = s.larare.find((l) => l.signatur === t.signatur && t.signatur !== '');
   const larareId = befintlig ? befintlig.id : nyttId('lr');
-  if (!befintlig) ut = laggTillLarare(ut, { id: larareId, namn: t.larareNamn, signatur: t.signatur });
-  const tjanstId = nyttId('tj');
-  ut = laggTillTjanst(ut, { id: tjanstId, skolarId, namn: `${t.signatur} Ma/NO+Tk`.trim() });
-  ut = sattLarare(ut, tjanstId, larareId);
+  if (!befintlig) { ut = laggTillLarare(ut, { id: larareId, namn: t.larareNamn, signatur: t.signatur }); skapade.push(`lärare ${t.larareNamn}`); }
+  // Tjänst: lärarens tjänst på skolåret, annars en med samma namn
+  const tjanstNamn = `${t.signatur} Ma/NO+Tk`.trim();
+  const tjanst = ut.tjanster.find((x) => x.skolarId === skolarId && (x.larareId === larareId || x.namn === tjanstNamn));
+  const tjanstId = tjanst?.id ?? nyttId('tj');
+  if (tjanst === undefined) {
+    ut = laggTillTjanst(ut, { id: tjanstId, skolarId, namn: tjanstNamn });
+    ut = sattLarare(ut, tjanstId, larareId);
+    skapade.push(`tjänst ${tjanstNamn}`);
+  } else if (tjanst.larareId === undefined) {
+    ut = sattLarare(ut, tjanstId, larareId);
+  }
+  // Klasser: samma namn i tjänsten
   const klassId = new Map<string, string>();
   for (const namn of [...new Set(t.lektioner.map((l) => l.klass))].sort()) {
+    const finns = ut.klasser.find((k) => k.tjanstId === tjanstId && k.namn === namn);
+    if (finns !== undefined) { klassId.set(namn, finns.id); continue; }
     const id = nyttId('k');
     klassId.set(namn, id);
     ut = laggTillKlass(ut, { id, tjanstId, namn });
+    skapade.push(`klass ${namn}`);
   }
+  // Ämnen: samma namn i klassen — med schema: hoppa; utan schema: komplettera; saknas: skapa
+  const harSchema = (a: { schema: Pass[]; schemaB?: Pass[] }) => a.schema.length > 0 || (a.schemaB?.length ?? 0) > 0;
   for (const [klassNamn, kid] of klassId) {
     const ma: Pass[] = t.lektioner.filter((l) => l.klass === klassNamn && l.amne === 'Matematik')
       .map(({ dag, start, slut }) => ({ dag, start, slut }));
-    if (ma.length > 0) ut = laggTillAmne(ut, { id: nyttId('am'), klassId: kid, namn: 'Matematik', schema: ma });
+    if (ma.length > 0) {
+      const finns = ut.amnen.find((a) => a.klassId === kid && a.namn === 'Matematik');
+      if (finns === undefined) { ut = laggTillAmne(ut, { id: nyttId('am'), klassId: kid, namn: 'Matematik', schema: ma }); skapade.push(`${klassNamn} · Matematik`); }
+      else if (harSchema(finns)) hoppade.push(`${klassNamn} · Matematik`);
+      else { ut = uppdateraAmne(ut, finns.id, { schema: ma }); kompletterade.push(`${klassNamn} · Matematik`); }
+    }
     const no: OmfattningsPass[] = t.lektioner.filter((l) => l.klass === klassNamn && l.amne === NO_TK)
       .map(({ dag, start, slut, omfattning }) => ({ dag, start, slut, omfattning }));
     if (no.length > 0) {
       const { schema, schemaB } = delaHalvklassPass(no);
-      const grupp = nyttId('no');
+      const befintligaNo = ut.amnen.filter((a) => a.klassId === kid && (NO_TK_AMNEN as readonly string[]).includes(a.namn));
+      const grupp = befintligaNo.find((a) => a.noGrupp !== undefined)?.noGrupp ?? nyttId('no');
       NO_TK_AMNEN.forEach((namn, order) => {
-        ut = laggTillAmne(ut, {
-          id: nyttId('am'), klassId: kid, namn, schema, schemaB,
-          halvklass: true, noGrupp: grupp, noOrder: order,
-        });
+        const finns = befintligaNo.find((a) => a.namn === namn);
+        if (finns === undefined) {
+          ut = laggTillAmne(ut, { id: nyttId('am'), klassId: kid, namn, schema, schemaB, halvklass: true, noGrupp: grupp, noOrder: order });
+          skapade.push(`${klassNamn} · ${namn}`);
+        } else if (harSchema(finns)) hoppade.push(`${klassNamn} · ${namn}`);
+        else { ut = uppdateraAmne(ut, finns.id, { schema, ...(schemaB.length > 0 ? { schemaB } : {}), halvklass: true, noGrupp: finns.noGrupp ?? grupp, noOrder: finns.noOrder ?? order }); kompletterade.push(`${klassNamn} · ${namn}`); }
       });
     }
   }
-  return ut;
+  return { s: ut, skapade, hoppade, kompletterade };
+}
+
+/**
+ * Skapar lärare + tjänst + klasser + ämnen (Matematik och NO+Tk med hel-/
+ * halvklasspass) ur ett tolkat schema, kopplat till ett befintligt skolår.
+ * Sedan Del 142 samma sak som slaIhopSchema — en andra import ger inga dubbletter.
+ */
+export function skapaTjanstFranSchema(s: Struktur, t: TolkatSchema, skolarId: string): Struktur {
+  return slaIhopSchema(s, t, skolarId).s;
 }

@@ -2103,10 +2103,24 @@ describe('👥 Socrative-roster', () => {
     act(() => { knapp(host, '🧪 Sätt grupper').click(); });
     expect(lasStruktur().elever.filter((e) => e.grupp === 'B').map((e) => e.namn).sort()).toEqual(['Omar Ali', 'Pia Provlund']);
 
-    // Rostern finns också i SuperTeach-fliken
+    // Rostern finns också i SuperTeach-fliken — under importnavets flik Elever (Del 142)
     act(() => { knapp(host, '📊 SuperTeach').click(); });
+    expect([...host.querySelectorAll('.st-importnav [role="tab"]')].map((b) => b.textContent)).toEqual([
+      'SSocrativequiz-rapporter (.xlsx) · rum & QR', 'MMagmaresultat · frågor · läs-screening', 'DDigiExamprovresultat', 'PPowerPointplaceringar (.pptx)', '👥EleverSocrative-lista · grupper A/B',
+    ]);
+    act(() => { ([...host.querySelectorAll<HTMLButtonElement>('.st-importnav [role="tab"]')].find((b) => b.textContent?.includes('Elever')))!.click(); });
     expect(host.textContent).toContain('3 elever registrerade');
     expect(host.querySelector('input[aria-label="Socrative-roster"]')).not.toBeNull();
+    // Magma-fliken förväljer källan Magma i inklistringen, PowerPoint-fliken visar placeringsimporten
+    const flik = (t: string) => [...host.querySelectorAll<HTMLButtonElement>('.st-importnav [role="tab"]')].find((b) => b.textContent?.includes(t))!;
+    act(() => { flik('Magma').click(); });
+    expect(select(host, 'Källa').value).toBe('magma');
+    expect(host.querySelector('.st-klistra')!.textContent).toContain('Magma resultat');
+    act(() => { flik('DigiExam').click(); });
+    expect(select(host, 'Källa').value).toBe('digiexam');
+    act(() => { flik('PowerPoint').click(); });
+    expect(host.querySelector('.st-import input[aria-label="Placering (pptx)"]')).not.toBeNull();
+    expect(host.querySelector('.st-klistra')).toBeNull();
   });
 });
 

@@ -11,7 +11,7 @@ import JSZip from 'jszip';
 import {
   NO_TK, NO_TK_AMNEN, STANDARD_AMNEN, amneBakgrund, antalSlots, arbetsNivaer, arHalvklass,
   begreppsRum, delaHalvklassPass, delkapitelUrAvsnitt, foreslagnaRum, hamtaLektionsplan,
-  effektivaNivaer, kombineraHalvklassPass, skapaTjanstFranSchema, tolkaSchemaPdf,
+  effektivaNivaer, kombineraHalvklassPass, slaIhopSchema, tolkaSchemaPdf,
   aterstallLektionsregler, harEgnaLektionsregler, lektionsreglerFor, sattLektionsregler, type Lektionsregel,
   slaIhopPlaneringsmall, tolkaPlaneringsmall,
   handelserPerDatum, kalenderHandelser, klassFarg, noBudget, noOverBudget, sattLektionsplan,
@@ -3317,17 +3317,11 @@ async function lasPptxSlides(fil: File): Promise<Array<{ namn: string; xml: stri
   return Promise.all(slides.map(async (sl) => ({ namn: sl.name, xml: await sl.async('string') })));
 }
 
-function SittplatsWidget({ s, f, klassId, klassNamn, kor, onElev }: {
-  s: Struktur; f: DashboardFilter; klassId: string; klassNamn: string;
-  kor: (fn: () => Struktur, m: string) => void; onElev: (id: string) => void;
+/** Del 142 · Placering ur PowerPoint — används både i importnavet och i sittplatswidgeten. */
+function PlaceringImport({ s, klassId, klassNamn, kor, onSparad }: {
+  s: Struktur; klassId: string; klassNamn: string; kor: (fn: () => Struktur, m: string) => void; onSparad?: (id: string) => void;
 }) {
-  const placeringar = (s.sittplatser ?? []).filter((p) => p.klassId === klassId);
-  const [valdId, setValdId] = useState<string | null>(null);
-  const vald = placeringar.find((p) => p.id === valdId) ?? placeringar[placeringar.length - 1];
-  const analys = vald === undefined ? null : sittplatsAnalys(s, vald.id, f);
   const elever = s.elever.filter((e) => e.klassId === klassId);
-
-  // Import
   const idag = new Date().toISOString().slice(0, 10);
   const [imp, setImp] = useState<{ filnamn: string; platser: Sittplats[]; rutor: SlideRuta[]; datum: string; datumKalla: string; fel: string | null } | null>(null);
   const lasFil = async (filer: FileList | null) => {
@@ -3353,25 +3347,11 @@ function SittplatsWidget({ s, f, klassId, klassNamn, kor, onElev }: {
     const p = { id: nyttId('sitt'), klassId, datum: imp.datum, kalla: imp.filnamn, platser: imp.platser };
     const traffar = imp.platser.filter((x) => x.elevId !== null).length;
     kor(() => sparaSittplatsering(lasStruktur(), p), `${klassNamn}: placering ${imp.datum} sparad (${traffar} elever på ${imp.platser.length} rutor).`);
-    setValdId(p.id); setImp(null);
+    onSparad?.(p.id); setImp(null);
   };
-  const farg = (v: number | null) => procentFarg(v, null);
   const DATUMKALLA: Record<string, string> = { bild: 'hittat på bilden', filnamn: 'hittat i filnamnet', idag: 'dagens datum — ändra om placeringen gällde tidigare' };
-
   return (
-    <div className="uppg-kort st-widget st-sitt">
-      <div className="rad">
-        <b>🪑 Sittplatser & resultat</b> <small className="muted">grannar = angränsande rutor · färg = elevens snitt under placeringens giltighetstid</small>
-        <span className="spacer" />
-        {placeringar.length > 0 && (
-          <select aria-label="Placering" value={vald?.id ?? ''} onChange={(e) => setValdId(e.target.value)}>
-            {placeringar.map((p) => <option key={p.id} value={p.id}>från {p.datum} · {p.kalla}</option>)}
-          </select>
-        )}
-      </div>
-
-      <details className="bulk-elever sitt-import">
-        <summary>📥 Importera placering från PowerPoint (.pptx)</summary>
+    <div className="placering-import">
         <p className="small muted">Varje elev i en egen textruta på bilden. Rutornas läge ger rad/kolumn; namnen matchas mot klassen (förnamn räcker om det är unikt, annars förnamn + initial). Datum föreslås från bilden eller filnamnet.</p>
         <input type="file" accept=".pptx" aria-label="Placering (pptx)" onChange={(e) => { void lasFil(e.target.files); e.target.value = ''; }} />
         {imp !== null && imp.fel !== null && <p className="status warn">⚠ {imp.filnamn}: {imp.fel}</p>}
@@ -3400,6 +3380,35 @@ function SittplatsWidget({ s, f, klassId, klassNamn, kor, onElev }: {
             </div>
           </>);
         })()}
+    </div>
+  );
+}
+
+function SittplatsWidget({ s, f, klassId, klassNamn, kor, onElev }: {
+  s: Struktur; f: DashboardFilter; klassId: string; klassNamn: string;
+  kor: (fn: () => Struktur, m: string) => void; onElev: (id: string) => void;
+}) {
+  const placeringar = (s.sittplatser ?? []).filter((p) => p.klassId === klassId);
+  const [valdId, setValdId] = useState<string | null>(null);
+  const vald = placeringar.find((p) => p.id === valdId) ?? placeringar[placeringar.length - 1];
+  const analys = vald === undefined ? null : sittplatsAnalys(s, vald.id, f);
+  const farg = (v: number | null) => procentFarg(v, null);
+
+  return (
+    <div className="uppg-kort st-widget st-sitt">
+      <div className="rad">
+        <b>🪑 Sittplatser & resultat</b> <small className="muted">grannar = angränsande rutor · färg = elevens snitt under placeringens giltighetstid</small>
+        <span className="spacer" />
+        {placeringar.length > 0 && (
+          <select aria-label="Placering" value={vald?.id ?? ''} onChange={(e) => setValdId(e.target.value)}>
+            {placeringar.map((p) => <option key={p.id} value={p.id}>från {p.datum} · {p.kalla}</option>)}
+          </select>
+        )}
+      </div>
+
+      <details className="bulk-elever sitt-import">
+        <summary>📥 Importera placering från PowerPoint (.pptx)</summary>
+        <PlaceringImport s={s} klassId={klassId} klassNamn={klassNamn} kor={kor} onSparad={(id) => setValdId(id)} />
       </details>
 
       {analys === null ? <p className="muted small">Ingen placering importerad för {klassNamn} ännu.</p> : (<>
@@ -5164,6 +5173,16 @@ function SocrativeLankPanel({ s, klass, amnen, planFor, kor }: {
   );
 }
 
+/** Del 142 · Importnavet: en rad per app, med ikon (bokstav i appens färg) och text. */
+type ImportApp = 'socrative' | 'magma' | 'digiexam' | 'pptx' | 'elever';
+const IMPORT_APPAR: Array<{ id: ImportApp; bokstav: string; namn: string; under: string; kalla?: ResultatKalla }> = [
+  { id: 'socrative', bokstav: 'S', namn: 'Socrative', under: 'quiz-rapporter (.xlsx) · rum & QR', kalla: 'socrative-exit' },
+  { id: 'magma', bokstav: 'M', namn: 'Magma', under: 'resultat · frågor · läs-screening', kalla: 'magma' },
+  { id: 'digiexam', bokstav: 'D', namn: 'DigiExam', under: 'provresultat', kalla: 'digiexam' },
+  { id: 'pptx', bokstav: 'P', namn: 'PowerPoint', under: 'placeringar (.pptx)' },
+  { id: 'elever', bokstav: '👥', namn: 'Elever', under: 'Socrative-lista · grupper A/B' },
+];
+
 function SuperTeachVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur, m: string) => void; meddela?: (m: string) => void }) {
   const klasser = [...s.klasser].sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
   const [klassId, setKlassId] = useState(klasser[0]?.id ?? '');
@@ -5233,6 +5252,7 @@ function SuperTeachVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Strukt
   }
   const [filRader, setFilRader] = useState<FilRad[]>([]);
   const [importeraOm, setImporteraOm] = useState(false);
+  const [importApp, setImportApp] = useState<ImportApp>('socrative');
   const lasFiler = async (filer: FileList | null) => {
     if (filer === null) return;
     const ut: FilRad[] = [];
@@ -5343,22 +5363,42 @@ function SuperTeachVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Strukt
           {varningar.map((v) => `${v.prov} (${v.datum})`).join(' · ')}</div>
       )}
 
-      {/* ── Importera: filer, roster, quizlänkar — högst upp så man ser vad som är inläst ── */}
+      {/* ── Del 142: Importnav — alla källor högst upp, en rad per app ── */}
       <details className="st-fall st-import" open={s.elever.filter((e) => e.klassId === klass.id).length === 0 || (s.resultat ?? []).length === 0}>
-        <summary><b>📥 Importera</b> <small className="muted">Socrative-filer, klistra in resultat, elevlista, quizlänkar och QR</small></summary>
-      {/* ── Socrative-rum: delningslänkar och QR ── */}
-      <SocrativeLankPanel s={s} klass={klass} amnen={amnen} planFor={planFor} kor={kor} />
+        <summary><b>📥 Importera</b> <small className="muted">Socrative · Magma · DigiExam · PowerPoint-placeringar · elevlista och grupper</small></summary>
+      <div className="st-importnav" role="tablist" aria-label="Importera från">
+        {IMPORT_APPAR.map((a) => (
+          <button key={a.id} role="tab" aria-selected={importApp === a.id} className={`st-importapp${importApp === a.id ? ' act' : ''}`}
+            onClick={() => { setImportApp(a.id); if (a.kalla !== undefined) setKalla(a.kalla); }}>
+            <span className={`app-ikon ${a.id}`} aria-hidden="true">{a.bokstav}</span>
+            <span className="st-importapp-text"><b>{a.namn}</b><small>{a.under}</small></span>
+          </button>
+        ))}
+      </div>
 
+      {importApp === 'elever' && (<>
       {/* ── Elever: Socrative-roster ── */}
       <div className="uppg-kort">
         <b>👥 Elever i {klass.namn}</b> <small className="muted">{s.elever.filter((e) => e.klassId === klass.id).length} elever registrerade — resultat kan bara matchas mot registrerade elever. Importera Socratives roster för klassen så matchas rapporterna på namn och Student ID.</small>
         <RosterImport s={s} klassId={klass.id} klassNamn={klass.namn} kor={kor} />
         <GruppImport s={s} klassId={klass.id} klassNamn={klass.namn} kor={kor} />
       </div>
+      </>)}
+
+      {importApp === 'pptx' && (
+        <div className="uppg-kort">
+          <b>🪑 Placeringar ur PowerPoint</b> <small className="muted">en .pptx med klassrummet: varje elev i en egen textruta — placeringen används i Sittplatser & resultat</small>
+          <PlaceringImport s={s} klassId={klass.id} klassNamn={klass.namn} kor={kor} />
+        </div>
+      )}
+
+      {importApp === 'socrative' && (<>
+      {/* ── Socrative-rum: delningslänkar och QR ── */}
+      <SocrativeLankPanel s={s} klass={klass} amnen={amnen} planFor={planFor} kor={kor} />
 
       {/* ── Import: Socrative-filer ── */}
       <div className="uppg-kort">
-        <b>📥 Importera Socrative-filer</b> <small className="muted">Välj klassrapporter (xlsx). Rummet i filen matchas mot planens läxförhör/exit-rum (t.ex. Biologi41) och pekar ut ämne, lektion och källa; för rum som används till allt (Matte8B) avgör starttiden i filnamnet (UTC → svensk tid) enligt BAM-rytmen. Redan importerade filer hoppas över.</small>
+        <b>📥 Socrative quiz-rapporter</b> <small className="muted">Välj klassrapporter (xlsx). Rummet i filen matchas mot planens läxförhör/exit-rum (t.ex. Biologi41) och pekar ut ämne, lektion och källa; för rum som används till allt (Matte8B) avgör starttiden i filnamnet (UTC → svensk tid) enligt BAM-rytmen. Redan importerade filer hoppas över.</small>
         <div className="rad" style={{ marginTop: 6 }}>
           <input type="file" multiple accept=".xlsx" aria-label="Socrative-filer"
             onChange={(e) => { void lasFiler(e.target.files); e.target.value = ''; }} />
@@ -5436,10 +5476,17 @@ function SuperTeachVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Strukt
           </div>
         </>)}
       </div>
+      </>)}
 
-      {/* ── Import: klistra in ── */}
-      <div className="uppg-kort">
-        <b>📥 Klistra in resultat</b> <small className="muted">Rader från valfri export: <code>Namn ⇥ Poäng ⇥ Max</code> (Max kan utelämnas — fältet nedan används). Inklistrade resultat saknar svar per fråga: de räknas i korten men syns inte i frågematrisen eller trendkollen — för det krävs Excel-filen.</small>
+      {/* ── Import: klistra in (Magma, DigiExam och fri text) ── */}
+      {(importApp === 'magma' || importApp === 'digiexam' || importApp === 'socrative') && (
+      <div className="uppg-kort st-klistra">
+        <b>{importApp === 'magma' ? '📗 Magma resultat' : importApp === 'digiexam' ? '📘 DigiExam resultat' : '📥 Klistra in resultat'}</b>{' '}
+        <small className="muted">{importApp === 'magma'
+          ? <>Markera resultattabellen i Magma (namn och poäng) och klistra in här. Screeningen i läsning (förmåga, förståelse, hastighet) görs också i Magma — när du skickat en export läses den och Magmas frågor in direkt ur filen; tills dess går resultat att klistra in.</>
+          : importApp === 'digiexam'
+            ? <>Markera resultatlistan i DigiExam (namn och poäng) och klistra in här. En DigiExam-export läses in som fil när tolkaren finns.</>
+            : <>Rader från valfri export: <code>Namn ⇥ Poäng ⇥ Max</code> (Max kan utelämnas — fältet nedan används). Inklistrade resultat saknar svar per fråga: de räknas i korten men syns inte i frågematrisen eller trendkollen — för det krävs Excel-filen.</>}</small>
         <div className="rad" style={{ flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
           <select aria-label="Källa" value={kalla} onChange={(e) => setKalla(e.target.value as ResultatKalla)}>
             {ALLA_KALLOR.map((k) => <option key={k} value={k}>{KALLNAMN[k]}</option>)}
@@ -5456,6 +5503,7 @@ function SuperTeachVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Strukt
           <button className="btn" disabled={!kanSpara} title={amne === undefined ? 'Välj ämne — resultat samlas ämnesvis' : ''} onClick={spara}>💾 Spara resultat</button>
         </div>
       </div>
+      )}
 
       </details>
 
@@ -5898,11 +5946,13 @@ function SchemaPdfPanel({ s, tolkat, kor, setVald }: {
           </select>
         </label>
         <button className="btn" disabled={skolarId === '' || tolkat.lektioner.length === 0} onClick={() => {
-          kor(() => skapaTjanstFranSchema(lasStruktur(), tolkat, skolarId),
-            `Tjänst skapad ur schemat: ${tolkat.larareNamn}, ${klasser.join(' & ')} med Matematik och NO+Tk. Koppla böcker och skapa planeringar.`);
+          let utfall: { skapade: string[]; hoppade: string[]; kompletterade: string[] } = { skapade: [], hoppade: [], kompletterade: [] };
+          kor(() => { const u = slaIhopSchema(lasStruktur(), tolkat, skolarId); utfall = u; return u.s; },
+            `Schemat inläst (${tolkat.larareNamn}, ${klasser.join(' & ')}). ${utfall.skapade.length > 0 ? `Skapat: ${utfall.skapade.join(', ')}. ` : ''}${utfall.kompletterade.length > 0 ? `Kompletterat med schema: ${utfall.kompletterade.join(', ')}. ` : ''}${utfall.hoppade.length > 0 ? `Fanns redan (orört): ${utfall.hoppade.join(', ')}.` : ''}${utfall.skapade.length === 0 && utfall.kompletterade.length === 0 ? ' Inget nytt att lägga till.' : ' Koppla böcker och skapa planeringar för det nya.'}`);
           setVald(null);
-        }}>▶ Skapa tjänst ur schemat</button>
+        }}>▶ Läs in schemat</button>
       </div>
+      <p className="muted small">Schemat kan läsas in flera gånger: lärare, tjänst, klasser och ämnen som redan finns hoppas över (deras scheman rörs inte), ämnen utan schema kompletteras och det som saknas läggs till.</p>
       <p className="muted small">NO+Tk skapas som fyra blockdelämnen (Biologi → Fysik → Kemi → Teknik — ordningen kan ändras efteråt) med hel-/halvklasspassen ur schemat (:a = Grupp A, :b = Grupp B).</p>
     </div>
   );

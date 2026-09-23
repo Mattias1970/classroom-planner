@@ -1075,3 +1075,17 @@ input.fel { border-color: #B71C1C; }
 .st-fmsvar { display: inline-block; margin: 2px 6px 2px 0; padding: 1px 8px; border-radius: 999px; font-size: 12px; background: #F1F3F6; }
 .st-fmsvar.ratt { background: #E3F2E6; color: #1B5E20; }
 .st-fmsvar.fel { background: #FBE4E4; color: #B71C1C; }
+
+/* ── Del 142: importnav ── */
+.st-importnav { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
+.st-importapp { display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px 8px 10px; border: 1px solid var(--ram); border-radius: 12px; background: #fff; cursor: pointer; text-align: left; min-width: 190px; }
+.st-importapp:hover { border-color: var(--bla); }
+.st-importapp.act { border-color: var(--bla); background: #EEF3FB; box-shadow: 0 0 0 2px rgba(47,90,168,.15); }
+.st-importapp-text { display: flex; flex-direction: column; line-height: 1.15; }
+.st-importapp-text small { color: var(--muted); }
+.app-ikon { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 9px; color: #fff; font-weight: 800; font-size: 17px; flex: none; }
+.app-ikon.socrative { background: #F26522; }
+.app-ikon.magma { background: #1E9E5A; }
+.app-ikon.digiexam { background: #1F4E9A; }
+.app-ikon.pptx { background: #C43E1C; }
+.app-ikon.elever { background: #5D6D7E; font-size: 16px; }
