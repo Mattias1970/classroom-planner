@@ -198,3 +198,27 @@ body[data-layout="v3"] .studio { max-width: none; padding: 0; }
 .v3-synkkort { border: 1px solid var(--v3-ram); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
 .v3-synkkort p { margin: 0; }
 .v3-synkkort .v3-knapp { align-self: flex-start; margin-top: auto; }
+
+/* ── Del 144: vägen till provet ── */
+.v3-vagbox { font: inherit; text-align: left; cursor: pointer; color: inherit; }
+.v3-vagbox:hover { border-color: var(--v3-bla); }
+.v3-vagbox.vald { background: var(--v3-bla-ljus); border-color: var(--v3-bla); box-shadow: 0 0 0 2px var(--v3-bla-ljus); }
+.v3-vagbox.klar { border-color: var(--v3-gron); background: #F4FBF5; }
+.v3-vagbox.klar .v3-status { color: var(--v3-gron); }
+.v3-vagbox.oplanerad { border-style: dotted; color: var(--v3-mut); }
+.v3-kedja-kort.prov.saknas { min-width: 150px; }
+.v3-vag-info { margin-top: 12px; border: 1px solid var(--v3-ram); border-radius: 12px; padding: 12px 14px; background: #fff; }
+.v3-vag-info-huvud { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.v3-vag-lektioner { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; }
+.v3-vag-lektion { border: 1px solid var(--v3-ram); border-left: 4px solid var(--v3-ram); border-radius: 8px; padding: 8px 10px; }
+.v3-vag-lektion.klar { border-left-color: var(--v3-gron); }
+.v3-vag-lektion.idag { border-left-color: var(--v3-bla); }
+.v3-vag-lektion-huvud { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.v3-vag-lektion-huvud .v3-lank { margin-left: auto; }
+.v3-vag-lektion p { margin: 4px 0 0; }
+.v3-vag-nivaer { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 13px; margin-top: 4px; }
+.v3-vag-niva { border-radius: 6px; padding: 1px 8px; background: var(--v3-yta); }
+.v3-vag-niva.niva1 { background: #E6F4EA; } .v3-vag-niva.niva2 { background: #E4EDFA; } .v3-vag-niva.niva3 { background: #FBE7E7; }
+.v3-vag-mal { margin-top: 10px; } .v3-vag-mal ul { margin: 4px 0 0; padding-left: 20px; }
+.v3-vag-begrepp { margin-top: 8px; display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.v3-vag-begrepp .v3-chip { font-size: 12px; }

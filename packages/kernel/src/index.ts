@@ -28,3 +28,4 @@ export * from './domain/kalender.js';
 export * from './domain/schemapdf.js';
 export * from './export/sidregister.js';
 export * from './domain/pedagogiskplanering.js';
+export * from './domain/vagtillprovet.js';

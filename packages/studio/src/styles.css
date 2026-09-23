@@ -994,7 +994,8 @@ input.fel { border-color: #B71C1C; }
 .st-svar-saknas { color: #b02a2a; font-weight: 700; }
 /* Del 133: dagens/nästa lektion i Lektionsplan */
 .tbl.plan tr.aktuell td.lekt-nr b { color: var(--bla); }
-.tbl.plan tr.aktuell td { box-shadow: inset 3px 0 0 var(--bla); }
+.tbl.plan tr.aktuell td { background: #F3F7FD; }
+.tbl.plan tr.aktuell td:first-child { box-shadow: inset 3px 0 0 var(--bla); }
 
 /* Del 138: ämnesflikar i Planering + 💾 Spara / 📂 Hämta-menyer */
 .amnesflikar { display: flex; flex-wrap: wrap; gap: 6px; }

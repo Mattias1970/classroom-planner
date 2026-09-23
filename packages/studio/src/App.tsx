@@ -191,6 +191,7 @@ export function App() {
             </div>
           )}
           {vy.typ === 'amne' && <Amnessida s={s} amneNamn={vy.amneNamn} filter={filter} setVy={setVy}
+            oppnaLektion={(amneId, i) => setLektionsHopp({ amneId, i, n: Date.now() })}
             planering={(amneId) => <Kort rubrik="Planering och lektioner" under="lektionsplan, detaljplanering, begrepp, filmer, Word"><PlaneringVy s={s} kor={kor} setVald={setVald} hopp={lektionsHopp} amneIdIn={amneId} dolAmnesval meddela={setMsg} /></Kort>} />}
           {vy.typ === 'kalender' && <Kort rubrik="Kalender" hoger={<button className="v3-lank" onClick={() => setVy({ typ: 'planering' })}>Planering →</button>}><KalenderVy s={s} onOppnaLektion={(amneId, i) => { setLektionsHopp({ amneId, i, n: Date.now() }); setVy({ typ: 'planering' }); }} /></Kort>}
           {vy.typ === 'classroom' && <Classroom s={s} filter={filter} setVy={setVy} />}

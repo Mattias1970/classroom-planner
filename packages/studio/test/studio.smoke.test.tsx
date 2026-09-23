@@ -3037,3 +3037,89 @@ describe('Del 143: byt grupp A/B med ett klick, redigerbar BAM i detaljplanering
     expect(host.querySelector('.ls-tider .status.warn')).toBeNull();
   });
 });
+
+describe('Del 144: vägen till provet på ämnessidan — alla avsnitt som boxar, klick ger info', () => {
+  const MATTEJSON = JSON.stringify({
+    schema: 'classroom-planner-bok', version: 1,
+    bok: { id: 'liber-matematik-y', titel: 'Matematik Y', förlag: 'Liber', ämne: 'Matematik', årskurs: 8,
+      kapitelMeta: { '1': { name: 'Tal', col: '#2f5aa8' }, '2': { name: 'Geometri', col: '#2e7d46' } } },
+    lektioner: {
+      '1': [
+        { id: 1, type: 'regular', avsnitt: '1.1 Bråk', del: 1, ett: '1–8', två: '9–16', tre: '—', sidor_teori: 's. 10–13', begrepp: 'täljare, nämnare', mal: 'förkorta bråk\nförlänga bråk' },
+        { id: 2, type: 'regular', avsnitt: '1.1 Bråk', del: 2, ett: '—', två: '17–24', tre: '25–32', sidor_teori: 's. 13–15' },
+        { id: 3, type: 'repetition', avsnitt: 'Blandade uppgifter', del: 1, ett: '40–47', två: '48–55', tre: '56–63', sidor_teori: 's. 20–22', mal: 'Repetera hela kapitlet.' },
+        { id: 4, type: 'review', avsnitt: 'Sammanfattning', del: 1, sidor_teori: 's. 23' },
+      ],
+      '2': [{ id: 1, type: 'regular', avsnitt: '2.1 Vinklar', del: 1, ett: '1–10', sidor_teori: 's. 30–33', begrepp: 'vinkel' }],
+    },
+  });
+
+  it('boxar i planeringsordning med status gjord/pågår/kommande, provet sist, klick visar uppgifter per nivå, mål och begrepp', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-26T10:00:00Z')); // onsdag: lektion 2 idag
+    const { bokFromImport, laggTillAmne, laggTillEgenRad, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering, sattLektionsplan, sparaBok, tomStruktur } = await import('@planner/kernel');
+    const bok = bokFromImport(MATTEJSON);
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = sparaBok(s, bok);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'ma', klassId: 'k', namn: 'Matematik', bokId: bok.id, schema: [{ dag: 3, start: '09:00', slut: '10:00' }] });
+    s = registreraPlanering(s, { id: 'pl', amneId: 'ma', bokId: bok.id, skapad: '2026-08-10' });
+    s = laggTillEgenRad(s, 'ma', { id: 'er1', position: 4, rubrik: 'Prov kapitel 1', typ: 'prov' }, '2026-08-17');
+    s = sattLektionsplan(s, { id: 'lp0', amneId: 'ma', lektionsIndex: 0, klar: true, uppgNiva2: '9–14' });
+    window.localStorage.setItem('classroom-planner.studio.v2', JSON.stringify(s));
+    localStorage.setItem('cp.layout', JSON.stringify('v3'));
+    const host = render();
+    act(() => { ([...host.querySelectorAll('.v3-nav')].find((b) => b.textContent?.trim() === 'Matematik') as HTMLButtonElement).click(); });
+
+    const vag = host.querySelector('.v3-vag')!;
+    expect(vag.textContent).toContain('Kap 1 Tal – Vägen till provet');
+    expect(vag.textContent).toContain('3 avsnitt · 1 av 5 lektioner gjorda · prov 2026-09-16');
+    const boxar = [...vag.querySelectorAll<HTMLButtonElement>('.v3-vagbox')];
+    expect(boxar.map((b) => b.getAttribute('aria-label'))).toEqual([
+      '1.1 Bråk: Pågår', 'Blandade uppgifter: Kommande', 'Sammanfattning: Kommande', 'Prov kapitel 1: Kommande',
+    ]);
+    expect(boxar[0].textContent).toContain('2 lektioner · ons 19/8 – ons 26/8');
+    expect(boxar[0].textContent).toContain('Pågår · 1/2');
+    expect(boxar[3].className).toContain('prov');
+    expect(vag.querySelector('.v3-vag-info')).toBeNull();
+
+    // Klick på 1.1 → infopanel: Del 1 gjord (kryss) med lärarens eget TVÅ-intervall, Del 2 idag, mål och begrepp
+    act(() => { boxar[0].click(); });
+    const info = vag.querySelector('.v3-vag-info')!;
+    expect(info.getAttribute('aria-label')).toBe('Om 1.1 Bråk');
+    expect(info.textContent).toContain('Delkapitel 1.1 · s. 10–15');
+    const lekt = [...info.querySelectorAll('.v3-vag-lektion')];
+    expect(lekt).toHaveLength(2);
+    expect(lekt[0].textContent).toContain('Del 1');
+    expect(lekt[0].textContent).toContain('✔ gjord');
+    expect(lekt[0].querySelector('.v3-vag-nivaer')!.textContent).toBe('Uppgifter: ETT 1–8TVÅ 9–14');
+    expect(lekt[1].textContent).toContain('Del 2');
+    expect(lekt[1].textContent).toContain('● idag');
+    expect(lekt[1].querySelector('.v3-vag-nivaer')!.textContent).toBe('Uppgifter: TVÅ 17–24TRE 25–32');
+    expect([...info.querySelectorAll('.v3-vag-mal li')].map((li) => li.textContent)).toEqual(['förkorta bråk', 'förlänga bråk']);
+    expect([...info.querySelectorAll('.v3-vag-begrepp .v3-chip')].map((c) => c.textContent)).toEqual(['täljare', 'nämnare']);
+    expect(boxar[0].getAttribute('aria-pressed')).toBe('true');
+
+    // Blandade uppgifter: tre nivåer och målet; provet: egen rad utan uppgifter
+    act(() => { boxar[1].click(); });
+    expect(vag.querySelector('.v3-vag-info')!.textContent).toContain('Blandade uppgifter · s. 20–22');
+    expect(vag.querySelector('.v3-vag-nivaer')!.textContent).toBe('Uppgifter: ETT 40–47TVÅ 48–55TRE 56–63');
+    expect(vag.querySelector('.v3-vag-mal')!.textContent).toContain('Repetera hela kapitlet.');
+    act(() => { boxar[3].click(); });
+    expect(vag.querySelector('.v3-vag-info')!.textContent).toContain('Prov kapitel 1 ons 16/9 · v.38 · ○ kommer');
+    expect(vag.querySelector('.v3-vag-nivaer')).toBeNull();
+
+    // "Öppna lektionen →" hoppar till detaljplaneringen för rätt lektion
+    act(() => { boxar[0].click(); });
+    act(() => { ([...vag.querySelectorAll<HTMLButtonElement>('.v3-vag-lektion .v3-lank')][1]).click(); });
+    expect(host.textContent).toContain('TAVLAN');
+    expect((select(host, 'Välj lektion') as HTMLSelectElement).value).toBe('1');
+
+    // Kapitelväljaren: kapitel 2 har inget prov planerat
+    valj(select(host, 'Kapitel på vägen'), '2');
+    expect(host.querySelector('.v3-vag')!.textContent).toContain('Kap 2 Geometri – Vägen till provet');
+    expect(host.querySelector('.v3-vag .v3-kedja-kort.prov.saknas')!.textContent).toContain('inte planerat än');
+    expect(host.querySelector('.v3-vag .v3-vag-info')).toBeNull();
+  });
+});
