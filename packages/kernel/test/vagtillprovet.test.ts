@@ -76,7 +76,7 @@ describe('Del 144: vägen till provet — alla avsnitt som boxar', () => {
 
     // 1.1: del 1 klar (kryss), del 2 idag → pågår; uppgifter ETT/TVÅ/TRE med lärarens eget TVÅ-intervall på del 1
     const d11 = v.boxar[0];
-    expect(d11).toMatchObject({ kod: '1.1', sidor: 's. 8–13', status: 'pagar', klara: 1, fran: '2026-09-14', till: '2026-09-18' });
+    expect(d11).toMatchObject({ kod: '1.1', sidor: 's. 8–13', status: 'pagar', klara: 1, fran: '2026-09-14', till: '2026-09-18', veckaFran: 38, veckaTill: 38 });
     expect(d11.lektioner.map((l) => [l.del, l.datum, l.status, l.kryss])).toEqual([[1, '2026-09-14', 'klar', true], [2, '2026-09-18', 'idag', false]]);
     expect(d11.lektioner[0].uppgifter).toEqual({ niva1: '1–8', niva2: '9–14', niva3: '—' });
     expect(d11.lektioner[1].uppgifter).toEqual({ niva1: '—', niva2: '16–22', niva3: '23–30' });
@@ -84,7 +84,8 @@ describe('Del 144: vägen till provet — alla avsnitt som boxar', () => {
     expect(d11.begrepp).toEqual(['bråk', 'täljare']);
     expect(d11.lektioner[0].index).toBe(0);
     // 1.2 kommande, Blandade uppgifter med tre nivåer och mål
-    expect(v.boxar[1]).toMatchObject({ status: 'kommande', klara: 0, fran: '2026-09-21', till: '2026-09-25' });
+    expect(v.boxar[1]).toMatchObject({ status: 'kommande', klara: 0, fran: '2026-09-21', till: '2026-09-25', veckaFran: 39, veckaTill: 39 });
+    expect(v.prov).toMatchObject({ veckaFran: 41, veckaTill: 41 });
     expect(v.boxar[2].lektioner[0].uppgifter).toEqual({ niva1: '56–63', niva2: '64–70', niva3: '71–78' });
     expect(v.boxar[2].mal).toEqual(['Repetera hela kapitlet inför diagnosen.']);
     expect(v.boxar[4]).toMatchObject({ typ: 'sammanfattning', sidor: 's. 24', status: 'kommande' });

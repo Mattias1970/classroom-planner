@@ -202,6 +202,7 @@ body[data-layout="v3"] .studio { max-width: none; padding: 0; }
 /* ── Del 144: vägen till provet ── */
 .v3-vagbox { font: inherit; text-align: left; cursor: pointer; color: inherit; }
 .v3-vagbox:hover { border-color: var(--v3-bla); }
+.v3-vagbox .v3-vag-vecka { font-weight: 700; color: var(--v3-marin); }
 .v3-vagbox.vald { background: var(--v3-bla-ljus); border-color: var(--v3-bla); box-shadow: 0 0 0 2px var(--v3-bla-ljus); }
 .v3-vagbox.klar { border-color: var(--v3-gron); background: #F4FBF5; }
 .v3-vagbox.klar .v3-status { color: var(--v3-gron); }

@@ -3081,6 +3081,8 @@ describe('Del 144: vägen till provet på ämnessidan — alla avsnitt som boxar
     ]);
     expect(boxar[0].textContent).toContain('2 lektioner · ons 19/8 – ons 26/8');
     expect(boxar[0].textContent).toContain('Pågår · 1/2');
+    // Vecka i varje box: 1.1 spänner v.34–35, Blandade v.36, provet v.38
+    expect(boxar.map((b) => b.querySelector('.v3-vag-vecka')!.textContent)).toEqual(['📅 v.34–35', '📅 v.36', '📅 v.37', '📅 v.38']);
     expect(boxar[3].className).toContain('prov');
     expect(vag.querySelector('.v3-vag-info')).toBeNull();
 

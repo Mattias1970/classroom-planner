@@ -54,6 +54,9 @@ export interface VagBox {
   /** Första och sista planerade datum. */
   fran: string | null;
   till: string | null;
+  /** Första och sista vecka. */
+  veckaFran: number | null;
+  veckaTill: number | null;
   /** Delkapitlets/avsnittets mål och begrepp (samlade över lektionerna, dedupade). */
   mal: string[];
   begrepp: string[];
@@ -113,7 +116,7 @@ function boxNyckel(lektion: Pick<Lektion, 'typ' | 'avsnitt'>): string {
 }
 
 function tomBox(id: string, typ: VagTyp, rubrik: string, kod: string | null, sidor: string): VagBox {
-  return { id, typ, ikon: IKON[typ], rubrik, kod, sidor, status: 'oplanerad', lektioner: [], klara: 0, fran: null, till: null, mal: [], begrepp: [] };
+  return { id, typ, ikon: IKON[typ], rubrik, kod, sidor, status: 'oplanerad', lektioner: [], klara: 0, fran: null, till: null, veckaFran: null, veckaTill: null, mal: [], begrepp: [] };
 }
 
 function boxarUrBoken(kap: Kapitel): VagBox[] {
@@ -194,6 +197,8 @@ export function vagTillProvet(s: Struktur, amneId: string, kapitelNr?: number, i
     b.status = boxStatus(b.lektioner);
     const datum = b.lektioner.map((l) => l.datum).filter((d): d is string => d !== null).sort();
     b.fran = datum[0] ?? null; b.till = datum[datum.length - 1] ?? null;
+    const veckor = b.lektioner.map((l) => l.vecka).filter((v): v is number => v !== null).sort((x, y) => x - y);
+    b.veckaFran = veckor[0] ?? null; b.veckaTill = veckor[veckor.length - 1] ?? null;
     b.mal = unika(b.lektioner.flatMap((l) => l.mal));
     b.begrepp = unika([...b.begrepp, ...b.lektioner.flatMap((l) => l.begrepp)]);
   }

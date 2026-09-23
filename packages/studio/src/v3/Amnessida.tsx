@@ -104,11 +104,13 @@ function VagKort({ box, vald, onKlick }: { box: VagBox; vald: boolean; onKlick: 
   const n = box.lektioner.length;
   const andel = n === 0 ? 0 : (box.klara / n) * 100;
   const datum = box.fran === null ? 'ej planerad' : box.fran === box.till || box.till === null ? dagText(box.fran) : `${dagText(box.fran)} – ${dagText(box.till)}`;
+  const vecka = box.veckaFran === null ? '' : box.veckaFran === box.veckaTill || box.veckaTill === null ? `v.${box.veckaFran}` : `v.${box.veckaFran}–${box.veckaTill}`;
   return (
     <button type="button" role="listitem" className={`v3-kedja-kort v3-vagbox ${box.status}${box.typ === 'prov' ? ' prov' : ''}${vald ? ' vald' : ''}`}
       aria-pressed={vald} aria-label={`${box.rubrik}: ${STATUS_TEXT[box.status]}`} title={`${vagTypNamn(box.typ)} · ${datum} — klicka för uppgifter, mål och begrepp`} onClick={onKlick}>
       <b><span aria-hidden="true">{box.ikon}</span> {box.rubrik}</b>
       <small>{n === 0 ? 'ingen lektion' : n === 1 ? datum : `${n} lektioner · ${datum}`}</small>
+      {vecka !== '' && <small className="v3-vag-vecka">📅 {vecka}</small>}
       <span className="v3-progress"><i style={{ width: `${andel}%` }} /></span>
       <small className={`v3-status ${box.status}`}>{STATUS_TEXT[box.status]}{n > 1 ? ` · ${box.klara}/${n}` : ''}</small>
     </button>
