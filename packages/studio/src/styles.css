@@ -1028,3 +1028,50 @@ input.fel { border-color: #B71C1C; }
 .regler-redigera { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; }
 .regler-redigera > .rad { grid-column: 1 / -1; }
 .regel-red input, .regel-red textarea { font: inherit; padding: 5px 7px; border: 1px solid var(--ram); border-radius: 6px; }
+
+/* ── Del 141: fällbara widgets med miniatyr ── */
+.st-widget.st-fall { padding: 0 14px; }
+.st-widget.st-fall > summary { flex-wrap: wrap; row-gap: 4px; }
+.st-widget.st-fall > summary .st-widget-under { flex: 1 1 260px; min-width: 0; }
+.st-widget.st-fall > summary .st-widget-ikon { margin-right: 2px; }
+.st-widget.st-fall[open] > summary { margin-bottom: 8px; }
+.st-widget-kropp { padding-bottom: 12px; }
+.st-widget-kropp > .rad:first-child:empty { display: none; }
+.st-mini { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; padding: 2px 8px; border-radius: 10px; background: #F7F9FC; border: 1px solid var(--ram); }
+.st-fall[open] > summary .st-mini { display: none; }
+.st-mini .st-spark, .st-mini svg { height: 26px; max-width: 120px; }
+.st-mini-tal { display: inline-flex; flex-direction: column; line-height: 1.1; }
+.st-mini-tal b { font-size: 15px; }
+.st-mini-tal small { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.st-mini-remsa { display: inline-flex; gap: 1px; }
+.st-mini-remsa i { display: inline-block; width: 6px; height: 16px; border-radius: 1px; }
+.st-grid2 > .st-widget.st-fall { margin: 0; }
+.st-urvalsrad { margin: 6px 0 10px; }
+
+/* ── Del 141: elevfilter ── */
+.st-elevfilter { position: relative; }
+.st-elevfilter > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--ram); border-radius: 999px; background: #fff; }
+.st-elevfilter > summary::-webkit-details-marker { display: none; }
+.st-elevfilter.aktiv > summary { border-color: var(--bla); background: #EEF3FB; }
+.st-elevfilter-rensa { margin-left: 2px; }
+.st-elevfilter-panel { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; width: min(560px, 92vw); background: #fff; border: 1px solid var(--ram); border-radius: 12px; box-shadow: 0 8px 24px rgba(20,40,80,.12); padding: 10px 14px; }
+.st-elevfilter-hjalp { margin: 0 0 8px; }
+.st-elevfilter-rad { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; border-top: 1px solid var(--ram); }
+.st-elevfilter-etikett { font-weight: 600; min-width: 120px; }
+.st-elevfilter-lista { align-items: flex-start; }
+.st-elevfilter-listkropp { flex: 1; min-width: 0; }
+.st-elevfilter-elever { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 2px 10px; max-height: 240px; overflow: auto; margin-top: 6px; }
+.st-elevfilter-elev { display: flex; align-items: center; gap: 6px; padding: 2px 4px; border-radius: 6px; cursor: pointer; }
+.st-elevfilter-elev.vald { background: #EEF3FB; }
+.st-elevfilter-namn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-elevfilter-prick { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.st-klusterchip i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--kluster); }
+.st-klusterkort.valt { outline: 2px solid var(--bla); outline-offset: 1px; }
+
+/* ── Del 141: fråga + svar i frågematrisen ── */
+.st-fmfragasvar { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 6px 0; }
+.st-fmfragasvar dt { color: var(--muted); font-size: 12px; }
+.st-fmfragasvar dd { margin: 0; }
+.st-fmsvar { display: inline-block; margin: 2px 6px 2px 0; padding: 1px 8px; border-radius: 999px; font-size: 12px; background: #F1F3F6; }
+.st-fmsvar.ratt { background: #E3F2E6; color: #1B5E20; }
+.st-fmsvar.fel { background: #FBE4E4; color: #B71C1C; }

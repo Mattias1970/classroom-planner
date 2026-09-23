@@ -32,6 +32,7 @@ import {
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
   elevrapport, elevrapportText, tillfalleEtiketter, normeradSpridning, klusterKurvor, normeraBand, taBortFil, rensaResultat,
   NORM_BAND, NORM_MAX, amnesKallor, lektionstester, elevLektionstest, tillfalleKortEtikett, KLUSTER_NAMN, TID_PASS, type Kluster,
+  begransaTillElever, elevUrval, klassensElever, type ElevUrvalVal,
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
@@ -50,6 +51,8 @@ import { Foraldrakontakt } from './v3/Foraldrakontakt.js';
 import { Datarepo } from './v3/Datarepo.js';
 import { amnesIkon } from './v3/ikoner.js';
 import { SparaMeny } from './SparaMeny.js';
+import { StWidget, MiniTal, MiniRemsa, useWidgetLage } from './StWidget.js';
+import { ElevFilter } from './ElevFilter.js';
 import {
   hamtaBockerFranGitHub, konfigKomplett, laddaFranGitHub, lasGitHubConfig, sparaGitHubConfig, sparaTillGitHub,
   type GitHubConfig,
@@ -1107,13 +1110,19 @@ function GruppImport({ s, klassId, klassNamn, kor }: {
   return (
     <details className="bulk-elever grupp-import">
       <summary>🧪 Laborationsgrupper A/B (klistra in lista)</summary>
-      <p className="small muted">En elev per rad: <code>Förnamn A</code> eller <code>Förnamn Efternamn, B</code>. Förnamn räcker när det är unikt i klassen — annars ber jag om efternamn.</p>
+      <p className="small muted">En elev per rad: <code>Förnamn A</code> eller <code>Förnamn Efternamn, B</code> — en tabell från Excel med kolumnerna Grupp A / Grupp B går bra att klistra in rakt av. Förnamn räcker när det är unikt i klassen — annars ber jag om efternamn. Elever som inte står i listan pekas ut.</p>
       <textarea aria-label="Grupplista" rows={6} value={text} placeholder={'Anna A\nOmar B\nPia Provlund B'} onChange={(e) => setText(e.target.value)} />
       {ut !== null && (<>
         {ut.tvetydiga.length > 0 && (
           <p className="status warn">⚠ Flera elever heter {ut.tvetydiga.map((t) => `${t.namn} (${t.kandidater.map((k) => k.namn).join(' / ')})`).join(', ')} — skriv hela namnet.</p>
         )}
         {ut.okanda.length > 0 && <p className="status warn">⚠ Finns inte i {klassNamn}: {ut.okanda.join(', ')}</p>}
+        {ut.ejListade.length > 0 && (
+          <p className="status warn st-ejlistade">⚠ Saknas i listan ({ut.ejListade.length}): {ut.ejListade.map((e) => (
+            <span key={e.id} className="chip">{e.namn} <button className="icon-btn" aria-label={`Ta bort ${e.namn}`} title="Ta bort eleven ur klassen (har slutat)"
+              onClick={() => { if (window.confirm(`Ta bort ${e.namn} ur ${klassNamn}? Elevens resultat följer med.`)) kor(() => taBortElev(lasStruktur(), e.id), `${e.namn} borttagen ur ${klassNamn}.`); }}>🗑</button></span>
+          ))} — har de slutat kan du ta bort dem här, annars lägg till dem i listan.</p>
+        )}
         <p className="small">{ut.tilldelade.length} elever matchade · <b>{andrade}</b> byter grupp</p>
         <div className="rad"><span className="spacer" />
           <button className="btn sm" disabled={andrade === 0} onClick={() => {
@@ -3454,31 +3463,33 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
   const [sok, setSok] = useState('');
   // Övningar som kör samma quiz som ett läxförhör/exit ticket räknas in i huvudsviten
   const [inkluderaOvn, setInkluderaOvn] = useState(true);
-  // Fällbara sektioner styrs härifrån så att KPI-korten kan öppna dem
-  type Sektion = 'lekt' | 'narv' | 'jamf';
-  const [oppnaSekt, setOppnaSekt] = useState<Set<Sektion>>(() => new Set());
+  // Del 141: alla rutor är fällbara widgets med miniatyr; öppet/stängt sparas per webbläsare.
+  // Frågematris, Resultat per delkapitel och Svåra begrepp är öppna från start, resten visar sin miniatyr.
+  const lage = useWidgetLage({ 'st-fragematris': true, 'st-led': true, 'st-fastnat': true });
   const [lyst, setLyst] = useState<string | null>(null);
-  const vaxlaSekt = (id: Sektion, oppen: boolean) => setOppnaSekt((f) => { const n = new Set(f); if (oppen) n.add(id); else n.delete(id); return n; });
-  /** KPI-kort → hoppa till (och öppna) den sektion som förklarar siffran. */
-  const gaTill = (mal: string, sektion?: Sektion) => {
-    if (sektion !== undefined) vaxlaSekt(sektion, true);
-    // Låt sektionen fällas ut innan vi scrollar
+  const W = (id: string) => ({ id, oppen: lage.arOppen(id), onToggle: (o: boolean) => lage.satt(id, o), lyst: lyst === id });
+  /** KPI-kort → hoppa till (och fälla ut) den widget som förklarar siffran. */
+  const gaTill = (mal: string) => {
+    lage.satt(mal, true);
+    // Låt rutan fällas ut innan vi scrollar
     window.setTimeout(() => {
       document.getElementById(mal)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       setLyst(mal);
       window.setTimeout(() => setLyst((l) => (l === mal ? null : l)), 1600);
     }, 30);
   };
-  const KORT_MAL: Record<KortKalla, { id: string; sektion?: Sektion }> = {
-    'socrative-laxforhor': { id: 'st-sekt-jamf', sektion: 'jamf' },
-    'socrative-exit': { id: 'st-sekt-jamf', sektion: 'jamf' },
+  const KORT_MAL: Record<KortKalla, { id: string }> = {
+    'socrative-laxforhor': { id: 'st-sekt-jamf' },
+    'socrative-exit': { id: 'st-sekt-jamf' },
     'socrative-ovning': { id: 'st-fragematris' },
     magma: { id: 'st-kurva' }, digiexam: { id: 'st-kurva' }, helhet: { id: 'st-kurva' },
   };
   const harm = useMemo(() => harmoniseraOvningar(sIn, { klassId, ...(amneId !== '' ? { amneId } : {}) }), [sIn, klassId, amneId]);
   // Visar filtret övningar ska de synas som övningar — inte inräknade som förhör
   const visarOvning = kallor !== undefined && kallor.includes('socrative-ovning') && !kallor.includes('socrative-laxforhor') && !kallor.includes('socrative-exit');
-  const s = inkluderaOvn && !visarOvning ? harm.s : sIn;
+  const sBas = inkluderaOvn && !visarOvning ? harm.s : sIn;
+  // Del 141: elevfilter — urvalet räknas på den ofiltrerade klassen (sBas) och begränsar sedan s
+  const [urvalVal, setUrvalVal] = useState<ElevUrvalVal>({ typ: 'alla' });
   // Fokus: en eller flera elever i den stora vyn. Första eleven är 'huvudelev'.
   const [fokus, setFokus] = useState<string[]>([]);
   const [fokusRubrik, setFokusRubrik] = useState<string>('');
@@ -3499,7 +3510,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
   const [visaTkPar, setVisaTkPar] = useState(false);
   const [tkSteg, setTkSteg] = useState<{ elevId: string; index: number } | null>(null);
   const [ledElev, setLedElev] = useState<string | null>(null);
-  const [vald, setVald] = useState<{ nr: number; fraga: string; kod: string; ursprung: string } | null>(null);
+  const [vald, setVald] = useState<{ nr: number; fraga: string; kod: string; ursprung: string; begrepp?: string } | null>(null);
   const [fMin, setFMin] = useState(0);
   const [fMax, setFMax] = useState(50);
   const [valdaTest, setValdaTest] = useState<string[]>([]);
@@ -3517,16 +3528,24 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
   // Omfånget (kapitel / termin / alla NO) läggs under periodfältet: skriver man en period gäller den
   const omfF = omfang?.filter ?? {};
   const grundF: DashboardFilter = { klassId, ...(amneId !== '' ? { amneId } : {}), ...omfF, ...(kallor !== undefined ? { kallor } : {}), ...(period ?? {}) };
-  const dagar = useMemo(() => lektionsDagar(s, grundF), [s, klassId, amneId, kallor, periodText]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dagar = useMemo(() => lektionsDagar(sBas, grundF), [sBas, klassId, amneId, kallor, periodText]); // eslint-disable-line react-hooks/exhaustive-deps
   const valdDag = dagar.find((d) => d.datum === dag) ?? null;
   // Dagfilter: läxförhör + exit ticket samma lektionsdag; vid halvklass täcker intervallet båda sessionerna
   const f: DashboardFilter = valdDag === null ? grundF : { ...grundF, fran: valdDag.datum, till: valdDag.datumTill };
   const tkFilter = { klassId, ...(amneId !== '' ? { amneId } : {}), ...(omfF.amneIds !== undefined ? { amneIds: omfF.amneIds } : {}), ...(omfF.kapitel !== undefined ? { kapitel: omfF.kapitel } : {}), ...(kallor !== undefined ? { kallor } : {}), ...(f.fran !== undefined ? { fran: f.fran } : {}), ...(f.till !== undefined ? { till: f.till } : {}) };
 
+  // ── Del 141: elevfilter ── kluster och närvaro för HELA klassen (till filtermenyn), sedan begränsad struktur
+  const filterNyckelBas = `${klassId}|${amneId}|${(kallor ?? []).join(',')}|${periodText}|${dag}|${JSON.stringify(omfF)}`;
+  const klassElever = useMemo(() => klassensElever(sBas, klassId), [sBas, klassId]);
+  const urvalBas = useMemo(() => ({ kluster: trendKluster(sBas, f), narvaro: elevNarvaro(sBas, f) }), [sBas, filterNyckelBas]); // eslint-disable-line react-hooks/exhaustive-deps
+  const urval = elevUrval(urvalVal, urvalBas.kluster, urvalBas.narvaro);
+  const urvalNyckel = urval.elevIds === null ? '' : urval.elevIds.join(',');
+  const s = useMemo(() => begransaTillElever(sBas, urval.elevIds), [sBas, urvalNyckel]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Klassnivå: räknas om bara när struktur eller filter ändras ──
   // Tidigare kördes ett tjugotal kernel-funktioner vid varje omritning, även när
   // man bara skrev i sökrutan eller klickade en knapp. Nu ligger de i ett memo.
-  const filterNyckel = `${klassId}|${amneId}|${(kallor ?? []).join(',')}|${periodText}|${dag}|${JSON.stringify(omfF)}`;
+  const filterNyckel = `${filterNyckelBas}|${urvalNyckel}`;
   const klassData = useMemo(() => {
     const kurva = klassKurva(s, f);
     const samband = sambandsanalys(s, f);
@@ -3586,6 +3605,25 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
   const ek = useMemo(() => (elev === null ? [] : elevKurva(s, elev.id, f)), [s, filterNyckel, elev?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const TREND = { upp: '↗', ned: '↘', jamn: '→' } as const;
   const kortKlass = (k: FrageKort) => `st-kort${k.antalProv === 0 ? ' tom' : ''}`;
+  // ── Del 141: miniatyrer — det man ser när en ruta är hopfälld ──
+  const tal = (v: Array<number | null | undefined>) => v.filter((x): x is number => typeof x === 'number' && !Number.isNaN(x));
+  const sistaRad = fmRader[fmRader.length - 1];
+  const fmMini = fm.fragor.length === 0 ? <MiniTal tal="—" etikett="inga frågedata" />
+    : <><MiniRemsa farger={(sistaRad?.celler ?? []).map((c) => (c === null ? '#F1F3F6' : ratFarg(c.procent)))} titel={sistaRad !== undefined ? `${sistaRad.prov}: andel rätt per fråga` : undefined} /><MiniTal tal={fmRader.length} etikett={`förhör · ${fm.fragor.length} frågor`} /></>;
+  const ledMini = led.length === 0 ? <MiniTal tal="—" etikett="inga frågedata" /> : <MiniTal tal={led.length} etikett={`förhör · ${delFarger.size} delkapitel`} />;
+  const fastnatMini = <MiniTal tal={klassFastnat.length} etikett={klassFastnat.length === 1 ? 'svårt begrepp' : 'svåra begrepp'} farg={klassFastnat.length > 0 ? '#B71C1C' : undefined} />;
+  const tkMini = tk.par.length === 0 ? <MiniTal tal="—" etikett="kräver samma fråga två gånger" />
+    : <><MiniTal tal={`${tk.netto > 0 ? '+' : ''}${tk.netto}`} etikett="netto" farg={tk.netto >= 0 ? '#1B5E20' : '#B71C1C'} /><MiniTal tal={`${tk.inlarningsProcent ?? '—'} %`} etikett="av felen blev rätt" /></>;
+  const lektDiff = tal(lekt.map((l) => l.diffSnitt));
+  const lektMini = lekt.length === 0 ? <MiniTal tal="—" etikett="inga lektioner med båda testerna" />
+    : <MiniTal tal={`${lektDiff.length > 0 && lektDiff.reduce((a, b) => a + b, 0) / lektDiff.length > 0 ? '+' : ''}${lektDiff.length > 0 ? Math.round(lektDiff.reduce((a, b) => a + b, 0) / lektDiff.length) : '—'}`} etikett={`Δ snitt · ${lekt.length} lektioner`} />;
+  const narvMini = narvaro.antalLektioner === 0 ? <MiniTal tal="—" etikett="inga lektioner" />
+    : <><Sparkline serie={narvaro.serie} farg="#00838F" krav={80} /><MiniTal tal={`${narvaro.narvaroProcent ?? '—'} %`} etikett={`${narvaro.riskElever.length} under 80 %`} /></>;
+  const jamfMini = <><Sparkline serie={tal(veckor.serier.helhet)} farg="#9AA3AE" krav={null} /><MiniTal tal={urvalBas.kluster.find((g) => g.kluster === 'riskzon')?.elever.length ?? 0} etikett="i riskzon" farg="#B71C1C" /></>;
+  const kurvaMini = kurva.length === 0 ? <MiniTal tal="—" etikett="inga prov" /> : <><Sparkline serie={tal(kurva.map((t) => t.snittProcent))} farg="#2f5aa8" krav={null} /><MiniTal tal={`${kurva[kurva.length - 1]?.snittProcent ?? '—'} %`} etikett="senaste" /></>;
+  const gruppMini = <MiniTal tal={`A ${grupper[0]?.perKalla.helhet ?? '—'} % · B ${grupper[1]?.perKalla.helhet ?? '—'} %`} etikett="helhet" />;
+  const sambandMini = samband.length === 0 ? <MiniTal tal="—" etikett="kräver minst tre elever" /> : <MiniTal tal={`r = ${samband[0].r > 0 ? '+' : ''}${samband[0].r.toFixed(2)}`} etikett={samband[0].text} />;
+  const elevprovMini = <MiniTal tal={`${matris.rader.length} × ${matris.tillfallen.length}`} etikett="elever × tillfällen" />;
   return (
     <div className="st-dash">
       <div className="rad" style={{ flexWrap: 'wrap', gap: 8 }}>
@@ -3598,6 +3636,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
             {dagar.map((d) => <option key={d.datum} value={d.datum}>{d.etikett}</option>)}
           </select></label>
         <label>🔎 <input aria-label="Sök elev" placeholder="Sök elev, ID, e-post…" value={sok} onChange={(e) => setSok(e.target.value)} /></label>
+        <ElevFilter elever={klassElever} kluster={urvalBas.kluster} narvaro={urvalBas.narvaro} val={urvalVal} valda={urval.elevIds} etikett={urval.etikett} onVal={setUrvalVal} />
         {harm.inkluderade.length > 0 && (
           <label className="small st-ovnval" title={harm.inkluderade.map((x) => `${x.prov} (${kortDatum(x.datum)}) räknas som ${TYPNAMN[x.som]} — samma quiz som ${x.liknar}, ${x.overlapp} % gemensamma frågor`).join('\n')}>
             <input type="checkbox" checked={inkluderaOvn} onChange={(e) => setInkluderaOvn(e.target.checked)} />
@@ -3606,8 +3645,12 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
         )}
         {valdDag !== null && <button className="btn sm" onClick={() => setDag('')}>✕ visa alla dagar</button>}
         <span className="spacer" />
-        <small className="muted">{klassNamn}{amneId !== '' ? ` · ${s.amnen.find((a) => a.id === amneId)?.namn ?? ''}` : ' · alla ämnen'}{period !== null ? ` · v.${period.veckaFran}–${period.veckaTill}` : ''}{valdDag !== null ? ` · ${kortDatum(valdDag.datum)}${valdDag.datumTill !== valdDag.datum ? `–${kortDatum(valdDag.datumTill)}` : ''}` : ''}</small>
+        <small className="muted">{klassNamn}{amneId !== '' ? ` · ${s.amnen.find((a) => a.id === amneId)?.namn ?? ''}` : ' · alla ämnen'}{period !== null ? ` · v.${period.veckaFran}–${period.veckaTill}` : ''}{valdDag !== null ? ` · ${kortDatum(valdDag.datum)}${valdDag.datumTill !== valdDag.datum ? `–${kortDatum(valdDag.datumTill)}` : ''}` : ''}{urval.elevIds !== null ? ` · ${urval.elevIds.length} elever (${urval.etikett})` : ''}</small>
       </div>
+      {urval.elevIds !== null && (
+        <p className="status st-urvalsrad" role="status">👥 Alla grafer visar <b>{urval.elevIds.length}</b> av {klassElever.length} elever · {urval.etikett}.{' '}
+          <button className="linkbtn" onClick={() => setUrvalVal({ typ: 'alla' })}>Visa alla elever</button></p>
+      )}
 
       {/* KPI-rad — frågekort i mockupens stil: ikon, rubrik, fråga, stort tal, delta, sparkline */}
       <div className="st-kortrad">
@@ -3617,8 +3660,8 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
           return (
             <div key={k.kalla} className={`${kortKlass(k)} klick`} style={{ '--kort': KORT_FARG[k.kalla] } as React.CSSProperties}
               role="button" tabIndex={0} title="Klicka för att öppna detaljerna"
-              onClick={() => { if (k.kalla === 'socrative-ovning') setFmTyper(['socrative-ovning']); gaTill(KORT_MAL[k.kalla].id, KORT_MAL[k.kalla].sektion); }}
-              onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); gaTill(KORT_MAL[k.kalla].id, KORT_MAL[k.kalla].sektion); } }}>
+              onClick={() => { if (k.kalla === 'socrative-ovning') setFmTyper(['socrative-ovning']); gaTill(KORT_MAL[k.kalla].id); }}
+              onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); gaTill(KORT_MAL[k.kalla].id); } }}>
               <div className="st-kort-topp">
                 <span className="st-ikon" aria-hidden="true">{KORT_IKON[k.kalla]}</span>
                 <div><div className="st-kort-rubrik">{k.rubrik}<InfoKnapp id={KORT_INFO[k.kalla]} /></div><div className="st-kort-fraga">{k.fraga}</div></div>
@@ -3639,8 +3682,8 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
           );
         })}
         <div className={`st-kort st-kort-narvaro klick${narvaro.antalLektioner === 0 ? ' tom' : ''}`} style={{ '--kort': '#00838F' } as React.CSSProperties}
-          role="button" tabIndex={0} title="Klicka för att öppna närvaron" onClick={() => gaTill('st-sekt-narv', 'narv')}
-          onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); gaTill('st-sekt-narv', 'narv'); } }}>
+          role="button" tabIndex={0} title="Klicka för att öppna närvaron" onClick={() => gaTill('st-sekt-narv')}
+          onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); gaTill('st-sekt-narv'); } }}>
           <div className="st-kort-topp">
             <span className="st-ikon" aria-hidden="true">🙋</span>
             <div><div className="st-kort-rubrik">{narvaro.rubrik}</div><div className="st-kort-fraga">{narvaro.fraga}</div></div>
@@ -3657,8 +3700,8 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
           </>)}
         </div>
         <div className="st-kort st-kort-kluster klick" style={{ '--kort': '#E65100' } as React.CSSProperties}
-          role="button" tabIndex={0} title="Klicka för att öppna trendklustren" onClick={() => gaTill('st-sekt-jamf', 'jamf')}
-          onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); gaTill('st-sekt-jamf', 'jamf'); } }}>
+          role="button" tabIndex={0} title="Klicka för att öppna trendklustren" onClick={() => gaTill('st-sekt-jamf')}
+          onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); gaTill('st-sekt-jamf'); } }}>
           <div className="st-kort-topp">
             <span className="st-ikon" aria-hidden="true">✨</span>
             <div><div className="st-kort-rubrik">Trendkluster</div><div className="st-kort-fraga">Elever som trendar tillsammans</div></div>
@@ -3669,12 +3712,12 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
       </div>
 
       {/* Frågematris */}
-      <div className={`uppg-kort st-widget st-fragematris${lyst === 'st-fragematris' ? ' lyst' : ''}`} id="st-fragematris">
+      <StWidget {...W('st-fragematris')} className="st-fragematris" ikon="🔢" rubrik="Frågematris" info={<InfoKnapp id="fragematris" />}
+        under="en rad per förhör, en kolumn per fråga · klicka på en ruta för att se fråga och rätt svar" mini={fmMini}>
         <div className="rad">
-          <b>🔢 Frågematris</b><InfoKnapp id="fragematris" /> <small className="muted">en rad per förhör, en kolumn per fråga · klicka på en ruta för att se frågan</small>
-          <span className="spacer" />
+          <small className="muted">Visa för:</small>
           <button className={`chipbtn ${ledElev === null ? 'act' : ''}`} onClick={() => setLedElev(null)}>Klassen</button>
-          {ledElev !== null && <span className="small">{s.elever.find((e) => e.id === ledElev)?.namn}</span>}
+          {ledElev !== null && <span className="chipbtn act">{s.elever.find((e) => e.id === ledElev)?.namn} <button className="icon-btn" aria-label="Visa klassen" title="Tillbaka till klassen" onClick={() => setLedElev(null)}>✕</button></span>}
         </div>
         <div className="rad st-fmverktyg">
           <small className="muted">Typ:</small>
@@ -3749,7 +3792,16 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
           {vald !== null && (
             <div className="st-fmvald">
               <b>Fråga {vald.nr}</b> <span className="chip">{vald.kod}</span> <small className="muted">först ställd i {vald.ursprung}</small>
-              <p>{vald.fraga}</p>
+              <dl className="st-fmfragasvar">
+                <dt>Fråga</dt><dd>{vald.fraga}</dd>
+                <dt>Rätt svar</dt><dd>{vald.begrepp !== undefined ? <b>{vald.begrepp}</b> : <span className="muted">saknas — importera Socrative-filen igen så följer facit med</span>}</dd>
+                {ledElev !== null && (<>
+                  <dt>{s.elever.find((e) => e.id === ledElev)?.namn ?? 'Eleven'} svarade</dt>
+                  <dd>{fmRader.map((rad) => { const i = fm.fragor.findIndex((x) => x.nr === vald.nr); const r = rad.elevCeller?.[i]; const t = rad.elevSvar?.[i]; return rad.celler[i] === null ? null : (
+                    <span key={rad.nyckel} className={`st-fmsvar ${r === true ? 'ratt' : r === false ? 'fel' : 'tom'}`} title={rad.prov}>{kortDatum(rad.datum)}: {t ?? '—'} {r === true ? '✓' : r === false ? '✗' : ''}</span>
+                  ); })}</dd>
+                </>)}
+              </dl>
               <div className="small">
                 {fmRader.map((rad, i) => { const c = rad.celler[fm.fragor.findIndex((x) => x.nr === vald.nr)]; return c === null ? null : (
                   <span key={i} className="st-fmhist" style={{ background: ratFarg(c.procent) }} title={`${rad.prov}: ${c.procent} %`}>{rad.prov}: {c.procent} %</span>
@@ -3793,15 +3845,75 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
             )}
           </details>
         </>)}
+      </StWidget>
+
+      {/* Resultat per delkapitel + svåra begrepp */}
+      <div className="st-grid2">
+        <StWidget {...W('st-led')} className="st-led" ikon="🧱" rubrik="Resultat per delkapitel" info={<InfoKnapp id="delkapitel" />}
+          under="varje förhör som led · stapelns höjd = antal frågor, fylld del = andel rätt" mini={ledMini}>
+          <div className="rad">
+            <span className="spacer" />
+            {ledElev !== null && <button className="btn sm" onClick={() => setLedElev(null)}>✕ hela klassen</button>}
+          </div>
+          {led.length === 0 ? <p className="muted small">Kräver förhör med frågedata (filimport) och rumsnamn som Biologi41, Biologi412 …</p> : (<>
+            <LedGraf tillfallen={led} hojd={320} farg={delFarger} />
+            <div className="st-legend">
+              {[...delFarger.entries()].map(([kod, c]) => <span key={kod}><i style={{ background: c }} /> {kod}</span>)}
+            </div>
+            <div className="rad" style={{ gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+              <small className="muted">Visa för:</small>
+              <button className={`chipbtn ${ledElev === null ? 'act' : ''}`} onClick={() => setLedElev(null)}>Klassen</button>
+              {sokElever(s, klassId, sok).slice(0, 40).map((e) => (
+                <button key={e.id} className={`chipbtn ${ledElev === e.id ? 'act' : ''}`} onClick={() => setLedElev(e.id)}>{e.namn}</button>
+              ))}
+            </div>
+          </>)}
+        </StWidget>
+
+        <StWidget {...W('st-fastnat')} className="st-fastnat" ikon="📌" rubrik="Svåra begrepp" info={<InfoKnapp id="fastnat" />}
+          under="fel minst två gånger · försvinner när eleven svarat rätt två gånger sedan senaste felet" mini={fastnatMini}>
+          {ledElev !== null ? (
+            (() => {
+              const lista = aterkommandeFel(s, ledElev, tkFilter);
+              const namn = s.elever.find((e) => e.id === ledElev)?.namn ?? '';
+              return lista.length === 0
+                ? <p className="muted small">{namn} har inga svåra begrepp i urvalet.</p>
+                : (<div className="st-scroll" style={{ maxHeight: 320 }}>
+                  <table className="tbl st-tabell"><thead><tr><th>Begrepp ({namn})</th><th>Del</th><th>Fel</th><th>Historik</th></tr></thead>
+                    <tbody>{lista.map((b) => (
+                      <tr key={b.fraga}>
+                        <td><div className="st-provnamn" title={b.fraga}>{b.fraga}</div></td>
+                        <td>{b.kod}</td>
+                        <td className="st-diff ned">{b.antalFel}</td>
+                        <td>{b.historik.map((h, i) => <span key={i} className={`st-tk-steg ${h.ratt ? 'upp' : 'ned'}`} title={`${h.prov} ${h.datum}`}>{h.ratt ? '✓' : '✗'}</span>)}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>);
+            })()
+          ) : klassFastnat.length === 0 ? <p className="muted small">Inga svåra begrepp för klassen i urvalet.</p> : (
+            <div className="st-scroll" style={{ maxHeight: 320 }}>
+              <table className="tbl st-tabell"><thead><tr><th>Begrepp</th><th>Del</th><th>Elever</th><th>Vilka</th></tr></thead>
+                <tbody>{klassFastnat.map((b) => (
+                  <tr key={b.fraga}>
+                    <td><div className="st-provnamn" title={b.fraga}>{b.fraga}</div></td>
+                    <td>{b.kod}</td>
+                    <td className="st-diff ned">{b.antalElever}</td>
+                    <td>{b.elever.map((e) => (
+                      <button key={e.elev.id} className="st-chip" title={`${e.elev.namn} · ${e.antalFel} fel`} onClick={() => setLedElev(e.elev.id)}>{initialer(e.elev.namn)}</button>
+                    ))}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+        </StWidget>
       </div>
 
       {/* Trendkoll: lär eller glömmer eleverna? */}
-      <div className="uppg-kort st-widget st-trendkoll">
-        <div className="rad">
-          <b>🔁 Trendkoll</b><InfoKnapp id="trendkoll" /> <small className="muted">samma fråga i två förhör (kumulativa läxförhör upprepar tidigare delkapitel) · fel→rätt = lärt, rätt→fel = glömt</small>
-          <span className="spacer" />
-          {tk.par.length > 0 && <label className="small"><input type="checkbox" checked={visaTkPar} onChange={(e) => setVisaTkPar(e.target.checked)} /> per jämförelse</label>}
-        </div>
+      <StWidget {...W('st-trendkoll')} className="st-trendkoll" ikon="🔁" rubrik="Trendkoll" info={<InfoKnapp id="trendkoll" />}
+        under="samma fråga i två förhör (kumulativa läxförhör upprepar tidigare delkapitel) · fel→rätt = lärt, rätt→fel = glömt" mini={tkMini}>
+        {tk.par.length > 0 && <div className="rad"><span className="spacer" /><label className="small"><input type="checkbox" checked={visaTkPar} onChange={(e) => setVisaTkPar(e.target.checked)} /> per jämförelse</label></div>}
         {tk.par.length === 0 ? <p className="muted small">{tk.sammanfattning}</p> : (<>
           <div className="st-tk-kpi">
             <div className="st-tk-tal lart"><b>{tk.lart}</b><span>fel → rätt</span></div>
@@ -3878,77 +3990,12 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
             </div>
           )}
         </>)}
-      </div>
+      </StWidget>
 
-      {/* Delkapitel som led + begrepp som fastnat */}
-      <div className="st-grid2">
-        <div className="uppg-kort st-widget st-led">
-          <div className="rad">
-            <b>🧱 Delkapitel i förhören</b><InfoKnapp id="delkapitel" /> <small className="muted">varje förhör som led · stapelns höjd = antal frågor, fylld del = andel rätt</small>
-            <span className="spacer" />
-            {ledElev !== null && <button className="btn sm" onClick={() => setLedElev(null)}>✕ hela klassen</button>}
-          </div>
-          {led.length === 0 ? <p className="muted small">Kräver förhör med frågedata (filimport) och rumsnamn som Biologi41, Biologi412 …</p> : (<>
-            <LedGraf tillfallen={led} hojd={320} farg={delFarger} />
-            <div className="st-legend">
-              {[...delFarger.entries()].map(([kod, c]) => <span key={kod}><i style={{ background: c }} /> {kod}</span>)}
-            </div>
-            <div className="rad" style={{ gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
-              <small className="muted">Visa för:</small>
-              <button className={`chipbtn ${ledElev === null ? 'act' : ''}`} onClick={() => setLedElev(null)}>Klassen</button>
-              {sokElever(s, klassId, sok).slice(0, 40).map((e) => (
-                <button key={e.id} className={`chipbtn ${ledElev === e.id ? 'act' : ''}`} onClick={() => setLedElev(e.id)}>{e.namn}</button>
-              ))}
-            </div>
-          </>)}
-        </div>
-
-        <div className="uppg-kort st-widget st-fastnat">
-          <b>📌 Begrepp som fastnat</b><InfoKnapp id="fastnat" /> <small className="muted">fel minst två gånger · försvinner när eleven svarat rätt två gånger sedan senaste felet</small>
-          {ledElev !== null ? (
-            (() => {
-              const lista = aterkommandeFel(s, ledElev, tkFilter);
-              const namn = s.elever.find((e) => e.id === ledElev)?.namn ?? '';
-              return lista.length === 0
-                ? <p className="muted small">{namn} har inga begrepp som fastnat i urvalet.</p>
-                : (<div className="st-scroll" style={{ maxHeight: 320 }}>
-                  <table className="tbl st-tabell"><thead><tr><th>Begrepp ({namn})</th><th>Del</th><th>Fel</th><th>Historik</th></tr></thead>
-                    <tbody>{lista.map((b) => (
-                      <tr key={b.fraga}>
-                        <td><div className="st-provnamn" title={b.fraga}>{b.fraga}</div></td>
-                        <td>{b.kod}</td>
-                        <td className="st-diff ned">{b.antalFel}</td>
-                        <td>{b.historik.map((h, i) => <span key={i} className={`st-tk-steg ${h.ratt ? 'upp' : 'ned'}`} title={`${h.prov} ${h.datum}`}>{h.ratt ? '✓' : '✗'}</span>)}</td>
-                      </tr>
-                    ))}</tbody>
-                  </table>
-                </div>);
-            })()
-          ) : klassFastnat.length === 0 ? <p className="muted small">Inga begrepp som fastnat för klassen i urvalet.</p> : (
-            <div className="st-scroll" style={{ maxHeight: 320 }}>
-              <table className="tbl st-tabell"><thead><tr><th>Begrepp</th><th>Del</th><th>Elever</th><th>Vilka</th></tr></thead>
-                <tbody>{klassFastnat.map((b) => (
-                  <tr key={b.fraga}>
-                    <td><div className="st-provnamn" title={b.fraga}>{b.fraga}</div></td>
-                    <td>{b.kod}</td>
-                    <td className="st-diff ned">{b.antalElever}</td>
-                    <td>{b.elever.map((e) => (
-                      <button key={e.elev.id} className="st-chip" title={`${e.elev.namn} · ${e.antalFel} fel`} onClick={() => setLedElev(e.elev.id)}>{initialer(e.elev.namn)}</button>
-                    ))}</td>
-                  </tr>
-                ))}</tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <details className={`st-fall${lyst === 'st-sekt-lekt' ? ' lyst' : ''}`} id="st-sekt-lekt" open={oppnaSekt.has('lekt')} onToggle={(e) => vaxlaSekt('lekt', (e.target as HTMLDetailsElement).open)}>
-        <summary><b>🎯 Lektionstest</b><InfoKnapp id="lektionstest" /> <small className="muted">läxförhör och exit ticket från samma lektion · Δ = exit − läxförhör räknas per lektion och medelvärdet tas sedan (bara lektioner med båda testerna), så det kan skilja sig från skillnaden mellan totalsnitten</small></summary>
       {/* Lektionstest: läxförhör vs exit ticket per lektion */}
-      <div className="uppg-kort st-widget st-lektionstest">
+      <StWidget {...W('st-sekt-lekt')} className="st-lektionstest" ikon="🎯" rubrik="Lektionstest" info={<InfoKnapp id="lektionstest" />}
+        under={<>läxförhör och exit ticket från samma lektion hålls isär · <b>Δ</b> = exit − läxförhör i procentenheter, räknat per lektion och sedan som medelvärde (bara lektioner med båda testerna)</>} mini={lektMini}>
         <div className="rad">
-          <b>🎯 Lektionstest</b> <small className="muted">läxförhöret i början (aggregerande) och exit ticket i slutet hålls isär · <b>Δ</b> = exit − läxförhör i procentenheter</small>
           <span className="spacer" />
           <label className="small"><input type="checkbox" checked={visaElevDiff} onChange={(e) => setVisaElevDiff(e.target.checked)} /> per elev</label>
         </div>
@@ -4002,16 +4049,14 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
             </table>
           </div>
         )}
-      </div>
+      </StWidget>
 
-      </details>
-
-      <details className={`st-fall${lyst === 'st-sekt-narv' ? ' lyst' : ''}`} id="st-sekt-narv" open={oppnaSekt.has('narv')} onToggle={(e) => vaxlaSekt('narv', (e.target as HTMLDetailsElement).open)}>
-        <summary><b>🙋 Närvaro & tid på dagen</b><InfoKnapp id="narvaro" /> <small className="muted">härledd ur Socrative-svaren</small></summary>
       {/* Närvaro & tid på dagen */}
+      <StWidget {...W('st-sekt-narv')} className="st-narvaro-w" ikon="🙋" rubrik="Närvaro & tid på dagen" info={<InfoKnapp id="narvaro" />}
+        under="härledd ur Socrative-svaren · närvaro = svarat på läxförhör eller exit ticket den lektionen" mini={narvMini}>
       <div className="st-grid2">
         <div className="uppg-kort st-widget st-narvaro">
-          <div className="rad"><b>Närvaro & tid på dagen</b> <small className="muted">närvaro = svarat på läxförhör eller exit ticket den lektionen</small><span className="spacer" /><ZoomKnappar z={zNarv} /></div>
+          <div className="rad"><span className="spacer" /><ZoomKnappar z={zNarv} /></div>
           {narvaro.antalLektioner === 0 ? <p className="muted small">Inga lektioner med Socrative-resultat i urvalet.</p> : (
             <div className="st-narvaro-grid">
               <div>
@@ -4067,12 +4112,11 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
           </div>
         </div>
       </div>
+      </StWidget>
 
-      </details>
-
-      <details className={`st-fall${lyst === 'st-sekt-jamf' ? ' lyst' : ''}`} id="st-sekt-jamf" open={oppnaSekt.has('jamf')} onToggle={(e) => vaxlaSekt('jamf', (e.target as HTMLDetailsElement).open)}>
-        <summary><b>📈 Läxförhör vs Exit tickets & trendkluster</b><InfoKnapp id="trendkluster" /> <small className="muted">veckokurvor, kluster, normerad graf</small></summary>
       {/* Jämförelse + kluster */}
+      <StWidget {...W('st-sekt-jamf')} className="st-jamf" ikon="📊" rubrik="Läxförhör vs Exit tickets & trendkluster" info={<InfoKnapp id="trendkluster" />}
+        under="veckokurvor, kluster, normerad graf · klicka på ett kluster för att filtrera hela sidan på dess elever" mini={jamfMini}>
       <div className="st-grid2">
         <div className="uppg-kort st-widget">
           <div className="rad"><b>Läxförhör vs Exit tickets</b> <small className="muted">snitt per vecka · streckad = klassmedel</small><span className="spacer" /><ZoomKnappar z={zVecko} /></div>
@@ -4097,23 +4141,28 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
         </div>
 
         <div className="uppg-kort st-widget">
-          <b>Trendkluster</b> <small className="muted">elever som trendar tillsammans · baserat på alla tillfällen i urvalet</small>
+          <b>Trendkluster</b> <small className="muted">elever som trendar tillsammans · hela klassen, alla tillfällen i urvalet · klicka på ett kluster för att välja dess elever i elevfiltret</small>
           <div className="st-klusterrad">
-            {kluster.map((g) => (
-              <div key={g.kluster} className={`st-klusterkort ${g.kluster}${g.elever.length > 0 ? ' klickbar' : ''}`} role={g.elever.length > 0 ? 'button' : undefined}
-                tabIndex={g.elever.length > 0 ? 0 : undefined} title={g.elever.length > 0 ? 'Öppna gruppens graf' : undefined}
-                onClick={() => { if (g.elever.length > 0) fokuseraGrupp(g.elever.map((e) => e.id), KLUSTER_NAMN[g.kluster]); }}
-                onKeyDown={(ev) => { if ((ev.key === 'Enter' || ev.key === ' ') && g.elever.length > 0) { ev.preventDefault(); fokuseraGrupp(g.elever.map((e) => e.id), KLUSTER_NAMN[g.kluster]); } }}>
+            {urvalBas.kluster.map((g) => {
+              const valt = urvalVal.typ === 'kluster' && urvalVal.kluster.includes(g.kluster);
+              const valjKluster = () => setUrvalVal(valt ? { typ: 'alla' } : { typ: 'kluster', kluster: [g.kluster] });
+              return (
+              <div key={g.kluster} className={`st-klusterkort ${g.kluster}${g.elever.length > 0 ? ' klickbar' : ''}${valt ? ' valt' : ''}`} role={g.elever.length > 0 ? 'button' : undefined}
+                aria-pressed={g.elever.length > 0 ? valt : undefined}
+                tabIndex={g.elever.length > 0 ? 0 : undefined} title={g.elever.length > 0 ? (valt ? 'Visa alla elever igen' : 'Filtrera hela sidan på klustrets elever') : undefined}
+                onClick={() => { if (g.elever.length > 0) valjKluster(); }}
+                onKeyDown={(ev) => { if ((ev.key === 'Enter' || ev.key === ' ') && g.elever.length > 0) { ev.preventDefault(); valjKluster(); } }}>
                 <div className="rad">
                   <button className="linkbtn st-klusterknapp" disabled={g.elever.length === 0} title="Visa hela gruppen i fokusvyn"
                     onClick={(ev) => { ev.stopPropagation(); fokuseraGrupp(g.elever.map((e) => e.id), KLUSTER_NAMN[g.kluster]); }}><b>{KLUSTER_NAMN[g.kluster]}</b></button>
-                  <span className="spacer" /><small>{g.elever.length} elever</small></div>
+                  <span className="spacer" /><small>{g.elever.length} elever{valt ? ' · 👥 valda' : ''}</small></div>
                 <Sparkline serie={g.serie} farg={KLUSTER_FARG[g.kluster]} krav={null} />
                 <div className="st-chips">{g.elever.map((e) => (
                   <button key={e.id} className="st-chip" title={e.namn} onClick={(ev) => { ev.stopPropagation(); setElevId(e.id); }}>{initialer(e.namn)}</button>
                 ))}</div>
               </div>
-            ))}
+              );
+            })}
           </div>
           {/* Klustrens kurvor relativt klassens snitt — på-knappar aktiverar linje + tonade band i klustrets färg */}
           <div className="rad st-klusterfilter">
@@ -4145,13 +4194,11 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
           </details>
         </div>
       </div>
-
-      </details>
+      </StWidget>
 
       {/* Klassens utveckling */}
-      <div className={`uppg-kort${lyst === 'st-kurva' ? ' lyst' : ''}`} id="st-kurva">
+      <StWidget {...W('st-kurva')} className="st-kurva-w" ikon="📈" rubrik={`${klassNamn} över tid`} under="snitt per provtillfälle · klicka på en punkt för provets elevlista" mini={kurvaMini}>
         <div className="rad">
-          <b>📈 {klassNamn} över tid</b> <small className="muted">snitt per provtillfälle · klicka på en punkt för provets elevlista</small>
           <span className="spacer" />
           <FilterKnapp pa={klassLage === 'normerad'} onClick={() => setKlassLage('normerad')} title="Snittet = 100, band om 3 procentenheter till ±30">Normerad</FilterKnapp>
           <FilterKnapp pa={klassLage === 'spridning'} onClick={() => setKlassLage('spridning')} title="Elevpunkter som bleknar med avståndet till snittet">Spridning</FilterKnapp>
@@ -4180,12 +4227,11 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
           z={zKlass}
         />
         )}
-      </div>
+      </StWidget>
 
       {/* Grupper + samband */}
       <div className="st-grid2 smal">
-        <div className="uppg-kort st-widget">
-          <b>Grupp A vs B</b><InfoKnapp id="grupper" /> <small className="muted">snitt per källa</small>
+        <StWidget {...W('st-grupper')} className="st-grupper-w" ikon="🧪" rubrik="Grupp A vs B" info={<InfoKnapp id="grupper" />} under="snitt per källa" mini={gruppMini}>
           <table className="tbl st-grupper">
             <thead><tr><th>Källa</th><th>Grupp A <small className="muted">({grupper[0].antalElever})</small></th><th>Grupp B <small className="muted">({grupper[1].antalElever})</small></th></tr></thead>
             <tbody>{(['socrative-laxforhor', 'socrative-exit', 'magma', 'digiexam', 'helhet'] as KortKalla[]).filter((k) => k === 'helhet' || kallor === undefined || kallor.includes(k)).map((k) => (
@@ -4196,22 +4242,21 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
               </tr>
             ))}</tbody>
           </table>
-        </div>
+        </StWidget>
 
-        <div className="uppg-kort st-widget">
-          <b>Sambandsanalys</b><InfoKnapp id="samband" /> <small className="muted">korrelation (Pearson r) mellan elevernas snitt i två källor</small>
+        <StWidget {...W('st-samband')} className="st-samband-w" ikon="🔗" rubrik="Sambandsanalys" info={<InfoKnapp id="samband" />} under="korrelation (Pearson r) mellan elevernas snitt i två källor" mini={sambandMini}>
           {samband.length === 0 && narvaroSamband === null ? <p className="muted small">Kräver minst tre elever med resultat i båda källorna.</p> : (
             <table className="tbl st-samband"><tbody>{[...samband, ...(narvaroSamband !== null ? [{ a: 'narvaro', b: 'helhet', r: narvaroSamband.r, n: narvaroSamband.n, text: 'Närvaro ↔ helhetsresultat' }] : [])].map((sb) => (
               <tr key={`${sb.a}|${sb.b}`}><td>{sb.text} <small className="muted">({sb.n} elever)</small></td>
                 <td className={`st-r ${sb.r >= 0.3 ? 'pos' : sb.r <= -0.3 ? 'neg' : ''}`}>{sb.r > 0 ? '+' : ''}{sb.r.toFixed(2)} {sb.r >= 0.3 ? '↑' : sb.r <= -0.3 ? '↓' : '→'}</td></tr>
             ))}</tbody></table>
           )}
-        </div>
+        </StWidget>
       </div>
 
       {/* Elev × prov */}
-      <div className="uppg-kort">
-        <b>🧑‍🎓 Elev × provtillfälle</b><InfoKnapp id="elevProv" /> <small className="muted">färg = mot kravet (grönt klarat, orange nära, rött under) · klicka på en elev för elevvyn</small>
+      <StWidget {...W('st-elevprov')} className="st-elevprov" ikon="🧑‍🎓" rubrik="Elev × provtillfälle" info={<InfoKnapp id="elevProv" />}
+        under="färg = mot kravet (grönt klarat, orange nära, rött under) · klicka på en elev för elevvyn" mini={elevprovMini}>
         {matris.tillfallen.length === 0 ? <p className="muted small">Inga provtillfällen i urvalet.</p> : (
           <div className="st-scroll">
             <table className="tbl st-matris">
@@ -4237,7 +4282,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
             </table>
           </div>
         )}
-      </div>
+      </StWidget>
 
       {/* Sittplatser */}
       <SittplatsWidget s={s} f={f} klassId={klassId} klassNamn={klassNamn} kor={kor} onElev={(id) => setElevId(id)} />

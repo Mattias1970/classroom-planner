@@ -6,6 +6,7 @@ export * from './domain/struktur.js';
 export * from './domain/sparat.js';
 export * from './domain/lektionsregler.js';
 export * from './domain/planeringsmall.js';
+export * from './domain/elevurval.js';
 export * from './domain/lektionskort.js';
 export * from './domain/amnen.js';
 export * from './domain/oversikt.js';

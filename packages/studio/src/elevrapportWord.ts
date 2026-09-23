@@ -309,7 +309,7 @@ export async function elevrapportDocx(a: Elevanalys): Promise<Blob> {
   }
   const lb = await ledBild(a);
   if (lb !== null) {
-    barn.push(new Paragraph({ children: [new TextRun({ text: 'Delkapitel i förhören', bold: true })] }));
+    barn.push(new Paragraph({ children: [new TextRun({ text: 'Resultat per delkapitel', bold: true })] }));
     barn.push(forklaringRad('delkapitel'));
     barn.push(bild(lb, 560, 217));
     barn.push(tom());

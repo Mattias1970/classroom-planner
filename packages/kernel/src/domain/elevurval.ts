@@ -1,0 +1,69 @@
+/**
+ * Del 141 · Elevurval — ett gemensamt elevfilter för hela SuperTeach-dashboarden.
+ *
+ * Läraren väljer elever på tre sätt: via trendkluster ("alla i riskzon"), via
+ * närvaro ("under 80 %") eller genom att bocka i elever. Urvalet ger en lista
+ * elev-id:n som sedan begränsar strukturen (`begransaTillElever`) så att ALLA
+ * grafer — kort, frågematris, trendkoll, kluster, närvaro — räknas på samma
+ * elever utan att någon kernel-funktion behöver känna till filtret.
+ */
+import type { Elev, Struktur } from './typer.js';
+import { KLUSTER_NAMN, type Kluster, type KlusterGrupp, type ElevNarvaro } from './dashboard.js';
+
+export type NarvaroRiktning = 'under' | 'over';
+
+export type ElevUrvalVal =
+  | { typ: 'alla' }
+  | { typ: 'kluster'; kluster: Kluster[] }
+  | { typ: 'narvaro'; grans: number; riktning: NarvaroRiktning }
+  | { typ: 'elever'; elevIds: string[]; etikett?: string };
+
+export interface ElevUrval {
+  /** null = alla elever (inget filter). */
+  elevIds: string[] | null;
+  /** Kort beskrivning för filterchippen: 'Riskzon', 'närvaro under 80 %', '4 elever'. */
+  etikett: string;
+}
+
+/** Räknar ut vilka elever ett val pekar ut. Kluster och närvaro ska komma från den OFILTRERADE klassen. */
+export function elevUrval(val: ElevUrvalVal, kluster: KlusterGrupp[], narvaro: ElevNarvaro[]): ElevUrval {
+  switch (val.typ) {
+    case 'alla':
+      return { elevIds: null, etikett: 'alla elever' };
+    case 'kluster': {
+      const valda = kluster.filter((g) => val.kluster.includes(g.kluster));
+      const ids = [...new Set(valda.flatMap((g) => g.elever.map((e) => e.id)))];
+      return { elevIds: ids, etikett: valda.map((g) => KLUSTER_NAMN[g.kluster]).join(' + ') || 'inget kluster' };
+    }
+    case 'narvaro': {
+      const grans = Math.max(0, Math.min(100, Math.round(val.grans)));
+      const ids = narvaro
+        .filter((n) => n.narvaroProcent !== null && (val.riktning === 'under' ? n.narvaroProcent < grans : n.narvaroProcent >= grans))
+        .map((n) => n.elev.id);
+      return { elevIds: ids, etikett: `närvaro ${val.riktning === 'under' ? 'under' : 'minst'} ${grans} %` };
+    }
+    case 'elever': {
+      const ids = [...new Set(val.elevIds)];
+      return { elevIds: ids, etikett: val.etikett ?? `${ids.length} elev${ids.length === 1 ? '' : 'er'}` };
+    }
+  }
+}
+
+/**
+ * Strukturen begränsad till de valda eleverna: elever och deras resultat.
+ * Allt annat (böcker, planeringar, filregister) lämnas orört. null = ingen ändring.
+ */
+export function begransaTillElever(s: Struktur, elevIds: string[] | null): Struktur {
+  if (elevIds === null) return s;
+  const valda = new Set(elevIds);
+  return {
+    ...s,
+    elever: s.elever.filter((e) => valda.has(e.id)),
+    ...(s.resultat !== undefined ? { resultat: s.resultat.filter((r) => valda.has(r.elevId)) } : {}),
+  };
+}
+
+/** Elever i klassen sorterade på namn — grunden för bocklistan i filtret. */
+export function klassensElever(s: Struktur, klassId: string): Elev[] {
+  return s.elever.filter((e) => e.klassId === klassId).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
+}

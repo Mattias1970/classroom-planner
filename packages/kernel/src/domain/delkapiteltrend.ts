@@ -316,6 +316,8 @@ export interface FragaRad {
   celler: Array<FragaCell | null>;
   /** Per elev: true/false/null (obesvarad). Sätts bara när elevId angetts. */
   elevCeller?: Array<boolean | null>;
+  /** Elevens svarstext per fråga (null = obesvarad). Sätts bara när elevId angetts. */
+  elevSvar?: Array<string | null>;
 }
 
 export interface Fragematris {
@@ -361,6 +363,7 @@ export function fragematris(s: Struktur, f: DelkapitelFilter): Fragematris {
   const rader: FragaRad[] = tillfallen.map((t) => {
     const celler: Array<FragaCell | null> = fragor.map(() => null);
     const elevCeller: Array<boolean | null> = fragor.map(() => null);
+    const elevSvar: Array<string | null> = fragor.map(() => null);
     for (const r of t.resultat) {
       for (const sv of r.svar ?? []) {
         const i = index.get(fragenyckel(sv.fraga));
@@ -369,7 +372,7 @@ export function fragematris(s: Struktur, f: DelkapitelFilter): Fragematris {
         if (sv.ratt !== null) { cell.bedomda += 1; if (sv.ratt) cell.ratt += 1; }
         cell.procent = cell.bedomda === 0 ? null : Math.round((cell.ratt / cell.bedomda) * 100);
         celler[i] = cell;
-        if (f.elevId !== undefined && r.elevId === f.elevId) elevCeller[i] = sv.ratt;
+        if (f.elevId !== undefined && r.elevId === f.elevId) { elevCeller[i] = sv.ratt; elevSvar[i] = sv.svar.trim() === '' ? null : sv.svar; }
       }
     }
     // Testnamnet byggs av de delkapitel provet faktiskt innehåller: 4.1 + 4.2 → test412
@@ -377,7 +380,7 @@ export function fragematris(s: Struktur, f: DelkapitelFilter): Fragematris {
     return {
       nyckel: t.nyckel, prov: t.prov, datum: t.datum, ...(t.tid !== undefined ? { tid: t.tid } : {}),
       kalla: t.kalla, ...(t.rum !== undefined ? { rum: t.rum } : {}),
-      test: testEtikett(koder), celler, ...(f.elevId !== undefined ? { elevCeller } : {}),
+      test: testEtikett(koder), celler, ...(f.elevId !== undefined ? { elevCeller, elevSvar } : {}),
     };
   });
   const grupper: Fragematris['grupper'] = [];

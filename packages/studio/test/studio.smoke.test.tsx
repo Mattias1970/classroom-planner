@@ -1525,7 +1525,7 @@ describe('📊 SuperTeach', () => {
 
     // Delkapitel som led + begrepp som fastnat: kräver frågedata, förklaras annars
     expect(host.querySelector('.st-led')!.textContent).toContain('rumsnamn som Biologi41');
-    expect(host.querySelector('.st-fastnat')!.textContent).toContain('Inga begrepp som fastnat');
+    expect(host.querySelector('.st-fastnat')!.textContent).toContain('Inga svåra begrepp');
 
     const fmKort = host.querySelector('.st-fragematris')!;
     expect(fmKort.textContent).toContain('Kräver förhör med frågedata');
@@ -2769,5 +2769,155 @@ describe('Del 130: tillfällen utan svar per fråga förklaras i frågematrisen;
     const rader = [...filer.querySelectorAll('tbody tr')].map((tr) => tr.textContent ?? '');
     expect(rader.find((r) => r.includes('2026-09-17'))).toContain('✗ saknas');
     expect(rader.find((r) => r.includes('2026-09-18'))).toContain('✓ 2 frågor');
+  });
+});
+
+describe('Del 141: elevfilter för hela dashboarden, fällbara widgets, fråga + svar, Svåra begrepp', () => {
+  async function fixtur() {
+    const { importeraResultat, registreraFil, laggTillSkolar, laggTillTjanst, laggTillKlass, laggTillAmne, laggTillElev, tomStruktur } = await import('@planner/kernel');
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', schema: [{ dag: 5, start: '08:10', slut: '09:10' }] });
+    s = laggTillElev(s, { id: 'e1', klassId: 'k', namn: 'Anna Testsson', grupp: 'A' });
+    s = laggTillElev(s, { id: 'e2', klassId: 'k', namn: 'Omar Provlund', grupp: 'B' });
+    s = laggTillElev(s, { id: 'e3', klassId: 'k', namn: 'Pia Övnegård', grupp: 'B' });
+    const svar = (a: boolean, b: boolean) => [{ fraga: 'Cellens chef?', svar: a ? 'D. • cellkärna' : 'A. • cellteorin', ratt: a, facit: 'D. • cellkärna' }, { fraga: 'Cellens hud?', svar: b ? 'C. • cellmembran' : 'B. • cellandning', ratt: b, facit: 'C. • cellmembran' }];
+    // Tre läxförhör: Anna stark, Omar svag (riskzon), Pia borta två gånger (närvaro 33 %)
+    let nr = 0;
+    const prov = (datum: string, rader: Array<{ namn: string; a: boolean; b: boolean }>) => {
+      nr += 1;
+      s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-laxforhor', prov: `Läxförhör ${nr}`, datum, tid: '08:32', rum: 'BIOLOGI8BB',
+        rader: rader.map((r) => ({ namn: r.namn, poang: (r.a ? 1 : 0) + (r.b ? 1 : 0), maxPoang: 2, svar: svar(r.a, r.b) })) }).s;
+      s = registreraFil(s, { amneId: 'bi', filnamn: `lax-${datum}.xlsx`, importerad: '2026-09-20T10:00:00Z', kalla: 'socrative-laxforhor', prov: `Läxförhör ${nr}`, datum, traffar: rader.length, rum: 'BIOLOGI8BB' });
+    };
+    prov('2026-09-04', [{ namn: 'Anna Testsson', a: true, b: true }, { namn: 'Omar Provlund', a: false, b: false }, { namn: 'Pia Övnegård', a: true, b: true }]);
+    prov('2026-09-14', [{ namn: 'Anna Testsson', a: true, b: true }, { namn: 'Omar Provlund', a: true, b: false }]);
+    prov('2026-09-25', [{ namn: 'Anna Testsson', a: true, b: true }, { namn: 'Omar Provlund', a: false, b: false }]);
+    window.localStorage.setItem('classroom-planner.studio.v2', JSON.stringify(s));
+    localStorage.setItem('st.kallor', JSON.stringify(['socrative-laxforhor', 'socrative-exit']));
+    const host = render();
+    act(() => { knapp(host, '📊 SuperTeach').click(); });
+    valj(select(host, 'SuperTeach ämne'), 'bi');
+    return host;
+  }
+
+  it('elevfiltret ligger i filterraden, kluster/närvaro/bocklista väljer elever och alla grafer följer urvalet', async () => {
+    const host = await fixtur();
+    const filter = host.querySelector('.st-elevfilter')!;
+    expect(filter.querySelector('summary')!.textContent).toContain('Alla elever');
+    expect(filter.querySelector('summary')!.textContent).toContain('(3)');
+    // Frågematris och Elev × prov visar tre elever
+    expect(host.querySelector('.st-elevprov .st-matris tbody')!.querySelectorAll('tr')).toHaveLength(3);
+
+    // Trendkluster → Riskzon väljer Omar (snitt 33 % < 90 %)
+    const klusterChip = (t: string) => [...filter.querySelectorAll<HTMLButtonElement>('.st-klusterchip')].find((b) => b.textContent?.includes(t))!;
+    expect(klusterChip('Riskzon').textContent).toContain('1');
+    act(() => { klusterChip('Riskzon').click(); });
+    expect(filter.querySelector('summary')!.textContent).toContain('1 av 3 elever · Riskzon');
+    expect(host.querySelector('.st-urvalsrad')!.textContent).toContain('Alla grafer visar 1 av 3 elever');
+    expect(host.querySelector('.st-elevprov .st-matris tbody')!.querySelectorAll('tr')).toHaveLength(1);
+    expect(host.querySelector('.st-elevprov .st-matris tbody')!.textContent).toContain('Omar Provlund');
+    expect(host.querySelector('.st-narvarolista')!.textContent).not.toContain('Anna Testsson');
+    expect(host.querySelector('.st-narvarolista')!.textContent).toContain('Omar Provlund');
+    // Trendkoll räknas på urvalet: bara Omar i tabellen
+    expect(host.querySelector('.st-trendkoll')!.textContent).toContain('Omar Provlund');
+    expect(host.querySelector('.st-trendkoll')!.textContent).not.toContain('Anna Testsson');
+    // Frågematrisens celler: 0 % rätt på fråga 1 första förhöret (bara Omar räknas)
+    const forstaRad = host.querySelector('.st-fmtabell tbody tr')!;
+    expect(forstaRad.querySelector('.st-fmruta')!.getAttribute('title')).toContain('0 % rätt (0/1)');
+
+    // Klusterkortet i widgeten är markerat, ett klick till släpper filtret
+    const riskKort = host.querySelector('.st-klusterkort.riskzon')!;
+    expect(riskKort.classList.contains('valt')).toBe(true);
+    act(() => { (riskKort as HTMLElement).click(); });
+    expect(filter.querySelector('summary')!.textContent).toContain('Alla elever');
+
+    // Närvaro ⬇ under 80 % → Pia (33 %)
+    act(() => { knapp(host, '⬇ välj elever med närvaro under 80 %').click(); });
+    expect(filter.querySelector('summary')!.textContent).toContain('1 av 3 elever · närvaro under 80 %');
+    expect(host.querySelector('.st-elevprov .st-matris tbody')!.textContent).toContain('Pia Övnegård');
+    valj(select(host, 'Närvaro under eller minst'), 'over');
+    expect(filter.querySelector('summary')!.textContent).toContain('2 av 3 elever · närvaro minst 80 %');
+
+    // Bocklistan: kryssa i Pia igen → egen lista med 3 elever; ✕ visar alla
+    const kryss = (n: string) => filter.querySelector(`input[aria-label="Elev ${n}"]`) as HTMLInputElement;
+    expect(kryss('Pia Övnegård').checked).toBe(false);
+    act(() => { kryss('Pia Övnegård').click(); });
+    expect(filter.querySelector('summary')!.textContent).toContain('3 av 3 elever · 3 elever');
+    act(() => { (filter.querySelector('button[aria-label="Visa alla elever"]') as HTMLButtonElement).click(); });
+    expect(filter.querySelector('summary')!.textContent).toContain('Alla elever');
+    expect(host.querySelector('.st-urvalsrad')).toBeNull();
+  });
+
+  it('alla rutor är fällbara widgets med miniatyr; ordningen är frågematris → resultat per delkapitel/svåra begrepp → trendkoll; klick på en ruta visar fråga och rätt svar', async () => {
+    const host = await fixtur();
+    const stVy = host.querySelector('.superteach')!;
+    const pos = (sel: string) => [...stVy.querySelectorAll('*')].findIndex((el) => el.matches(sel));
+    expect(pos('.st-fragematris')).toBeLessThan(pos('.st-led'));
+    expect(pos('.st-led')).toBeLessThan(pos('.st-fastnat'));
+    expect(pos('.st-fastnat')).toBeLessThan(pos('.st-trendkoll'));
+    // Rubrikerna
+    const rubriker = [...stVy.querySelectorAll('details.st-widget > summary > b')].map((b) => b.textContent ?? '');
+    expect(rubriker.some((r) => r.includes('Resultat per delkapitel'))).toBe(true);
+    expect(rubriker.some((r) => r.includes('Svåra begrepp'))).toBe(true);
+    expect(stVy.textContent).not.toContain('Begrepp som fastnat');
+    expect(stVy.textContent).not.toContain('Delkapitel i förhören');
+    // Öppna från start: frågematris, resultat per delkapitel, svåra begrepp — övriga hopfällda med miniatyr
+    const w = (id: string) => host.querySelector(`#${id}`) as HTMLDetailsElement;
+    expect(w('st-fragematris').open).toBe(true);
+    expect(w('st-led').open).toBe(true);
+    expect(w('st-trendkoll').open).toBe(false);
+    expect(w('st-trendkoll').querySelector('summary .st-mini')!.textContent).toContain('netto');
+    expect(w('st-sekt-narv').querySelector('summary .st-mini svg.st-spark')).not.toBeNull();
+    expect(w('st-fragematris').querySelector('summary .st-mini .st-mini-remsa i')).not.toBeNull();
+    // Fälla ut sparas per webbläsare (jsdom köar toggle-händelsen — skicka den själv)
+    act(() => { (w('st-trendkoll').querySelector('summary') as HTMLElement).click(); w('st-trendkoll').dispatchEvent(new Event('toggle')); });
+    expect(w('st-trendkoll').open).toBe(true);
+    expect(JSON.parse(localStorage.getItem('classroom-planner.studio.st-widgets')!)).toEqual({ 'st-trendkoll': true });
+    // ℹ i rubriken öppnar förklaringen utan att fälla ihop rutan
+    act(() => { (w('st-fragematris').querySelector('summary button[aria-label^="Vad betyder"]') as HTMLButtonElement).click(); });
+    expect(host.querySelector('.st-info-popup')).not.toBeNull();
+    expect(w('st-fragematris').open).toBe(true);
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+
+    // Klick på en ruta: fråga OCH rätt svar
+    act(() => { (host.querySelector('.st-fmtabell tbody tr .st-fmruta') as HTMLElement).click(); });
+    const vald = host.querySelector('.st-fmvald')!;
+    expect(vald.textContent).toContain('Cellens chef?');
+    expect(vald.textContent).toContain('Rätt svar');
+    expect(vald.textContent).toContain('cellkärna');
+    // Med en elev vald visas elevens svar per förhör
+    act(() => { [...host.querySelectorAll<HTMLButtonElement>('.st-led .chipbtn')].find((b) => b.textContent === 'Omar Provlund')!.click(); });
+    const svar = [...host.querySelectorAll('.st-fmvald .st-fmsvar')].map((x) => x.textContent ?? '');
+    expect(svar).toHaveLength(3);
+    expect(svar[0]).toContain('cellteorin');
+    expect(svar[0]).toContain('✗');
+    expect(svar[1]).toContain('cellkärna');
+    expect(svar[1]).toContain('✓');
+  });
+
+  it('laborationsgrupper: Excel-tabell med Grupp A/Grupp B klistras in, dubbelnamn matchar, elever som saknas i listan pekas ut och kan tas bort', async () => {
+    const { laggTillSkolar, laggTillTjanst, laggTillKlass, laggTillElev, tomStruktur } = await import('@planner/kernel');
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillElev(s, { id: 'e1', klassId: 'k', namn: 'Jack Sixten Provlund', grupp: 'B' });
+    s = laggTillElev(s, { id: 'e2', klassId: 'k', namn: 'Sixten Testsson', grupp: 'A' });
+    s = laggTillElev(s, { id: 'e3', klassId: 'k', namn: 'Denys Övnegård', grupp: 'A' });
+    window.localStorage.setItem('classroom-planner.studio.v2', JSON.stringify(s));
+    const host = render();
+    act(() => { treeKnapp(host, '💼 NO').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    skrivArea(host.querySelector('textarea[aria-label="Grupplista"]') as HTMLTextAreaElement, '\tGrupp A\tGrupp B\nJack Sixten\tA\t\nSixten\t\tB\n');
+    const ruta = host.querySelector('.grupp-import')!;
+    expect(ruta.textContent).toContain('2 elever matchade');
+    expect(ruta.textContent).not.toContain('Finns inte i 8B');
+    expect(ruta.querySelector('.st-ejlistade')!.textContent).toContain('Saknas i listan (1): Denys Övnegård');
+    window.confirm = () => true;
+    act(() => { (ruta.querySelector('button[aria-label="Ta bort Denys Övnegård"]') as HTMLButtonElement).click(); });
+    expect(lasStruktur().elever.map((e) => e.id)).toEqual(['e1', 'e2']);
+    act(() => { knapp(host, '🧪 Sätt grupper').click(); });
+    expect(lasStruktur().elever.map((e) => `${e.id}:${e.grupp}`)).toEqual(['e1:A', 'e2:B']);
   });
 });

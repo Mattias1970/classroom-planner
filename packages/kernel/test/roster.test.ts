@@ -133,4 +133,17 @@ describe('Del 62: laborationsgrupper ur lista', async () => {
     expect(ut.struktur.elever.map((e) => e.grupp)).toEqual(['A', 'B', 'B']);
     expect(s.elever.map((e) => e.grupp)).toEqual(['A', 'A', 'A']); // ren funktion
   });
+
+  it('Del 141: kolumnrubriken Grupp A/Grupp B hoppas över, dubbelnamn matchar på början, ej listade elever pekas ut', () => {
+    let s = grund();
+    s = laggTillElev(s, { id: 'e1', klassId: 'k8b', namn: 'Jack Sixten Provlund', grupp: 'A' });
+    s = laggTillElev(s, { id: 'e2', klassId: 'k8b', namn: 'Sixten Testsson', grupp: 'A' });
+    s = laggTillElev(s, { id: 'e3', klassId: 'k8b', namn: 'Denys Övnegård', grupp: 'A' });
+    const rader = tolkaGruppLista('\tGrupp A\tGrupp B\nJack Sixten\tA\t\nSixten\t\tB\n');
+    expect(rader).toEqual([{ namn: 'Jack Sixten', grupp: 'A' }, { namn: 'Sixten', grupp: 'B' }]);
+    const ut = tilldelaGrupper(s, 'k8b', rader);
+    expect(ut.okanda).toEqual([]);
+    expect(ut.tilldelade.map((t) => `${t.elev.id}:${t.grupp}`)).toEqual(['e1:A', 'e2:B']);
+    expect(ut.ejListade.map((e) => e.id)).toEqual(['e3']);
+  });
 });

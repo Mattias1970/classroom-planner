@@ -155,6 +155,7 @@ export function tolkaGruppLista(text: string): GruppRad[] {
     if (m === null) continue;
     const namn = m[1].trim();
     if (namn === '' || /^(namn|elev|förnamn|fornamn)$/i.test(namn)) continue;
+    if (/^grupp\s*[ab]$/i.test(namn)) continue;   // kolumnrubriken 'Grupp A\tGrupp B'
     ut.push({ namn, grupp: m[2].toUpperCase() as Elev['grupp'] });
   }
   return ut;
@@ -168,6 +169,8 @@ export interface GruppTilldelning {
   tvetydiga: Array<{ namn: string; kandidater: Elev[] }>;
   /** Rader som inte matchar någon elev i klassen. */
   okanda: string[];
+  /** Elever i klassen som inte står med i listan — har de slutat, eller glömdes de? */
+  ejListade: Elev[];
 }
 
 function fornamnAv(namn: string): string {
@@ -193,11 +196,20 @@ export function tilldelaGrupper(s: Struktur, klassId: string, rader: GruppRad[])
       if (via.length === 1) traff = via[0];
       else if (via.length > 1) { tvetydiga.push({ namn: r.namn, kandidater: via }); continue; }
     }
+    if (traff === null) {
+      // 'Jack Sixten' → eleven vars namn börjar med de orden ('Jack Sixten Provlund'), om det är entydigt
+      const ord = r.namn.toLowerCase().replace(/,/g, ' ').split(/\s+/).filter((x) => x !== '');
+      const borjar = elever.filter((e) => { const en = e.namn.toLowerCase().split(/\s+/); return ord.length > 1 && ord.every((o, i) => en[i] === o); });
+      if (borjar.length === 1) traff = borjar[0];
+      else if (borjar.length > 1) { tvetydiga.push({ namn: r.namn, kandidater: borjar }); continue; }
+    }
     if (traff === null) { okanda.push(r.namn); continue; }
     nyGrupp.set(traff.id, r.grupp);
     tilldelade.push({ elev: traff, grupp: r.grupp, andrad: traff.grupp !== r.grupp });
   }
   const struktur = nyGrupp.size === 0 ? s
     : { ...s, elever: s.elever.map((e) => (nyGrupp.has(e.id) ? { ...e, grupp: nyGrupp.get(e.id)! } : e)) };
-  return { struktur, tilldelade, tvetydiga, okanda };
+  const namnda = new Set([...tilldelade.map((t) => t.elev.id), ...tvetydiga.flatMap((t) => t.kandidater.map((k) => k.id))]);
+  const ejListade = elever.filter((e) => !namnda.has(e.id));
+  return { struktur, tilldelade, tvetydiga, okanda, ejListade };
 }

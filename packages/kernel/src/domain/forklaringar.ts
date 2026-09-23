@@ -109,7 +109,7 @@ export const FORKLARINGAR = {
     ],
   },
   delkapitel: {
-    rubrik: 'Delkapitel i förhören',
+    rubrik: 'Resultat per delkapitel',
     kort: 'Varje förhör som staplade led: ett led per delkapitel, fylld del = andel rätt.',
     lang: [
       'Ledets höjd är antalet frågor från delkapitlet, den fyllda delen hur många som var rätt. Ett led som tunnas ut i senare förhör betyder att delkapitlet håller på att glömmas, även om helheten ser bra ut.',
@@ -126,7 +126,7 @@ export const FORKLARINGAR = {
     lang: ['Det visar ett ändrat svar. Om det håller följs upp i nästa kumulativa läxförhör, och genom att eleven förklarar begreppet med egna ord.'],
   },
   fastnat: {
-    rubrik: 'Begrepp som fastnat',
+    rubrik: 'Svåra begrepp',
     kort: 'Fel minst två gånger och ännu inte befäst med två rätt i rad.',
     lang: ['Skiljer sig från "kvar att lära": här står begrepp som brukar glida iväg även om de tillfälligt sitter. De försvinner ur listan när eleven svarat rätt två gånger efter det senaste felet.'],
   },
