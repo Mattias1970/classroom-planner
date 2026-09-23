@@ -86,3 +86,22 @@ describe('effektivaNivaer — lärarens överstyrning av uppgiftsintervall', () 
     expect(effektivaNivaer(lekt, { uppgNiva1: '  ' }).niva1).toBe('1–6');
   });
 });
+
+describe('Del 143: lärarens egna BAM-delar', async () => {
+  const { tavelTidslinje, standardBamDelar, bamAvvikelse, exitStartFor } = await import('../src/domain/lektionskort.js');
+  it('utan egna delar = standard-BAM', () => {
+    expect(tavelTidslinje(REG, '09:00', '10:00')).toEqual(bamTidslinje(REG, '09:00', '10:00'));
+    expect(standardBamDelar(REG, '09:00', '10:00').map((d) => `${d.namn} ${d.minuter}`)).toEqual(['Läxförhör 10', 'Genomgång 15', 'Arbete 25', 'Exit ticket 10']);
+  });
+  it('egna delar läggs efter varandra från passets start; 0-minutersdelar hoppas över; ikon ur namnet', () => {
+    const bam = [{ namn: 'Läxförhör', minuter: 5 }, { namn: 'Laboration', minuter: 40, text: 'sal 214' }, { namn: 'Paus', minuter: 0 }, { namn: 'Exit ticket', minuter: 10, ikon: '🎟' }];
+    const seg = tavelTidslinje(REG, '09:00', '10:00', bam);
+    expect(seg.map((x) => `${x.ikon} ${x.namn} ${x.start}–${x.slut}`)).toEqual(['📱 Läxförhör 09:00–09:05', '🧪 Laboration 09:05–09:45', '🎟 Exit ticket 09:45–09:55']);
+    expect(seg[1].text).toBe('sal 214');
+    expect(bamAvvikelse('09:00', '10:00', bam)).toBe(-5);           // 5 minuter över
+    expect(bamAvvikelse('09:00', '10:00', [{ namn: 'Arbete', minuter: 70 }])).toBe(10);
+    expect(exitStartFor(REG, '09:00', '10:00', bam)).toBe('09:45');
+    expect(exitStartFor(REG, '09:00', '10:00', [{ namn: 'Arbete', minuter: 60 }])).toBeNull();
+    expect(exitStartFor(REG, '09:00', '10:00')).toBe(exitStart(REG, '09:00', '10:00'));
+  });
+});

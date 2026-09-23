@@ -16,6 +16,7 @@ import {
   slaIhopPlaneringsmall, tolkaPlaneringsmall,
   handelserPerDatum, kalenderHandelser, klassFarg, noBudget, noOverBudget, sattLektionsplan,
   kapitelKort, manadsRutor, skolarManader, veckaRutor, viktigaDatum, bamTidslinje, begreppForLektion, bokBegrepp,
+  tavelTidslinje, standardBamDelar, bamAvvikelse, exitStartFor, type BamDel,
   bokFromValfriImport, bokSidregister, bokSidregisterCsv, elevSchema, exitStart, giltigtPass,
   kalendariumFromIcs, laggTillAmne, laggTillElev, laggTillKlass, laggTillLarare,
   laggTillSkolar, laggTillTjanst, larareSchema, normaliseraDagar, nyttId, parseKalendarium,
@@ -1682,6 +1683,65 @@ function arFargnivaer(_bok: Bok): boolean { return true; }
  * Bokens exempel), Begrepp med förklaringar, Arbete, Magma, Filmer, Läxa och
  * Exit ticket. Alla ytor redigerbara — sparas i lektionsplanen (overlay).
  */
+/** Del 143 · Byt laborationsgrupp A/B på en elev med ett klick — samma växlare i SuperTeach-fokus och Elever-vyn. */
+function GruppVaxlare({ elev, kor }: { elev: Elev; kor: (fn: () => Struktur, m: string) => void }) {
+  return (
+    <span className="grupp-vaxlare" role="group" aria-label={`Grupp för ${elev.namn}`}>
+      {(['A', 'B'] as Grupp[]).map((g) => (
+        <button key={g} type="button" className={`chipbtn${elev.grupp === g ? ' act' : ''}`} aria-pressed={elev.grupp === g}
+          title={elev.grupp === g ? `${elev.namn} är i grupp ${g}` : `Flytta ${elev.namn} till grupp ${g}`}
+          onClick={() => { if (elev.grupp !== g) kor(() => uppdateraElev(lasStruktur(), elev.id, { grupp: g }), `${elev.namn} flyttad till grupp ${g} — lektionerna följer gruppen.`); }}>{g}</button>
+      ))}
+    </span>
+  );
+}
+
+/** Del 143 · Redigera lektionens delar (BAM) med egna tider: namn, minuter, ikon, ordning. */
+const BAM_IKONER = ['📱', '🧑‍🏫', '✏️', '🎫', '📋', '📝', '🧪', '💬', '🎬', '☕', '▪'];
+function BamRedigering({ bam, standard, onSpara }: { bam: BamDel[] | undefined; standard: BamDel[]; onSpara: (bam: BamDel[] | undefined, m: string) => void }) {
+  const [oppen, setOppen] = useState(false);
+  const [delar, setDelar] = useState<BamDel[]>(bam ?? standard);
+  if (!oppen) {
+    return (
+      <div className="rad" style={{ gap: 6 }}>
+        <button className="btn sec sm" onClick={() => { setDelar(bam ?? standard); setOppen(true); }}>✏ Ändra BAM</button>
+        {bam !== undefined && <small className="muted">egna delar · <button className="linkbtn" onClick={() => onSpara(undefined, 'Lektionen följer standard-BAM igen.')}>↺ standard</button></small>}
+      </div>
+    );
+  }
+  const satt = (i: number, patch: Partial<BamDel>) => setDelar(delar.map((d, j) => (j === i ? { ...d, ...patch } : d)));
+  const flytta = (i: number, dir: -1 | 1) => { const j = i + dir; if (j < 0 || j >= delar.length) return; const n = [...delar]; [n[i], n[j]] = [n[j], n[i]]; setDelar(n); };
+  const summa = delar.reduce((a, d) => a + Math.max(0, Math.round(d.minuter)), 0);
+  return (
+    <div className="bam-red">
+      <table className="tbl small">
+        <thead><tr><th></th><th>Del</th><th>Minuter</th><th>Text på tavlan</th><th></th></tr></thead>
+        <tbody>{delar.map((d, i) => (
+          <tr key={i}>
+            <td><select aria-label={`Ikon del ${i + 1}`} value={d.ikon ?? '▪'} onChange={(e) => satt(i, { ikon: e.target.value })}>{BAM_IKONER.map((ik) => <option key={ik} value={ik}>{ik}</option>)}</select></td>
+            <td><input aria-label={`Namn del ${i + 1}`} value={d.namn} onChange={(e) => satt(i, { namn: e.target.value })} /></td>
+            <td><input aria-label={`Minuter del ${i + 1}`} type="number" min={0} step={5} value={d.minuter} style={{ width: 64 }} onChange={(e) => satt(i, { minuter: Number(e.target.value) })} /></td>
+            <td><input aria-label={`Text del ${i + 1}`} value={d.text ?? ''} placeholder="t.ex. rum, uppgifter" onChange={(e) => satt(i, { text: e.target.value })} /></td>
+            <td className="rad" style={{ gap: 2 }}>
+              <button className="icon-btn" aria-label={`Flytta upp del ${i + 1}`} disabled={i === 0} onClick={() => flytta(i, -1)}>↑</button>
+              <button className="icon-btn" aria-label={`Flytta ned del ${i + 1}`} disabled={i === delar.length - 1} onClick={() => flytta(i, 1)}>↓</button>
+              <button className="icon-btn" aria-label={`Ta bort del ${i + 1}`} onClick={() => setDelar(delar.filter((_, j) => j !== i))}>🗑</button>
+            </td>
+          </tr>
+        ))}</tbody>
+      </table>
+      <div className="rad" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <button className="btn sec sm" onClick={() => setDelar([...delar, { namn: 'Ny del', minuter: 10, ikon: '▪' }])}>➕ Ny del</button>
+        <button className="btn sec sm" onClick={() => setDelar(standard)}>↺ Standard</button>
+        <small className="muted">summa {summa} min</small>
+        <span className="spacer" />
+        <button className="btn sec sm" onClick={() => setOppen(false)}>Avbryt</button>
+        <button className="btn sm" disabled={delar.length === 0 || delar.some((d) => d.namn.trim() === '')} onClick={() => { onSpara(delar.map((d) => ({ ...d, namn: d.namn.trim(), minuter: Math.max(0, Math.round(d.minuter)) })), 'Lektionens delar sparade.'); setOppen(false); }}>💾 Spara BAM</button>
+      </div>
+    </div>
+  );
+}
+
 function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
   s: Struktur; amneId: string; plan: PlaneradLektion[]; bok: Bok; amnesNamn: string;
   kor: (fn: () => Struktur, m: string) => void; idx: number; setIdx: (i: number) => void;
@@ -1709,16 +1769,24 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
   const bas = () => hamtaLektionsplan(lasStruktur(), amneId, i) ?? { id: `lp-${amneId}-${i}`, amneId, lektionsIndex: i };
   const satt = (falt: keyof LektionsPlan, v: string) =>
     kor(() => sattLektionsplan(lasStruktur(), { ...bas(), [falt]: v }), '');
-  const oka = (t: string | null, min: number): string => {
-    if (t === null) return '';
-    const [h, m] = t.split(':').map(Number);
-    const tot = h * 60 + m + min;
-    return `${String(Math.floor(tot / 60)).padStart(2, '0')}:${String(tot % 60).padStart(2, '0')}`;
-  };
-  const exitTid = rad.start !== null && rad.slutTid !== null ? exitStart(rad.lektion, rad.start, rad.slutTid) : null;
+  const exitTid = rad.start !== null && rad.slutTid !== null ? exitStartFor(rad.lektion, rad.start, rad.slutTid, lp?.bam) : null;
   const harLax = har(rad.lektion.socStart);
-  const genomStart = harLax && rad.start !== null ? oka(rad.start, 10) : rad.start ?? '';
-  const genomSlut = genomStart !== '' ? oka(genomStart, 10) : '';
+  // Del 143: tavlans delar — lärarens egna (lp.bam) eller standard-BAM ur passets längd
+  const tavla = rad.start !== null && rad.slutTid !== null ? tavelTidslinje(rad.lektion, rad.start, rad.slutTid, lp?.bam) : [];
+  const bamAvvik = rad.start !== null && rad.slutTid !== null && lp?.bam !== undefined ? bamAvvikelse(rad.start, rad.slutTid, lp.bam) : 0;
+  const sattBam = (bam: BamDel[] | undefined, m: string) => kor(() => { const b = bas(); const { bam: _bort, ...rest } = b; return sattLektionsplan(lasStruktur(), bam === undefined ? rest as LektionsPlan : { ...b, bam }); }, m);
+  // Förifyllning i redigeringen: standard-BAM, men utan läxförhör när lektionen saknar ett — de minuterna går till genomgången
+  const bamStandard = ((): BamDel[] => {
+    const std = rad.start !== null && rad.slutTid !== null ? standardBamDelar(rad.lektion, rad.start, rad.slutTid) : [];
+    if (harLax) return std;
+    const lax = std.find((d) => /läxförhör/i.test(d.namn));
+    if (lax === undefined) return std;
+    return std.filter((d) => d !== lax).map((d) => (/genomgång/i.test(d.namn) ? { ...d, minuter: d.minuter + lax.minuter } : d));
+  })();
+  const tid = (re: RegExp) => { const x = tavla.find((y) => re.test(y.namn)); return x === undefined ? null : `${x.start}–${x.slut}`; };
+  const laxTid = tid(/läxförhör/i); const genomTid = tid(/genomgång/i); const arbeteTid = tid(/arbete/i);
+  const tavelText = (namn: string): string => /läxförhör|exit/i.test(namn) ? rum
+    : /genomgång/i.test(namn) ? '' : /arbete/i.test(namn) ? (arNo ? 'Läs + Testa dig själv' : har(eff.niva1) ? `${N.niva1} → ${N.niva2}` : `${N.niva2} → ${N.niva3}`) : '';
   const dagN = rad.datum !== null ? DAGNAMN[new Date(`${rad.datum}T00:00:00Z`).getUTCDay()] ?? '' : '';
   const kapFarg = kap?.farg ?? '#5c6b7a';
 
@@ -1760,10 +1828,11 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
           <b>{rad.start !== null ? `${rad.start} – ${rad.slutTid}` : '—'}</b>&nbsp;<span className="muted-ljus">{dagN}{rad.vecka !== null ? ` · v.${rad.vecka}` : ''}</span></div>
         {rad.start !== null && (
           <div className="ls-tider">
-            {harLax && <div className="ls-tid"><span className="ls-tid-t">{rad.start}–{genomStart}</span><b>📱 Läxförhör</b><span className="muted small">{rum}</span></div>}
-            <div className="ls-tid"><span className="ls-tid-t">{genomStart}–{genomSlut}</span><b>□ Genomgång</b><span className="muted small">10 min</span></div>
-            <div className="ls-tid"><span className="ls-tid-t">{genomSlut}–{exitTid ?? rad.slutTid}</span><b>✏ Arbete</b><span className="muted small">{arNo ? 'Läs + Testa dig själv' : har(eff.niva1) ? `${N.niva1} → ${N.niva2}` : `${N.niva2} → ${N.niva3}`}</span></div>
-            {exitTid !== null && <div className="ls-tid"><span className="ls-tid-t">{exitTid}–{rad.slutTid}</span><b>📱 Exit ticket</b><span className="muted small">{rum}</span></div>}
+            {tavla.filter((x) => harLax || !/läxförhör/i.test(x.namn) || lp?.bam !== undefined).map((x, xi) => (
+              <div key={xi} className="ls-tid"><span className="ls-tid-t">{x.start}–{x.slut}</span><b>{x.ikon} {x.namn}</b><span className="muted small">{x.text ?? tavelText(x.namn)}{x.text === undefined && tavelText(x.namn) === '' ? `${x.minuter} min` : ''}</span></div>
+            ))}
+            {bamAvvik !== 0 && <p className="status warn small">⚠ Delarna {bamAvvik > 0 ? `är ${bamAvvik} minuter längre än passet` : `lämnar ${-bamAvvik} minuter över`} ({rad.start}–{rad.slutTid}).</p>}
+            <BamRedigering bam={lp?.bam} standard={bamStandard} onSpara={sattBam} />
           </div>
         )}
         <SocrativeRumPanel s={s} rum={rum} kor={kor} />
@@ -1789,7 +1858,7 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
       {/* ── LÄXFÖRHÖR (BAM: lektionen inleds med förhöret) ── */}
       {harLax && (
         <section className="ls-sektion ls-laxforhor">
-          <div className="ls-sek-rubrik">📱 {rad.start !== null ? `${rad.start}–${genomStart} · ` : ''}LÄXFÖRHÖR</div>
+          <div className="ls-sek-rubrik">📱 {laxTid !== null ? `${laxTid} · ` : ''}LÄXFÖRHÖR</div>
           <div className="ls-soc-bar"><span className="ls-soc">Socrative.com</span><span className="ls-soc-rum">Roomname: {rum}</span><span className="ls-soc-quiz">{rad.lektion.socStart}</span></div>
           <p className="small">✅ <b>Klar med läxförhöret? Börja direkt med arbetet</b> — {arNo ? 'läs teorisidorna och sätt igång med Testa dig själv' : `${bok.nivaer.niva1}-uppgifterna`}. Ingen väntetid.</p>
         </section>
@@ -1797,7 +1866,7 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
 
       {/* ── GENOMGÅNG ── */}
       <section className="ls-sektion ls-genomgang">
-        <div className="ls-sek-rubrik">□ {rad.start !== null ? `${genomStart}–${genomSlut} · ` : ''}GENOMGÅNG</div>
+        <div className="ls-sek-rubrik">□ {genomTid !== null ? `${genomTid} · ` : ''}GENOMGÅNG</div>
         <textarea aria-label="Genomgång" rows={5} value={lp?.genomgang ?? ''}
           placeholder={har(rad.lektion.genomgang) ? rad.lektion.genomgang : 'Det du berättar under genomgången …'}
           onChange={(e) => satt('genomgang', e.target.value)} />
@@ -1835,7 +1904,7 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
 
       {/* ── ARBETE ── */}
       <section className="ls-sektion ls-arbete">
-        <div className="ls-sek-rubrik">✏ {rad.start !== null ? `${genomSlut}–${exitTid ?? rad.slutTid} · ` : ''}ARBETE</div>
+        <div className="ls-sek-rubrik">✏ {arbeteTid !== null ? `${arbeteTid} · ` : ''}ARBETE</div>
         {arNo
           ? <p className="small"><b>Kap {rad.kapitel} · {lektionsNamn(rad.lektion, lp)}</b> — läs {lp?.sidorTeori !== undefined && lp.sidorTeori !== '' ? lp.sidorTeori : rad.lektion.sidorTeori} och besvara skriftligt: <b>{har(rad.lektion.ex) ? rad.lektion.ex : 'Testa dig själv'}</b>.</p>
           : <p className="small"><b>{lektionsNamn(rad.lektion, lp)}</b> · minimum: <b>{minimum === 1 ? N.niva1 : N.niva2}</b> klar och inlämnad.</p>}
@@ -2591,8 +2660,9 @@ function Lektionskort(props: {
   const slut = rad.slutTid ?? '09:10';
   const N = bok.nivaer;
   const har = (v: string) => v !== '—' && v !== '';
-  const seg = bamTidslinje(l, start, slut);
-  const exit = exitStart(l, start, slut);
+  const lpBam = s !== undefined && amneId !== undefined && lektionsIndex !== undefined ? hamtaLektionsplan(s, amneId, lektionsIndex)?.bam : undefined;
+  const seg = tavelTidslinje(l, start, slut, lpBam);
+  const exit = exitStartFor(l, start, slut, lpBam);
   const begrepp = begreppForLektion(bok, rad.kapitel, l);
   const { minimum } = arbetsNivaer(l);
   const nivaNamn = [N.niva1, N.niva2, N.niva3] as const;
@@ -4325,7 +4395,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
             <div className="uppg-kort st-elev st-fokus" role="dialog" aria-label="Elevfokus">
               <div className="rad">
                 <b>👤 {fokusRubrik !== '' ? `${fokusRubrik} · ` : ''}{fokusElever.length === 1 ? elev.namn : `${fokusElever.length} elever`}</b>
-                {fokusElever.length === 1 && <small className="muted">Grupp {elev.grupp}{elev.socrativeId !== undefined ? ` · Socrative ${elev.socrativeId}` : ''}</small>}
+                {fokusElever.length === 1 && <small className="muted"><GruppVaxlare elev={elev} kor={kor} />{elev.socrativeId !== undefined ? ` · Socrative ${elev.socrativeId}` : ''}</small>}
                 {fokusElever.length === 1 && (() => { const n = narvaroPerElev.get(elev.id); return n !== undefined && n.narvaroProcent !== null && (
                   <span className={`st-krav ${n.narvaroProcent >= 80 ? 'ok' : 'ej'}`} title={n.franvaroDatum.length > 0 ? `Frånvaro: ${n.franvaroDatum.join(', ')}` : 'Ingen frånvaro'}>
                     🙋 närvaro {n.narvaroProcent} % ({n.narvarande}/{n.lektioner})</span>); })()}
@@ -4894,10 +4964,11 @@ function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur,
           <b>Välj elev</b> <small className="muted">klicka på en rad för att öppna rapporten</small>
           <div className="st-scroll" style={{ maxHeight: 560 }}>
             <table className="tbl st-tabell">
-              <thead><tr><th>Elev</th><th>Läxförhör</th><th>Exit</th><th>Närvaro</th><th>Fastnat</th><th>Läget</th><th></th></tr></thead>
+              <thead><tr><th>Elev</th><th>Grupp</th><th>Läxförhör</th><th>Exit</th><th>Närvaro</th><th>Svåra begrepp</th><th>Läget</th><th></th></tr></thead>
               <tbody>{rader.map((r) => (
                 <tr key={r.elev.id} className="st-rapportrad" onClick={() => setElevId(r.elev.id)}>
                   <td><button className="linkbtn">{r.elev.namn}</button></td>
+                  <td onClick={(ev) => ev.stopPropagation()}><GruppVaxlare elev={r.elev} kor={kor} /></td>
                   <td>{r.laxforhorProcent ?? '—'} %</td>
                   <td>{r.exitProcent ?? '—'} %</td>
                   <td className={r.narvaroProcent !== null && r.narvaroProcent < 80 ? 'st-narv-lag' : undefined}>{r.narvaroProcent ?? '—'} %</td>

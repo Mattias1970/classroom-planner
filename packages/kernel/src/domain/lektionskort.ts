@@ -6,7 +6,7 @@
  * (del 1: nivå 1/2 med minimum nivå 1; del 2: nivå 2/3 med minimum nivå 2).
  */
 import { delkapitelKod } from './bok.js';
-import type { Bok, Lektion } from './typer.js';
+import type { BamDel, Bok, Lektion } from './typer.js';
 
 export function tillMin(t: string): number {
   const [h, m] = t.split(':').map(Number);
@@ -64,6 +64,47 @@ export function bamTidslinje(lektion: Pick<Lektion, 'typ'>, start: string, slut:
 export function exitStart(lektion: Pick<Lektion, 'typ'>, start: string, slut: string): string | null {
   const seg = bamTidslinje(lektion, start, slut).find((x) => x.namn === 'Exit ticket');
   return seg?.start ?? null;
+}
+
+/** Ett segment på tavlan: som BamSegment men med fritt namn (lärarens egna delar). */
+export interface TavelSegment { namn: string; ikon: string; start: string; slut: string; minuter: number; text?: string }
+
+const BAM_IKON: Record<string, string> = { 'Läxförhör': '📱', 'Genomgång': '🧑‍🏫', 'Arbete': '✏️', 'Exit ticket': '🎫', 'Instruktion': '📋', 'Prov': '📝', 'Laboration': '🧪', 'Diskussion': '💬', 'Film': '🎬', 'Paus': '☕' };
+
+/** Standard-BAM som redigerbara delar — utgångspunkten när läraren trycker "Ändra BAM". */
+export function standardBamDelar(lektion: Pick<Lektion, 'typ'>, start: string, slut: string): BamDel[] {
+  return bamTidslinje(lektion, start, slut).map((x) => ({ namn: x.namn, minuter: x.minuter, ikon: x.ikon }));
+}
+
+/**
+ * Del 143 · Tavlans tidslinje: lärarens egna delar (lp.bam) lagda efter varandra från
+ * passets start, annars standard-BAM. Delar med 0 minuter hoppas över. Summan kan
+ * skilja sig från passets längd — se `bamAvvikelse`.
+ */
+export function tavelTidslinje(lektion: Pick<Lektion, 'typ'>, start: string, slut: string, bam?: BamDel[]): TavelSegment[] {
+  if (bam === undefined) return bamTidslinje(lektion, start, slut).map((x) => ({ ...x }));
+  const ut: TavelSegment[] = [];
+  let t = tillMin(start);
+  for (const d of bam) {
+    const min = Math.max(0, Math.round(d.minuter));
+    if (min === 0) continue;
+    ut.push({ namn: d.namn, ikon: d.ikon ?? BAM_IKON[d.namn] ?? '▪', start: tillKlockslag(t), slut: tillKlockslag(t + min), minuter: min, ...(d.text !== undefined && d.text !== '' ? { text: d.text } : {}) });
+    t += min;
+  }
+  return ut;
+}
+
+/** Minuter som delarna avviker från passets längd: 0 = stämmer, >0 = för långt, <0 = tid över. */
+export function bamAvvikelse(start: string, slut: string, bam: BamDel[]): number {
+  const summa = bam.reduce((a, d) => a + Math.max(0, Math.round(d.minuter)), 0);
+  return summa - Math.max(0, tillMin(slut) - tillMin(start));
+}
+
+/** Exit ticketens start med hänsyn till lärarens BAM (delen som heter Exit ticket, annars sista delen). */
+export function exitStartFor(lektion: Pick<Lektion, 'typ'>, start: string, slut: string, bam?: BamDel[]): string | null {
+  if (bam === undefined) return exitStart(lektion, start, slut);
+  const seg = tavelTidslinje(lektion, start, slut, bam);
+  return (seg.find((x) => /exit/i.test(x.namn)) ?? null)?.start ?? null;
 }
 
 /** Tavelrubriken högst upp: 'Ma 09:00–10:00'. */

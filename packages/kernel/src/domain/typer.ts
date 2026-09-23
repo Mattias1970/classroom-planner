@@ -281,11 +281,22 @@ export interface PlaneradLektion {
  * sammanfattning, mål, läxa, Socrative-rum, flippat underlag och laboration.
  * En overlay per (ämne, lektionsposition) ovanpå bokens lektion.
  */
+/** Del 143 · En del av lektionens BAM-struktur, redigerad av läraren: namn, längd i minuter och ikon. */
+export interface BamDel {
+  namn: string;
+  minuter: number;
+  ikon?: string;
+  /** Kort anteckning som visas på tavlan (rum, uppgifter …). */
+  text?: string;
+}
+
 export interface LektionsPlan {
   id: string;
   amneId: string;
   /** Position i ämnets planering (0-baserad). */
   lektionsIndex: number;
+  /** Lärarens egna lektionsdelar med tider (Del 143). Saknas → standard-BAM ur passets längd. */
+  bam?: BamDel[];
   /** Namn på presentationen som används på lektionen. */
   presentation?: string;
   /** Sammanfattning av delkapitlet. */

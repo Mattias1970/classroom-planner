@@ -1089,3 +1089,14 @@ input.fel { border-color: #B71C1C; }
 .app-ikon.digiexam { background: #1F4E9A; }
 .app-ikon.pptx { background: #C43E1C; }
 .app-ikon.elever { background: #5D6D7E; font-size: 16px; }
+
+/* ── Del 143: gruppväxlare A/B och redigerbar BAM ── */
+.grupp-vaxlare { display: inline-flex; gap: 0; }
+.grupp-vaxlare .chipbtn { padding: 1px 10px; font-size: 12px; font-weight: 700; border-radius: 0; }
+.grupp-vaxlare .chipbtn:first-child { border-radius: 12px 0 0 12px; }
+.grupp-vaxlare .chipbtn:last-child { border-radius: 0 12px 12px 0; margin-left: -1px; }
+.bam-red { margin-top: 8px; padding: 8px 10px; border: 1px dashed var(--ram); border-radius: 10px; background: #fff; }
+.bam-red table.tbl td { padding: 3px 4px; vertical-align: middle; }
+.bam-red table.tbl input:not([type="number"]) { width: 100%; min-width: 90px; }
+.bam-red .icon-btn { border: none; background: none; cursor: pointer; font-size: 14px; padding: 0 3px; }
+.bam-red .icon-btn:disabled { opacity: .3; cursor: default; }

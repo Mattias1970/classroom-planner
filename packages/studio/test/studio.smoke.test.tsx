@@ -2935,3 +2935,105 @@ describe('Del 141: elevfilter för hela dashboarden, fällbara widgets, fråga +
     expect(lasStruktur().elever.map((e) => `${e.id}:${e.grupp}`)).toEqual(['e1:A', 'e2:B']);
   });
 });
+
+describe('Del 143: byt grupp A/B med ett klick, redigerbar BAM i detaljplaneringen', () => {
+  it('gruppväxlaren i Elever-vyn och i SuperTeach-fokus flyttar eleven mellan A och B', async () => {
+    const { importeraResultat, laggTillSkolar, laggTillTjanst, laggTillKlass, laggTillAmne, laggTillElev, tomStruktur } = await import('@planner/kernel');
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', schema: [{ dag: 5, start: '08:10', slut: '09:10' }] });
+    s = laggTillElev(s, { id: 'e1', klassId: 'k', namn: 'Anna Testsson', grupp: 'A' });
+    s = laggTillElev(s, { id: 'e2', klassId: 'k', namn: 'Omar Provlund', grupp: 'B' });
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-laxforhor', prov: 'Läxförhör 1', datum: '2026-09-04', tid: '08:32', rum: 'BIOLOGI8BB',
+      rader: [{ namn: 'Anna Testsson', poang: 2, maxPoang: 2 }, { namn: 'Omar Provlund', poang: 1, maxPoang: 2 }] }).s;
+    window.localStorage.setItem('classroom-planner.studio.v2', JSON.stringify(s));
+    const host = render();
+
+    // Elever-vyn (📄 Rapporter): kolumnen Grupp har växlaren, klick på B flyttar Anna utan att öppna rapporten
+    act(() => { knapp(host, '📄 Rapporter').click(); });
+    const rubriker = [...host.querySelectorAll('.st-tabell thead th')].map((th) => th.textContent);
+    expect(rubriker).toContain('Grupp');
+    expect(rubriker).toContain('Svåra begrepp');
+    const vaxlare = host.querySelector<HTMLElement>('[aria-label="Grupp för Anna Testsson"]')!;
+    expect(vaxlare.querySelector('button[aria-pressed="true"]')!.textContent).toBe('A');
+    act(() => { [...vaxlare.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'B')!.click(); });
+    expect(lasStruktur().elever.find((e) => e.id === 'e1')!.grupp).toBe('B');
+    expect(host.querySelector('[aria-label="Grupp för Anna Testsson"] button[aria-pressed="true"]')!.textContent).toBe('B');
+    expect(host.querySelector('.st-fokus-bak')).toBeNull();
+
+    // SuperTeach-fokus: samma växlare i elevhuvudet, tillbaka till A
+    act(() => { knapp(host, '📊 SuperTeach').click(); });
+    valj(select(host, 'SuperTeach ämne'), 'bi');
+    act(() => { ([...host.querySelectorAll<HTMLButtonElement>('.st-matris .linkbtn')].find((b) => b.textContent === 'Anna Testsson'))!.click(); });
+    const fokus = host.querySelector('.st-fokus-bak')!;
+    const vaxlare2 = fokus.querySelector<HTMLElement>('[aria-label="Grupp för Anna Testsson"]')!;
+    expect(vaxlare2.querySelector('button[aria-pressed="true"]')!.textContent).toBe('B');
+    act(() => { [...vaxlare2.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'A')!.click(); });
+    expect(lasStruktur().elever.find((e) => e.id === 'e1')!.grupp).toBe('A');
+  });
+
+  it('BAM kan redigeras per lektion: egna delar med egna tider på tavlan, avvikelsevarning och återgång till standard', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'liber-matematik-y');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '🧭 Detaljplanering').click(); });
+    expect(host.textContent).toContain('TAVLAN');
+
+    // Standard-BAM: tavlan börjar 09:00 och slutar 10:00, ingen varning
+    const tider = () => [...host.querySelectorAll('.ls-tid .ls-tid-t')].map((x) => x.textContent);
+    // Lektion 1 saknar läxförhör → tavlan börjar med genomgången 09:10 (standardens läxförhörsplats hålls fri), slutar 10:00
+    expect(tider()).toEqual(['09:10–09:25', '09:25–09:50', '09:50–10:00']);
+    expect(host.querySelector('.ls-tider .status.warn')).toBeNull();
+    const amneId = lasStruktur().amnen.find((a) => a.namn === 'Matematik')!.id;
+    expect((lasStruktur().lektionsplaner ?? []).some((p) => p.amneId === amneId && p.bam !== undefined)).toBe(false);
+
+    // Öppna redigeringen: delarna förifylls från standard, del 1 får 20 min och en egen text
+    act(() => { knapp(host, '✏ Ändra BAM').click(); });
+    // Förifyllt utan läxförhör: genomgången har fått läxförhörets 10 minuter (25 min), summan är passets 60
+    const antalDelar = host.querySelectorAll('.bam-red tbody tr').length;
+    expect(antalDelar).toBe(3);
+    expect(input(host, 'Namn del 1').value).toBe('Genomgång');
+    expect(input(host, 'Minuter del 1').value).toBe('25');
+    expect(host.querySelector('.bam-red')!.textContent).toContain('summa 60 min');
+    skriv(input(host, 'Minuter del 1'), '20');
+    skriv(input(host, 'Text del 1'), 'sal 214');
+    act(() => { knapp(host, '➕ Ny del').click(); });
+    expect(host.querySelectorAll('.bam-red tbody tr')).toHaveLength(antalDelar + 1);
+    skriv(input(host, `Namn del ${antalDelar + 1}`), 'Fråga på allt');
+    skriv(input(host, `Minuter del ${antalDelar + 1}`), '10');
+    act(() => { knapp(host, '💾 Spara BAM').click(); });
+
+    const lp = (lasStruktur().lektionsplaner ?? []).find((p) => p.amneId === amneId && p.bam !== undefined)!;
+    expect(lp).toBeDefined();
+    expect(lp.bam![0]).toMatchObject({ namn: 'Genomgång', minuter: 20, text: 'sal 214' });
+    expect(lp.bam!.at(-1)).toMatchObject({ namn: 'Fråga på allt', minuter: 10 });
+    // Tavlan följer de egna tiderna: del 1 = 09:00–09:20, sista delen är den nya
+    expect(tider()[0]).toBe('09:00–09:20');
+    const rader = [...host.querySelectorAll('.ls-tid')];
+    expect(rader[0].textContent).toContain('sal 214');
+    expect(rader.at(-1)!.textContent).toContain('Fråga på allt');
+    // Summan skiljer sig från passets 60 minuter → varning
+    expect(host.querySelector('.ls-tider .status.warn')!.textContent).toContain('minuter');
+    expect(host.textContent).toContain('egna delar');
+
+    // ↺ standard tar bort de egna delarna och tavlan blir som förut
+    act(() => { knapp(host, '↺ standard').click(); });
+    expect((lasStruktur().lektionsplaner ?? []).some((p) => p.amneId === amneId && p.bam !== undefined)).toBe(false);
+    expect(tider().at(-1)!.endsWith('10:00')).toBe(true);
+    expect(host.querySelector('.ls-tider .status.warn')).toBeNull();
+  });
+});
