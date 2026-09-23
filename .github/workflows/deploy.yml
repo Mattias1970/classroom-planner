@@ -1,10 +1,10 @@
 # Del 39 (uppdaterad Del 119: Node 22, actions v5): bygg web- OCH studioappen och publicera till GitHub Pages
-# Webbappen på /, studio (v2) på /studio/ — nås från valfri dator via
+# Webbappen på /, studio (v3) på /studio/ — nås från valfri dator via (Del 146: även grenen studio-v3 publicerar)
 # https://mattias1970.github.io/classroom-planner/
 name: Deploy till GitHub Pages
 on:
   push:
-    branches: [classroom-planner, main, utveckling]
+    branches: [classroom-planner, main, utveckling, studio-v3]
   workflow_dispatch:
 permissions:
   contents: read
