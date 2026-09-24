@@ -6,6 +6,7 @@
  * utskriften säger samma sak som skärmen.
  */
 import { AlignmentType, Document, ExternalHyperlink, HeadingLevel, ImageRun, Packer, Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType } from 'docx';
+import { elevrapportBlob, type RapportMeta } from './elevrapportLayout.js';
 import { forklaring, niva, type Elevanalys, type EnkelRapport, type ForklaringId, type Studieguide } from '@planner/kernel';
 
 const BLA = '#2f5aa8'; const GRON = '#1B5E20'; const ROD = '#B71C1C'; const GRA = '#9AA3AE';
@@ -35,105 +36,6 @@ function rutnat(ctx: CanvasRenderingContext2D, x0: number, y0: number, b: number
     ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + b, y); ctx.stroke();
     ctx.fillText(`${Math.round(p)}`, x0 - 6, y + 4);
   }
-}
-
-/** Elevens kurva med kravlinjer och klassens snitt. */
-async function kurvBild(a: Elevanalys): Promise<ArrayBuffer> {
-  const B = 620; const H = 250; const x0 = 34; const y0 = 14; const b = B - x0 - 12; const h = H - y0 - 56;
-  const { c, ctx } = canvas(B, H);
-  rutnat(ctx, x0, y0, b, h);
-  const n = a.kurva.length;
-  const px = (i: number) => (n <= 1 ? x0 + b / 2 : x0 + (i / (n - 1)) * b);
-  const py = (p: number) => y0 + h - (p / 100) * h;
-  for (const [krav, farg] of [[90, '#E65100'], [70, '#EF9A9A']] as const) {
-    ctx.strokeStyle = farg; ctx.setLineDash([5, 4]); ctx.beginPath();
-    ctx.moveTo(x0, py(krav)); ctx.lineTo(x0 + b, py(krav)); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = farg; ctx.textAlign = 'left'; ctx.fillText('Godkänt', x0 + 4, py(krav) - 4);
-  }
-  if (n > 0) {
-    ctx.strokeStyle = BLA; ctx.lineWidth = 2.2; ctx.beginPath();
-    a.kurva.forEach((p, i) => (i === 0 ? ctx.moveTo(px(i), py(p.procent)) : ctx.lineTo(px(i), py(p.procent))));
-    ctx.stroke();
-    ctx.textAlign = 'center';
-    a.kurva.forEach((p, i) => {
-      ctx.fillStyle = p.klarat === false ? ROD : BLA;
-      ctx.beginPath(); ctx.arc(px(i), py(p.procent), 3.4, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#333'; ctx.fillText(`${p.procent}`, px(i), py(p.procent) - 9);
-      ctx.fillStyle = GRA;
-      ctx.fillText(`T${i + 1}`, px(i), y0 + h + 16);
-      ctx.fillText(p.datum.slice(5).replace('-', '/'), px(i), y0 + h + 30);
-    });
-  }
-  return png(c);
-}
-
-/** Delkapitel som staplade led per förhör. */
-async function ledBild(a: Elevanalys): Promise<ArrayBuffer | null> {
-  const rader = a.segment.filter((t) => t.segment.length > 0);
-  if (rader.length === 0) return null;
-  const B = 620; const H = 240; const x0 = 34; const y0 = 14; const b = B - x0 - 12; const h = H - y0 - 56;
-  const { c, ctx } = canvas(B, H);
-  const maxF = Math.max(1, ...rader.map((t) => t.antalFragor));
-  rutnat(ctx, x0, y0, b, h, maxF);
-  const koder = [...new Set(rader.flatMap((t) => t.segment.map((x) => x.kod)))].sort();
-  const farger = ['#2f5aa8', '#1B5E20', '#B71C1C', '#E65100', '#6A1B9A', '#00838F'];
-  const band = b / rader.length;
-  const bredd = Math.min(58, band * 0.55);
-  rader.forEach((t, i) => {
-    const cx = x0 + band * (i + 0.5);
-    let botten = y0 + h;
-    for (const seg of t.segment) {
-      const hoj = (seg.antalFragor / maxF) * h;
-      const fyllt = ((seg.procent ?? 0) / 100) * hoj;
-      const farg = farger[koder.indexOf(seg.kod) % farger.length];
-      ctx.globalAlpha = 0.16; ctx.fillStyle = farg;
-      ctx.fillRect(cx - bredd / 2, botten - hoj, bredd, hoj);
-      ctx.globalAlpha = 0.9;
-      ctx.fillRect(cx - bredd / 2, botten - fyllt, bredd, fyllt);
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.strokeRect(cx - bredd / 2, botten - hoj, bredd, hoj);
-      if (hoj > 15) {
-        ctx.fillStyle = fyllt > hoj / 2 ? '#fff' : farg; ctx.textAlign = 'center';
-        ctx.fillText(`${seg.kod} ${seg.procent ?? '—'}%`, cx, botten - hoj / 2 + 4);
-      }
-      botten -= hoj;
-    }
-    ctx.fillStyle = GRA; ctx.textAlign = 'center';
-    ctx.fillText(`T${i + 1}`, cx, y0 + h + 16);
-    ctx.fillText(t.datum.slice(5).replace('-', '/'), cx, y0 + h + 30);
-  });
-  return png(c);
-}
-
-/** Stapel per källa: eleven mot klassen. */
-async function kallBild(a: Elevanalys): Promise<ArrayBuffer | null> {
-  if (a.kallor.length === 0) return null;
-  const B = 620; const H = 190; const x0 = 34; const y0 = 14; const b = B - x0 - 12; const h = H - y0 - 46;
-  const { c, ctx } = canvas(B, H);
-  rutnat(ctx, x0, y0, b, h);
-  const band = b / a.kallor.length;
-  a.kallor.forEach((k, i) => {
-    const cx = x0 + band * (i + 0.5);
-    const bar = Math.min(34, band * 0.3);
-    const py = (p: number) => y0 + h - (p / 100) * h;
-    if (k.snittProcent !== null) {
-      ctx.fillStyle = k.krav !== null && k.snittProcent >= k.krav ? GRON : k.snittProcent >= 60 ? '#F9A825' : ROD;
-      ctx.fillRect(cx - bar - 2, py(k.snittProcent), bar, y0 + h - py(k.snittProcent));
-      ctx.fillStyle = '#333'; ctx.textAlign = 'center';
-      ctx.fillText(`${k.snittProcent}`, cx - bar / 2 - 2, py(k.snittProcent) - 5);
-    }
-    if (k.klassSnitt !== null) {
-      ctx.fillStyle = '#C7CEDB';
-      ctx.fillRect(cx + 2, py(k.klassSnitt), bar, y0 + h - py(k.klassSnitt));
-      ctx.fillStyle = GRA; ctx.textAlign = 'center';
-      ctx.fillText(`${k.klassSnitt}`, cx + bar / 2 + 2, py(k.klassSnitt) - 5);
-    }
-    ctx.fillStyle = '#333'; ctx.textAlign = 'center';
-    ctx.fillText(k.namn, cx, y0 + h + 16);
-    ctx.fillStyle = GRA;
-    ctx.fillText(k.krav !== null ? 'godkäntgräns' : `${k.antal} prov`, cx, y0 + h + 30);
-  });
-  return png(c);
 }
 
 function bild(data: ArrayBuffer, bredd: number, hojd: number): Paragraph {
@@ -175,38 +77,6 @@ function forklaringRad(id: ForklaringId): Paragraph {
   return new Paragraph({ children: [new TextRun({ text: `${f.kort} ${f.lang[0] ?? ''}`, size: 18, color: '666666', italics: true })] });
 }
 
-const RATT = 'C8E6C9'; const FEL = 'FFCDD2'; const EJ = 'F2F4F7';
-
-/** Frågematrisen: en rad per förhör, en ruta per fråga (grön rätt, röd fel, tom = ej gjord). */
-function matrisTabell(a: Elevanalys): Table[] {
-  const m = a.matris;
-  if (m.fragor.length === 0 || m.rader.length === 0) return [];
-  const rutcell = (fyll: string, text: string): TableCell => new TableCell({
-    shading: { type: ShadingType.CLEAR, fill: fyll },
-    margins: { top: 20, bottom: 20, left: 20, right: 20 },
-    children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text, size: 12 })] })],
-  });
-  const huvud = new TableRow({ children: [
-    new TableCell({ shading: { type: ShadingType.CLEAR, fill: 'EEF1F5' }, children: [new Paragraph({ children: [new TextRun({ text: 'Quiz', bold: true, size: 16 })] })] }),
-    ...m.fragor.map((fr) => new TableCell({
-      shading: { type: ShadingType.CLEAR, fill: 'EEF1F5' },
-      children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: String(fr.nr), size: 12 })] })],
-    })),
-  ] });
-  const rader = m.rader.map((rad) => new TableRow({ children: [
-    new TableCell({ children: [new Paragraph({ children: [
-      new TextRun({ text: `${rad.prov}`, size: 14 }),
-      new TextRun({ text: `  ${rad.datum.slice(5)}${rad.tid !== undefined ? ` ${rad.tid}` : ''}`, size: 12, color: '888888' }),
-    ] })] }),
-    ...m.fragor.map((_, i) => {
-      const svar = rad.elevCeller?.[i];
-      const fanns = rad.celler[i] !== null;
-      return rutcell(!fanns ? 'FFFFFF' : svar === true ? RATT : svar === false ? FEL : EJ, !fanns ? '' : svar === true ? '✓' : svar === false ? '✗' : '·');
-    }),
-  ] }));
-  return [new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [huvud, ...rader] })];
-}
-
 function lank(text: string, url: string): Paragraph {
   return new Paragraph({ bullet: { level: 0 }, children: [
     new ExternalHyperlink({ children: [new TextRun({ text, style: 'Hyperlink' })], link: url }),
@@ -218,163 +88,12 @@ export function rapportFilnamn(a: Elevanalys): string {
   return `${a.elev.namn} ${a.amneNamn} rapport.docx`.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '-');
 }
 
-/** Bygger rapporten som en .docx-blob (delas av enskild nedladdning och klassexporten). */
-export async function elevrapportDocx(a: Elevanalys): Promise<Blob> {
-  const idag = new Date().toISOString().slice(0, 10);
-  const senast = a.nu.senastDatum ?? null;
-  const barn: Array<Paragraph | Table> = [
-    new Paragraph({ text: `${a.elev.namn} — ${a.amneNamn}`, heading: HeadingLevel.HEADING_1 }),
-    new Paragraph({ children: [new TextRun({ text: a.sammanfattning, italics: true })] }),
-    new Paragraph({ children: [new TextRun({ text: `Rapport skapad ${idag}${a.period.fran !== null || a.period.till !== null ? ` · period ${a.period.fran ?? 'start'} – ${a.period.till ?? 'idag'}` : ''}. Förhörsgränserna 90 % (läxförhör) och 70 % (exit ticket) gäller begreppsfrågorna och är inte ett ämnesbetyg.`, color: '777777', size: 18 })] }),
-    tom(),
-  ];
-
-  // ── 1. Aktuellt kunnande ──
-  barn.push(new Paragraph({ text: `1. Aktuellt kunnande${senast !== null ? ` (senaste försöket per fråga, till och med ${senast})` : ''}`, heading: HeadingLevel.HEADING_2 }));
-  barn.push(forklaringRad('nulage'));
-  if (a.nu.fragor.length === 0) barn.push(new Paragraph('Inga begreppsfrågor med svar i perioden.'));
-  else {
-    barn.push(new Paragraph({ children: [new TextRun({ text: `Rätt på ${a.nu.kan.length} av ${a.nu.fragor.length} testade begreppsfrågor (${a.nu.procent} %). ${a.nu.kvar.length} var fel i senaste försöket.`, bold: true })] }));
-    barn.push(tabell(['Delkapitel', 'Rätt', 'Fel', 'Andel', 'Senast testat'],
-      a.nu.delkapitel.map((d) => [d.kod, String(d.ratt), String(d.fel), `${d.procent} %`, `${d.senastProv ?? '—'} ${d.senastDatum ?? ''}`])));
-    if (a.nu.kvar.length > 0) {
-      barn.push(new Paragraph({ children: [new TextRun({ text: `Fel i senaste försöket (${a.nu.kvar.length})`, bold: true })] }));
-      for (const x of a.nu.kvar) barn.push(new Paragraph({ bullet: { level: 0 }, children: [
-        ...(x.begrepp !== undefined ? [new TextRun({ text: `${x.begrepp} — `, bold: true })] : []), new TextRun(x.fraga),
-        new TextRun({ text: `  (${x.kod}, ${x.senastProv} ${x.senastDatum})`, size: 18, color: '777777' }),
-      ] }));
-    }
-    if (a.nu.fixat.length > 0) {
-      barn.push(new Paragraph({ children: [new TextRun({ text: `Rätt i senaste försöket efter tidigare fel (${a.nu.fixat.length})`, bold: true })] }));
-      for (const x of a.nu.fixat) barn.push(new Paragraph({ bullet: { level: 0 }, children: [
-        ...(x.begrepp !== undefined ? [new TextRun({ text: `${x.begrepp} — `, bold: true })] : []), new TextRun(x.fraga),
-        new TextRun({ text: `  (${x.kod}, ${x.tidigareFel} fel tidigare)`, size: 18, color: '777777' }),
-      ] }));
-    }
-  }
-  barn.push(tom());
-
-  // ── 2. Nästa steg ──
-  barn.push(new Paragraph({ text: '2. Nästa steg — fokus, lärarstöd och uppföljning', heading: HeadingLevel.HEADING_2 }));
-  for (const r of a.rad) { barn.push(punkt(r), tom()); }
-  if (a.ovningar.length > 0 || a.filmer.length > 0) {
-    if (a.ovningar.length > 0) {
-      barn.push(new Paragraph({ children: [new TextRun({ text: 'Socrative-rum att öva i:', bold: true })] }));
-      for (const o of a.ovningar) barn.push(lank(`${o.rum} — ${o.kod} ${o.namn}`, o.url));
-    }
-    if (a.filmer.length > 0) {
-      barn.push(new Paragraph({ children: [new TextRun({ text: 'Filmer:', bold: true })] }));
-      for (const film of a.filmer) barn.push(lank(`${film.titel} (${film.for})`, film.url));
-    }
-    barn.push(tom());
-  }
-
-  // ── 3. Historik ──
-  barn.push(new Paragraph({ text: '3. Historik — resultat med datum', heading: HeadingLevel.HEADING_2 }));
-  for (const r of a.laget) { barn.push(punkt(r), tom()); }
-  if (a.laget.length === 0) barn.push(new Paragraph('Inga resultat i perioden.'), tom());
-  if (a.lektionsarbete.rader.length > 0) {
-    barn.push(new Paragraph({ children: [new TextRun({ text: `Lektionsarbete — snitt ${a.lektionsarbete.snitt} %, ${a.lektionsarbete.niva}`, bold: true })] }));
-    barn.push(forklaringRad('exit'));
-    barn.push(tabell(['Datum', 'Exit ticket', 'Resultat', 'Bedömning'], a.lektionsarbete.rader.map((x) => [x.datum, x.prov, `${x.procent} %`, x.niva])));
-    barn.push(tom());
-  }
-  if (a.ovar.length > 0) {
-    barn.push(new Paragraph({ children: [new TextRun({ text: 'Övar du inför läxförhören?', bold: true })] }));
-    barn.push(forklaringRad('ovar'));
-    const cell = (x: { ratt: number; antal: number; procent: number } | null) => (x === null ? '—' : `${x.ratt}/${x.antal} (${x.procent} %)`);
-    barn.push(tabell(['Läxförhör', 'Exit-begreppen', 'Tidigare läxa', 'Nya frågor', 'Tolkning'],
-      a.ovar.map((o) => [`${o.datum} ${o.prov}`, cell(o.exit), cell(o.tidigare), cell(o.nya), o.tolkning])));
-    barn.push(tom());
-  }
-  if (a.trendsteg.length > 0) {
-    barn.push(new Paragraph({ children: [new TextRun({ text: 'Glömt och vänt mellan förhören', bold: true })] }));
-    barn.push(forklaringRad('trendkoll'));
-    barn.push(tabell(['Från → till', 'Glömda', 'Vända till rätt'],
-      a.trendsteg.map((st) => [
-        `${st.foreDatum} → ${st.datum}`,
-        `${st.glomt}${st.glomt > 0 ? `: ${(st.glomtBegrepp.length > 0 ? st.glomtBegrepp : st.glomtFragor).join(' · ')}` : ''}`,
-        `${st.lart}${st.lart > 0 ? `: ${(st.lartBegrepp.length > 0 ? st.lartBegrepp : st.lartFragor).join(' · ')}` : ''}`,
-      ])));
-    barn.push(tom());
-  }
-  if (a.kurva.length > 0) {
-    barn.push(forklaringRad('laxforhor'));
-    barn.push(forklaringRad('exit'));
-    barn.push(bild(await kurvBild(a), 560, 226));
-    barn.push(new Paragraph({ children: [new TextRun({ text: 'Varje punkt är ett prov. Streckade linjer är förhörsgränserna: 90 % för läxförhör, 70 % för exit ticket. Jämförelsen är mot dina egna tidigare resultat.', size: 18, color: '777777' })] }));
-    barn.push(tabell(['Nr', 'Datum', 'Prov', 'Resultat', 'Bedömning'],
-      a.kurva.map((p, i) => [`T${i + 1}`, p.datum, p.prov, `${p.procent} %`, niva(p.kalla, p.procent) ?? '—'])));
-    barn.push(tom());
-  }
-  const lb = await ledBild(a);
-  if (lb !== null) {
-    barn.push(new Paragraph({ children: [new TextRun({ text: 'Resultat per delkapitel', bold: true })] }));
-    barn.push(forklaringRad('delkapitel'));
-    barn.push(bild(lb, 560, 217));
-    barn.push(tom());
-  }
-  const kb = await kallBild(a);
-  if (kb !== null) {
-    barn.push(new Paragraph({ children: [new TextRun({ text: 'Snitt per testtyp, du och klassen', bold: true })] }));
-    barn.push(bild(kb, 560, 172));
-    barn.push(new Paragraph({ children: [new TextRun({ text: 'Färgad stapel = du, grå = klassens snitt. Klassens snitt är en referens, inte målet — målet är din egen utveckling.', size: 18, color: '777777' })] }));
-    barn.push(tom());
-  }
-
-  // ── Bilaga A: frågematris ──
-  const matris = matrisTabell(a);
-  if (matris.length > 0) {
-    barn.push(new Paragraph({ text: 'Bilaga A — Fråga för fråga', heading: HeadingLevel.HEADING_2, pageBreakBefore: true }));
-    barn.push(forklaringRad('fragematris'));
-    barn.push(...matris);
-    barn.push(new Paragraph({ children: [new TextRun({ text: 'Grön ruta = rätt, röd = fel, tom = frågan ingick inte i det quizet. Samma fråga har samma nummer i alla quiz.', size: 18, color: '777777' })] }));
-    for (const g of a.matris.grupper) {
-      barn.push(new Paragraph({ children: [new TextRun({ text: `Fråga ${g.fran}–${g.till}: ${g.ursprung}${g.kod !== '—' ? ` (${g.kod})` : ''}`, size: 18, color: '777777' })] }));
-    }
-    barn.push(tom());
-  }
-
-  // ── Bilaga B: begrepp med förklaringar ──
-  if (a.fastnat.length > 0 || a.rapport !== null) {
-    barn.push(new Paragraph({ text: 'Bilaga B — Begrepp och förklaringar', heading: HeadingLevel.HEADING_2, pageBreakBefore: true }));
-    if (a.fastnat.length > 0) {
-      barn.push(new Paragraph({ children: [new TextRun({ text: 'Begrepp som varit fel minst två gånger', bold: true })] }));
-      barn.push(forklaringRad('fastnat'));
-      barn.push(tabell(['Begrepp', 'Delkapitel', 'Fel', 'Senast fel'],
-        a.fastnat.slice(0, 15).map((b) => [b.fraga, b.kod, String(b.antalFel), b.senasteFel])));
-      barn.push(tom());
-    }
-    if (a.rapport !== null) {
-      for (const k of a.rapport.kapitel) {
-        barn.push(new Paragraph({ children: [new TextRun({ text: `Kapitel ${k.nr} ${k.namn}`, bold: true })] }));
-        barn.push(tabell(['Delkapitel', 'Begreppsfrågor just nu', 'Äldre prov'],
-          k.delkapitel.map((d) => {
-            const nuDel = a.nu.delkapitel.find((x) => x.kod === d.kod);
-            return [`${d.kod} ${d.namn}`,
-              nuDel === undefined || nuDel.procent === null ? 'inte testat' : `${nuDel.procent} % (${nuDel.senastDatum ?? ''})`,
-              d.senaste.map((x) => `${x.procent} % (${x.datum})`).join(', ') || '—'];
-          })));
-        if (k.sammanfattning !== null) {
-          barn.push(new Paragraph({ children: [new TextRun({ text: 'Sammanfattning', bold: true })] }));
-          for (const rad of k.sammanfattning.split('\n')) barn.push(new Paragraph(rad));
-        }
-        if (k.attOva.length > 0) {
-          barn.push(new Paragraph({ children: [new TextRun({ text: 'Begreppsförklaringar', bold: true })] }));
-          for (const b of k.attOva) {
-            barn.push(new Paragraph({ bullet: { level: 0 }, children: [
-              new TextRun({ text: b.begrepp, bold: true }),
-              ...(b.forklaring !== null ? [new TextRun(` — ${b.forklaring}`)] : []),
-            ] }));
-          }
-        }
-        barn.push(tom());
-      }
-    }
-  }
-
-  const doc = new Document({ sections: [{ children: barn }] });
-  return Packer.toBlob(doc);
+/**
+ * Bygger rapporten som en .docx-blob (delas av enskild nedladdning och klassexporten).
+ * Del 151: layouten ligger i elevrapportLayout.ts — områden, bilagor och frågematris.
+ */
+export async function elevrapportDocx(a: Elevanalys, meta: RapportMeta = {}): Promise<Blob> {
+  return elevrapportBlob(a, meta);
 }
 
 function laddaNer(blob: Blob, filnamn: string): void {
@@ -386,8 +105,8 @@ function laddaNer(blob: Blob, filnamn: string): void {
 }
 
 /** Bygger och laddar ner en elevs rapport. */
-export async function elevrapportTillWord(a: Elevanalys): Promise<void> {
-  laddaNer(await elevrapportDocx(a), rapportFilnamn(a));
+export async function elevrapportTillWord(a: Elevanalys, meta: RapportMeta = {}): Promise<void> {
+  laddaNer(await elevrapportDocx(a, meta), rapportFilnamn(a));
 }
 
 /**
@@ -396,7 +115,7 @@ export async function elevrapportTillWord(a: Elevanalys): Promise<void> {
  * `steg` anropas efter varje elev så gränssnittet kan visa hur långt det gått.
  */
 export async function klassrapporterTillWord(
-  analyser: Elevanalys[], arkivNamn: string, steg?: (klar: number, av: number) => void,
+  analyser: Elevanalys[], arkivNamn: string, steg?: (klar: number, av: number) => void, meta: RapportMeta = {},
 ): Promise<void> {
   if (analyser.length === 0) return;
   const { default: JSZip } = await import('jszip');
@@ -407,7 +126,7 @@ export async function klassrapporterTillWord(
     // Två elever kan heta lika — numrera i så fall
     if (anvanda.has(namn)) namn = namn.replace(/\.docx$/, `-${i + 1}.docx`);
     anvanda.add(namn);
-    zip.file(namn, await elevrapportDocx(a));
+    zip.file(namn, await elevrapportDocx(a, meta));
     steg?.(i + 1, analyser.length);
   }
   laddaNer(await zip.generateAsync({ type: 'blob' }), `${arkivNamn}.zip`.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '-'));

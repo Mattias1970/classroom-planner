@@ -19,6 +19,7 @@ import { aterkommandeFel, aterkommandeFelKlass, befastaDelkapitel, delkapitelSeg
 import { begreppForFraga, elevrapport, socrativeElevLank, type Elevrapport } from './elevrapport.js';
 import { planForAmne } from './studieguide.js';
 import { fragematris, type Fragematris } from './delkapiteltrend.js';
+import { glomskaAnalys, type Glomska } from './glomska.js';
 
 export interface KallaSammanfattning {
   kalla: ResultatKalla;
@@ -69,6 +70,8 @@ export interface Elevanalys {
   segment: SegmentTillfalle[];
   /** Fråga × testtillfälle för eleven — rätt, fel eller inte gjord. */
   matris: Fragematris;
+  /** Del 151: minnet — begrepp som kunnats och sedan blivit fel (upprepat = flagga, enstaka = notering). */
+  glomska: Glomska;
   /** Vad eleven kan NU — senaste svaret på varje fråga. */
   nu: Nulage;
   /** Övningar som återanvänder läxförhörens eller exit ticketsens frågor. */
@@ -426,7 +429,7 @@ export function elevanalys(sIn: Struktur, elevId: string, f: DashboardFilter & {
     glomt: tkElev?.glomt ?? 0,
     trendsteg: tkElev?.steg ?? [],
     lektionsarbete, ovar, befasta: [...befasta].sort(),
-    segment, matris, nu, ovningsDubbletter: dubblettOvningar, inkluderadeOvningar: harm.inkluderade, fastnat, ovningar, filmer, rapport, laget, rad, sammanfattning,
+    segment, matris, glomska: glomskaAnalys(matris), nu, ovningsDubbletter: dubblettOvningar, inkluderadeOvningar: harm.inkluderade, fastnat, ovningar, filmer, rapport, laget, rad, sammanfattning,
   };
 }
 

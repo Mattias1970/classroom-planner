@@ -3675,9 +3675,12 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
     setRapportPagar(`0 av ${medResultat.length}`);
     const amnesNamn = amneId !== '' ? sBas.amnen.find((a) => a.id === amneId)?.namn ?? '' : '';
     const arkiv = [klassNamn, urval.grupp !== null ? `grupp ${urval.grupp}` : '', amnesNamn, 'rapporter'].filter((x) => x !== '').join(' ');
+    // Rapporten har egna områden för exit tickets och läxförhör — källfiltret på sidan gäller inte där
+    const { kallor: _k, ...rapportF } = f;
     void import('./elevrapportWord.js')
       .then(({ klassrapporterTillWord }) => klassrapporterTillWord(
-        medResultat.map((r) => elevanalys(sBas, r.elev.id, f)), arkiv, (klar, av) => setRapportPagar(`${klar} av ${av}`),
+        medResultat.map((r) => elevanalys(sBas, r.elev.id, rapportF)), arkiv, (klar, av) => setRapportPagar(`${klar} av ${av}`),
+        { klassNamn, ...(urval.grupp !== null ? { grupp: `Grupp ${urval.grupp}` } : {}) },
       ))
       .catch(() => window.alert('Rapporterna kunde inte skapas.'))
       .finally(() => setRapportPagar(''));
@@ -4932,7 +4935,7 @@ function RapportVy({ s, kor, meddela, topp }: { s: Struktur; kor: (fn: () => Str
   const tillWord = (a: ReturnType<typeof elevanalys>, id: string) => {
     setSkriver(id);
     void import('./elevrapportWord.js')
-      .then(({ elevrapportTillWord }) => elevrapportTillWord(a))
+      .then(({ elevrapportTillWord }) => elevrapportTillWord(a, { klassNamn: klass?.namn }))
       .catch(() => window.alert('Rapporten kunde inte skapas.'))
       .finally(() => setSkriver(''));
   };
@@ -4958,7 +4961,7 @@ function RapportVy({ s, kor, meddela, topp }: { s: Struktur; kor: (fn: () => Str
     void import('./elevrapportWord.js')
       .then(({ klassrapporterTillWord }) => klassrapporterTillWord(
         medResultat.map((r) => elevanalys(s, r.elev.id, f)), arkiv,
-        (klar, av) => setForlopp(`${klar} av ${av}`),
+        (klar, av) => setForlopp(`${klar} av ${av}`), { klassNamn: klass.namn },
       ))
       .catch(() => window.alert('Rapporterna kunde inte skapas.'))
       .finally(() => { setSkriver(''); setForlopp(''); });

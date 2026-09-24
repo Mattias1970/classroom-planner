@@ -30,3 +30,5 @@ export * from './export/sidregister.js';
 export * from './domain/pedagogiskplanering.js';
 export * from './domain/vagtillprovet.js';
 export * from './domain/vantande.js';
+export * from './domain/glomska.js';
+export * from './domain/rapportomraden.js';
