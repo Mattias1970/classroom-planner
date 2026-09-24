@@ -3842,15 +3842,31 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
             </div>
           </>)}
         </div>
-        <div className="st-kort st-kort-kluster klick" style={{ '--kort': '#E65100' } as React.CSSProperties}
-          role="button" tabIndex={0} title="Klicka för att öppna trendklustren" onClick={() => gaTill('st-sekt-jamf')}
-          onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); gaTill('st-sekt-jamf'); } }}>
+        {/* Del 152: trendklusterkortet — länk per kluster (väljer urval för hela sidan) och knapp till stora klusterrutan */}
+        <div className="st-kort st-kort-kluster" style={{ '--kort': '#E65100' } as React.CSSProperties}>
           <div className="st-kort-topp">
             <span className="st-ikon" aria-hidden="true">✨</span>
-            <div><div className="st-kort-rubrik">Trendkluster</div><div className="st-kort-fraga">Elever som trendar tillsammans</div></div>
+            <div><div className="st-kort-rubrik">Trendkluster</div><div className="st-kort-fraga">Elever som trendar tillsammans · hela klassen</div></div>
           </div>
-          <div className="st-kort-tal">{kluster.filter((g) => g.elever.length > 0).length}</div>
-          <div className="small muted">{kluster.find((g) => g.kluster === 'riskzon')?.elever.length ?? 0} i riskzon</div>
+          <ul className="st-klusterlankar" aria-label="Välj trendkluster">
+            {(['stigande', 'stabil', 'riskzon', 'ojamn'] as Kluster[]).map((k) => {
+              const g = urvalBas.kluster.find((x) => x.kluster === k);
+              const n = g?.elever.length ?? 0;
+              const pa = (urvalVal.typ === 'kluster' && urvalVal.kluster.length === 1 && urvalVal.kluster[0] === k)
+                || (urvalVal.typ === 'elever' && urvalVal.franKluster?.length === 1 && urvalVal.franKluster[0] === k);
+              return (
+                <li key={k}>
+                  <button type="button" className={`st-klusterlank${pa ? ' act' : ''}`} aria-pressed={pa} disabled={n === 0}
+                    style={{ '--kluster': KLUSTER_FARG[k] } as React.CSSProperties}
+                    title={n === 0 ? 'Inga elever i klustret' : pa ? 'Visa hela klassen igen' : `Visa grupp ${KLUSTER_NAMN[k]} i alla grafer`}
+                    onClick={() => setUrvalVal(pa ? { typ: 'alla' } : { typ: 'kluster', kluster: [k] })}>
+                    <i aria-hidden="true" /><span>{KLUSTER_NAMN[k]}</span><b>{n}</b><span aria-hidden="true" className="st-klusterlank-pil">›</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <button type="button" className="btn sm st-klusteroppna" onClick={oppnaKlusterAnalys}>📈 Öppna trendklustren</button>
         </div>
       </div>
 

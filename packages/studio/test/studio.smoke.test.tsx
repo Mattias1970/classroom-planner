@@ -1424,7 +1424,7 @@ describe('📊 SuperTeach', () => {
     const kort = [...host.querySelectorAll('.st-kort')];
     expect(kort.map((k) => k.querySelector('.st-kort-fraga')?.textContent)).toEqual([
       'Gör eleven läxor?', 'Lär sig eleven på lektionen?', 'Kan eleven begreppen?', 'Klarar eleven proven?', 'Hur går det sammantaget?',
-      'Är eleven på lektionen?', 'Elever som trendar tillsammans',
+      'Är eleven på lektionen?', 'Elever som trendar tillsammans · hela klassen',
     ]);
     // Övningskortet visas bara när det finns övningar
     // Närvaro härledd ur Socrative: tre lektioner, Omar borta på en → klass 83 %
@@ -1563,7 +1563,7 @@ describe('📊 SuperTeach', () => {
     expect(narvSekt.open).toBe(true);
     const jamfSekt = host.querySelector('#st-sekt-jamf') as HTMLDetailsElement;
     expect(jamfSekt.open).toBe(false);
-    act(() => { ([...host.querySelectorAll('.st-kort.klick')].find((k) => k.textContent?.includes('Trendkluster')) as HTMLElement).click(); });
+    act(() => { knapp(host, '📈 Öppna trendklustren').click(); }); // Del 152: kortets knapp öppnar klusterrutan
     expect(jamfSekt.open).toBe(true);
 
     // ℹ-knappen öppnar förklaringen som popup; Esc stänger
@@ -2981,6 +2981,28 @@ describe('Del 141: elevfilter för hela dashboarden, fällbara widgets, fråga +
     expect(samb.textContent).toContain('Antal begrepp ↔ resultat');
     expect(samb.querySelectorAll('.st-begrdiagram')).toHaveLength(2);
     expect(samb.querySelector('.st-begrdiagram.socrative-laxforhor')!.textContent).toContain('3 förhör');
+  });
+
+  it('Del 152: trendklusterkortet uppe till höger har länkar till klustren (hela klassen) och öppnar stora klusterrutan', async () => {
+    const host = await fixtur();
+    const kort = host.querySelector('.st-kort-kluster')!;
+    const lankar = [...kort.querySelectorAll<HTMLButtonElement>('.st-klusterlank')];
+    expect(lankar.map((b) => b.querySelector('span')!.textContent)).toEqual(['Stigande', 'Stabil', 'Riskzon', 'Ojämn utveckling']);
+    const risk = lankar[2];
+    expect(risk.querySelector('b')!.textContent).toBe('1');
+    act(() => { risk.click(); });
+    expect(risk.getAttribute('aria-pressed')).toBe('true');
+    expect(host.querySelector('.st-gruppchip')!.textContent).toContain('Riskzon');
+    // Antalen gäller hela klassen även när gruppen är vald
+    expect(host.querySelector('.st-kort-kluster .st-klusterlank.act b')!.textContent).toBe('1');
+    act(() => { risk.click(); });
+    expect(host.querySelector('.st-gruppchip')).toBeNull();
+    // Knappen fäller ut den stora trendklusterrutan med analysen
+    const w = host.querySelector('#st-sekt-jamf') as HTMLDetailsElement;
+    expect(w.open).toBe(false);
+    act(() => { knapp(host, '📈 Öppna trendklustren').click(); });
+    expect(w.open).toBe(true);
+    expect(w.querySelector('.st-klusteranalys')).not.toBeNull();
   });
 
   it('alla rutor är fällbara widgets med miniatyr; ordningen är frågematris → resultat per delkapitel/svåra begrepp → trendkoll; klick på en ruta visar fråga och rätt svar', async () => {

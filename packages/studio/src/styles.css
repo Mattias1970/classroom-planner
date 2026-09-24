@@ -1137,3 +1137,15 @@ input.fel { border-color: #B71C1C; }
 .st-omfang-grupp select { font-size: 12px; border-radius: 14px; padding: 2px 6px; }
 .st-omfang-grupp select.act { border-color: var(--bla); background: #EEF3FB; font-weight: 600; }
 .st-omfang-etikett { margin-left: auto; }
+
+/* ── Del 152: trendklusterkortet ── */
+.st-klusterlankar { list-style: none; margin: 6px 0 8px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.st-klusterlank { width: 100%; display: flex; align-items: center; gap: 8px; padding: 3px 8px; border: 1px solid transparent; border-radius: 8px; background: none; font: inherit; font-size: 13px; cursor: pointer; text-align: left; color: inherit; }
+.st-klusterlank i { width: 9px; height: 9px; border-radius: 50%; background: var(--kluster); flex: none; }
+.st-klusterlank span:first-of-type { flex: 1; }
+.st-klusterlank b { color: var(--kluster); }
+.st-klusterlank-pil { color: var(--muted); }
+.st-klusterlank:hover:not(:disabled) { background: #FFF3E0; }
+.st-klusterlank.act { border-color: var(--kluster); background: color-mix(in srgb, var(--kluster) 10%, #fff); font-weight: 700; }
+.st-klusterlank:disabled { opacity: .45; cursor: default; }
+.st-klusteroppna { width: 100%; }
