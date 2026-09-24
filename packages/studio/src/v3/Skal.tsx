@@ -26,7 +26,7 @@ export function vyNyckel(v: V3Vy): string { return v.typ === 'amne' ? `amne:${v.
 /** Globala filter i toppraden. Vyerna som har egna väljare fortsätter med dem; de nya vyerna läser härifrån. */
 export interface Filter { klassId: string; skolarId: string; amneId: string; periodText: string; sok: string }
 
-export function Skal({ s, vy, setVy, filter, setFilter, notiser, larareNamn, verktyg, detalj, children }: {
+export function Skal({ s, vy, setVy, filter, setFilter, notiser, larareNamn, verktyg, detalj, periodTips, children }: {
   s: Struktur; vy: V3Vy; setVy: (v: V3Vy) => void;
   filter: Filter; setFilter: (f: Filter) => void;
   /** Antal varningar (t.ex. förväntade prov utan resultat) — visas på klockan. */
@@ -36,6 +36,8 @@ export function Skal({ s, vy, setVy, filter, setFilter, notiser, larareNamn, ver
   verktyg: React.ReactNode;
   /** Valfri detaljpanel till höger. */
   detalj?: React.ReactNode;
+  /** Del 150: ledtext i Period när vyn har en tidsram (omfångets termin/läsår). */
+  periodTips?: string;
   children: React.ReactNode;
 }) {
   const [meny, setMeny] = useState<'ingen' | 'notiser' | 'anvandare'>('ingen');
@@ -99,7 +101,7 @@ export function Skal({ s, vy, setVy, filter, setFilter, notiser, larareNamn, ver
               <option value="">alla</option>{(filter.klassId === '' ? s.amnen : amnenIKlass).map((a) => <option key={a.id} value={a.id}>{a.namn}</option>)}
             </select></label>
           <label className="v3-filter"><span className="v3-filter-ikon"><Ikon.kalender storlek={16} /></span>Period:
-            <input aria-label="Filter period" placeholder="v.34–42" value={filter.periodText} onChange={(e) => setFilter({ ...filter, periodText: e.target.value })} /></label>
+            <input aria-label="Filter period" placeholder={periodTips !== undefined && periodTips !== '' ? periodTips : 'v.34–42'} title={periodTips !== undefined && periodTips !== '' ? `Omfångets tid: ${periodTips} — skriv veckor (v.35–43) för att smalna av` : undefined} value={filter.periodText} onChange={(e) => setFilter({ ...filter, periodText: e.target.value })} /></label>
           <span className="spacer" />
           <label className="v3-sok"><Ikon.sok storlek={16} /><input aria-label="Filter sök" placeholder="Sök elev, delkapitel, moment…" value={filter.sok} onChange={(e) => setFilter({ ...filter, sok: e.target.value })} /></label>
           <div className="v3-meny-anker">

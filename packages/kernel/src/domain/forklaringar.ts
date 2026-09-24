@@ -150,10 +150,10 @@ export const FORKLARINGAR = {
   },
   omfang: {
     rubrik: 'Omfång',
-    kort: 'Vilka resultat som analyseras: aktivt kapitel (standard), hela terminen, alla NO-ämnen i terminen, eller hela läsåret.',
+    kort: 'Tre val som kombineras fritt: Ämne (aktiv kurs, alla NO-ämnen, alla ämnen) · Block (kapitlet som pågår, ett valt kapitel, alla) · Tid (terminen, läsåret, all tid).',
     lang: [
-      'Aktivt kapitel är kapitlet för den senaste planerade lektionen — läxförhören där visar hur begreppen sitter just nu. Prov utan delkapitelkod (till exempel Magma-diagnoser) ingår inte i kapitelurvalet.',
-      'Hela terminen ger utvecklingen i ämnet över tid. Alla NO-ämnen lägger Biologi, Fysik, Kemi och Teknik i samma bild, för terminen eller hela läsåret — det är årskursnivån. Ett periodfält som fyllts i går före omfångets datum.',
+      'Aktiv kurs är förvald: ämnet i klassen vars planering har en lektion närmast idag. Kapitlet som pågår är kapitlet för den senaste planerade lektionen — läxförhören där visar hur begreppen sitter just nu. Prov utan delkapitelkod (till exempel Magma-diagnoser) ingår inte när ett kapitel är valt.',
+      'Block gäller bara en kurs. Alla NO-ämnen lägger Biologi, Fysik, Kemi och Teknik i samma bild — årskursnivån. Läsåret följer läsåret i topplistan. Perioden i veckor (i topplistan eller dashboardens periodfält) läggs ovanpå.',
     ],
   },
   elevProv: {

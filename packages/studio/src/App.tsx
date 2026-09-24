@@ -27,7 +27,7 @@ import {
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   arFilImporterad, arRatt, andraKalla, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
   delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, enkelRapport, studieguide, rapportOversikt, forklaring, niva, type ForklaringId,
-  omfangFilter, OMFANG_NAMN, type Omfang, type OmfangResultat, begreppForFraga, harmoniseraOvningar, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
+  omfangFilterVal, omfangFranGammal, aktivKurs, STANDARD_OMFANG, terminIntervall, lasarIntervall, type Omfang, type OmfangVal, type OmfangResultat, begreppForFraga, harmoniseraOvningar, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   matchaVantande, vantandeNamn, kopplaVantande, taBortVantande,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
@@ -120,6 +120,8 @@ export function App() {
   const [vy, setVy] = useState<V3Vy>(() => lasInstallning<V3Vy>('cp3.vy', { typ: 'oversikt' }));
   useEffect(() => { sparaInstallning('cp3.vy', vy); }, [vy]);
   const [filter, setFilter] = useState<Filter>(() => ({ klassId: s.klasser[0]?.id ?? '', skolarId: s.skolar[0]?.id ?? '', amneId: '', periodText: '', sok: '' }));
+  // Del 150: ledtext i topplistans Period (omfångets tid) när vyn anger en
+  const [periodTips, setPeriodTips] = useState('');
   const verktyg = (
     <>
       <button className="btn sec" onClick={angra} title="Ångra senaste ändring (upp till 20 steg)">↩ Ångra</button>
@@ -183,7 +185,7 @@ export function App() {
     const larare = s.larare[0]?.namn ?? '';
     return (
       <div className="studio">
-        <Skal s={s} vy={vy} setVy={setVy} filter={filter} setFilter={setFilter} notiser={notiser} larareNamn={larare} verktyg={verktyg}>
+        <Skal s={s} vy={vy} setVy={setVy} filter={filter} setFilter={setFilter} notiser={notiser} larareNamn={larare} verktyg={verktyg} periodTips={periodTips}>
           {msg && <p className="status">{msg}</p>}
           {vy.typ === 'oversikt' && <Oversikt s={s} filter={filter} setVy={setVy} struktur={struktur} />}
           {vy.typ === 'planering' && (
@@ -199,8 +201,8 @@ export function App() {
             planering={(amneId) => <Kort rubrik="Planering och lektioner" under="lektionsplan, detaljplanering, begrepp, filmer, Word"><PlaneringVy s={s} kor={kor} setVald={setVald} hopp={lektionsHopp} amneIdIn={amneId} dolAmnesval meddela={setMsg} /></Kort>} />}
           {vy.typ === 'kalender' && <Kort rubrik="Kalender" hoger={<button className="v3-lank" onClick={() => setVy({ typ: 'planering' })}>Planering →</button>}><KalenderVy s={s} onOppnaLektion={(amneId, i) => { setLektionsHopp({ amneId, i, n: Date.now() }); setVy({ typ: 'planering' }); }} /></Kort>}
           {vy.typ === 'classroom' && <Classroom s={s} filter={filter} setVy={setVy} />}
-          {vy.typ === 'resultat' && <SuperTeachVy s={s} kor={kor} meddela={setMsg} />}
-          {vy.typ === 'elever' && <RapportVy s={s} kor={kor} meddela={setMsg} />}
+          {vy.typ === 'resultat' && <SuperTeachVy s={s} kor={kor} meddela={setMsg} topp={{ filter, setFilter, setPeriodTips }} />}
+          {vy.typ === 'elever' && <RapportVy s={s} kor={kor} meddela={setMsg} topp={{ filter, setFilter, setPeriodTips }} />}
           {vy.typ === 'foraldrakontakt' && <Foraldrakontakt s={s} filter={filter} setVy={setVy} />}
           {vy.typ === 'datarepo' && <Datarepo s={s} spara={spara} kor={kor} meddela={setMsg} />}
         </Skal>
@@ -3563,13 +3565,17 @@ function SittplatsWidget({ s, f, klassId, klassNamn, kor, onElev }: {
 }
 
 /** Dashboarden: frågekort → klassens utveckling → elev × prov-heatmap → elevvy. */
-function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfang, onVisaProv, kor }: {
+function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfang, periodStyrd, onVisaProv, kor }: {
   s: Struktur; klassId: string; klassNamn: string; amneId: string; kallor: ResultatKalla[] | undefined;
   /** Omfångets filterfält (kapitel, amneIds, datum) och etikett — från omfangFilter. */
   omfang?: OmfangResultat;
+  /** Del 150: perioden (veckor) styrs av v3:s topplista — samma fält i båda. */
+  periodStyrd?: { text: string; satt: (text: string) => void };
   onVisaProv: (prov: string) => void; kor: (fn: () => Struktur, m: string) => void;
 }) {
-  const [periodText, setPeriodText] = useState('');
+  const [periodLokal, setPeriodLokal] = useState('');
+  const periodText = periodStyrd?.text ?? periodLokal;
+  const setPeriodText = periodStyrd?.satt ?? setPeriodLokal;
   const [sok, setSok] = useState('');
   // Övningar som kör samma quiz som ett läxförhör/exit ticket räknas in i huvudsviten
   const [inkluderaOvn, setInkluderaOvn] = useState(true);
@@ -4892,16 +4898,16 @@ function EnkelRapportVy({ s, elev, f, periodText, onTillbaka, onFull, onStudie, 
  * 📄 Rapporter — en elev i taget: hur det går, vad eleven kan göra, och
  * hela underlaget. Samma analys som Word-filen, fast på skärmen.
  */
-function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur, m: string) => void; meddela: (m: string) => void }) {
+function RapportVy({ s, kor, meddela, topp }: { s: Struktur; kor: (fn: () => Struktur, m: string) => void; meddela: (m: string) => void; topp?: ToppKoppling }) {
   const [design, setDesign] = useState(false);
   const [mallAlla, setMallAlla] = useState<string | null>(null);
   const [valAlla, setValAlla] = useState(false);
-  const klasser = [...s.klasser].sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
-  const [klassId, setKlassId] = useState(klasser[0]?.id ?? '');
-  const klass = klasser.find((k) => k.id === klassId) ?? klasser[0];
-  const amnen = s.amnen.filter((a) => a.klassId === klass?.id);
-  const [amneId, setAmneId] = useState('');
-  const [periodText, setPeriodText] = useState('');
+  // Del 150: klass, kurs (aktiv kurs förvald) och period följer topplistan i v3
+  const { klasser, klass, amnen, amneId, setKlassId, setAmneId } = useKlassOchKurs(s, topp);
+  const klassId = klass?.id ?? '';
+  const [periodLokal, setPeriodLokal] = useState('');
+  const periodText = topp !== undefined ? topp.filter.periodText : periodLokal;
+  const setPeriodText = (x: string) => { if (topp !== undefined) topp.setFilter({ ...topp.filter, periodText: x }); else setPeriodLokal(x); };
   const [elevId, setElevId] = useState('');
   const [lage, setLage] = useState<'enkel' | 'full' | 'studie'>('enkel');
   const [sok, setSok] = useState('');
@@ -5002,7 +5008,7 @@ function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur,
       </div>
       <div className="rad st-filterrad">
         <label>Klass:{' '}
-          <select aria-label="Klass för rapport" value={klass.id} onChange={(e) => { setKlassId(e.target.value); setAmneId(''); setElevId(''); }}>
+          <select aria-label="Klass för rapport" value={klass.id} onChange={(e) => { setKlassId(e.target.value); setElevId(''); }}>
             {klasser.map((k) => <option key={k.id} value={k.id}>{k.namn}</option>)}
           </select></label>
         <label>Ämne:{' '}
@@ -5365,13 +5371,49 @@ function VantandePanel({ s, klassId, kor }: { s: Struktur; klassId: string; kor:
   );
 }
 
-function SuperTeachVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur, m: string) => void; meddela?: (m: string) => void }) {
+/**
+ * Del 150 · Koppling till v3:s topplista (Klass · Läsår · Ämne · Period). Vyerna läser
+ * och skriver samma filter, så topplistan visar alltid det som är aktivt och ett byte
+ * där slår igenom i vyn.
+ */
+interface ToppKoppling { filter: Filter; setFilter: (f: Filter) => void; setPeriodTips?: (t: string) => void }
+
+/**
+ * Klass och kurs för en vy: från topplistan (v3) eller lokalt (v2). Aktiv kurs väljs
+ * automatiskt en gång per klass; väljer läraren sedan "alla ämnen" står det kvar.
+ */
+function useKlassOchKurs(s: Struktur, topp: ToppKoppling | undefined) {
   const klasser = [...s.klasser].sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
-  const [klassId, setKlassId] = useState(klasser[0]?.id ?? '');
-  const klass = klasser.find((k) => k.id === klassId) ?? klasser[0];
+  const [klassLokal, setKlassLokal] = useState(klasser[0]?.id ?? '');
+  const [kursLokal, setKursLokal] = useState('');
+  const klassIdVal = topp !== undefined ? topp.filter.klassId : klassLokal;
+  const klass = klasser.find((k) => k.id === klassIdVal) ?? klasser[0];
+  const kursIdVal = topp !== undefined ? topp.filter.amneId : kursLokal;
+  const autoSatt = useRef<Set<string>>(new Set());
+  const idag = new Date().toISOString().slice(0, 10);
+  const setKlassId = (id: string) => { if (topp !== undefined) topp.setFilter({ ...topp.filter, klassId: id, amneId: '' }); else { setKlassLokal(id); setKursLokal(''); } };
+  const setKursId = (id: string) => { autoSatt.current.add(klass?.id ?? ''); if (topp !== undefined) topp.setFilter({ ...topp.filter, klassId: klass?.id ?? topp.filter.klassId, amneId: id }); else setKursLokal(id); };
+  useEffect(() => {
+    if (klass === undefined) return;
+    // Topplistan på "alla klasser" → vyn behöver en klass: visa den som används
+    if (topp !== undefined && topp.filter.klassId !== klass.id && !s.amnen.some((a) => a.id === topp.filter.amneId && a.klassId === klass.id)) {
+      topp.setFilter({ ...topp.filter, klassId: klass.id, amneId: topp.filter.amneId !== '' && s.amnen.find((a) => a.id === topp.filter.amneId)?.klassId === klass.id ? topp.filter.amneId : '' });
+      return;
+    }
+    if (kursIdVal === '' && !autoSatt.current.has(klass.id)) {
+      autoSatt.current.add(klass.id);
+      const aktiv = aktivKurs(s, klass.id, idag);
+      if (aktiv !== null) { if (topp !== undefined) topp.setFilter({ ...topp.filter, klassId: klass.id, amneId: aktiv }); else setKursLokal(aktiv); }
+    }
+  }, [klass?.id, kursIdVal, topp?.filter.klassId]); // eslint-disable-line react-hooks/exhaustive-deps
   const amnen = s.amnen.filter((a) => a.klassId === klass?.id);
-  const [amneId, setAmneId] = useState('');
-  const amne = amnen.find((a) => a.id === amneId);
+  const amne = amnen.find((a) => a.id === kursIdVal);
+  const aktivId = klass === undefined ? null : aktivKurs(s, klass.id, idag);
+  return { klasser, klass, amnen, amne, amneId: amne?.id ?? '', setKlassId, setAmneId: setKursId, aktivId };
+}
+
+function SuperTeachVy({ s, kor, meddela, topp }: { s: Struktur; kor: (fn: () => Struktur, m: string) => void; meddela?: (m: string) => void; topp?: ToppKoppling }) {
+  const { klasser, klass, amnen, amne, amneId, setKlassId, setAmneId, aktivId } = useKlassOchKurs(s, topp);
   const [kalla, setKalla] = useState<ResultatKalla>('socrative-exit');
   const [prov, setProv] = useState('');
   const [datum, setDatum] = useState(() => new Date().toISOString().slice(0, 10));
@@ -5380,10 +5422,21 @@ function SuperTeachVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Strukt
   // Läxförhören är standardurvalet — det som säger mest om hur begreppen sitter
   const [filter, setFilterRaw] = useState<ResultatKalla[]>(() => lasInstallning<ResultatKalla[]>('st.kallor', ['socrative-laxforhor']));
   const setFilter = (k: ResultatKalla[]) => { setFilterRaw(k); sparaInstallning('st.kallor', k); };
-  // Omfång: aktivt kapitel (standard) → terminen → alla NO-ämnen → läsåret
-  const [omfang, setOmfangRaw] = useState<Omfang>(() => lasInstallning<Omfang>('st.omfang', 'kapitel'));
-  const setOmfang = (o: Omfang) => { setOmfangRaw(o); sparaInstallning('st.omfang', o); };
+  // Del 150: omfång i tre delar — ämne · block · tid. Äldre sparat omfång översätts.
+  const [omfVal, setOmfValRaw] = useState<OmfangVal>(() => {
+    const ny = lasInstallning<OmfangVal | null>('st.omfang2', null);
+    if (ny !== null) return ny;
+    const gammal = lasInstallning<Omfang | null>('st.omfang', null);
+    return gammal !== null ? omfangFranGammal(gammal) : STANDARD_OMFANG;
+  });
+  const setOmfVal = (o: OmfangVal) => { setOmfValRaw(o); sparaInstallning('st.omfang2', o); };
+  // Topplistans Period visar omfångets tid som ledtext när inga veckor är ifyllda
+  const tipsIdag = new Date().toISOString().slice(0, 10);
+  const tipsText = omfVal.tid === 'allt' ? 'all tid' : omfVal.tid === 'termin' ? terminIntervall(tipsIdag).namn : lasarIntervall(s, tipsIdag, topp?.filter.skolarId).namn;
+  useEffect(() => { topp?.setPeriodTips?.(tipsText); }, [tipsText]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => topp?.setPeriodTips?.(''), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [visaProv, setVisaProv] = useState('');
+  const [importeraOm, setImporteraOm] = useState(false);
 
   if (klass === undefined) return <div className="card"><h2>📊 SuperTeach</h2><p className="muted">Skapa klasser och elever under 🗂 Struktur först.</p></div>;
 
@@ -5433,7 +5486,6 @@ function SuperTeachVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Strukt
     typAndrad?: boolean;
   }
   const [filRader, setFilRader] = useState<FilRad[]>([]);
-  const [importeraOm, setImporteraOm] = useState(false);
   const [importApp, setImportApp] = useState<ImportApp>('socrative');
   const lasFiler = async (filer: FileList | null) => {
     if (filer === null) return;
@@ -5498,7 +5550,8 @@ function SuperTeachVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Strukt
   };
 
   const idag = new Date().toISOString().slice(0, 10);
-  const omf = omfangFilter(s, klass.id, amne?.id ?? '', omfang, idag);
+  const omf = omfangFilterVal(s, klass.id, amne?.id ?? '', omfVal, idag, topp?.filter.skolarId);
+  const amnenVal = amne === undefined ? 'alla' : omfVal.amnen;
   // Ämnets källor (Biologi: inte Magma) begränsar alltid; chipparna väljer inom dem
   const tillatna = amnesKallor(amne?.namn);
   const kallor = filter.filter((k) => tillatna.includes(k)).length > 0 ? filter.filter((k) => tillatna.includes(k)) : (amne === undefined ? undefined : tillatna);
@@ -5512,13 +5565,13 @@ function SuperTeachVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Strukt
       <h2>📊 SuperTeach — resultat <small className="muted" style={{ fontWeight: 400 }}>· {omf.etikett}</small></h2>
       <div className="rad" style={{ flexWrap: 'wrap', gap: 8 }}>
         <label>Klass:{' '}
-          <select aria-label="SuperTeach klass" value={klass.id} onChange={(e) => { setKlassId(e.target.value); setAmneId(''); }}>
+          <select aria-label="SuperTeach klass" value={klass.id} onChange={(e) => setKlassId(e.target.value)}>
             {klasser.map((k) => <option key={k.id} value={k.id}>{k.namn}</option>)}
           </select></label>
         <label>Ämne:{' '}
-          <select aria-label="SuperTeach ämne" value={amneId} onChange={(e) => setAmneId(e.target.value)}>
+          <select aria-label="SuperTeach ämne" value={amneId} onChange={(e) => { setAmneId(e.target.value); if (e.target.value !== '') setOmfVal({ ...omfVal, amnen: 'kurs' }); }}>
             <option value="">— alla ämnen (aggregerat) —</option>
-            {amnen.map((a) => <option key={a.id} value={a.id}>{a.namn}</option>)}
+            {amnen.map((a) => <option key={a.id} value={a.id}>{a.namn}{a.id === aktivId ? ' (aktiv kurs)' : ''}</option>)}
           </select></label>
         {amne !== undefined && <SparaMeny typ="superteach" s={s} amneId={amne.id} kor={kor} meddela={meddela} />}
         <span className="spacer" />
@@ -5527,17 +5580,45 @@ function SuperTeachVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Strukt
             onClick={() => setFilter(filter.includes(k) ? filter.filter((x) => x !== k) : [...filter, k])}>{KALLNAMN[k]}</button>
         ))}
       </div>
-      <div className="rad st-omfang" role="radiogroup" aria-label="Omfång">
+      {/* Del 150: omfång = ämne · block · tid, fritt kombinerade */}
+      <div className="st-omfang" aria-label="Omfång">
         <b className="small">Omfång:</b>
-        {(['kapitel', 'termin', 'no-termin', 'no-lasar', 'allt'] as Omfang[]).map((o) => {
-          const r = omfangFilter(s, klass.id, amne?.id ?? '', o, idag);
-          return (
-            <button key={o} role="radio" aria-checked={omfang === o} className={`chipbtn ${omfang === o ? 'act' : ''}`} title={r.etikett}
-              disabled={(o === 'kapitel' || o === 'termin') && amne === undefined}
-              onClick={() => setOmfang(o)}>{OMFANG_NAMN[o]}<small className="muted"> · {r.etikett}</small></button>
-          );
-        })}
+        <span className="st-omfang-grupp" role="radiogroup" aria-label="Omfång ämne">
+          <small className="muted">📚 Ämne</small>
+          {amnen.length > 0 && (() => {
+            const kurs = amne ?? amnen.find((a) => a.id === aktivId) ?? amnen[0];
+            const pa = amnenVal === 'kurs';
+            return <button role="radio" aria-checked={pa} className={`chipbtn ${pa ? 'act' : ''}`}
+              onClick={() => { if (amne === undefined) setAmneId(kurs.id); setOmfVal({ ...omfVal, amnen: 'kurs' }); }}>{kurs.namn}{kurs.id === aktivId && <small> · aktiv kurs</small>}</button>;
+          })()}
+          <button role="radio" aria-checked={amnenVal === 'no'} className={`chipbtn ${amnenVal === 'no' ? 'act' : ''}`} disabled={amne === undefined && amnen.length === 0}
+            onClick={() => { if (amne === undefined && amnen[0] !== undefined) setAmneId((amnen.find((a) => a.id === aktivId) ?? amnen[0]).id); setOmfVal({ ...omfVal, amnen: 'no' }); }}>Alla NO-ämnen</button>
+          <button role="radio" aria-checked={amnenVal === 'alla'} className={`chipbtn ${amnenVal === 'alla' ? 'act' : ''}`}
+            onClick={() => { setAmneId(''); setOmfVal({ ...omfVal, amnen: 'alla' }); }}>Alla ämnen</button>
+        </span>
+        <span className={`st-omfang-grupp${amnenVal !== 'kurs' ? ' av' : ''}`} role="radiogroup" aria-label="Omfång block" title={amnenVal !== 'kurs' ? 'Block (kapitel) gäller en kurs' : undefined}>
+          <small className="muted">🧱 Block</small>
+          <button role="radio" aria-checked={omfVal.block === 'aktivt'} disabled={amnenVal !== 'kurs'} className={`chipbtn ${omfVal.block === 'aktivt' && amnenVal === 'kurs' ? 'act' : ''}`}
+            onClick={() => setOmfVal({ ...omfVal, block: 'aktivt' })}>Kapitlet som pågår{amnenVal === 'kurs' && omfVal.block === 'aktivt' && omf.kapitel !== null ? <small> · Kap {omf.kapitel}</small> : null}</button>
+          <select aria-label="Välj kapitel" disabled={amnenVal !== 'kurs' || omf.kapitelIKursen.length === 0} value={typeof omfVal.block === 'number' ? String(omfVal.block) : ''}
+            className={typeof omfVal.block === 'number' && amnenVal === 'kurs' ? 'act' : undefined}
+            onChange={(e) => setOmfVal({ ...omfVal, block: e.target.value === '' ? 'aktivt' : Number(e.target.value) })}>
+            <option value="">kapitel…</option>
+            {omf.kapitelIKursen.map((k) => <option key={k} value={k}>Kap {k}</option>)}
+          </select>
+          <button role="radio" aria-checked={omfVal.block === 'alla'} disabled={amnenVal !== 'kurs'} className={`chipbtn ${omfVal.block === 'alla' && amnenVal === 'kurs' ? 'act' : ''}`}
+            onClick={() => setOmfVal({ ...omfVal, block: 'alla' })}>Alla kapitel</button>
+        </span>
+        <span className="st-omfang-grupp" role="radiogroup" aria-label="Omfång tid">
+          <small className="muted">🗓 Tid</small>
+          {(['termin', 'lasar', 'allt'] as const).map((tid) => {
+            const r = omfangFilterVal(s, klass.id, amne?.id ?? '', { ...omfVal, tid }, idag, topp?.filter.skolarId);
+            return <button key={tid} role="radio" aria-checked={omfVal.tid === tid} className={`chipbtn ${omfVal.tid === tid ? 'act' : ''}`}
+              onClick={() => setOmfVal({ ...omfVal, tid })}>{tid === 'termin' ? 'Terminen' : tid === 'lasar' ? 'Läsåret' : 'All tid'}{r.tid !== null && <small> · {r.tid.namn}</small>}</button>;
+          })}
+        </span>
         <InfoKnapp id="omfang" />
+        <small className="muted st-omfang-etikett">= {omf.etikett}</small>
       </div>
 
       {varningar.length > 0 && (
@@ -5690,7 +5771,8 @@ function SuperTeachVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Strukt
 
       </details>
 
-      <SuperTeachDashboard s={s} klassId={klass.id} klassNamn={klass.namn} amneId={amne?.id ?? ''} kallor={kallor} omfang={omf}
+      <SuperTeachDashboard s={s} klassId={klass.id} klassNamn={klass.namn} amneId={omf.amneId} kallor={kallor} omfang={omf}
+        periodStyrd={topp === undefined ? undefined : { text: topp.filter.periodText, satt: (text) => topp.setFilter({ ...topp.filter, periodText: text }) }}
         onVisaProv={(p) => setVisaProv(p)} kor={kor} />
 
       {/* ── Översikt ── */}

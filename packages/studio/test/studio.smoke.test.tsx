@@ -2535,14 +2535,27 @@ describe('Del 126: omfång i SuperTeach', () => {
     skriv(input(host, 'Elevens namn'), 'Anna Berg');
     act(() => { knapp(host, '➕ Lägg till elev').click(); });
     act(() => { knapp(host, '📊 SuperTeach').click(); });
-    const radio = [...host.querySelectorAll('[role="radiogroup"][aria-label="Omfång"] [role="radio"]')] as HTMLButtonElement[];
-    expect(radio.map((b) => b.textContent?.split(' ·')[0].trim())).toEqual(['Aktivt kapitel', 'Hela terminen', 'Alla NO-ämnen', 'Alla NO-ämnen', 'Allt']);
-    expect(radio[0].getAttribute('aria-checked')).toBe('true');
+    // Del 150: omfång = ämne · block · tid, aktiv kurs (enda ämnet) förvald
+    const grupp = (namn: string) => [...host.querySelectorAll(`[role="radiogroup"][aria-label="Omfång ${namn}"] [role="radio"]`)] as HTMLButtonElement[];
+    const text = (b: HTMLButtonElement) => b.textContent?.split(' ·')[0].trim();
+    expect(grupp('ämne').map(text)).toEqual(['Biologi', 'Alla NO-ämnen', 'Alla ämnen']);
+    expect(grupp('ämne')[0].textContent).toContain('aktiv kurs');
+    expect(grupp('ämne')[0].getAttribute('aria-checked')).toBe('true');
+    expect(select(host, 'SuperTeach ämne').selectedOptions[0].textContent).toBe('Biologi (aktiv kurs)');
+    expect(grupp('block').map(text)).toEqual(['Kapitlet som pågår', 'Alla kapitel']);
+    expect(grupp('block')[0].getAttribute('aria-checked')).toBe('true');
+    expect(grupp('tid').map(text)).toEqual(['Terminen', 'Läsåret', 'All tid']);
+    expect(grupp('tid')[1].getAttribute('aria-checked')).toBe('true');
     // Läxförhör förvalt bland källchipparna
     expect(host.querySelector('.chipbtn.act')!.textContent).toContain('Läxförhör');
-    act(() => { radio[2].click(); }); // alla NO · terminen
-    expect(host.querySelector('h2')!.textContent).toMatch(/HT 20\d\d · Biologi/);
-    expect(JSON.parse(localStorage.getItem('st.omfang')!)).toBe('no-termin');
+    act(() => { grupp('ämne')[1].click(); }); // alla NO
+    act(() => { grupp('tid')[0].click(); });  // terminen
+    expect(host.querySelector('h2')!.textContent).toMatch(/Biologi · HT 20\d\d/);
+    expect(grupp('block')[0].disabled).toBe(true);        // block gäller en kurs
+    expect(JSON.parse(localStorage.getItem('st.omfang2')!)).toEqual({ amnen: 'no', block: 'aktivt', tid: 'termin' });
+    act(() => { grupp('ämne')[2].click(); }); // alla ämnen
+    expect(select(host, 'SuperTeach ämne').value).toBe('');
+    expect(host.querySelector('h2')!.textContent).toContain('alla ämnen');
   });
 });
 
@@ -3296,5 +3309,58 @@ describe('Del 147: resultat som väntar på elev kopplas automatiskt när eleven
     act(() => { (host.querySelector('button[aria-label="Ta bort väntande Okänd Person"]') as HTMLButtonElement).click(); });
     expect(host.querySelector('.st-vantande')).toBeNull();
     expect(lasStruktur().vantandeResultat).toBeUndefined();
+  });
+});
+
+describe('Del 150: topplistan (Klass · Läsår · Ämne · Period) följer det som är aktivt', () => {
+  it('Resultat förväljer aktiv kurs i topplistan, byten åt båda hållen slår igenom och perioden är samma fält', async () => {
+    const { importeraResultat, laggTillSkolar, laggTillTjanst, laggTillKlass, laggTillAmne, laggTillElev, tomStruktur } = await import('@planner/kernel');
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', schema: [{ dag: 1, start: '08:10', slut: '09:10' }] });
+    s = laggTillAmne(s, { id: 'fy', klassId: 'k', namn: 'Fysik', schema: [{ dag: 2, start: '08:10', slut: '09:10' }] });
+    s = laggTillElev(s, { id: 'e1', klassId: 'k', namn: 'Anna Testsson', grupp: 'A' });
+    // Fysik har senaste resultatet → aktiv kurs (ingen planering finns)
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-laxforhor', prov: 'Biologi41', datum: '2026-09-01', rader: [{ namn: 'Anna Testsson', poang: 8, maxPoang: 10 }] }).s;
+    s = importeraResultat(s, { klassId: 'k', amneId: 'fy', kalla: 'socrative-laxforhor', prov: 'Fysik21', datum: '2026-09-10', rader: [{ namn: 'Anna Testsson', poang: 6, maxPoang: 10 }] }).s;
+    window.localStorage.setItem('classroom-planner.studio.v2', JSON.stringify(s));
+    localStorage.setItem('cp.layout', JSON.stringify('v3'));
+    localStorage.removeItem('st.omfang'); localStorage.removeItem('st.omfang2');
+    const host = render();
+    act(() => { ([...host.querySelectorAll('.v3-nav')].find((b) => b.textContent?.trim() === 'Resultat') as HTMLButtonElement).click(); });
+    // Aktiv kurs förvald — i vyn OCH i topplistan
+    expect(select(host, 'Filter ämne').value).toBe('fy');
+    expect(select(host, 'SuperTeach ämne').value).toBe('fy');
+    expect(select(host, 'SuperTeach ämne').selectedOptions[0].textContent).toBe('Fysik (aktiv kurs)');
+    expect(select(host, 'Filter klass').value).toBe('k');
+    // Period i topplistan visar omfångets tid (läsåret) som ledtext
+    expect(input(host, 'Filter period').placeholder).toBe('2026/2027');
+    act(() => { ([...host.querySelectorAll('[role="radiogroup"][aria-label="Omfång tid"] [role="radio"]')] as HTMLButtonElement[])[2].click(); });
+    expect(input(host, 'Filter period').placeholder).toBe('all tid');
+    // Byte i topplistan → vyn följer
+    valj(select(host, 'Filter ämne'), 'bi');
+    expect(select(host, 'SuperTeach ämne').value).toBe('bi');
+    expect(host.querySelector('h2')!.textContent).toContain('Biologi');
+    // Byte i vyn → topplistan följer
+    valj(select(host, 'SuperTeach ämne'), 'fy');
+    expect(select(host, 'Filter ämne').value).toBe('fy');
+    // "alla" i topplistan = alla ämnen i omfånget; väljs inte om automatiskt
+    valj(select(host, 'Filter ämne'), '');
+    expect(select(host, 'SuperTeach ämne').value).toBe('');
+    expect(([...host.querySelectorAll('[role="radiogroup"][aria-label="Omfång ämne"] [role="radio"]')] as HTMLButtonElement[])[2].getAttribute('aria-checked')).toBe('true');
+    // Perioden är ett och samma fält: topplistan ↔ dashboardens periodfält
+    skriv(input(host, 'Filter period'), 'v.36');
+    expect(input(host, 'Period (veckor)').value).toBe('v.36');
+    skriv(input(host, 'Period (veckor)'), 'v.37');
+    expect(input(host, 'Filter period').value).toBe('v.37');
+    // ↺ Helklass nollar även topplistans period
+    act(() => { (host.querySelector('button[aria-label="Återställ alla filter till helklass"]') as HTMLButtonElement).click(); });
+    expect(input(host, 'Filter period').value).toBe('');
+    // Elever-vyn följer samma topplista
+    valj(select(host, 'Filter ämne'), 'bi');
+    act(() => { ([...host.querySelectorAll('.v3-nav')].find((b) => b.textContent?.trim() === 'Elever') as HTMLButtonElement).click(); });
+    expect(select(host, 'Ämne för rapport').value).toBe('bi');
+    expect(input(host, 'Filter period').placeholder).toBe('v.34–42');   // rapportvyn har ingen tidsram → standardledtext
   });
 });

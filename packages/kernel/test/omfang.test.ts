@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { aktivtKapitel, lasarIntervall, noAmnenIKlass, omfangFilter, terminIntervall } from '../src/domain/omfang.js';
+import { aktivKurs, aktivtKapitel, lasarIntervall, noAmnenIKlass, omfangFilter, omfangFilterVal, omfangFranGammal, terminIntervall } from '../src/domain/omfang.js';
 import { dashboardResultat, frageKort, kapitelMatchar, amneMatchar } from '../src/domain/dashboard.js';
 import { importeraResultat } from '../src/domain/resultat.js';
-import { laggTillAmne, laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst, tomStruktur, type Struktur } from '../src/index.js';
+import { laggTillAmne, laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering, sparaBok, tomStruktur, type Struktur } from '../src/index.js';
 
 function bygg(): Struktur {
   let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
@@ -61,5 +61,46 @@ describe('omfång — aktivt kapitel, termin, alla NO-ämnen, läsår', () => {
     const noL = omfangFilter(s, 'k', 'bi', 'no-lasar', idag);
     expect(noL.etikett).toBe('2026/2027 · Biologi, Fysik');
     expect(frageKort(s, { klassId: 'k', ...noL.filter }).find((k) => k.kalla === 'socrative-laxforhor')!.antalProv).toBe(3);
+  });
+});
+
+describe('Del 150: omfång i tre delar — ämne, block, tid — och aktiv kurs', () => {
+  it('kombinerar ämne, block och tid fritt', () => {
+    const s = bygg(); const idag = '2026-09-20';
+    const std = omfangFilterVal(s, 'k', 'bi', { amnen: 'kurs', block: 'aktivt', tid: 'lasar' }, idag);
+    expect(std).toMatchObject({ amneId: 'bi', kapitel: 4, etikett: 'Biologi · Kap 4 · 2026/2027', tid: { namn: '2026/2027' } });
+    expect(dashboardResultat(s, { klassId: 'k', amneId: std.amneId, ...std.filter }).map((r) => r.prov)).toEqual(['Biologi 4.1', '4.1-4.2 Begrepp']);
+    const kap3 = omfangFilterVal(s, 'k', 'bi', { amnen: 'kurs', block: 3, tid: 'allt' }, idag);
+    expect(kap3.etikett).toBe('Biologi · Kap 3 · all tid');
+    expect(dashboardResultat(s, { klassId: 'k', amneId: kap3.amneId, ...kap3.filter }).map((r) => r.prov)).toEqual(['Biologi 3.1']);
+    const no = omfangFilterVal(s, 'k', 'bi', { amnen: 'no', block: 'aktivt', tid: 'termin' }, idag);
+    expect(no).toMatchObject({ amneId: '', kapitel: null, etikett: 'Biologi, Fysik · HT 2026' });   // block gäller bara en kurs
+    expect(dashboardResultat(s, { klassId: 'k', ...no.filter }).length).toBe(3);
+    const alla = omfangFilterVal(s, 'k', '', { amnen: 'kurs', block: 'aktivt', tid: 'allt' }, idag);
+    expect(alla).toMatchObject({ amneId: '', etikett: 'alla ämnen · all tid', tid: null });           // ingen kurs → alla ämnen
+    expect(dashboardResultat(s, { klassId: 'k', ...alla.filter }).length).toBe(4);
+  });
+
+  it('läsåret följer valt skolår; äldre sparade omfång översätts', () => {
+    let s = bygg();
+    s = laggTillSkolar(s, { id: 'la2', namn: '2025/2026', start: '2025-08-18', slut: '2026-06-12', dagar: [] });
+    const f = omfangFilterVal(s, 'k', 'bi', { amnen: 'kurs', block: 'alla', tid: 'lasar' }, '2026-09-20', 'la2');
+    expect(f.etikett).toBe('Biologi · 2025/2026');
+    expect(dashboardResultat(s, { klassId: 'k', amneId: 'bi', ...f.filter }).map((r) => r.prov)).toEqual(['Biologi 3.1']);
+    expect(omfangFranGammal('no-termin')).toEqual({ amnen: 'no', block: 'alla', tid: 'termin' });
+    expect(omfangFranGammal('kapitel')).toEqual({ amnen: 'kurs', block: 'aktivt', tid: 'lasar' });
+  });
+
+  it('aktiv kurs: ämnet med lektion närmast idag; utan planering senaste resultat', () => {
+    let s = bygg();
+    expect(aktivKurs(s, 'k', '2026-09-20')).toBe('fy');           // Fysik har senaste resultat (1/9)
+    const bok = { id: 'b', titel: 'B', forlag: '', amne: 'Biologi', arskurs: 8, nivaer: { niva1: 'a', niva2: 'b', niva3: 'c' },
+      kapitel: [{ nr: 4, namn: 'K', farg: '#000', sidor: '', delkapitel: [], begreppslista: [], resurser: { filmer: [] },
+        extraLektioner: Array.from({ length: 40 }, (_, i) => ({ id: i + 1, typ: 'regular' as const, avsnitt: `Lektion ${i + 1}`, del: 1, niva1: '—', niva2: '—', niva3: '—', sidorTeori: '—', begrepp: '—', genomgang: '—', laxa: '—', ex: '—', socStart: '—', exit: '—' })) }] };
+    s = sparaBok(s, bok);
+    s = { ...s, amnen: s.amnen.map((a) => (a.id === 'bi' ? { ...a, bokId: 'b' } : a)) };
+    s = registreraPlanering(s, { id: 'pl', amneId: 'bi', bokId: 'b', skapad: '2026-08-10' });
+    expect(aktivKurs(s, 'k', '2026-09-20')).toBe('bi');           // planerad lektion nästa måndag
+    expect(aktivKurs(s, 'saknas', '2026-09-20')).toBeNull();
   });
 });
