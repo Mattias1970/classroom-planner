@@ -14,7 +14,7 @@ import { KLUSTER_NAMN, klusterElevIds, urvalAvvikerFranKluster, type Elev, type 
 const KLUSTER_ORDNING: Kluster[] = ['stigande', 'stabil', 'riskzon', 'ojamn'];
 const KLUSTER_FARG: Record<Kluster, string> = { stigande: '#1B5E20', stabil: '#2f5aa8', riskzon: '#B71C1C', ojamn: '#E65100' };
 
-export function ElevFilter({ elever, kluster, narvaro, val, valda, etikett, onVal, onAnalys }: {
+export function ElevFilter({ elever, kluster, narvaro, val, valda, etikett, grupp, onVal, onAnalys, onAterstall, andraFilter, rapport }: {
   /** Klassens alla elever (ofiltrerade). */
   elever: Elev[];
   kluster: KlusterGrupp[];
@@ -26,6 +26,14 @@ export function ElevFilter({ elever, kluster, narvaro, val, valda, etikett, onVa
   onVal: (v: ElevUrvalVal) => void;
   /** Öppnar trendklustergrafen. */
   onAnalys?: () => void;
+  /** Del 149: gruppens namn (urvalets namn) när urvalet inte är hela klassen. */
+  grupp?: string | null;
+  /** Del 149: återställ ALLA filter på sidan till helklass (period, dag, sök, frågefilter, urval). */
+  onAterstall?: () => void;
+  /** Andra filter än elevurvalet är aktiva (period, dag, sök …) — då visas återställningsknappen ändå. */
+  andraFilter?: boolean;
+  /** Del 149: Word-rapporter för dem som visas (klassen eller gruppen). */
+  rapport?: { onKlick: () => void; pagar: string };
 }) {
   const [sok, setSok] = useState('');
   const [panel, setPanel] = useState(false);
@@ -55,14 +63,17 @@ export function ElevFilter({ elever, kluster, narvaro, val, valda, etikett, onVa
     setFraga(null); setPanel(true);
   };
   const traff = elever.filter((e) => sok.trim() === '' || e.namn.toLowerCase().includes(sok.trim().toLowerCase()));
-  const klassChip = filtrerat ? `${antal} av ${elever.length}` : `${elever.length}`;
+  const gruppNamn = grupp ?? etikett;
+  const aterstall = () => { if (onAterstall !== undefined) onAterstall(); else onVal({ typ: 'alla' }); setFraga(null); };
+  const visasFor = filtrerat ? `Grupp ${gruppNamn} (${antal})` : `Klassen (${elever.length})`;
 
   return (
     <div className={`st-elevfilter${filtrerat ? ' aktiv' : ''}`} role="group" aria-label="Elevfilter">
       <div className="st-urvalsbar">
         <span className="st-urvalsbar-etikett">👥 Visas för:</span>
         <button type="button" className={`chipbtn st-klasschip${!filtrerat ? ' act' : ''}`} aria-pressed={!filtrerat} title="Alla elever i klassen"
-          onClick={() => { onVal({ typ: 'alla' }); setFraga(null); }}>Klassen <small>{klassChip}</small></button>
+          onClick={() => { onVal({ typ: 'alla' }); setFraga(null); }}>Klassen <small>{elever.length}</small></button>
+        {filtrerat && <span className="chipbtn act st-gruppchip" title="Alla grafer, tabeller och rapporter gäller den här gruppen">👥 Grupp: <b>{gruppNamn}</b> <small>{antal}</small></span>}
         <span className="st-urvalsbar-sep" aria-hidden="true">·</span>
         <span className="st-urvalsbar-etikett">✨ Trendkluster</span>
         {KLUSTER_ORDNING.map((k) => {
@@ -83,8 +94,13 @@ export function ElevFilter({ elever, kluster, narvaro, val, valda, etikett, onVa
         <button type="button" className={`chipbtn st-eleverchip${val.typ === 'elever' ? ' act' : ''}${panel ? ' oppen' : ''}`} aria-expanded={panel} aria-controls="st-elevpanel"
           onClick={() => setPanel(!panel)}>🧑‍🎓 Elever{val.typ === 'elever' ? <small>{antal} valda</small> : null} {panel ? '▴' : '▾'}</button>
         {val.typ === 'narvaro' && <span className="chipbtn act st-narvchip">🙋 {etikett}</span>}
-        {filtrerat && <span className="st-urvalsbar-status" role="status">Alla grafer visar <b>{antal}</b> av {elever.length} elever · {etikett}.</span>}
-        {filtrerat && <button type="button" className="icon-btn st-elevfilter-rensa" aria-label="Visa alla elever" title="Visa alla elever" onClick={() => { onVal({ typ: 'alla' }); setFraga(null); }}>✕</button>}
+        <span className="st-urvalsbar-hoger">
+          {filtrerat && <span className="st-urvalsbar-status" role="status">Alla grafer visar grupp <b>{gruppNamn}</b> · {antal} av {elever.length} elever.</span>}
+          {(filtrerat || andraFilter === true) && <button type="button" className="btn sec sm st-aterstall" aria-label="Återställ alla filter till helklass" title="Återställ period, dag, sök, frågefilter och elevurval — hela klassen"
+            onClick={aterstall}>↺ Helklass</button>}
+          {rapport !== undefined && <button type="button" className="btn sm st-rapportknapp" disabled={rapport.pagar !== ''} title={`En Word-rapport per elev (zip) för ${visasFor.toLowerCase()}`}
+            onClick={rapport.onKlick}>{rapport.pagar !== '' ? `… skapar ${rapport.pagar}` : <>📄 Word-rapporter · {visasFor}</>}</button>}
+        </span>
       </div>
 
       {fraga !== null && val.typ === 'kluster' && (

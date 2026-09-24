@@ -33,7 +33,7 @@ import {
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
   elevrapport, elevrapportText, tillfalleEtiketter, normeradSpridning, klusterKurvor, normeraBand, taBortFil, rensaResultat,
-  NORM_BAND, NORM_MAX, amnesKallor, lektionstester, elevLektionstest, tillfalleKortEtikett, KLUSTER_NAMN, TID_PASS, type Kluster,
+  NORM_BAND, NORM_MAX, amnesKallor, lektionsExit, elevLektionsExit, begreppSamband, type BegreppSamband, tillfalleKortEtikett, KLUSTER_NAMN, TID_PASS, type Kluster,
   begransaTillElever, elevUrval, klassensElever, type ElevUrvalVal,
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
@@ -2873,6 +2873,37 @@ function procentFarg(p: number | null, krav: number | null): string {
   return p >= 80 ? '#C8E6C9' : p >= 50 ? '#FFF9C4' : '#FFCDD2';
 }
 
+/** Del 149 · Punktdiagram: antal begrepp (x) mot klassens snitt (y) per förhör, med regressionslinje. */
+function BegreppSpridning({ b }: { b: BegreppSamband }) {
+  const w = 300; const h = 180; const m = { v: 34, h: 10, t: 10, u: 26 };
+  const farg = KORT_FARG[b.kalla];
+  const xs = b.punkter.map((p) => p.begrepp);
+  const xMin = Math.min(...xs, 0); const xMax = Math.max(...xs, 1);
+  const X = (x: number) => m.v + ((x - xMin) / Math.max(1, xMax - xMin)) * (w - m.v - m.h);
+  const Y = (y: number) => m.t + (1 - y / 100) * (h - m.t - m.u);
+  const my = b.punkter.length === 0 ? 0 : b.punkter.reduce((a, p) => a + p.snitt, 0) / b.punkter.length;
+  const mx = xs.length === 0 ? 0 : xs.reduce((a, x) => a + x, 0) / xs.length;
+  const linje = b.lutning === null ? null : [xMin, xMax].map((x) => ({ x, y: Math.max(0, Math.min(100, my + b.lutning! * (x - mx))) }));
+  const krav = b.kalla === 'socrative-laxforhor' ? 90 : 70;
+  return (
+    <div className={`st-begrdiagram ${b.kalla}`}>
+      <div className="rad"><b style={{ color: farg }}>{TYPNAMN[b.kalla]}</b><span className="spacer" />
+        {b.r !== null && <span className={`st-r ${b.r >= 0.3 ? 'pos' : b.r <= -0.3 ? 'neg' : ''}`}>r = {b.r > 0 ? '+' : ''}{b.r.toFixed(2)}</span>}
+        <small className="muted">{b.punkter.length} förhör</small></div>
+      {b.punkter.length > 0 && (
+        <svg viewBox={`0 0 ${w} ${h}`} width="100%" className="st-diagram" role="img" aria-label={`Antal begrepp mot resultat, ${TYPNAMN[b.kalla]}`}>
+          {[0, 50, 100].map((y) => <g key={y}><line x1={m.v} x2={w - m.h} y1={Y(y)} y2={Y(y)} stroke="#E3E7ED" /><text x={m.v - 4} y={Y(y) + 4} fontSize="10" textAnchor="end" fill="#6B7684">{y}</text></g>)}
+          <line x1={m.v} x2={w - m.h} y1={Y(krav)} y2={Y(krav)} stroke={farg} strokeDasharray="4 3" opacity=".5" />
+          {linje !== null && <line x1={X(linje[0].x)} x2={X(linje[1].x)} y1={Y(linje[0].y)} y2={Y(linje[1].y)} stroke="#444" strokeWidth="1.5" strokeDasharray="6 3" />}
+          {b.punkter.map((p, i) => <circle key={i} cx={X(p.begrepp)} cy={Y(p.snitt)} r="4.5" fill={farg} fillOpacity=".75"><title>{`${p.prov} (${kortDatum(p.datum)}): ${p.begrepp} begrepp · snitt ${p.snitt} % · ${p.elever} elever`}</title></circle>)}
+          <text x={(m.v + w - m.h) / 2} y={h - 6} fontSize="10" textAnchor="middle" fill="#6B7684">antal begrepp ({xMin}–{xMax})</text>
+        </svg>
+      )}
+      <p className="small st-begrtext">{b.text}</p>
+    </div>
+  );
+}
+
 /** Liten sparkline (SVG) för ett frågekort. */
 function Sparkline({ serie, farg, krav }: { serie: number[]; farg: string; krav: number | null }) {
   const w = 120; const h = 34;
@@ -3481,12 +3512,7 @@ function SittplatsWidget({ s, f, klassId, klassNamn, kor, onElev }: {
         )}
       </div>
 
-      <details className="bulk-elever sitt-import">
-        <summary>📥 Importera placering från PowerPoint (.pptx)</summary>
-        <PlaceringImport s={s} klassId={klassId} klassNamn={klassNamn} kor={kor} onSparad={(id) => setValdId(id)} />
-      </details>
-
-      {analys === null ? <p className="muted small">Ingen placering importerad för {klassNamn} ännu.</p> : (<>
+      {analys === null ? <p className="muted small">Ingen placering importerad för {klassNamn} ännu — importera den under <b>📥 Importera → PowerPoint</b> överst på sidan.</p> : (<>
         <p className="small muted">Gäller {analys.placering.datum} – {analys.giltigTill ?? 'tills vidare'} · {analys.rader.filter((r) => r.elev !== null).length} elever</p>
         <div className="st-sittgrid" style={{ gridTemplateColumns: `repeat(${analys.antalKolumner}, minmax(80px, 1fr))` }}>
           {Array.from({ length: analys.antalRader * analys.antalKolumner }, (_, i) => {
@@ -3607,6 +3633,9 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
   const zFokus = useZoom();
   const [klassLage, setKlassLage] = useState<'normerad' | 'spridning' | 'kurva'>('normerad');
   const [klusterPa, setKlusterPa] = useState<Kluster[]>(['stigande', 'stabil', 'riskzon', 'ojamn']);
+  // Del 149: trendklustrens analysgraf visas på begäran
+  const [visaKlusterAnalys, setVisaKlusterAnalys] = useState(false);
+  const [rapportPagar, setRapportPagar] = useState('');
   const period = tolkaVeckor(periodText);
   const [dag, setDag] = useState('');
   // Omfånget (kapitel / termin / alla NO) läggs under periodfältet: skriver man en period gäller den
@@ -3625,6 +3654,28 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
   const urval = elevUrval(urvalVal, urvalBas.kluster, urvalBas.narvaro);
   const urvalNyckel = urval.elevIds === null ? '' : urval.elevIds.join(',');
   const s = useMemo(() => begransaTillElever(sBas, urval.elevIds), [sBas, urvalNyckel]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Del 149: återställ allt till helklass — period, dag, sök, frågefilter, fokus och elevurval
+  const andraFilter = periodText !== '' || dag !== '' || sok !== '' || fmTyper.length > 0 || valdaTest.length > 0 || fMin !== 0 || fMax !== 50;
+  const aterstallHelklass = () => {
+    setUrvalVal({ typ: 'alla' }); setPeriodText(''); setDag(''); setSok('');
+    setFmTyper([]); setValdaTest([]); setFMin(0); setFMax(50); setFokus([]); setLedElev(null); setVald(null);
+  };
+  const oppnaKlusterAnalys = () => { setVisaKlusterAnalys(true); gaTill('st-sekt-jamf'); };
+  /** Del 149: en Word-rapport per elev (zip) för klassen eller gruppen som visas. */
+  const rapporterTillWord = () => {
+    const ids = urval.elevIds === null ? null : new Set(urval.elevIds);
+    const medResultat = rapportOversikt(sBas, f, '').filter((r) => r.antalProv > 0 && (ids === null || ids.has(r.elev.id)));
+    if (medResultat.length === 0) { window.alert('Ingen elev i urvalet har resultat.'); return; }
+    setRapportPagar(`0 av ${medResultat.length}`);
+    const amnesNamn = amneId !== '' ? sBas.amnen.find((a) => a.id === amneId)?.namn ?? '' : '';
+    const arkiv = [klassNamn, urval.grupp !== null ? `grupp ${urval.grupp}` : '', amnesNamn, 'rapporter'].filter((x) => x !== '').join(' ');
+    void import('./elevrapportWord.js')
+      .then(({ klassrapporterTillWord }) => klassrapporterTillWord(
+        medResultat.map((r) => elevanalys(sBas, r.elev.id, f)), arkiv, (klar, av) => setRapportPagar(`${klar} av ${av}`),
+      ))
+      .catch(() => window.alert('Rapporterna kunde inte skapas.'))
+      .finally(() => setRapportPagar(''));
+  };
 
   // ── Klassnivå: räknas om bara när struktur eller filter ändras ──
   // Tidigare kördes ett tjugotal kernel-funktioner vid varje omritning, även när
@@ -3635,7 +3686,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
     const samband = sambandsanalys(s, f);
     return {
       kort: frageKort(s, f), kurva, spridning: klassSpridning(s, f),
-      lekt: lektionstester(s, f), elevLekt: elevLektionstest(s, f),
+      lekt: lektionsExit(s, f), elevLekt: elevLektionsExit(s, f), begrSamband: begreppSamband(s, f),
       klassFastnat: aterkommandeFelKlass(s, tkFilter),
       tk: trendkoll(s, tkFilter),
       normerad: normeradSpridning(s, f), klusterK: klusterKurvor(s, f), veckor: veckoSerier(s, f),
@@ -3646,7 +3697,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
       kravLinjer: [...new Set(kurva.map((t) => t.krav).filter((k): k is number => k !== null))].sort().map((p) => ({ procent: p, namn: 'Godkänt' })),
     };
   }, [s, filterNyckel]); // eslint-disable-line react-hooks/exhaustive-deps
-  const { kort, kurva, spridning, lekt, elevLekt, klassFastnat, tk, normerad, klusterK, veckor, kluster, grupper, samband, narvaro, narvaroPerElev, tid, narvaroSamband, kravLinjer } = klassData;
+  const { kort, kurva, spridning, lekt, elevLekt, begrSamband, klassFastnat, tk, normerad, klusterK, veckor, kluster, grupper, samband, narvaro, narvaroPerElev, tid, narvaroSamband, kravLinjer } = klassData;
   const tidHarData = tid.some((c) => c.antal > 0);
 
   // ── Elevberoende: bara när vald elev i led/matris ändras ──
@@ -3698,9 +3749,9 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
   const fastnatMini = <MiniTal tal={klassFastnat.length} etikett={klassFastnat.length === 1 ? 'svårt begrepp' : 'svåra begrepp'} farg={klassFastnat.length > 0 ? '#B71C1C' : undefined} />;
   const tkMini = tk.par.length === 0 ? <MiniTal tal="—" etikett="kräver samma fråga två gånger" />
     : <><MiniTal tal={`${tk.netto > 0 ? '+' : ''}${tk.netto}`} etikett="netto" farg={tk.netto >= 0 ? '#1B5E20' : '#B71C1C'} /><MiniTal tal={`${tk.inlarningsProcent ?? '—'} %`} etikett="av felen blev rätt" /></>;
-  const lektDiff = tal(lekt.map((l) => l.diffSnitt));
-  const lektMini = lekt.length === 0 ? <MiniTal tal="—" etikett="inga lektioner med båda testerna" />
-    : <MiniTal tal={`${lektDiff.length > 0 && lektDiff.reduce((a, b) => a + b, 0) / lektDiff.length > 0 ? '+' : ''}${lektDiff.length > 0 ? Math.round(lektDiff.reduce((a, b) => a + b, 0) / lektDiff.length) : '—'}`} etikett={`Δ snitt · ${lekt.length} lektioner`} />;
+  const lektSnitt = tal(lekt.map((l) => l.snitt));
+  const lektMini = lekt.length === 0 ? <MiniTal tal="—" etikett="inga exit tickets" />
+    : <><Sparkline serie={lektSnitt} farg={KORT_FARG['socrative-exit']} krav={70} /><MiniTal tal={`${lektSnitt.length > 0 ? Math.round(lektSnitt.reduce((a, b) => a + b, 0) / lektSnitt.length) : '—'} %`} etikett={`exit · ${lekt.length} lektioner`} /></>;
   const narvMini = narvaro.antalLektioner === 0 ? <MiniTal tal="—" etikett="inga lektioner" />
     : <><Sparkline serie={narvaro.serie} farg="#00838F" krav={80} /><MiniTal tal={`${narvaro.narvaroProcent ?? '—'} %`} etikett={`${narvaro.riskElever.length} under 80 %`} /></>;
   const jamfMini = <><Sparkline serie={tal(veckor.serier.helhet)} farg="#9AA3AE" krav={null} /><MiniTal tal={urvalBas.kluster.find((g) => g.kluster === 'riskzon')?.elever.length ?? 0} etikett="i riskzon" farg="#B71C1C" /></>;
@@ -3728,11 +3779,12 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
         )}
         {valdDag !== null && <button className="btn sm" onClick={() => setDag('')}>✕ visa alla dagar</button>}
         <span className="spacer" />
-        <small className="muted">{klassNamn}{amneId !== '' ? ` · ${s.amnen.find((a) => a.id === amneId)?.namn ?? ''}` : ' · alla ämnen'}{period !== null ? ` · v.${period.veckaFran}–${period.veckaTill}` : ''}{valdDag !== null ? ` · ${kortDatum(valdDag.datum)}${valdDag.datumTill !== valdDag.datum ? `–${kortDatum(valdDag.datumTill)}` : ''}` : ''}{urval.elevIds !== null ? ` · ${urval.elevIds.length} elever (${urval.etikett})` : ''}</small>
+        <small className="muted">{urval.grupp !== null ? `Grupp ${urval.grupp} · ${klassNamn}` : `Klass ${klassNamn}`}{amneId !== '' ? ` · ${s.amnen.find((a) => a.id === amneId)?.namn ?? ''}` : ' · alla ämnen'}{period !== null ? ` · v.${period.veckaFran}–${period.veckaTill}` : ''}{valdDag !== null ? ` · ${kortDatum(valdDag.datum)}${valdDag.datumTill !== valdDag.datum ? `–${kortDatum(valdDag.datumTill)}` : ''}` : ''}{urval.elevIds !== null ? ` · grupp ${urval.grupp ?? urval.etikett} (${urval.elevIds.length} elever)` : ''}</small>
       </div>
       {/* Del 148: "Visas för:" — klassen, trendklustren, analysknapp och elevnamn, alltid synligt överst */}
-      <ElevFilter elever={klassElever} kluster={urvalBas.kluster} narvaro={urvalBas.narvaro} val={urvalVal} valda={urval.elevIds} etikett={urval.etikett} onVal={setUrvalVal}
-        onAnalys={() => gaTill('st-sekt-jamf')} />
+      <ElevFilter elever={klassElever} kluster={urvalBas.kluster} narvaro={urvalBas.narvaro} val={urvalVal} valda={urval.elevIds} etikett={urval.etikett} grupp={urval.grupp} onVal={setUrvalVal}
+        onAnalys={oppnaKlusterAnalys} onAterstall={aterstallHelklass} andraFilter={andraFilter}
+        rapport={{ onKlick: rapporterTillWord, pagar: rapportPagar }} />
 
       {/* KPI-rad — frågekort i mockupens stil: ikon, rubrik, fråga, stort tal, delta, sparkline */}
       <div className="st-kortrad">
@@ -4074,32 +4126,25 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
         </>)}
       </StWidget>
 
-      {/* Lektionstest: läxförhör vs exit ticket per lektion */}
+      {/* Lektionstest (Del 149): bara exit tickets — vad eleverna lärde sig på lektionen */}
       <StWidget {...W('st-sekt-lekt')} className="st-lektionstest" ikon="🎯" rubrik="Lektionstest" info={<InfoKnapp id="lektionstest" />}
-        under={<>läxförhör och exit ticket från samma lektion hålls isär · <b>Δ</b> = exit − läxförhör i procentenheter, räknat per lektion och sedan som medelvärde (bara lektioner med båda testerna)</>} mini={lektMini}>
+        under={<>bara <b>exit tickets</b> — vad eleverna lärde sig på lektionen · krav 70 % · läxförhören (läxan) analyseras i trendkollen</>} mini={lektMini}>
         <div className="rad">
           <span className="spacer" />
           <label className="small"><input type="checkbox" checked={visaElevDiff} onChange={(e) => setVisaElevDiff(e.target.checked)} /> per elev</label>
         </div>
-        {lekt.length === 0 ? <p className="muted small">Inga lektioner med både läxförhör och exit ticket i urvalet.</p> : !visaElevDiff ? (
+        {lekt.length === 0 ? <p className="muted small">Inga exit tickets i urvalet.</p> : !visaElevDiff ? (
           <div className="st-scroll">
             <table className="tbl st-tabell">
-              <thead><tr>
-                <th>Lektion</th><th>Läxförhör</th><th>Exit ticket</th>
-                <th title="Snitt av elevernas exit − läxförhör">Δ snitt</th><th>Δ median</th><th>Elever</th>
-              </tr></thead>
+              <thead><tr><th>Lektion</th><th>Exit ticket</th><th>Median</th><th title="Andel av eleverna som nådde 70 %">Nådde 70 %</th><th>Elever</th></tr></thead>
               <tbody>{lekt.map((l) => (
                 <tr key={l.datum}>
-                  <td><b>v{l.vecka}</b> {kortDatum(l.datum)}{l.datumTill !== l.datum && <small className="muted"> +{kortDatum(l.datumTill)}</small>}</td>
-                  <td>{l.laxforhorProv === null ? <span className="muted">—</span> : (<>
-                    <div className="st-provnamn" title={`${l.laxforhorProv}${l.laxforhorRum !== undefined ? ` (${l.laxforhorRum})` : ''}`}>{l.laxforhorProv}</div>
-                    <span className="st-bar"><i style={{ width: `${l.laxforhorSnitt ?? 0}%`, background: KORT_FARG['socrative-laxforhor'] }} /><b>{l.laxforhorSnitt ?? '—'} %</b> <small className="muted">md {l.laxforhorMedian ?? '—'}</small></span></>)}</td>
-                  <td>{l.exitProv === null ? <span className="muted">—</span> : (<>
-                    <div className="st-provnamn" title={`${l.exitProv}${l.exitRum !== undefined ? ` (${l.exitRum})` : ''}`}>{l.exitProv}</div>
-                    <span className="st-bar"><i style={{ width: `${l.exitSnitt ?? 0}%`, background: KORT_FARG['socrative-exit'] }} /><b>{l.exitSnitt ?? '—'} %</b> <small className="muted">md {l.exitMedian ?? '—'}</small></span></>)}</td>
-                  <td className={`st-diff ${(l.diffSnitt ?? 0) > 0 ? 'upp' : (l.diffSnitt ?? 0) < 0 ? 'ned' : ''}`}>{l.diffSnitt === null ? '—' : `${l.diffSnitt > 0 ? '+' : ''}${l.diffSnitt}`}</td>
-                  <td className={`st-diff ${(l.diffMedian ?? 0) > 0 ? 'upp' : (l.diffMedian ?? 0) < 0 ? 'ned' : ''}`}>{l.diffMedian === null ? '—' : `${l.diffMedian > 0 ? '+' : ''}${l.diffMedian}`}</td>
-                  <td className="small muted">{l.antalBada} av {l.elever.length}</td>
+                  <td><b>v{l.vecka}</b> {kortDatum(l.datum)}</td>
+                  <td><div className="st-provnamn" title={`${l.prov}${l.rum !== undefined ? ` (${l.rum})` : ''}`}>{l.prov}</div>
+                    <span className="st-bar"><i style={{ width: `${l.snitt ?? 0}%`, background: KORT_FARG['socrative-exit'] }} /><b>{l.snitt ?? '—'} %</b></span></td>
+                  <td>{l.median ?? '—'} %</td>
+                  <td className={l.klaradeProcent !== null && l.klaradeProcent < 70 ? 'st-diff ned' : 'st-diff upp'}>{l.klaradeProcent ?? '—'} % <small className="muted">({l.klarade}/{l.elever.length})</small></td>
+                  <td className="small muted">{l.elever.length}</td>
                 </tr>
               ))}</tbody>
             </table>
@@ -4107,24 +4152,18 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
         ) : (
           <div className="st-scroll" style={{ maxHeight: 420 }}>
             <table className="tbl st-tabell st-matris">
-              <thead><tr><th>Elev</th><th>Läxförhör</th><th>Exit</th><th>Δ snitt</th><th>Δ median</th>
-                {lekt.map((l) => <th key={l.datum} title={`${l.laxforhorProv ?? '—'} → ${l.exitProv ?? '—'}`}><span className="st-kol">v{l.vecka} {kortDatum(l.datum)}</span></th>)}
+              <thead><tr><th>Elev</th><th>Snitt</th><th>Median</th><th>Nådde 70 %</th><th title="Snitt senaste halvan − första halvan av lektionerna">Utveckling</th>
+                {lekt.map((l) => <th key={l.datum} title={l.prov}><span className="st-kol">v{l.vecka} {kortDatum(l.datum)}</span></th>)}
               </tr></thead>
               <tbody>{elevLekt.map((e) => (
                 <tr key={e.elev.id}>
                   <td><button className="linkbtn" onClick={() => setElevId(e.elev.id)}>{e.elev.namn}</button></td>
-                  <td>{e.laxforhorSnitt ?? '—'} %</td><td>{e.exitSnitt ?? '—'} %</td>
-                  <td className={`st-diff ${(e.diffSnitt ?? 0) > 0 ? 'upp' : (e.diffSnitt ?? 0) < 0 ? 'ned' : ''}`}>{e.diffSnitt === null ? '—' : `${e.diffSnitt > 0 ? '+' : ''}${e.diffSnitt}`}</td>
-                  <td className={`st-diff ${(e.diffMedian ?? 0) > 0 ? 'upp' : (e.diffMedian ?? 0) < 0 ? 'ned' : ''}`}>{e.diffMedian === null ? '—' : `${e.diffMedian > 0 ? '+' : ''}${e.diffMedian}`}</td>
+                  <td>{e.snitt ?? '—'} %</td><td>{e.median ?? '—'} %</td>
+                  <td>{e.klarade}/{e.lektioner}</td>
+                  <td className={`st-diff ${(e.utveckling ?? 0) > 0 ? 'upp' : (e.utveckling ?? 0) < 0 ? 'ned' : ''}`}>{e.utveckling === null ? '—' : `${e.utveckling > 0 ? '+' : ''}${e.utveckling}`}</td>
                   {lekt.map((l) => {
-                    const r = l.elever.find((x) => x.elev.id === e.elev.id);
-                    return (
-                      <td key={l.datum} className="st-cell st-cell-diff" title={r === undefined ? 'saknas' : `läxförhör ${r.laxforhor ?? '—'} % → exit ${r.exit ?? '—'} %`}>
-                        {r === undefined || r.diff === null
-                          ? <span className="muted">{r === undefined ? '·' : `${r.laxforhor ?? '—'}/${r.exit ?? '—'}`}</span>
-                          : <span className={`st-diff ${r.diff > 0 ? 'upp' : r.diff < 0 ? 'ned' : ''}`}>{r.diff > 0 ? '+' : ''}{r.diff}</span>}
-                      </td>
-                    );
+                    const p = l.elever.find((x) => x.elev.id === e.elev.id)?.procent ?? null;
+                    return <td key={l.datum} className="st-cell" style={{ background: procentFarg(p, 70) }} title={p === null ? 'ingen exit ticket' : `${l.prov}: ${p} %`}>{p === null ? <span className="muted">·</span> : p}</td>;
                   })}
                 </tr>
               ))}</tbody>
@@ -4223,7 +4262,27 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
         </div>
 
         <div className="uppg-kort st-widget">
-          <b>Trendkluster</b> <small className="muted">elever som trendar tillsammans · hela klassen, alla tillfällen i urvalet · klicka på ett kluster för att välja dess elever i elevfiltret</small>
+          <div className="rad st-klustertopp">
+            <b>Trendkluster</b>
+            <span className="st-klustertopp-val" role="group" aria-label="Välj trend som urval">
+              <small className="muted">Välj som urval:</small>
+              {urvalBas.kluster.map((g) => {
+                const pa = (urvalVal.typ === 'kluster' && urvalVal.kluster.length === 1 && urvalVal.kluster[0] === g.kluster)
+                  || (urvalVal.typ === 'elever' && urvalVal.franKluster?.length === 1 && urvalVal.franKluster[0] === g.kluster);
+                return (
+                  <button key={g.kluster} type="button" className={`chipbtn st-klusterchip${pa ? ' act' : ''}`} aria-pressed={pa} disabled={g.elever.length === 0}
+                    style={{ '--kluster': KLUSTER_FARG[g.kluster] } as React.CSSProperties}
+                    onClick={() => setUrvalVal(pa ? { typ: 'alla' } : { typ: 'kluster', kluster: [g.kluster] })}>
+                    <i aria-hidden="true" /> {KLUSTER_NAMN[g.kluster]} <small>{g.elever.length}</small>
+                  </button>
+                );
+              })}
+            </span>
+            <span className="spacer" />
+            <button type="button" className={`btn sm${visaKlusterAnalys ? ' sec' : ''}`} aria-expanded={visaKlusterAnalys} onClick={() => setVisaKlusterAnalys(!visaKlusterAnalys)}>
+              {visaKlusterAnalys ? '▴ Dölj analysen' : '📈 Analysera trendkluster'}</button>
+          </div>
+          <small className="muted">elever som trendar tillsammans · hela klassen, alla tillfällen i urvalet · välj ett kluster ovan (eller klicka på en ruta) för att göra det till urval för hela sidan</small>
           <div className="st-klusterrad">
             {urvalBas.kluster.map((g) => {
               const valt = urvalVal.typ === 'kluster' && urvalVal.kluster.includes(g.kluster);
@@ -4247,6 +4306,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
             })}
           </div>
           {/* Klustrens kurvor relativt klassens snitt — på-knappar aktiverar linje + tonade band i klustrets färg */}
+          {visaKlusterAnalys && (<div className="st-klusteranalys">
           <div className="rad st-klusterfilter">
             {klusterK.map((k) => (
               <FilterKnapp key={k.kluster} pa={klusterPa.includes(k.kluster)} farg={KLUSTER_FARG[k.kluster]}
@@ -4260,6 +4320,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
               linje: k.procent.map((p, i) => (p === null || spridning[i].snittProcent === null ? null : Math.round(p - (spridning[i].snittProcent ?? 0)))),
             }))} />
           <TestLista tillfallen={spridning} />
+          </div>)}
           <details className="st-forklaring">
             <summary>❓ Vad visar trendklustren?</summary>
             <p><b>Grupperna.</b> Varje elev placeras i en av fyra grupper utifrån sina resultat i urvalet:</p>
@@ -4333,6 +4394,11 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
                 <td className={`st-r ${sb.r >= 0.3 ? 'pos' : sb.r <= -0.3 ? 'neg' : ''}`}>{sb.r > 0 ? '+' : ''}{sb.r.toFixed(2)} {sb.r >= 0.3 ? '↑' : sb.r <= -0.3 ? '↓' : '→'}</td></tr>
             ))}</tbody></table>
           )}
+          {/* Del 149: blir resultatet lägre när förhöret prövar fler begrepp? */}
+          <div className="st-begrsamband">
+            <b>Antal begrepp ↔ resultat</b> <small className="muted">ett begrepp = en fråga i quizet · varje punkt = ett förhör (klassens snitt)</small>
+            <div className="st-grid2">{begrSamband.map((b) => <BegreppSpridning key={b.kalla} b={b} />)}</div>
+          </div>
         </StWidget>
       </div>
 

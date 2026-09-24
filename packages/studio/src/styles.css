@@ -1055,7 +1055,11 @@ input.fel { border-color: #B71C1C; }
 .st-urvalsbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .st-urvalsbar-etikett { font-weight: 700; color: var(--text-varm); }
 .st-urvalsbar-sep { color: var(--muted); padding: 0 2px; }
-.st-urvalsbar-status { margin-left: auto; font-size: 13px; color: var(--text-varm); }
+.st-urvalsbar-hoger { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.st-urvalsbar-status { font-size: 13px; color: var(--text-varm); }
+.st-gruppchip { cursor: default; }
+.st-aterstall { white-space: nowrap; }
+.st-rapportknapp { white-space: nowrap; }
 .st-klasschip small, .st-eleverchip small { opacity: .8; margin-left: 4px; }
 .st-klusterchip.avviker { border: 2px dashed #B71C1C; background: #FDECEC; color: #7a1010; }
 .st-avviker-mark { margin-left: 4px; color: #B71C1C; font-weight: 700; }
@@ -1114,3 +1118,13 @@ input.fel { border-color: #B71C1C; }
 .st-vantande { border-left: 4px solid #E65100; background: #FFF7F0; margin: 0 0 12px; }
 .st-vantande-tabell td { vertical-align: middle; }
 .st-vantande-tabell select { font-size: 12px; max-width: 170px; }
+
+/* ── Del 149: trendklusterrutans topp ── */
+.st-klustertopp { gap: 8px; flex-wrap: wrap; align-items: center; }
+.st-klustertopp-val { display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.st-klusteranalys { margin-top: 8px; border-top: 1px dashed var(--ram); padding-top: 8px; }
+
+/* ── Del 149: antal begrepp ↔ resultat ── */
+.st-begrsamband { margin-top: 12px; border-top: 1px solid var(--ram); padding-top: 8px; }
+.st-begrdiagram { border: 1px solid var(--ram); border-radius: 10px; padding: 6px 10px; background: #fff; }
+.st-begrtext { margin: 4px 0 0; }

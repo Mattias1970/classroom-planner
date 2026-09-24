@@ -359,6 +359,63 @@ export function sambandsanalys(s: Struktur, f: DashboardFilter): Samband[] {
   return ut;
 }
 
+// ── Del 149: Antal begrepp ↔ resultat ──
+//
+// Blir resultatet lägre när ett förhör prövar fler begrepp? Ett begrepp = en
+// fråga i Socrative-quizet (frågetexten är begreppsbeskrivningen). Antalet
+// räknas som antal olika frågor i svaren; utan frågedata används maxpoängen
+// (en poäng per fråga). Läxförhör och exit tickets räknas var för sig —
+// läxförhören växer med kapitlet (aggregerande), exit ticketen gäller dagens avsnitt.
+
+export interface BegreppPunkt { prov: string; datum: string; begrepp: number; snitt: number; elever: number; }
+
+export interface BegreppSamband {
+  kalla: 'socrative-laxforhor' | 'socrative-exit';
+  punkter: BegreppPunkt[];
+  /** Pearson r mellan antal begrepp och klassens snitt; null vid < 3 tillfällen eller samma antal överallt. */
+  r: number | null;
+  /** Förändring i snitt (procentenheter) per extra begrepp — lutningen i en rät linje; null som r. */
+  lutning: number | null;
+  /** Beskrivande tolkning — inga orsaksslutsatser. */
+  text: string;
+}
+
+function antalBegrepp(rs: Resultat[]): number {
+  const fragor = new Set(rs.flatMap((r) => (r.svar ?? []).map((sv) => sv.fraga.trim().toLowerCase())).filter((x) => x !== ''));
+  if (fragor.size > 0) return fragor.size;
+  return Math.max(0, ...rs.map((r) => r.maxPoang));
+}
+
+function sambandText(r: number | null, lutning: number | null, n: number): string {
+  if (n < 3) return 'För få tillfällen (minst tre behövs).';
+  if (r === null || lutning === null) return 'Alla tillfällen har lika många begrepp — inget att jämföra.';
+  const styrka = Math.abs(r) >= 0.7 ? 'starkt' : Math.abs(r) >= 0.5 ? 'måttligt' : Math.abs(r) >= 0.3 ? 'svagt' : null;
+  if (styrka === null) return `Inget tydligt samband (r = ${r.toFixed(2)}): resultatet följer inte antalet begrepp.`;
+  const riktning = r < 0 ? 'lägre' : 'högre';
+  return `${styrka.charAt(0).toUpperCase() + styrka.slice(1)} samband (r = ${r.toFixed(2)}): fler begrepp går ihop med ${riktning} resultat, ungefär ${Math.abs(lutning).toFixed(1)} procentenheter per begrepp.`;
+}
+
+/** Antal begrepp per förhör mot klassens snitt, för läxförhör och exit tickets var för sig. */
+export function begreppSamband(s: Struktur, f: DashboardFilter): BegreppSamband[] {
+  return (['socrative-laxforhor', 'socrative-exit'] as const).map((kalla) => {
+    const rs = dashboardResultat(s, { ...f, kallor: [kalla] });
+    const { tillfallen } = tillfalleIndex(rs);
+    const punkter: BegreppPunkt[] = tillfallen.map((t) => {
+      const ps = t.resultat.map(resultatProcent).filter((p): p is number => p !== null);
+      return { prov: t.resultat[0].prov, datum: t.resultat[0].datum, begrepp: antalBegrepp(t.resultat), snitt: snitt(ps) ?? 0, elever: ps.length };
+    }).filter((p) => p.begrepp > 0 && p.elever > 0).sort((a, b) => a.datum.localeCompare(b.datum));
+    const xs = punkter.map((p) => p.begrepp); const ys = punkter.map((p) => p.snitt);
+    const r = pearson(xs, ys);
+    let lutning: number | null = null;
+    if (r !== null) {
+      const mx = xs.reduce((a, b) => a + b, 0) / xs.length; const my = ys.reduce((a, b) => a + b, 0) / ys.length;
+      const sxx = xs.reduce((a, x) => a + (x - mx) ** 2, 0);
+      lutning = Math.round((xs.reduce((a, x, i) => a + (x - mx) * (ys[i] - my), 0) / sxx) * 10) / 10;
+    }
+    return { kalla, punkter, r, lutning, text: sambandText(r, lutning, punkter.length) };
+  });
+}
+
 export type Kluster = 'stigande' | 'stabil' | 'riskzon' | 'ojamn';
 export const KLUSTER_NAMN: Record<Kluster, string> = { stigande: 'Stigande', stabil: 'Stabil', riskzon: 'Riskzon', ojamn: 'Ojämn utveckling' };
 export interface KlusterGrupp { kluster: Kluster; elever: Elev[]; serie: number[]; }
@@ -828,6 +885,65 @@ export function lektionstester(s: Struktur, f: DashboardFilter): Lektionstest[] 
       antalBada: diffV.length,
     };
   });
+}
+
+// ── Del 149: Lektionsanalys — bara exit tickets ──
+//
+// Vad eleverna lärde sig PÅ lektionen mäts med exit ticketen i slutet av
+// lektionen. Läxförhöret prövar läxan (det eleven läst hemma) och hör inte
+// hit — det analyseras i trendkollen och i läxområdet i elevrapporten.
+
+export interface LektionExit {
+  datum: string;
+  vecka: number;
+  prov: string;
+  rum?: string;
+  elever: Array<{ elev: Elev; procent: number }>;
+  snitt: number | null;
+  median: number | null;
+  /** Elever som nådde exit-kravet (70 %). */
+  klarade: number;
+  /** Andel av deltagarna som nådde kravet, 0–100. */
+  klaradeProcent: number | null;
+}
+
+/** Exit ticket per lektion (lektioner utan exit ticket tas inte med). */
+export function lektionsExit(s: Struktur, f: DashboardFilter): LektionExit[] {
+  const krav = kravFor('socrative-exit') ?? 70;
+  return lektionstester(s, f).filter((l) => l.exitProv !== null).map((l) => {
+    const elever = l.elever.filter((r) => r.exit !== null).map((r) => ({ elev: r.elev, procent: r.exit as number }));
+    const v = elever.map((e) => e.procent);
+    const klarade = v.filter((p) => p >= krav).length;
+    return {
+      datum: l.datum, vecka: l.vecka, prov: l.exitProv as string, ...(l.exitRum !== undefined ? { rum: l.exitRum } : {}),
+      elever, snitt: l.exitSnitt, median: l.exitMedian, klarade,
+      klaradeProcent: v.length === 0 ? null : Math.round((klarade / v.length) * 100),
+    };
+  });
+}
+
+export interface ElevLektionExit {
+  elev: Elev;
+  snitt: number | null;
+  median: number | null;
+  /** Lektioner där eleven gjort exit ticketen. */
+  lektioner: number;
+  /** Av dem: nådde kravet. */
+  klarade: number;
+  /** Utveckling: snitt senaste halvan − snitt första halvan (procentenheter), null vid < 4 lektioner. */
+  utveckling: number | null;
+}
+
+/** Exit tickets per elev över lektionerna i urvalet. */
+export function elevLektionsExit(s: Struktur, f: DashboardFilter): ElevLektionExit[] {
+  const krav = kravFor('socrative-exit') ?? 70;
+  const lekt = lektionsExit(s, f);
+  return sokElever(s, f.klassId, '').map((elev) => {
+    const v = lekt.map((l) => l.elever.find((e) => e.elev.id === elev.id)?.procent).filter((p): p is number => p !== undefined);
+    const halv = Math.floor(v.length / 2);
+    const utveckling = v.length < 4 ? null : Math.round(((snitt(v.slice(v.length - halv)) ?? 0) - (snitt(v.slice(0, halv)) ?? 0)) * 10) / 10;
+    return { elev, snitt: snitt(v), median: median(v), lektioner: v.length, klarade: v.filter((p) => p >= krav).length, utveckling };
+  }).filter((r) => r.lektioner > 0);
 }
 
 export interface ElevLektionstest { elev: Elev; laxforhorSnitt: number | null; exitSnitt: number | null; diffSnitt: number | null; diffMedian: number | null; lektioner: number; }

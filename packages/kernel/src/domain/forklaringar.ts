@@ -71,10 +71,10 @@ export const FORKLARINGAR = {
   },
   lektionstest: {
     rubrik: 'Lektionstest',
-    kort: 'Läxförhör och exit ticket från samma lektion sida vid sida; Δ = exit − läxförhör, räknat per lektion.',
+    kort: 'Exit ticketen i slutet av lektionen visar vad eleverna lärde sig på lektionen. Läxförhöret räknas inte här.',
     lang: [
-      'Bara lektioner där eleven gjort båda testerna räknas. Skillnaden räknas per lektion och medelvärdet tas sedan, så det kan avvika från skillnaden mellan de två totalsnitten (som kan bygga på olika lektioner).',
-      'Testerna prövar olika innehåll och svårighetsgrad. Δ beskriver resultaten; vad skillnaden beror på följs upp med eleven.',
+      'Läxförhöret i början prövar läxan — det eleven läst hemma — och analyseras i trendkollen och i elevrapportens läxdel. Lektionen mäts bara med exit ticketen.',
+      '"Nådde 70 %" är andelen elever som klarade exit-kravet. Utveckling per elev = snittet på den senare halvan av lektionerna minus den första halvan (kräver minst fyra exit tickets).',
     ],
   },
   samband: {

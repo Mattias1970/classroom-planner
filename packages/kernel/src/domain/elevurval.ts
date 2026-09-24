@@ -24,10 +24,30 @@ export interface ElevUrval {
   elevIds: string[] | null;
   /** Kort beskrivning för filterchippen: 'Riskzon', 'närvaro under 80 %', '4 elever'. */
   etikett: string;
+  /**
+   * Del 149 · Gruppens namn när urvalet inte är hela klassen: urvalets namn
+   * ('Riskzon', 'Riskzon (ändrat)', 'Närvaro under 80 %') eller 'Egen grupp'
+   * för ett fritt namnurval. null = hela klassen.
+   */
+  grupp: string | null;
 }
 
 /** Räknar ut vilka elever ett val pekar ut. Kluster och närvaro ska komma från den OFILTRERADE klassen. */
 export function elevUrval(val: ElevUrvalVal, kluster: KlusterGrupp[], narvaro: ElevNarvaro[]): ElevUrval {
+  const u = elevUrvalBas(val, kluster, narvaro);
+  if (u.elevIds === null) return { ...u, grupp: null };
+  let grupp: string;
+  if (val.typ === 'kluster') grupp = u.etikett;
+  else if (val.typ === 'narvaro') grupp = u.etikett.charAt(0).toUpperCase() + u.etikett.slice(1);
+  else if (val.typ === 'elever' && val.franKluster !== undefined && val.franKluster.length > 0) {
+    const namn = val.franKluster.map((k) => KLUSTER_NAMN[k]).join(' + ');
+    grupp = urvalAvvikerFranKluster(val, kluster) ? `${namn} (ändrat)` : namn;
+  } else if (val.typ === 'elever' && val.etikett !== undefined) grupp = `Sök ${val.etikett}`;
+  else grupp = 'Egen grupp';
+  return { ...u, grupp };
+}
+
+function elevUrvalBas(val: ElevUrvalVal, kluster: KlusterGrupp[], narvaro: ElevNarvaro[]): Omit<ElevUrval, 'grupp'> {
   switch (val.typ) {
     case 'alla':
       return { elevIds: null, etikett: 'alla elever' };
