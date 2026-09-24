@@ -3720,7 +3720,6 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
             {dagar.map((d) => <option key={d.datum} value={d.datum}>{d.etikett}</option>)}
           </select></label>
         <label>🔎 <input aria-label="Sök elev" placeholder="Sök elev, ID, e-post…" value={sok} onChange={(e) => setSok(e.target.value)} /></label>
-        <ElevFilter elever={klassElever} kluster={urvalBas.kluster} narvaro={urvalBas.narvaro} val={urvalVal} valda={urval.elevIds} etikett={urval.etikett} onVal={setUrvalVal} />
         {harm.inkluderade.length > 0 && (
           <label className="small st-ovnval" title={harm.inkluderade.map((x) => `${x.prov} (${kortDatum(x.datum)}) räknas som ${TYPNAMN[x.som]} — samma quiz som ${x.liknar}, ${x.overlapp} % gemensamma frågor`).join('\n')}>
             <input type="checkbox" checked={inkluderaOvn} onChange={(e) => setInkluderaOvn(e.target.checked)} />
@@ -3731,10 +3730,9 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
         <span className="spacer" />
         <small className="muted">{klassNamn}{amneId !== '' ? ` · ${s.amnen.find((a) => a.id === amneId)?.namn ?? ''}` : ' · alla ämnen'}{period !== null ? ` · v.${period.veckaFran}–${period.veckaTill}` : ''}{valdDag !== null ? ` · ${kortDatum(valdDag.datum)}${valdDag.datumTill !== valdDag.datum ? `–${kortDatum(valdDag.datumTill)}` : ''}` : ''}{urval.elevIds !== null ? ` · ${urval.elevIds.length} elever (${urval.etikett})` : ''}</small>
       </div>
-      {urval.elevIds !== null && (
-        <p className="status st-urvalsrad" role="status">👥 Alla grafer visar <b>{urval.elevIds.length}</b> av {klassElever.length} elever · {urval.etikett}.{' '}
-          <button className="linkbtn" onClick={() => setUrvalVal({ typ: 'alla' })}>Visa alla elever</button></p>
-      )}
+      {/* Del 148: "Visas för:" — klassen, trendklustren, analysknapp och elevnamn, alltid synligt överst */}
+      <ElevFilter elever={klassElever} kluster={urvalBas.kluster} narvaro={urvalBas.narvaro} val={urvalVal} valda={urval.elevIds} etikett={urval.etikett} onVal={setUrvalVal}
+        onAnalys={() => gaTill('st-sekt-jamf')} />
 
       {/* KPI-rad — frågekort i mockupens stil: ikon, rubrik, fråga, stort tal, delta, sparkline */}
       <div className="st-kortrad">

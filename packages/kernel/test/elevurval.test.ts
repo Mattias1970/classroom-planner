@@ -47,3 +47,22 @@ describe('Del 141: elevurval', () => {
     expect(klassensElever(s, 'k1').map((x) => x.namn)).toEqual(['Anna Testsson', 'Bo Provlund', 'Cia Övnegård']);
   });
 });
+
+describe('Del 148: namnurval som började i ett kluster', () => {
+  it('etiketten visar klustret, och "ändrat urval" när namnen avviker', async () => {
+    const { elevUrval, urvalAvvikerFranKluster, klusterElevIds } = await import('../src/domain/elevurval.js');
+    const e = (id: string, namn: string) => ({ id, klassId: 'k', namn, grupp: 'A' as const });
+    const kluster = [
+      { kluster: 'riskzon' as const, elever: [e('e1', 'Anna Testsson'), e('e2', 'Omar Provlund')], snitt: 40, trend: -5 },
+      { kluster: 'stabil' as const, elever: [e('e3', 'Pia Övnegård')], snitt: 90, trend: 0 },
+    ] as unknown as Parameters<typeof elevUrval>[1];
+    expect(klusterElevIds(kluster, ['riskzon'])).toEqual(['e1', 'e2']);
+    const samma = { typ: 'elever' as const, elevIds: ['e2', 'e1'], franKluster: ['riskzon' as const] };
+    expect(urvalAvvikerFranKluster(samma, kluster)).toBe(false);
+    expect(elevUrval(samma, kluster, []).etikett).toBe('Riskzon');
+    const andrat = { typ: 'elever' as const, elevIds: ['e1', 'e3'], franKluster: ['riskzon' as const] };
+    expect(urvalAvvikerFranKluster(andrat, kluster)).toBe(true);
+    expect(elevUrval(andrat, kluster, []).etikett).toBe('Riskzon · ändrat urval');
+    expect(urvalAvvikerFranKluster({ typ: 'elever', elevIds: ['e1'] }, kluster)).toBe(false);
+  });
+});

@@ -1050,20 +1050,28 @@ input.fel { border-color: #B71C1C; }
 .st-urvalsrad { margin: 6px 0 10px; }
 
 /* ── Del 141: elevfilter ── */
-.st-elevfilter { position: relative; }
-.st-elevfilter > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--ram); border-radius: 999px; background: #fff; }
-.st-elevfilter > summary::-webkit-details-marker { display: none; }
-.st-elevfilter.aktiv > summary { border-color: var(--bla); background: #EEF3FB; }
+.st-elevfilter { margin: 6px 0 10px; border: 1px solid var(--ram); border-radius: 12px; background: #fff; padding: 6px 12px; }
+.st-elevfilter.aktiv { border-color: var(--bla); box-shadow: inset 4px 0 0 var(--bla); }
+.st-urvalsbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.st-urvalsbar-etikett { font-weight: 700; color: var(--text-varm); }
+.st-urvalsbar-sep { color: var(--muted); padding: 0 2px; }
+.st-urvalsbar-status { margin-left: auto; font-size: 13px; color: var(--text-varm); }
+.st-klasschip small, .st-eleverchip small { opacity: .8; margin-left: 4px; }
+.st-klusterchip.avviker { border: 2px dashed #B71C1C; background: #FDECEC; color: #7a1010; }
+.st-avviker-mark { margin-left: 4px; color: #B71C1C; font-weight: 700; }
+.st-klusterfraga { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; padding: 6px 10px; border-radius: 8px; background: #FFF4E5; border: 1px solid #F0C48C; font-size: 13px; }
 .st-elevfilter-rensa { margin-left: 2px; }
-.st-elevfilter-panel { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; width: min(560px, 92vw); background: #fff; border: 1px solid var(--ram); border-radius: 12px; box-shadow: 0 8px 24px rgba(20,40,80,.12); padding: 10px 14px; }
-.st-elevfilter-hjalp { margin: 0 0 8px; }
-.st-elevfilter-rad { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; border-top: 1px solid var(--ram); }
+.st-elevfilter-panel { margin-top: 8px; border-top: 1px solid var(--ram); padding-top: 4px; }
+.st-elevfilter-rad { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; }
+.st-elevfilter-rad + .st-elevfilter-rad { border-top: 1px solid var(--ram); }
 .st-elevfilter-etikett { font-weight: 600; min-width: 120px; }
 .st-elevfilter-lista { align-items: flex-start; }
 .st-elevfilter-listkropp { flex: 1; min-width: 0; }
-.st-elevfilter-elever { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 2px 10px; max-height: 240px; overflow: auto; margin-top: 6px; }
-.st-elevfilter-elev { display: flex; align-items: center; gap: 6px; padding: 2px 4px; border-radius: 6px; cursor: pointer; }
-.st-elevfilter-elev.vald { background: #EEF3FB; }
+.st-elevfilter-elever { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 3px 10px; max-height: 260px; overflow: auto; margin-top: 6px; }
+.st-elevfilter-elev { display: flex; align-items: center; gap: 6px; padding: 2px 6px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
+.st-elevfilter-elev.lyst { border-color: var(--kluster, var(--bla)); background: #FFFDF5; }
+.st-elevfilter-elev.vald { background: #EEF3FB; font-weight: 600; }
+.st-elevfilter-elev.vald.lyst { background: color-mix(in srgb, var(--kluster, #2f5aa8) 14%, #fff); box-shadow: 0 0 0 2px color-mix(in srgb, var(--kluster, #2f5aa8) 45%, #fff); }
 .st-elevfilter-namn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st-elevfilter-prick { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .st-klusterchip i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--kluster); }

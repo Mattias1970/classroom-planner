@@ -16,7 +16,8 @@ export type ElevUrvalVal =
   | { typ: 'alla' }
   | { typ: 'kluster'; kluster: Kluster[] }
   | { typ: 'narvaro'; grans: number; riktning: NarvaroRiktning }
-  | { typ: 'elever'; elevIds: string[]; etikett?: string };
+  /** `franKluster`: urvalet började som ett trendkluster som läraren sedan justerat namn för namn (Del 148). */
+  | { typ: 'elever'; elevIds: string[]; etikett?: string; franKluster?: Kluster[] };
 
 export interface ElevUrval {
   /** null = alla elever (inget filter). */
@@ -44,9 +45,26 @@ export function elevUrval(val: ElevUrvalVal, kluster: KlusterGrupp[], narvaro: E
     }
     case 'elever': {
       const ids = [...new Set(val.elevIds)];
+      if (val.franKluster !== undefined && val.franKluster.length > 0) {
+        const namn = val.franKluster.map((k) => KLUSTER_NAMN[k]).join(' + ');
+        return { elevIds: ids, etikett: urvalAvvikerFranKluster(val, kluster) ? `${namn} · ändrat urval` : namn };
+      }
       return { elevIds: ids, etikett: val.etikett ?? `${ids.length} elev${ids.length === 1 ? '' : 'er'}` };
     }
   }
+}
+
+/** Elev-id:n i ett eller flera kluster (dedupade). */
+export function klusterElevIds(kluster: KlusterGrupp[], valda: Kluster[]): string[] {
+  return [...new Set(kluster.filter((g) => valda.includes(g.kluster)).flatMap((g) => g.elever.map((e) => e.id)))];
+}
+
+/** Sant när ett namnurval som började i ett kluster inte längre är exakt klustrets elever. */
+export function urvalAvvikerFranKluster(val: ElevUrvalVal, kluster: KlusterGrupp[]): boolean {
+  if (val.typ !== 'elever' || val.franKluster === undefined || val.franKluster.length === 0) return false;
+  const a = new Set(val.elevIds);
+  const b = new Set(klusterElevIds(kluster, val.franKluster));
+  return a.size !== b.size || [...a].some((id) => !b.has(id));
 }
 
 /**

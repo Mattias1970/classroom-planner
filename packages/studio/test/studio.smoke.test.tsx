@@ -2816,20 +2816,26 @@ describe('Del 141: elevfilter för hela dashboarden, fällbara widgets, fråga +
     return host;
   }
 
-  it('elevfiltret ligger i filterraden, kluster/närvaro/bocklista väljer elever och alla grafer följer urvalet', async () => {
+  it('"Visas för:"-raden överst: klassen, trendkluster, analysknapp och elever — kluster/närvaro/bocklista väljer elever och alla grafer följer urvalet', async () => {
     const host = await fixtur();
     const filter = host.querySelector('.st-elevfilter')!;
-    expect(filter.querySelector('summary')!.textContent).toContain('Alla elever');
-    expect(filter.querySelector('summary')!.textContent).toContain('(3)');
+    const bar = filter.querySelector('.st-urvalsbar')!;
+    const status = () => filter.querySelector('.st-urvalsbar-status')?.textContent ?? '';
+    expect(bar.textContent).toContain('Visas för:');
+    expect(bar.querySelector('.st-klasschip')!.textContent).toBe('Klassen 3');
+    expect(bar.querySelector('.st-klasschip')!.getAttribute('aria-pressed')).toBe('true');
+    expect(knapp(host, '📈 Analys av trendkluster')).not.toBeNull();
+    expect(filter.querySelector('.st-elevfilter-panel')).toBeNull();          // elevpanelen är hopfälld
     // Frågematris och Elev × prov visar tre elever
     expect(host.querySelector('.st-elevprov .st-matris tbody')!.querySelectorAll('tr')).toHaveLength(3);
 
-    // Trendkluster → Riskzon väljer Omar (snitt 33 % < 90 %)
-    const klusterChip = (t: string) => [...filter.querySelectorAll<HTMLButtonElement>('.st-klusterchip')].find((b) => b.textContent?.includes(t))!;
+    // Trendkluster → Riskzon väljer Omar (snitt 33 % < 90 %) och frågar om elevnamnen ska aktiveras
+    const klusterChip = (t: string) => [...bar.querySelectorAll<HTMLButtonElement>('.st-klusterchip')].find((b) => b.textContent?.includes(t))!;
     expect(klusterChip('Riskzon').textContent).toContain('1');
     act(() => { klusterChip('Riskzon').click(); });
-    expect(filter.querySelector('summary')!.textContent).toContain('1 av 3 elever · Riskzon');
-    expect(host.querySelector('.st-urvalsrad')!.textContent).toContain('Alla grafer visar 1 av 3 elever');
+    expect(status()).toContain('Alla grafer visar 1 av 3 elever · Riskzon');
+    expect(bar.querySelector('.st-klasschip')!.textContent).toBe('Klassen 1 av 3');
+    expect(filter.querySelector('.st-klusterfraga')!.textContent).toContain('Riskzon: 1 elever valda. Aktivera elevnamnen');
     expect(host.querySelector('.st-elevprov .st-matris tbody')!.querySelectorAll('tr')).toHaveLength(1);
     expect(host.querySelector('.st-elevprov .st-matris tbody')!.textContent).toContain('Omar Provlund');
     expect(host.querySelector('.st-narvarolista')!.textContent).not.toContain('Anna Testsson');
@@ -2840,28 +2846,84 @@ describe('Del 141: elevfilter för hela dashboarden, fällbara widgets, fråga +
     // Frågematrisens celler: 0 % rätt på fråga 1 första förhöret (bara Omar räknas)
     const forstaRad = host.querySelector('.st-fmtabell tbody tr')!;
     expect(forstaRad.querySelector('.st-fmruta')!.getAttribute('title')).toContain('0 % rätt (0/1)');
+    // "Behåll klustret" stänger frågan utan att ändra urvalet
+    act(() => { knapp(host, 'Behåll klustret').click(); });
+    expect(filter.querySelector('.st-klusterfraga')).toBeNull();
+    expect(status()).toContain('Riskzon');
 
     // Klusterkortet i widgeten är markerat, ett klick till släpper filtret
     const riskKort = host.querySelector('.st-klusterkort.riskzon')!;
     expect(riskKort.classList.contains('valt')).toBe(true);
     act(() => { (riskKort as HTMLElement).click(); });
-    expect(filter.querySelector('summary')!.textContent).toContain('Alla elever');
+    expect(status()).toBe('');
+    expect(bar.querySelector('.st-klasschip')!.getAttribute('aria-pressed')).toBe('true');
 
-    // Närvaro ⬇ under 80 % → Pia (33 %)
+    // Elevpanelen: närvaro ⬇ under 80 % → Pia (33 %)
+    act(() => { (bar.querySelector('.st-eleverchip') as HTMLButtonElement).click(); });
+    expect(filter.querySelector('.st-elevfilter-panel')).not.toBeNull();
     act(() => { knapp(host, '⬇ välj elever med närvaro under 80 %').click(); });
-    expect(filter.querySelector('summary')!.textContent).toContain('1 av 3 elever · närvaro under 80 %');
+    expect(status()).toContain('1 av 3 elever · närvaro under 80 %');
     expect(host.querySelector('.st-elevprov .st-matris tbody')!.textContent).toContain('Pia Övnegård');
     valj(select(host, 'Närvaro under eller minst'), 'over');
-    expect(filter.querySelector('summary')!.textContent).toContain('2 av 3 elever · närvaro minst 80 %');
+    expect(status()).toContain('2 av 3 elever · närvaro minst 80 %');
 
     // Bocklistan: kryssa i Pia igen → egen lista med 3 elever; ✕ visar alla
     const kryss = (n: string) => filter.querySelector(`input[aria-label="Elev ${n}"]`) as HTMLInputElement;
     expect(kryss('Pia Övnegård').checked).toBe(false);
     act(() => { kryss('Pia Övnegård').click(); });
-    expect(filter.querySelector('summary')!.textContent).toContain('3 av 3 elever · 3 elever');
+    expect(status()).toContain('3 av 3 elever · 3 elever');
     act(() => { (filter.querySelector('button[aria-label="Visa alla elever"]') as HTMLButtonElement).click(); });
-    expect(filter.querySelector('summary')!.textContent).toContain('Alla elever');
+    expect(status()).toBe('');
     expect(host.querySelector('.st-urvalsrad')).toBeNull();
+  });
+
+  it('Del 148: aktivera elevnamn ur ett kluster — klustrets elever lyser, namn kan väljas till/från och avvikelse markeras på klusterchippen', async () => {
+    const host = await fixtur();
+    const filter = host.querySelector('.st-elevfilter')!;
+    const bar = filter.querySelector('.st-urvalsbar')!;
+    const status = () => filter.querySelector('.st-urvalsbar-status')?.textContent ?? '';
+    const klusterChip = (t: string) => [...bar.querySelectorAll<HTMLButtonElement>('.st-klusterchip')].find((b) => b.textContent?.includes(t))!;
+    act(() => { klusterChip('Riskzon').click(); });
+    act(() => { knapp(host, '✓ Aktivera elevnamn').click(); });
+    // Namnurval med klustret som utgångspunkt: panelen öppen, Omar lyser och är vald, chippen markerad utan avvikelse
+    expect(filter.querySelector('.st-klusterfraga')).toBeNull();
+    expect(filter.querySelector('.st-elevfilter-panel')).not.toBeNull();
+    const elevRad = (n: string) => (filter.querySelector(`input[aria-label="Elev ${n}"]`) as HTMLInputElement).closest('.st-elevfilter-elev')!;
+    expect(elevRad('Omar Provlund').className).toContain('lyst');
+    expect(elevRad('Omar Provlund').className).toContain('vald');
+    expect(elevRad('Anna Testsson').className).not.toContain('lyst');
+    expect(klusterChip('Riskzon').getAttribute('aria-pressed')).toBe('true');
+    expect(klusterChip('Riskzon').className).not.toContain('avviker');
+    expect(status()).toContain('1 av 3 elever · Riskzon');
+    expect(bar.querySelector('.st-eleverchip')!.textContent).toContain('1 valda');
+    expect(filter.querySelector('.st-elevfilter-panel')!.textContent).toContain('Urvalet började i Riskzon. Klustrets elever lyser.');
+
+    // Välj till Anna → urvalet avviker: röd streckad chip med ✎, etiketten "ändrat urval"
+    act(() => { (filter.querySelector('input[aria-label="Elev Anna Testsson"]') as HTMLInputElement).click(); });
+    expect(status()).toContain('2 av 3 elever · Riskzon · ändrat urval');
+    expect(klusterChip('Riskzon').className).toContain('avviker');
+    expect(klusterChip('Riskzon').querySelector('.st-avviker-mark')).not.toBeNull();
+    expect(host.querySelector('.st-elevprov .st-matris tbody')!.querySelectorAll('tr')).toHaveLength(2);
+    expect(filter.querySelector('.st-elevfilter-panel')!.textContent).toContain('— ändrat');
+    // Välj bort Omar → fortfarande avvikande (Anna ensam)
+    act(() => { (filter.querySelector('input[aria-label="Elev Omar Provlund"]') as HTMLInputElement).click(); });
+    expect(status()).toContain('1 av 3 elever · Riskzon · ändrat urval');
+    expect(elevRad('Omar Provlund').className).toContain('lyst');       // lyser fortfarande (hör till klustret)
+    expect(elevRad('Omar Provlund').className).not.toContain('vald');
+    // Klick på den avvikande chippen återgår till klustret
+    act(() => { klusterChip('Riskzon').click(); });
+    expect(status()).toContain('1 av 3 elever · Riskzon');
+    expect(status()).not.toContain('ändrat');
+    expect(klusterChip('Riskzon').className).not.toContain('avviker');
+
+    // 📈 Analys av trendkluster öppnar klusterwidgeten
+    const w = host.querySelector('#st-sekt-jamf') as HTMLDetailsElement;
+    expect(w.open).toBe(false);
+    act(() => { knapp(host, '📈 Analys av trendkluster').click(); });
+    expect(w.open).toBe(true);
+    // Klassen-chippen tar tillbaka alla
+    act(() => { (bar.querySelector('.st-klasschip') as HTMLButtonElement).click(); });
+    expect(status()).toBe('');
   });
 
   it('alla rutor är fällbara widgets med miniatyr; ordningen är frågematris → resultat per delkapitel/svåra begrepp → trendkoll; klick på en ruta visar fråga och rätt svar', async () => {
