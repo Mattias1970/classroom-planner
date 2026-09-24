@@ -29,6 +29,7 @@ import {
   delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, enkelRapport, studieguide, rapportOversikt, forklaring, niva, type ForklaringId,
   omfangFilter, OMFANG_NAMN, type Omfang, type OmfangResultat, begreppForFraga, harmoniseraOvningar, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
+  matchaVantande, vantandeNamn, kopplaVantande, taBortVantande,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
   elevrapport, elevrapportText, tillfalleEtiketter, normeradSpridning, klusterKurvor, normeraBand, taBortFil, rensaResultat,
@@ -99,9 +100,12 @@ export function App() {
   const kor = (fn: () => Struktur, m: string) => {
     try {
       const fore = JSON.stringify(lasStruktur());
-      const ny = fn();
+      const ny0 = fn();
+      // Del 147: resultat som väntat på en elev kopplas automatiskt så fort eleven finns (ny, omdöpt, Socrative-id)
+      const vm = matchaVantande(ny0);
+      const ny = vm.s;
       angraStack.current = [...angraStack.current.slice(-19), fore];   // max 20 steg
-      spara(ny, `✓ ${m}`);
+      spara(ny, `✓ ${m}${vm.matchade > 0 ? ` · ${vm.matchade} väntande resultat kopplade till ${vm.elever.join(', ')}` : ''}`);
     } catch (e) { setMsg(`✗ ${(e as Error).message}`); }
   };
   const angra = () => {
@@ -5255,6 +5259,48 @@ const IMPORT_APPAR: Array<{ id: ImportApp; bokstav: string; namn: string; under:
   { id: 'elever', bokstav: '👥', namn: 'Elever', under: 'Socrative-lista · grupper A/B' },
 ];
 
+/**
+ * Del 147 · Resultat som väntar på en elev: namn i importerade filer som inte
+ * matchade klasslistan. Läggs eleven till (här eller var som helst) kopplas
+ * raderna automatiskt; annars kan namnet kopplas till en befintlig elev eller kastas.
+ */
+function VantandePanel({ s, klassId, kor }: { s: Struktur; klassId: string; kor: (fn: () => Struktur, m: string) => void }) {
+  const namn = vantandeNamn(s, klassId);
+  const [grupp, setGrupp] = useState<Record<string, Grupp>>({});
+  const [koppla, setKoppla] = useState<Record<string, string>>({});
+  if (namn.length === 0) return null;
+  const elever = klassensElever(s, klassId);
+  const antal = namn.reduce((a, v) => a + v.antal, 0);
+  return (
+    <div className="uppg-kort st-vantande" role="region" aria-label="Resultat som väntar på elev">
+      <b>⏳ {antal} resultat väntar på {namn.length} {namn.length === 1 ? 'elev' : 'elever'} som inte finns i klasslistan</b>
+      <p className="small muted">Raderna är sparade — ingen fil behöver läsas in igen. Lägg till eleven så kopplas resultaten automatiskt, eller koppla namnet till en elev som stavas annorlunda.</p>
+      <table className="tbl small st-vantande-tabell">
+        <thead><tr><th>Namn i filen</th><th>Resultat</th><th>Senast</th><th>Åtgärd</th></tr></thead>
+        <tbody>{namn.map((v) => (
+          <tr key={v.namn}>
+            <td><b>{v.namn}</b>{v.sidId !== undefined && <small className="muted"> · id {v.sidId}</small>}</td>
+            <td>{v.antal} <small className="muted">({v.prov.join(', ')})</small></td>
+            <td>{v.senast}</td>
+            <td className="rad" style={{ gap: 6, flexWrap: 'wrap' }}>
+              <select aria-label={`Grupp för ${v.namn}`} value={grupp[v.namn] ?? 'A'} onChange={(e) => setGrupp({ ...grupp, [v.namn]: e.target.value as Grupp })}>
+                <option value="A">A</option><option value="B">B</option>
+              </select>
+              <button className="btn sm" onClick={() => kor(() => laggTillElev(lasStruktur(), { id: nyttId('e'), klassId, namn: v.namn, grupp: grupp[v.namn] ?? 'A', ...(v.sidId !== undefined ? { socrativeId: v.sidId } : {}) }), `${v.namn} tillagd i klassen`)}>➕ Lägg till som elev</button>
+              <select aria-label={`Koppla ${v.namn} till`} value={koppla[v.namn] ?? ''} onChange={(e) => setKoppla({ ...koppla, [v.namn]: e.target.value })}>
+                <option value="">koppla till elev…</option>
+                {elever.map((e) => <option key={e.id} value={e.id}>{e.namn}</option>)}
+              </select>
+              <button className="btn sec sm" disabled={(koppla[v.namn] ?? '') === ''} onClick={() => kor(() => kopplaVantande(lasStruktur(), klassId, v.namn, koppla[v.namn]!).s, `${v.namn} kopplad — ${v.antal} resultat inlagda`)}>🔗 Koppla</button>
+              <button className="icon-btn" aria-label={`Ta bort väntande ${v.namn}`} title="Kasta raderna (eleven går inte i klassen)" onClick={() => { if (window.confirm(`Kasta ${v.antal} väntande resultat för ${v.namn}?`)) kor(() => taBortVantande(lasStruktur(), klassId, v.namn), `Väntande resultat för ${v.namn} borttagna`); }}>🗑</button>
+            </td>
+          </tr>
+        ))}</tbody>
+      </table>
+    </div>
+  );
+}
+
 function SuperTeachVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur, m: string) => void; meddela?: (m: string) => void }) {
   const klasser = [...s.klasser].sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
   const [klassId, setKlassId] = useState(klasser[0]?.id ?? '');
@@ -5298,7 +5344,7 @@ function SuperTeachVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Strukt
     if (amne === undefined) return;
     kor(() => importeraResultat(lasStruktur(), {
       klassId: klass.id, amneId: amne.id, kalla, prov: prov.trim(), datum, rader,
-    }).s, `${rader.length - omatchade.length} resultat sparade på ${amne.namn} · ${prov.trim()}${omatchade.length > 0 ? ` — ⚠ omatchade: ${omatchade.join(', ')}` : ''}`);
+    }).s, `${rader.length - omatchade.length} resultat sparade på ${amne.namn} · ${prov.trim()}${omatchade.length > 0 ? ` — ⏳ väntar på elev: ${omatchade.join(', ')}` : ''}`);
     setRadText(''); setProv('');
   };
 
@@ -5447,6 +5493,7 @@ function SuperTeachVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Strukt
           </button>
         ))}
       </div>
+      <VantandePanel s={s} klassId={klass.id} kor={kor} />
 
       {importApp === 'elever' && (<>
       {/* ── Elever: Socrative-roster ── */}

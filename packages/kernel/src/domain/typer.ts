@@ -368,6 +368,8 @@ export interface Struktur {
   resultat?: import('./resultat.js').Resultat[];
   /** SuperTeach: register över importerade resultatfiler per ämne. */
   filregister?: import('./resultat.js').FilPost[];
+  /** Del 147: resultatrader vars namn inte matchade någon elev vid importen — kopplas automatiskt när eleven tillkommer. */
+  vantandeResultat?: import('./resultat.js').VantandeResultat[];
   /** SuperTeach: sittplatsplaceringar importerade från PowerPoint. */
   sittplatser?: import('./sittplatser.js').Sittplatsering[];
   skolar: Skolar[];

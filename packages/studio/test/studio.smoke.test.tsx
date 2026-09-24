@@ -3125,3 +3125,70 @@ describe('Del 144: vägen till provet på ämnessidan — alla avsnitt som boxar
     expect(host.querySelector('.v3-vag .v3-vag-info')).toBeNull();
   });
 });
+
+describe('Del 147: resultat som väntar på elev kopplas automatiskt när eleven tillkommer', () => {
+  it('omatchat namn sparas som väntande, panelen visas, ➕ Lägg till som elev ger resultaten utan ny import; koppla och kasta fungerar', () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    skriv(input(host, 'Elevens namn'), 'Anna Testsson');
+    act(() => { knapp(host, '➕ Lägg till elev').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '📊 SuperTeach').click(); });
+    valj(select(host, 'SuperTeach ämne'), lasStruktur().amnen[0].id);
+    const spara = (prov: string, datum: string, rader: string) => {
+      skriv(input(host, 'Provnamn'), prov);
+      skriv(input(host, 'Provdatum'), datum);
+      skrivArea(host.querySelector('textarea[aria-label="Resultatrader"]') as HTMLTextAreaElement, rader);
+      act(() => { knapp(host, '💾 Spara resultat').click(); });
+    };
+    // Pia finns inte i klassen än, Kalle är felstavad Anna? nej — Kalle är en elev som inte går i klassen
+    spara('Quiz 1.1a', '2026-08-26', 'Anna Testsson\t9\nPia Övnegård\t6\nKalle Provlund\t5');
+    spara('Quiz 1.1b', '2026-09-02', 'Anna Testsson\t10\nPia Övnegård\t8');
+    expect(lasStruktur().resultat).toHaveLength(2);
+    expect(lasStruktur().vantandeResultat).toHaveLength(3);
+    const panel = host.querySelector('.st-vantande')!;
+    expect(panel.textContent).toContain('3 resultat väntar på 2 elever som inte finns i klasslistan');
+    const rad = (namn: string) => [...panel.querySelectorAll('tbody tr')].find((r) => r.textContent?.includes(namn))!;
+    expect(rad('Pia Övnegård').textContent).toContain('2 (Quiz 1.1a, Quiz 1.1b)');
+
+    // ➕ Lägg till som elev (grupp B) → eleven finns och båda resultaten är kopplade, panelen visar bara Kalle
+    valj(rad('Pia Övnegård').querySelector('select[aria-label="Grupp för Pia Övnegård"]') as HTMLSelectElement, 'B');
+    act(() => { (rad('Pia Övnegård').querySelector('button.btn.sm') as HTMLButtonElement).click(); });
+    const pia = lasStruktur().elever.find((e) => e.namn === 'Pia Övnegård')!;
+    expect(pia.grupp).toBe('B');
+    expect(lasStruktur().resultat!.filter((r) => r.elevId === pia.id).map((r) => r.prov).sort()).toEqual(['Quiz 1.1a', 'Quiz 1.1b']);
+    expect(lasStruktur().vantandeResultat).toHaveLength(1);
+    expect(host.textContent).toContain('2 väntande resultat kopplade till Pia Övnegård');
+    expect([...host.querySelectorAll('.st-vantande tbody tr td:first-child')].map((td) => td.textContent)).toEqual(['Kalle Provlund']);
+    // Matrisen visar Pia direkt
+    expect(host.querySelector('.st-matris')!.textContent).toContain('Pia Övnegård');
+
+    // 🔗 Koppla: Kalle var egentligen Anna (annat namn i Socrative) → resultatet hamnar på Anna
+    const panel2 = host.querySelector('.st-vantande')!;
+    valj(panel2.querySelector('select[aria-label="Koppla Kalle Provlund till"]') as HTMLSelectElement, lasStruktur().elever.find((e) => e.namn === 'Anna Testsson')!.id);
+    act(() => { knapp(host, '🔗 Koppla').click(); });
+    expect(lasStruktur().vantandeResultat).toBeUndefined();
+    expect(host.querySelector('.st-vantande')).toBeNull();
+    const anna = lasStruktur().elever.find((e) => e.namn === 'Anna Testsson')!;
+    // Kalles 5/10 på Quiz 1.1a ersatte Annas 9 — samma elev, källa och prov
+    expect(lasStruktur().resultat!.filter((r) => r.elevId === anna.id && r.prov === 'Quiz 1.1a').map((r) => r.poang)).toEqual([5]);
+
+    // 🗑 Kasta: ett namn som inte hör hemma
+    spara('Quiz 1.2', '2026-09-09', 'Anna Testsson\t7\nOkänd Person\t3');
+    expect(host.querySelector('.st-vantande')!.textContent).toContain('1 resultat väntar på 1 elev');
+    window.confirm = () => true;
+    act(() => { (host.querySelector('button[aria-label="Ta bort väntande Okänd Person"]') as HTMLButtonElement).click(); });
+    expect(host.querySelector('.st-vantande')).toBeNull();
+    expect(lasStruktur().vantandeResultat).toBeUndefined();
+  });
+});

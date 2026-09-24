@@ -82,6 +82,32 @@ export interface ImportUnderlag {
   rader: ImportRad[];
 }
 
+/**
+ * Del 147 · En resultatrad som väntar på sin elev: namnet i filen matchade ingen i
+ * klassen. Raden sparas med allt som behövs för att bli ett Resultat så att
+ * ingen fil behöver läsas in igen när eleven läggs till eller kopplas.
+ */
+export interface VantandeResultat {
+  id: string;
+  klassId: string;
+  amneId?: string;
+  kalla: ResultatKalla;
+  prov: string;
+  datum: string;
+  tid?: string;
+  rum?: string;
+  autoTyp?: boolean;
+  /** Namnet som stod i filen. */
+  namn: string;
+  /** Student ID ur Socrative-rapporten om det fanns. */
+  sidId?: string;
+  poang: number;
+  maxPoang: number;
+  svar?: FragaSvar[];
+  /** När raden importerades (ISO). */
+  importerad?: string;
+}
+
 export interface ImportUtfall {
   s: Struktur;
   /** Antal rader som matchades mot en elev. */
@@ -193,9 +219,23 @@ export function importeraResultat(s: Struktur, u: ImportUnderlag): ImportUtfall 
   if (u.prov.trim() === '') throw new Error('Provet måste ha ett namn.');
   const omatchade: string[] = [];
   const nya: Resultat[] = [];
+  const vantande: VantandeResultat[] = [];
   for (const rad of u.rader) {
     const elev = matchaElev(s, u.klassId, rad.namn, rad.sidId);
-    if (elev === null) { omatchade.push(rad.namn); continue; }
+    if (elev === null) {
+      omatchade.push(rad.namn);
+      vantande.push({
+        id: nyttId('vr'), klassId: u.klassId, kalla: u.kalla, prov: u.prov.trim(), datum: u.datum,
+        namn: rad.namn.trim(), poang: rad.poang, maxPoang: rad.maxPoang,
+        ...(rad.sidId !== undefined && rad.sidId.trim() !== '' ? { sidId: rad.sidId.trim() } : {}),
+        ...(u.tid !== undefined ? { tid: u.tid } : {}),
+        ...(u.rum !== undefined ? { rum: u.rum } : {}),
+        ...(u.autoTyp === true ? { autoTyp: true } : {}),
+        ...(rad.svar !== undefined && rad.svar.length > 0 ? { svar: rad.svar } : {}),
+        ...(u.amneId !== undefined ? { amneId: u.amneId } : {}),
+      });
+      continue;
+    }
     nya.push({
       id: nyttId('res'), elevId: elev.id, kalla: u.kalla, prov: u.prov.trim(),
       datum: u.datum, poang: rad.poang, maxPoang: rad.maxPoang,
@@ -208,7 +248,15 @@ export function importeraResultat(s: Struktur, u: ImportUnderlag): ImportUtfall 
   }
   const ersatta = new Set(nya.map((r) => `${r.elevId}|${r.kalla}|${r.prov}`));
   const kvar = (s.resultat ?? []).filter((r) => !ersatta.has(`${r.elevId}|${r.kalla}|${r.prov}`));
-  return { s: { ...s, resultat: [...kvar, ...nya] }, traffar: nya.length, omatchade };
+  // Väntande rader: en omkörning av samma fil ersätter raden med samma namn på samma prov
+  const vNyckel = (v: VantandeResultat) => `${v.klassId}|${v.kalla}|${v.prov}|${normalisera(v.namn)}`;
+  const vErsatta = new Set(vantande.map(vNyckel));
+  const vKvar = (s.vantandeResultat ?? []).filter((v) => !vErsatta.has(vNyckel(v)));
+  const allaVantande = [...vKvar, ...vantande];
+  return {
+    s: { ...s, resultat: [...kvar, ...nya], ...(allaVantande.length > 0 ? { vantandeResultat: allaVantande } : {}) },
+    traffar: nya.length, omatchade,
+  };
 }
 
 /** Alla resultat för en elev, senaste datum först. */

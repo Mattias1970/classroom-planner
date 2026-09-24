@@ -1101,3 +1101,8 @@ input.fel { border-color: #B71C1C; }
 .bam-red table.tbl input:not([type="number"]) { width: 100%; min-width: 90px; }
 .bam-red .icon-btn { border: none; background: none; cursor: pointer; font-size: 14px; padding: 0 3px; }
 .bam-red .icon-btn:disabled { opacity: .3; cursor: default; }
+
+/* ── Del 147: resultat som väntar på elev ── */
+.st-vantande { border-left: 4px solid #E65100; background: #FFF7F0; margin: 0 0 12px; }
+.st-vantande-tabell td { vertical-align: middle; }
+.st-vantande-tabell select { font-size: 12px; max-width: 170px; }
