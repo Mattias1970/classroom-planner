@@ -17,10 +17,12 @@ import {
 import { Ikon, amnesIkon } from './ikoner.js';
 import { DataSaknas, Kort, Kpi, type Filter, type V3Vy } from './Skal.js';
 
-export function Oversikt({ s, filter, setVy, struktur }: {
+export function Oversikt({ s, filter, setVy, struktur, onNyKlass }: {
   s: Struktur; filter: Filter; setVy: (v: V3Vy) => void;
   /** v2:s strukturträd + paneler, renderade av App. */
   struktur: React.ReactNode;
+  /** Del 155: öppna lathunden "Ny klass – steg för steg". */
+  onNyKlass?: () => void;
 }) {
   const idag = new Date().toISOString().slice(0, 10);
   const klasser = filter.klassId === '' ? s.klasser : s.klasser.filter((k) => k.id === filter.klassId);
@@ -70,6 +72,14 @@ export function Oversikt({ s, filter, setVy, struktur }: {
 
   return (
     <div className="v3-sida-innehall">
+      {onNyKlass !== undefined && (s.klasser.length === 0 ? (
+        <div className="kg-komigang">
+          <div><b>🧭 Kom igång</b><p>Lägg till din första klass: läsår, schema, böcker, planering och elever — steg för steg.</p></div>
+          <button type="button" className="btn" onClick={onNyKlass}>➕ Ny klass – steg för steg</button>
+        </div>
+      ) : (
+        <div className="kg-genvag"><button type="button" className="btn sec" onClick={onNyKlass}>➕ Ny klass – steg för steg</button></div>
+      ))}
       <div className="v3-kpi-rad">
         <Kpi ikon={Ikon.elever} rubrik="Närvaro" varde={narvaro === null ? '—' : `${narvaro} %`} under="registrerade quizsvar" ton="bla" onKlick={() => setVy({ typ: 'resultat' })} />
         <Kpi ikon={Ikon.bok} rubrik="Aktiva ämnen" varde={aktiva.length} under={`${amnen.length} ämnen totalt`} ton="gron" onKlick={() => setVy({ typ: 'planering' })} />

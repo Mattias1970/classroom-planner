@@ -55,6 +55,7 @@ import { amnesIkon } from './v3/ikoner.js';
 import { SparaMeny } from './SparaMeny.js';
 import { StWidget, MiniTal, MiniRemsa, useWidgetLage } from './StWidget.js';
 import { ElevFilter } from './ElevFilter.js';
+import { KlassGuide } from './KlassGuide.js';
 import {
   hamtaBockerFranGitHub, konfigKomplett, laddaFranGitHub, lasGitHubConfig, sparaGitHubConfig, sparaTillGitHub,
   type GitHubConfig,
@@ -122,6 +123,23 @@ export function App() {
   const [filter, setFilter] = useState<Filter>(() => ({ klassId: s.klasser[0]?.id ?? '', skolarId: s.skolar[0]?.id ?? '', amneId: '', periodText: '', sok: '' }));
   // Del 150: ledtext i topplistans Period (omfångets tid) när vyn anger en
   const [periodTips, setPeriodTips] = useState('');
+  // Del 155: lathunden "Ny klass – steg för steg"
+  const [klassGuide, setKlassGuide] = useState(false);
+  const klassNamnFor = (id: string) => s.klasser.find((k) => k.id === id)?.namn ?? '';
+  const klassGuideVy = klassGuide ? (
+    <KlassGuide s={s} kor={kor} onStang={() => setKlassGuide(false)}
+      onOppna={(v) => {
+        setKlassGuide(false);
+        if (v.typ === 'planering') {
+          const a = s.amnen.find((x) => x.id === v.amneId);
+          setFilter({ ...filter, amneId: v.amneId, klassId: a?.klassId ?? filter.klassId });
+          setVy({ typ: 'planering' }); setHuvudvy('planering');
+        } else if (v.typ === 'resultat') { setVy({ typ: 'resultat' }); setHuvudvy('superteach'); }
+        else { setVy({ typ: 'datarepo' }); setHuvudvy('struktur'); setVald({ typ: 'github' }); }
+      }}
+      klassPanel={(id) => <KlassPanel s={s} id={id} kor={kor} setVald={() => undefined} iGuide />}
+      elevPanel={(id) => <Elevlista s={s} klassId={id} klassNamn={klassNamnFor(id)} kor={kor} oppenLista />} />
+  ) : null;
   const verktyg = (
     <>
       <button className="btn sec" onClick={angra} title="Ångra senaste ändring (upp till 20 steg)">↩ Ångra</button>
@@ -166,7 +184,7 @@ export function App() {
   if (layout === 'v3') {
     const struktur = (
       <div className="cols">
-        <nav className="tree" aria-label="Struktur"><Trad s={s} vald={vald} setVald={setVald} kor={kor} /></nav>
+        <nav className="tree" aria-label="Struktur"><Trad s={s} vald={vald} setVald={setVald} kor={kor} onNyKlass={() => setKlassGuide(true)} /></nav>
         <main className="panel">
           {(vald === null || !valdFinns(s, vald)) && <Start s={s} />}
           {vald?.typ === 'skolar' && <SkolarPanel s={s} id={vald.id} kor={kor} />}
@@ -187,7 +205,7 @@ export function App() {
       <div className="studio">
         <Skal s={s} vy={vy} setVy={setVy} filter={filter} setFilter={setFilter} notiser={notiser} larareNamn={larare} verktyg={verktyg} periodTips={periodTips}>
           {msg && <p className="status">{msg}</p>}
-          {vy.typ === 'oversikt' && <Oversikt s={s} filter={filter} setVy={setVy} struktur={struktur} />}
+          {vy.typ === 'oversikt' && <Oversikt s={s} filter={filter} setVy={setVy} struktur={struktur} onNyKlass={() => setKlassGuide(true)} />}
           {vy.typ === 'planering' && (
             <div className="v3-sida-innehall">
               <Kort rubrik="Planering" under="årsplanering, veckoplanering, lektionskort och begrepp — samma verktyg som förut" hoger={<button className="v3-lank" onClick={() => setVy({ typ: 'kalender' })}>Kalender →</button>}>
@@ -206,6 +224,7 @@ export function App() {
           {vy.typ === 'foraldrakontakt' && <Foraldrakontakt s={s} filter={filter} setVy={setVy} />}
           {vy.typ === 'datarepo' && <Datarepo s={s} spara={spara} kor={kor} meddela={setMsg} />}
         </Skal>
+        {klassGuideVy}
       </div>
     );
   }
@@ -259,7 +278,7 @@ export function App() {
       ) : (
         <div className="cols">
           <nav className="tree" aria-label="Struktur">
-            <Trad s={s} vald={vald} setVald={setVald} kor={kor} />
+            <Trad s={s} vald={vald} setVald={setVald} kor={kor} onNyKlass={() => setKlassGuide(true)} />
           </nav>
           <main className="panel">
             {msg && <p className="status">{msg}</p>}
@@ -277,6 +296,7 @@ export function App() {
           </main>
         </div>
       )}
+      {klassGuideVy}
     </div>
   );
 }
@@ -402,8 +422,8 @@ function TradNod({ id, oppen, vaxla, act, barn, children }: {
   );
 }
 
-function Trad(props: { s: Struktur; vald: Vald; setVald: (v: Vald) => void; kor: (fn: () => Struktur, m: string) => void }) {
-  const { s, vald, setVald, kor } = props;
+function Trad(props: { s: Struktur; vald: Vald; setVald: (v: Vald) => void; kor: (fn: () => Struktur, m: string) => void; onNyKlass?: () => void }) {
+  const { s, vald, setVald, kor, onNyKlass } = props;
   const ar = (v: Vald) => JSON.stringify(v) === JSON.stringify(vald);
   // Öppna noder sparas mellan besök; allt är hopfällt tills man öppnar något
   const [oppna, setOppna] = useState<Set<string>>(() => new Set(lasInstallning<string[]>('cp2.tradOppna', [])));
@@ -513,6 +533,7 @@ function Trad(props: { s: Struktur; vald: Vald; setVald: (v: Vald) => void; kor:
         </div>
         );
       })}
+      {onNyKlass !== undefined && <button className="node add kg-tradknapp" onClick={onNyKlass}>🧭 Ny klass – steg för steg</button>}
       <button className="node add" onClick={() => setVald({ typ: 'nyttSkolar' })}>➕ Lägg till skolår</button>
 
       <div className="tree-h">TJÄNSTER</div>
@@ -923,7 +944,11 @@ function PassRedigerareB(props: { pass: PassRad[]; onChange: (p: PassRad[]) => v
 }
 
 // ── Klass ────────────────────────────────────────────────────
-function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn: () => Struktur, m: string) => void; setVald: (v: Vald) => void }) {
+function KlassPanel({ s, id, kor, setVald, iGuide = false }: {
+  s: Struktur; id: string; kor: (fn: () => Struktur, m: string) => void; setVald: (v: Vald) => void;
+  /** Del 155: inbäddad i lathunden — bara ämnen och pass (elever och borttagning har egna ställen). */
+  iGuide?: boolean;
+}) {
   const k = s.klasser.find((x) => x.id === id);
   const [namn, setNamn] = useState<string>(STANDARD_AMNEN[0]);
   const [bokId, setBokId] = useState('');
@@ -954,7 +979,7 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
     <div className="card">
       <h2>👥 {k.namn}</h2>
       <p className="note">Varje ämne får sitt eget schema — inget ärvs. Bokens lektioner mappas sedan på schemat.
-        Biologi, Fysik, Kemi och Teknik läses i halvklass: Grupp A och Grupp B har varsin tid, och Socrative-rummen
+        Biologi, Fysik, Kemi och Teknik läses i halvklass: Grupp A och Grupp B har varsin tid.
         Varje ämne har ett Socrative-rum per klass (t.ex. {socrativeRum('Matematik', k.namn)}, {socrativeRum('Biologi', k.namn)}).</p>
       <h3>Nytt ämne</h3>
       {alternativ.length === 0
@@ -1041,12 +1066,14 @@ function KlassPanel({ s, id, kor, setVald }: { s: Struktur; id: string; kor: (fn
       </div>
       {konfliktMsg && <p className="status warn">{konfliktMsg}</p>}
       </>}
-      <Elevlista s={s} klassId={id} klassNamn={k.namn} kor={kor} />
-      <div className="modal-actions">
-        <button className="btn warn" onClick={() => {
-          if (window.confirm(`Ta bort klass ${k.namn} med alla ämnen och planeringar?`)) kor(() => taBortKlass(lasStruktur(), id), 'Klass borttagen.');
-        }}>🗑 Ta bort klass</button>
-      </div>
+      {!iGuide && <Elevlista s={s} klassId={id} klassNamn={k.namn} kor={kor} />}
+      {!iGuide && (
+        <div className="modal-actions">
+          <button className="btn warn" onClick={() => {
+            if (window.confirm(`Ta bort klass ${k.namn} med alla ämnen och planeringar?`)) kor(() => taBortKlass(lasStruktur(), id), 'Klass borttagen.');
+          }}>🗑 Ta bort klass</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1144,8 +1171,10 @@ function GruppImport({ s, klassId, klassNamn, kor }: {
 }
 
 // ── Elevlista med Grupp A/B ──────────────────────────────────
-function Elevlista({ s, klassId, klassNamn, kor }: {
+function Elevlista({ s, klassId, klassNamn, kor, oppenLista = false }: {
   s: Struktur; klassId: string; klassNamn: string; kor: (fn: () => Struktur, m: string) => void;
+  /** Del 155: i lathunden är "klistra in lista" utfälld från början (snabbaste vägen). */
+  oppenLista?: boolean;
 }) {
   const [namn, setNamn] = useState('');
   const [bulkText, setBulkText] = useState('');
@@ -1192,7 +1221,7 @@ function Elevlista({ s, klassId, klassNamn, kor }: {
       )}
       <RosterImport s={s} klassId={klassId} klassNamn={klassNamn} kor={kor} />
       <GruppImport s={s} klassId={klassId} klassNamn={klassNamn} kor={kor} />
-      <details className="bulk-elever">
+      <details className="bulk-elever" open={oppenLista && elever.length === 0 ? true : undefined}>
         <summary>➕ Lägg till flera elever (klistra in lista)</summary>
         <p className="small muted">En elev per rad, t.ex. <code>Efternamn, Förnamn</code> eller <code>Förnamn Efternamn</code> — formatet i Socrative-rapporten fungerar rakt av. Dubbletter hoppas över.</p>
         <textarea aria-label="Elevlista" rows={4} value={bulkText} onChange={(e) => setBulkText(e.target.value)}
