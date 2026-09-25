@@ -32,12 +32,12 @@ describe('Del 151: rapportens områden', () => {
     // 1 Lektionerna
     expect(r.lektioner.rader.map((x) => [x.prov, x.procent, x.klarat])).toEqual([['Exit 1', 75, true], ['Exit 2', 100, true]]);
     expect(r.lektioner).toMatchObject({ ton: 'bra', status: 'Når kravet', snitt: 88, klarade: 2, utveckling: null });
-    expect(r.lektioner.slutsats).toBe('Exit ticketen når kravet (70 %) på 2 av 2 lektioner, snitt 88 %.');
+    expect(r.lektioner.slutsats).toBe('Exit ticket nådde kravet (70 %) på 2 av 2 lektioner, med ett snitt på 88 %.');
     // 2 Läxorna
     expect(r.laxor.rader.map((x) => x.procent)).toEqual([50, 50, 25, 50]);
     expect(r.laxor.klarade).toBe(0);
     expect(r.laxor.ton).toBe('oro');
-    expect(r.laxor.slutsats).toContain('senast 50 % (fre 25 sep)');
+    expect(r.laxor.slutsats).toContain('Senaste förhöret gav 50 % (25 sep).');
     expect(r.laxor.vantTotalt).toBeGreaterThan(0);
     expect(r.laxor.vandSteg.flatMap((v) => v.begrepp).every((b) => !b.includes(' — '))).toBe(true);   // bara begreppsnamn
     expect(r.laxor.kvar.map((k) => k.begrepp)).toEqual(['cellkärna', 'mitokondrie']);
@@ -46,10 +46,10 @@ describe('Del 151: rapportens områden', () => {
     expect(r.minne.status).toBe('Några att repetera');
     // Fokus: högst två, med prov och datum
     expect(r.fokus).toHaveLength(2);
-    expect(r.fokus[0].rubrik).toBe('Repetera begrepp du kunnat');
-    expect(r.fokus[0].text).toContain('cellkärna, mitokondrie — rätt tidigare, fel de två senaste gångerna (senast fre 25 sep)');
-    expect(r.fokus[1].rubrik).toBe('Lär in begreppen som är kvar');
-    expect(r.fokus[1].text).toContain('L4, fre 25 sep');
+    expect(r.fokus[0].rubrik).toBe('Repetera begrepp du har lärt dig');
+    expect(r.fokus[0].text).toContain('cellkärna, mitokondrie – rätt tidigare men fel de två senaste gångerna (senast 25 sep). Läraren går igenom dem med dig, och de följs upp i nästa läxförhör.');
+    expect(r.fokus[1].rubrik).toBe('Lär dig begreppen som är kvar');
+    expect(r.fokus[1].text).toContain('(L4, 25 sep)');
     expect(r.prov).toBeNull();                                   // inga DigiExam-prov → inget provområde
   });
 
@@ -62,7 +62,7 @@ describe('Del 151: rapportens områden', () => {
     provet('Prov kap 6 CA', '2026-10-08', 15, 11);
     const r = rapportOmraden(elevanalys(s, 'e1', { klassId: 'k', amneId: 'bi' }));
     expect(r.prov!.rader.map((x) => [x.prov, x.procent, x.klassSnitt, x.mot])).toEqual([['Prov kap 6 E', 60, 70, -10], ['Prov kap 6 CA', 75, 65, 10]]);
-    expect(r.prov!.slutsats).toBe('Senaste provet, Prov kap 6 CA (tor 8 okt): 15 av 20 poäng (75 %), 10 procentenheter över klassens snitt. Från första till senaste provet: +15 procentenheter. Provet bedöms per förmåga i DigiExam; betyget är lärarens sammanvägda bedömning.');
+    expect(r.prov!.slutsats).toBe('Senaste provet, Prov kap 6 CA (8 okt): 15 av 20 poäng (75 %), 10 procentenheter över klassens snitt. Från första till senaste provet har resultatet ökat med 15 procentenheter. Provet bedöms per förmåga i DigiExam; betyget är lärarens sammanvägda bedömning.');
     expect(r.prov!.nyckeltal[1]).toEqual({ etikett: 'Klassens snitt', varde: '65 %', under: 'samma prov' });
   });
 

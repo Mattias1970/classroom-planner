@@ -14,7 +14,10 @@
 import type { Elevanalys } from './elevanalys.js';
 import type { GlomskaBegrepp } from './glomska.js';
 import { kravFor, niva } from './resultat.js';
-import { kortDatum } from './dashboard.js';
+/** '2026-09-25' → '25 sep' — utan veckodagsförkortning (fre, tis), som Words svenska stavningskontroll inte känner igen. */
+const MAN = ['jan', 'feb', 'mars', 'apr', 'maj', 'juni', 'juli', 'aug', 'sep', 'okt', 'nov', 'dec'];
+export function rapportDatum(d: string): string { return `${Number(d.slice(8, 10))} ${MAN[Number(d.slice(5, 7)) - 1] ?? ''}`; }
+const kortDatum = rapportDatum;
 
 export type OmradeTon = 'bra' | 'okej' | 'oro' | 'ingen';
 
@@ -93,7 +96,9 @@ function halvor(v: number[]): number | null {
   const h = Math.floor(v.length / 2);
   return Math.round((snitt(v.slice(v.length - h))! - snitt(v.slice(0, h))!));
 }
-const tecken = (x: number) => `${x > 0 ? '+' : ''}${x}`;
+const tecken = (x: number) => `${x > 0 ? '+' : x < 0 ? '−' : ''}${Math.abs(x)}`;
+/** 1 begrepp / 3 begrepp — med rätt pronomen efter (det/de). */
+const ettFlera = (n: number, en: string, flera: string) => (n === 1 ? en : flera);
 
 function lektioner(a: Elevanalys): LektionOmrade {
   const krav = kravFor('socrative-exit') ?? 70;
@@ -108,17 +113,17 @@ function lektioner(a: Elevanalys): LektionOmrade {
   }
   const andel = klarade / rader.length;
   const ton: OmradeTon = s !== null && s >= krav && andel >= 0.7 ? 'bra' : s !== null && s >= krav - 15 ? 'okej' : 'oro';
-  const utv = utveckling === null ? '' : utveckling >= 5 ? ` De senare exit tickets ligger ${utveckling} procentenheter högre än de första.`
-    : utveckling <= -5 ? ` De senare exit tickets ligger ${-utveckling} procentenheter lägre än de första.` : ' Resultaten ligger på ungefär samma nivå över perioden.';
+  const utv = utveckling === null ? '' : utveckling >= 5 ? ` Resultaten på de senare exit tickets ligger ${utveckling} procentenheter högre än på de första.`
+    : utveckling <= -5 ? ` Resultaten på de senare exit tickets ligger ${-utveckling} procentenheter lägre än på de första.` : ' Resultaten ligger på ungefär samma nivå under hela perioden.';
   const slutsats = ton === 'bra'
-    ? `Exit ticketen når kravet (${krav} %) på ${klarade} av ${rader.length} lektioner, snitt ${s} %.${utv}`
-    : `Exit ticketen når kravet (${krav} %) på ${klarade} av ${rader.length} lektioner, snitt ${s} % (${niva('socrative-exit', s) ?? '—'}).${utv}`;
+    ? `Exit ticket nådde kravet (${krav} %) på ${klarade} av ${rader.length} lektioner, med ett snitt på ${s} %.${utv}`
+    : `Exit ticket nådde kravet (${krav} %) på ${klarade} av ${rader.length} lektioner, med ett snitt på ${s} % (${(niva('socrative-exit', s) ?? '—').toLowerCase()}).${utv}`;
   return {
     ton, status: ton === 'bra' ? 'Når kravet' : ton === 'okej' ? 'Delvis' : 'Under kravet', slutsats,
     nyckeltal: [
       { etikett: 'Snitt exit ticket', varde: `${s} %`, under: niva('socrative-exit', s) ?? undefined },
       { etikett: `Nådde ${krav} %`, varde: `${klarade} av ${rader.length}`, under: 'lektioner' },
-      ...(utveckling !== null ? [{ etikett: 'Utveckling', varde: `${tecken(utveckling)} p.e.`, under: 'senare mot första lektionerna' }] : []),
+      ...(utveckling !== null ? [{ etikett: 'Utveckling', varde: tecken(utveckling), under: 'procentenheter, senare mot första lektionerna' }] : []),
     ],
     rader, snitt: s, klarade, utveckling,
   };
@@ -152,16 +157,16 @@ function laxor(a: Elevanalys): LaxOmrade {
   }
   const senaste = rader[rader.length - 1];
   const ton: OmradeTon = senaste.klarat && (s ?? 0) >= krav - 5 ? 'bra' : (s ?? 0) >= krav - 20 || (forandring ?? 0) >= 10 ? 'okej' : 'oro';
-  const riktning = forandring === null ? '' : forandring >= 5 ? ` Från första till senaste förhöret: ${tecken(forandring)} procentenheter.`
-    : forandring <= -5 ? ` Från första till senaste förhöret: ${forandring} procentenheter.` : ' Nivån är ungefär densamma från första till senaste förhöret.';
-  const vant = vantTotalt > 0 ? ` ${vantTotalt} begrepp har gått från fel till rätt mellan förhören.` : '';
+  const riktning = forandring === null ? '' : forandring >= 5 ? ` Från första till senaste förhöret har resultatet ökat med ${forandring} procentenheter.`
+    : forandring <= -5 ? ` Från första till senaste förhöret har resultatet minskat med ${-forandring} procentenheter.` : ' Resultatet ligger på ungefär samma nivå i första och senaste förhöret.';
+  const vant = vantTotalt > 0 ? ` ${vantTotalt} ${ettFlera(vantTotalt, 'begrepp har gått', 'begrepp har gått')} från fel till rätt mellan förhören.` : '';
   return {
     ton, status: ton === 'bra' ? 'Når kravet' : ton === 'okej' ? 'På väg' : 'Under kravet',
-    slutsats: `Läxförhören når kravet (${krav} %) ${klarade} av ${rader.length} gånger, senast ${senaste.procent} % (${kortDatum(senaste.datum)}).${riktning}${vant}`,
+    slutsats: `Läxförhören nådde kravet (${krav} %) ${klarade} av ${rader.length} gånger. Senaste förhöret gav ${senaste.procent} % (${kortDatum(senaste.datum)}).${riktning}${vant}`,
     nyckeltal: [
       { etikett: 'Senaste läxförhör', varde: `${senaste.procent} %`, under: senaste.niva },
       { etikett: `Nådde ${krav} %`, varde: `${klarade} av ${rader.length}`, under: 'läxförhör' },
-      { etikett: 'Vänt fel → rätt', varde: String(vantTotalt), under: 'begrepp mellan förhören' },
+      { etikett: 'Från fel till rätt', varde: String(vantTotalt), under: 'begrepp mellan förhören' },
     ],
     rader, snitt: s, klarade, forandring, vandSteg, vantTotalt, kvar, fixat,
   };
@@ -170,18 +175,18 @@ function laxor(a: Elevanalys): LaxOmrade {
 function minne(a: Elevanalys): MinnesOmrade {
   const g = a.glomska;
   if (g.testadeIgen === 0) {
-    return { ton: 'ingen', status: 'Inget underlag', slutsats: 'Inga begrepp som eleven kunnat har testats igen ännu.', nyckeltal: [], flaggade: [], noterade: [], hallerI: 0, testadeIgen: 0 };
+    return { ton: 'ingen', status: 'Inget underlag', slutsats: 'Inget inlärt begrepp har testats igen ännu.', nyckeltal: [], flaggade: [], noterade: [], hallerI: 0, testadeIgen: 0 };
   }
   const ton: OmradeTon = g.borjarGlomma.length === 0 ? 'bra' : g.borjarGlomma.length <= 2 ? 'okej' : 'oro';
   const flagg = g.borjarGlomma.length === 0 ? ' Inget begrepp har varit fel de två senaste gångerna.'
-    : ` ${g.borjarGlomma.length} begrepp har varit fel de två senaste gångerna efter att ha varit rätt — de behöver repeteras.`;
-  const not = g.enstakaFel.length > 0 ? ` ${g.enstakaFel.length} enstaka fel på kunnade begrepp noteras men flaggas inte.` : '';
+    : ` ${g.borjarGlomma.length} ${ettFlera(g.borjarGlomma.length, 'begrepp har varit fel de två senaste gångerna efter att tidigare ha varit rätt – det behöver repeteras.', 'begrepp har varit fel de två senaste gångerna efter att tidigare ha varit rätt – de behöver repeteras.')}`;
+  const not = g.enstakaFel.length > 0 ? ` ${g.enstakaFel.length} enstaka ${ettFlera(g.enstakaFel.length, 'fel', 'fel')} på inlärda begrepp noteras men flaggas inte.` : '';
   return {
-    ton, status: ton === 'bra' ? 'Håller i' : ton === 'okej' ? 'Några att repetera' : 'Behöver repeteras',
-    slutsats: `${g.hallerI} av ${g.testadeIgen} begrepp som varit rätt var rätt igen varje gång de testades.${flagg}${not}`,
+    ton, status: ton === 'bra' ? 'Sitter kvar' : ton === 'okej' ? 'Några att repetera' : 'Behöver repeteras',
+    slutsats: `Av ${g.testadeIgen} inlärda begrepp som testats igen var ${g.hallerI} rätt varje gång.${flagg}${not}`,
     nyckeltal: [
-      { etikett: 'Håller i', varde: `${g.procentHallerI ?? '—'} %`, under: `${g.hallerI} av ${g.testadeIgen} begrepp` },
-      { etikett: 'Börjar glömma', varde: String(g.borjarGlomma.length), under: 'fel två gånger i rad' },
+      { etikett: 'Rätt varje gång', varde: `${g.procentHallerI ?? '—'} %`, under: `${g.hallerI} av ${g.testadeIgen} inlärda begrepp` },
+      { etikett: 'Börjar glömmas', varde: String(g.borjarGlomma.length), under: 'fel två gånger i rad' },
       { etikett: 'Enstaka fel', varde: String(g.enstakaFel.length), under: 'noteras, flaggas inte' },
     ],
     flaggade: g.borjarGlomma, noterade: g.enstakaFel, hallerI: g.hallerI, testadeIgen: g.testadeIgen,
@@ -194,7 +199,9 @@ function prov(a: Elevanalys): ProvOmrade | null {
   const sista = rader[rader.length - 1];
   const tal = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(1).replace('.', ','));
   const jamfor = sista.mot === null ? '' : sista.mot >= 0 ? `, ${sista.mot} procentenheter över klassens snitt` : `, ${-sista.mot} procentenheter under klassens snitt`;
-  const utv = rader.length >= 2 && rader[0].procent !== null && sista.procent !== null ? ` Från första till senaste provet: ${tecken(Math.round(sista.procent - rader[0].procent))} procentenheter.` : '';
+  const diff = rader.length >= 2 && rader[0].procent !== null && sista.procent !== null ? Math.round(sista.procent - rader[0].procent) : null;
+  const utv = diff === null ? '' : diff > 0 ? ` Från första till senaste provet har resultatet ökat med ${diff} procentenheter.`
+    : diff < 0 ? ` Från första till senaste provet har resultatet minskat med ${-diff} procentenheter.` : ' Första och senaste provet gav samma resultat.';
   return {
     ton: 'ingen', status: `${rader.length} prov`,
     slutsats: `Senaste provet, ${sista.prov} (${kortDatum(sista.datum)}): ${tal(sista.poang)} av ${tal(sista.maxPoang)} poäng${sista.procent !== null ? ` (${sista.procent} %)` : ''}${jamfor}.${utv} Provet bedöms per förmåga i DigiExam; betyget är lärarens sammanvägda bedömning.`,
@@ -215,20 +222,20 @@ export function rapportOmraden(a: Elevanalys): RapportOmraden {
   const fokus: Array<{ rubrik: string; text: string }> = [];
   if (min.flaggade.length > 0) {
     const b = min.flaggade.slice(0, 4);
-    fokus.push({ rubrik: 'Repetera begrepp du kunnat',
-      text: `${b.map(namnPa).join(', ')}${min.flaggade.length > 4 ? ` och ${min.flaggade.length - 4} till` : ''} — rätt tidigare, fel de två senaste gångerna (senast ${kortDatum(b[0].senasteDatum)}). Läraren går igenom dem med dig; de följs upp i nästa läxförhör.` });
+    fokus.push({ rubrik: 'Repetera begrepp du har lärt dig',
+      text: `${b.map(namnPa).join(', ')}${min.flaggade.length > 4 ? ` och ${min.flaggade.length - 4} till` : ''} – rätt tidigare men fel de två senaste gångerna (senast ${kortDatum(b[0].senasteDatum)}). Läraren går igenom ${ettFlera(min.flaggade.length, 'det', 'dem')} med dig, och ${ettFlera(min.flaggade.length, 'det', 'de')} följs upp i nästa läxförhör.` });
   }
   if (lax.kvar.length > 0 && fokus.length < 2) {
     const b = lax.kvar.slice(0, 4);
-    fokus.push({ rubrik: 'Lär in begreppen som är kvar',
-      text: `${lax.kvar.length} begrepp var fel i senaste försöket, t.ex. ${b.map(namnPa).join(', ')} (${b[0].prov}, ${kortDatum(b[0].datum)}). Läs sammanfattningen i bilaga B och öva i Socrative-rummet; uppföljning i nästa läxförhör.` });
+    fokus.push({ rubrik: 'Lär dig begreppen som är kvar',
+      text: `${lax.kvar.length} begrepp var fel i senaste försöket, till exempel ${b.map(namnPa).join(', ')} (${b[0].prov}, ${kortDatum(b[0].datum)}). Läs sammanfattningen i bilaga B och öva i Socrative-rummet. ${ettFlera(lax.kvar.length, 'Det', 'De')} följs upp i nästa läxförhör.` });
   }
   if (lek.ton === 'oro' && fokus.length < 2) {
-    fokus.push({ rubrik: 'Exit ticketen på lektionen',
-      text: `Exit ticketen har nått ${kravFor('socrative-exit') ?? 70} % på ${lek.klarade} av ${lek.rader.length} lektioner. Läraren stämmer av med dig under arbetet på lektionen; följs upp med nästa exit ticket.` });
+    fokus.push({ rubrik: 'Exit ticket på lektionerna',
+      text: `Du har nått ${kravFor('socrative-exit') ?? 70} % på exit ticket på ${lek.klarade} av ${lek.rader.length} lektioner. Läraren stämmer av med dig under lektionsarbetet, och det följs upp med nästa exit ticket.` });
   }
   if (fokus.length === 0 && lax.rader.length + lek.rader.length > 0) {
-    fokus.push({ rubrik: 'Fortsätt som nu', text: 'Resultaten når förhörsgränserna. Fortsätt läsa läxan inför varje läxförhör och gör exit ticketen noggrant.' });
+    fokus.push({ rubrik: 'Fortsätt som nu', text: 'Resultaten når förhörsgränserna. Fortsätt att läsa läxan inför varje läxförhör och gör exit ticket noggrant.' });
   }
   return { lektioner: lek, laxor: lax, minne: min, prov: prov(a), fokus };
 }

@@ -8,7 +8,7 @@
  * de ersätts med motsvarigheter som finns (ja/nej, –, ●).
  */
 import type { Content, ContentTable, TableCell, TDocumentDefinitions } from 'pdfmake/interfaces';
-import { kortDatum, rapportOmraden, type Elevanalys, type GlomskaBegrepp, type OmradeTon, type RapportOmraden } from '@planner/kernel';
+import { rapportDatum as kortDatum, rapportOmraden, type Elevanalys, type GlomskaBegrepp, type OmradeTon, type RapportOmraden } from '@planner/kernel';
 import { FM, OMRADE, TON, TYP, laxBild, lektionsBild, veckaFor, type RapportMeta } from './elevrapportLayout.js';
 
 const TEXT = '#1F2937'; const MUTED = '#6B7280'; const YTA = '#F3F4F6'; const LINJE = '#E5E7EB';
@@ -111,9 +111,9 @@ function oversikt(a: Elevanalys, r: RapportOmraden, meta: RapportMeta): Content[
     ruta(OMRADE.lektioner, '1', lek.ton, lek.status, lek.snitt === null ? '—' : `${lek.snitt} %`,
       lek.rader.length === 0 ? 'Inga exit tickets i perioden.' : `Exit ticket i snitt. Nådde 70 % på ${lek.klarade} av ${lek.rader.length} lektioner.`),
     ruta(OMRADE.laxor, '2', lax.ton, lax.status, lax.rader.length === 0 ? '—' : `${lax.rader[lax.rader.length - 1].procent} %`,
-      lax.rader.length === 0 ? 'Inga läxförhör i perioden.' : `Senaste läxförhöret. ${lax.vantTotalt} begrepp vända från fel till rätt.`),
+      lax.rader.length === 0 ? 'Inga läxförhör i perioden.' : `Senaste läxförhöret. ${lax.vantTotalt} begrepp har gått från fel till rätt.`),
     ruta(OMRADE.minne, '3', min.ton, min.status, min.testadeIgen === 0 ? '—' : `${Math.round((min.hallerI / min.testadeIgen) * 100)} %`,
-      min.testadeIgen === 0 ? 'Inget kunnat begrepp har testats igen ännu.' : `av kunnade begrepp var rätt igen. ${min.flaggade.length} börjar glömmas.`),
+      min.testadeIgen === 0 ? 'Inget inlärt begrepp har testats igen ännu.' : `av inlärda begrepp var rätt varje gång. ${min.flaggade.length} börjar glömmas.`),
     ...(r.prov === null ? [] : [ruta(OMRADE.prov, '4', r.prov.ton, r.prov.status, r.prov.nyckeltal[0].varde,
       `Senaste provet (${kortDatum(r.prov.rader[r.prov.rader.length - 1].datum)}). Klassens snitt ${r.prov.nyckeltal[1].varde}.`)]),
   ];
@@ -150,19 +150,19 @@ function oversikt(a: Elevanalys, r: RapportOmraden, meta: RapportMeta): Content[
       ]] },
       layout: 'noBorders', margin: [0, 0, 0, 6],
     }))),
-    { text: 'Hur rapporten läses: 70 % (exit ticket) och 90 % (läxförhör) är förhörsgränser för begreppsfrågorna, inte ämnesbetyg. Rapporten beskriver resultaten; orsaker följs upp i samtal. Jämförelsen är mot dina egna tidigare resultat. Bilaga A visar varje fråga, bilaga B vad du kan läsa.', fontSize: 8.5, color: MUTED, margin: [0, 12, 0, 0] },
+    { text: 'Så läser du rapporten: 70 % (exit ticket) och 90 % (läxförhör) är gränser för förhörens begreppsfrågor, inte ämnesbetyg. Rapporten beskriver resultaten; orsakerna följs upp i samtal. Jämförelsen görs mot dina egna tidigare resultat. Bilaga A visar varje fråga och bilaga B vad du kan läsa.', fontSize: 8.5, color: MUTED, margin: [0, 12, 0, 0] },
   ];
 }
 
 // ── Områdena ────────────────────────────────────────────────────
 async function lektionerna(r: RapportOmraden): Promise<Content[]> {
   const o = r.lektioner; const u: Content[] = [band('1', OMRADE.lektioner, true)];
-  u.push(liten('Exit ticketen i slutet av lektionen prövar det ni arbetat med just den lektionen. Läxförhöret räknas inte här — det hör till läxorna.'));
+  u.push(liten('Exit ticket i slutet av lektionen prövar det ni har arbetat med under just den lektionen. Läxförhöret räknas inte här – det redovisas under Läxorna.'));
   u.push(slutsats(o.ton, o.status, o.slutsats));
   const n = nyckeltal(o.nyckeltal, OMRADE.lektioner.farg); if (n !== null) u.push(n);
   if (o.rader.length > 0) {
     const img = await bildUrl(lektionsBild(o));
-    if (img !== null) u.push({ image: img, width: BREDD * 0.92, alignment: 'center', margin: [0, 2, 0, 2] }, liten('Grön stapel = nådde 70 %, orange = under. Streckad linje = kravet.'));
+    if (img !== null) u.push({ image: img, width: BREDD * 0.92, alignment: 'center', margin: [0, 2, 0, 2] }, liten('Grön stapel = nådde 70 %, orange = under 70 %. Den streckade linjen visar kravet.'));
     u.push(underrubrik('Lektion för lektion'));
     u.push(dataTabell(['Datum', 'Exit ticket', 'Resultat', 'Nådde 70 %', 'Nivå'], [16, 38, 12, 14, 20],
       o.rader.map((x) => [kortDatum(x.datum), x.prov, { text: `${x.procent} %`, bold: true }, janej(x.klarat), x.niva])));
@@ -172,26 +172,26 @@ async function lektionerna(r: RapportOmraden): Promise<Content[]> {
 
 async function laxorna(r: RapportOmraden): Promise<Content[]> {
   const o = r.laxor; const u: Content[] = [band('2', OMRADE.laxor, true)];
-  u.push(liten('Läxförhöret i början av lektionen prövar läxan: begreppen från förra lektionen och tidigare läxor. Det som räknas är att du ökar från gång till gång och vänder fel till rätt.'));
+  u.push(liten('Läxförhöret i början av lektionen prövar läxan: begreppen från förra lektionen och från tidigare läxor. Det viktiga är att resultatet ökar från gång till gång och att fel blir rätt.'));
   u.push(slutsats(o.ton, o.status, o.slutsats));
   const n = nyckeltal(o.nyckeltal, OMRADE.laxor.farg); if (n !== null) u.push(n);
   if (o.rader.length > 0) {
     const img = await bildUrl(laxBild(o));
-    if (img !== null) u.push({ image: img, width: BREDD * 0.92, alignment: 'center', margin: [0, 2, 0, 2] }, liten('Varje punkt är ett läxförhör. Grön = nådde 90 %, orange = under.'));
+    if (img !== null) u.push({ image: img, width: BREDD * 0.92, alignment: 'center', margin: [0, 2, 0, 2] }, liten('Varje punkt är ett läxförhör. Grön = nådde 90 %, orange = under 90 %.'));
     u.push(underrubrik('Läxförhör för läxförhör'));
     const del = (x: { ratt: number; antal: number } | null) => (x === null ? '—' : `${x.ratt} av ${x.antal}`);
     const harNya = o.rader.some((x) => x.nya !== null);
     u.push(dataTabell(['Datum', 'Läxförhör', 'Resultat', 'Nådde 90 %', 'Förra lektionen', 'Tidigare läxor', ...(harNya ? ['Nya'] : [])], harNya ? [14, 26, 10, 12, 14, 14, 10] : [15, 29, 11, 13, 16, 16],
       o.rader.map((x) => [kortDatum(x.datum), x.prov, { text: `${x.procent} %`, bold: true }, janej(x.klarat), del(x.forraLektionen), del(x.tidigare), ...(harNya ? [del(x.nya)] : [])])));
-    u.push(liten('Förra lektionen = begreppen från exit ticketen sedan förra läxförhöret. Tidigare läxor = begrepp från tidigare förhör — visar om du läser hela läxan, inte bara det senaste.'));
+    u.push(liten('Förra lektionen = begreppen från exit ticket sedan förra läxförhöret. Tidigare läxor = begrepp från tidigare förhör; visar om du läser hela läxan och inte bara det senaste.'));
   }
   if (o.vandSteg.length > 0) {
-    u.push(underrubrik(`Vänt från fel till rätt (${o.vantTotalt})`, '#1B5E20'));
+    u.push(underrubrik(`Från fel till rätt (${o.vantTotalt})`, '#1B5E20'));
     u.push(dataTabell(['Mellan förhören', 'Antal', 'Begrepp'], [30, 10, 60],
       o.vandSteg.map((s) => [`${kortDatum(s.franDatum)} – ${kortDatum(s.tillDatum)}`, { text: `+${s.antal}`, farg: '1B5E20', bold: true }, s.begrepp.join(' · ')])));
   }
   if (o.kvar.length > 0) {
-    u.push(underrubrik(`Kvar att lära — fel i senaste försöket (${o.kvar.length})`, '#B71C1C'));
+    u.push(underrubrik(`Kvar att lära – fel i senaste försöket (${o.kvar.length})`, '#B71C1C'));
     u.push(punkter(o.kvar.map((x) => [
       ...(x.begrepp !== undefined ? [{ text: `${x.begrepp} — `, bold: true }] : []), { text: x.fraga },
       { text: `  ${x.kod} · ${x.prov} ${kortDatum(x.datum)}`, fontSize: 8, color: MUTED },
@@ -213,14 +213,14 @@ function glomskaRad(g: GlomskaBegrepp): Array<{ text: string; bold?: boolean; co
 
 function minnet(r: RapportOmraden): Content[] {
   const o = r.minne; const u: Content[] = [band('3', OMRADE.minne, true)];
-  u.push(liten('Läxförhören tar upp gamla begrepp igen. Ett begrepp räknas som kunnat från första gången det var rätt. Är det fel de två senaste gångerna flaggas det. Ett enstaka fel noteras bara — man kan trycka fel.'));
+  u.push(liten('Läxförhören tar upp tidigare begrepp igen. Ett begrepp räknas som inlärt från första gången du svarade rätt. Om det sedan är fel de två senaste gångerna flaggas det. Ett enstaka fel noteras bara – det är lätt att trycka fel.'));
   u.push(slutsats(o.ton, o.status, o.slutsats));
   const n = nyckeltal(o.nyckeltal, OMRADE.minne.farg); if (n !== null) u.push(n);
-  if (o.flaggade.length > 0) { u.push(underrubrik(`Börjar glömma — repetera (${o.flaggade.length})`, '#B71C1C')); u.push(punkter(o.flaggade.map(glomskaRad))); }
+  if (o.flaggade.length > 0) { u.push(underrubrik(`Börjar glömmas – repetera (${o.flaggade.length})`, '#B71C1C')); u.push(punkter(o.flaggade.map(glomskaRad))); }
   if (o.noterade.length > 0) {
-    u.push(underrubrik(`Noterat: enstaka fel på kunnade begrepp (${o.noterade.length})`, MUTED));
+    u.push(underrubrik(`Noterat: enstaka fel på inlärda begrepp (${o.noterade.length})`, MUTED));
     u.push({ text: sak(o.noterade.map((g) => `${g.begrepp ?? g.fraga} (${kortDatum(g.fel[g.fel.length - 1].datum)})`).join(' · ')), fontSize: 8.5, color: MUTED, margin: [0, 0, 0, 4] });
-    u.push(liten('Flaggas inte. Blir samma begrepp fel igen nästa gång flyttas det upp till "börjar glömma".'));
+    u.push(liten('Dessa flaggas inte. Blir samma begrepp fel även nästa gång flyttas det till ”börjar glömmas”.'));
   }
   return u;
 }
@@ -230,20 +230,21 @@ function proven(r: RapportOmraden): Content[] {
   const tal = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(1).replace('.', ','));
   return [
     band('4', OMRADE.prov, true),
-    liten('Proven skrivs i DigiExam och bedöms per förmåga. Här visas poängen och klassens snitt på samma prov — betyget sätts av läraren utifrån förmågorna.'),
+    liten('Proven skrivs i DigiExam och bedöms per förmåga. Här visas poängen och klassens snitt på samma prov. Betyget sätts av läraren utifrån förmågorna.'),
     slutsats(o.ton, o.status, o.slutsats),
     ...(() => { const n = nyckeltal(o.nyckeltal, OMRADE.prov.farg); return n === null ? [] : [n]; })(),
     underrubrik('Prov för prov'),
     dataTabell(['Datum', 'Prov', 'Poäng', 'Resultat', 'Klassens snitt', 'Mot klassen'], [15, 33, 13, 12, 14, 13],
       o.rader.map((x) => [kortDatum(x.datum), x.prov, `${tal(x.poang)} / ${tal(x.maxPoang)}`, { text: x.procent !== null ? `${x.procent} %` : '—', bold: true },
         x.klassSnitt !== null ? `${x.klassSnitt} %` : '—',
-        x.mot === null ? '—' : { text: `${x.mot > 0 ? '+' : ''}${x.mot}`, farg: x.mot >= 0 ? '1B5E20' : 'B71C1C', bold: true }])),
+        x.mot === null ? '—' : { text: `${x.mot > 0 ? '+' : x.mot < 0 ? '−' : ''}${Math.abs(x.mot)}`, farg: x.mot >= 0 ? '1B5E20' : 'B71C1C', bold: true }])),
   ];
 }
 
 // ── Bilaga A: frågematrisen, som på skärmen ─────────────────────
-const ETIKETT = [24, 58, 52, 104];
-const RUT_MIN = 10; const RUT_MAX = 17;
+// Smala etikettkolumner och små rutor, så att upp till ~70 frågor ryms i EN matris som på skärmen
+const ETIKETT = [20, 44, 44, 92];
+const RUT_MIN = 7; const RUT_MAX = 17;
 
 function matrisBlock(a: Elevanalys, fran: number, till: number): Content {
   const m = a.matris;
@@ -259,7 +260,7 @@ function matrisBlock(a: Elevanalys, fran: number, till: number): Content {
     for (let i = 1; i < n; i++) rad1.push({});
   }
   const rad2: TableCell[] = [
-    ...['Vecka', 'Datum', 'Typ', 'Quiz'].map((x): TableCell => ({ text: x, bold: true, fontSize: 6.5, color: MUTED })),
+    ...['Vecka', 'Datum', 'Typ', 'Förhör'].map((x): TableCell => ({ text: x, bold: true, fontSize: 6.5, color: MUTED })),
     ...fragor.map((fr): TableCell => ({ text: String(fr.nr), fontSize: 5.5, color: h(FM.nr), alignment: 'center' })),
   ];
   const rader = [...m.rader].sort((x, y) => x.datum.localeCompare(y.datum) || (x.tid ?? '').localeCompare(y.tid ?? ''));
@@ -309,11 +310,11 @@ function bilagaA(a: Elevanalys): Content[] {
     { text: 'Bilaga A', bold: true, fontSize: 9, color: MUTED, pageBreak: 'before', pageOrientation: 'landscape' },
     { text: 'Fråga för fråga', bold: true, fontSize: 16, margin: [0, 0, 0, 4] },
   ];
-  if (m.fragor.length === 0) { u.push(liten('Inga förhör med svar per fråga i perioden.')); return u; }
+  if (m.fragor.length === 0) { u.push(liten('Det finns inga förhör med svar per fråga i perioden.')); return u; }
   u.push({ text: [
     { text: '■ ', color: h(FM.ratt), fontSize: 11 }, { text: 'rätt   ' }, { text: '■ ', color: h(FM.fel), fontSize: 11 }, { text: 'fel   ' },
-    { text: '■ ', color: '#D9DDE3', fontSize: 11 }, { text: 'ingick inte / inte gjord   ' },
-    { text: 'Samma fråga har samma nummer i alla förhör. Kolumnerna är grupperade efter förhöret där frågan först ställdes.', color: MUTED },
+    { text: '■ ', color: '#D9DDE3', fontSize: 11 }, { text: 'ingick inte eller besvarades inte   ' },
+    { text: 'Samma fråga har samma nummer i alla förhör. Kolumnerna är grupperade efter det förhör där frågan ställdes första gången.', color: MUTED },
   ], fontSize: 8.5, margin: [0, 0, 0, 6] });
   for (const [fran, till] of blockGranser(a)) u.push(matrisBlock(a, fran, till));
   u.push({ text: 'Frågorna', bold: true, fontSize: 12, margin: [0, 6, 0, 4] });
@@ -335,7 +336,7 @@ function bilagaB(a: Elevanalys, r: RapportOmraden): Content[] {
   const u: Content[] = [
     { text: 'Bilaga B', bold: true, fontSize: 9, color: MUTED, pageBreak: 'before', pageOrientation: 'portrait' },
     { text: 'Att läsa och öva', bold: true, fontSize: 16, margin: [0, 0, 0, 4] },
-    liten('Sammanfattningarna och förklaringarna är bokens. Begrepp markerade ● är sådana du ska repetera eller lära in (område 2 och 3).'),
+    liten('Sammanfattningarna och förklaringarna kommer från läroboken. Begrepp markerade med ● ska du repetera eller lära dig (se område 2 och 3).'),
   ];
   const markerade = new Set([...r.minne.flaggade.map((g) => (g.begrepp ?? '').toLowerCase()), ...r.laxor.kvar.map((k) => (k.begrepp ?? '').toLowerCase())].filter((x) => x !== ''));
   if (a.ovningar.length > 0 || a.filmer.length > 0) {
@@ -346,7 +347,7 @@ function bilagaB(a: Elevanalys, r: RapportOmraden): Content[] {
     ], margin: [0, 0, 0, 6] });
   }
   const kapitel = a.rapport?.kapitel ?? [];
-  if (kapitel.length === 0 && a.ovningar.length === 0 && a.filmer.length === 0) u.push(liten('Inga sammanfattningar eller länkar finns för ämnet ännu.'));
+  if (kapitel.length === 0 && a.ovningar.length === 0 && a.filmer.length === 0) u.push(liten('Det finns ännu inga sammanfattningar eller länkar för ämnet.'));
   for (const k of kapitel) {
     if (k.sammanfattning === null && k.attOva.length === 0) continue;
     u.push({ text: `Kapitel ${k.nr} ${k.namn}`, bold: true, fontSize: 12, color: h(OMRADE.laxor.farg), margin: [0, 12, 0, 4] });
@@ -371,7 +372,7 @@ export async function elevrapportPdfDefinition(a: Elevanalys, meta: RapportMeta 
   return {
     pageSize: 'A4', pageOrientation: 'portrait', pageMargins: [48, 44, 48, 44],
     info: { title: `Elevrapport ${a.elev.namn} ${a.amneNamn}`, creator: 'Classroom Planner' },
-    defaultStyle: { font: 'Roboto', fontSize: 10, color: TEXT, lineHeight: 1.15 },
+    defaultStyle: { font: 'Roboto', fontSize: 10, color: TEXT, lineHeight: 1.15 }, language: 'sv-SE',
     header: (_sida: number, _av: number, storlek: { width: number }) => ({ text: `${a.elev.namn} · ${a.amneNamn}`, fontSize: 8, color: '#9CA3AF', alignment: 'right', margin: [0, 22, storlek.width > 700 ? 32 : 48, 0] }),
     footer: (sida: number, av: number) => ({ text: `Sida ${sida} av ${av}`, fontSize: 8, color: '#9CA3AF', alignment: 'center', margin: [0, 12, 0, 0] }),
     content: [
