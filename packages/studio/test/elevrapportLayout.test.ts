@@ -56,6 +56,10 @@ function byggKlass() {
         return { namn, poang: svar.filter((x: { ratt: boolean }) => x.ratt).length, maxPoang: svar.length, svar };
       }) }).s;
   });
+  // Två DigiExam-prov (förmåga B: E-prov och CA-prov)
+  for (const [prov, datum, poang] of [['Prov kap 6 B E', '2026-10-01', [14, 19, 11]], ['Prov kap 6 B CA', '2026-10-08', [9, 13, 6]]] as const) {
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'digiexam', prov, datum, rader: elever.map((namn, e) => ({ namn, poang: poang[e], maxPoang: 20 })) }).s;
+  }
   return s;
 }
 
@@ -79,6 +83,7 @@ describe('Del 151: elevrapporten i Word — pedagogiska områden', () => {
       'Lektionerna', 'Hur mycket lär du dig på lektionen?', 'Lektion för lektion',
       'Läxorna', 'Läxförhör för läxförhör', 'Vänt från fel till rätt', 'Kvar att lära',
       'Minnet', 'Börjar glömma — repetera (1)', 'Noterat: enstaka fel på kunnade begrepp',
+      'Proven', 'Prov för prov', 'Prov kap 6 B CA',
       'Bilaga A', 'Fråga för fråga', 'Frågorna', 'Bilaga B', 'Att läsa och öva']) {
       expect(text, del).toContain(del);
     }
@@ -96,5 +101,28 @@ describe('Del 151: elevrapporten i Word — pedagogiska områden', () => {
     expect(xml).toContain('w:fill="E8ECF3"');
     expect(text).toContain('Exit 6.1');
     expect(text).toContain('Läxförhör 6.1–6.4');
+  }, 60000);
+});
+
+describe('Del 153: elevrapporten som PDF', () => {
+  it('samma områden, prov och bilagor; frågematrisen på en liggande sida; inga tecken som typsnittet saknar', async () => {
+    const { elevrapportPdfDefinition } = await import('../src/elevrapportPdf');
+    const a = elevanalys(byggKlass(), 'e0', { klassId: 'k', amneId: 'bi' });
+    const def = await elevrapportPdfDefinition(a, { klassNamn: '8B', grupp: 'Grupp Riskzon' });
+    const json = JSON.stringify(def.content);
+    for (const del of ['ELEVRAPPORT', 'Pia Övnegård', 'Biologi · 8B · Grupp Riskzon', 'Så går du vidare', '1   Lektionerna', '2   Läxorna', '3   Minnet', '4   Proven',
+      'Prov för prov', 'Bilaga A', 'Fråga för fråga', 'Bilaga B', 'Att läsa och öva']) expect(json, del).toContain(del);
+    expect(json).toContain('"pageOrientation":"landscape"');
+    expect(json).toContain('"fillColor":"#4CAF50"');
+    expect(json).toContain('"fillColor":"#D32F2F"');
+    expect(json.match(/.{0,40}[✓✗→★🎯📚🧠📝].{0,20}/u)?.[0] ?? null).toBeNull();
+    // pdfmake bygger faktiskt dokumentet (fångar fel i layoutfunktionerna)
+    const pm = (await import('pdfmake/build/pdfmake')) as unknown as { default?: unknown };
+    const pdfMake = (pm.default ?? pm) as { addVirtualFileSystem?: (v: unknown) => void; vfs?: unknown; createPdf: (d: unknown) => { getBuffer: (cb: (b: Uint8Array) => void) => void } };
+    const vf = (await import('pdfmake/build/vfs_fonts')) as unknown as { default?: unknown };
+    if (pdfMake.addVirtualFileSystem !== undefined) pdfMake.addVirtualFileSystem(vf.default ?? vf); else pdfMake.vfs = vf.default ?? vf;
+    const buf = await new Promise<Uint8Array>((res) => pdfMake.createPdf(def).getBuffer(res));
+    expect(new TextDecoder().decode(buf.slice(0, 5))).toBe('%PDF-');
+    expect(buf.length).toBeGreaterThan(50_000);
   }, 60000);
 });

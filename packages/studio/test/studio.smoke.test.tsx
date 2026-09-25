@@ -2856,7 +2856,9 @@ describe('Del 141: elevfilter för hela dashboarden, fällbara widgets, fråga +
     expect(bar.querySelector('.st-klasschip')!.getAttribute('aria-pressed')).toBe('false');
     // Del 149: en vald grupp heter Grupp (inte klass) och får urvalets namn
     expect(bar.querySelector('.st-gruppchip')!.textContent).toBe('👥 Grupp: Riskzon 1');
-    expect(knapp(host, '📄 Word-rapporter · Grupp Riskzon (1)')).not.toBeNull();
+    // Del 153: rapporterna finns som Word och PDF för gruppen som visas
+    const rg = host.querySelector('[aria-label="Elevrapporter för Grupp Riskzon (1)"]')!;
+    expect([...rg.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Word', 'PDF']);
     expect(filter.querySelector('.st-klusterfraga')!.textContent).toContain('Riskzon: 1 elever valda. Aktivera elevnamnen');
     expect(host.querySelector('.st-elevprov .st-matris tbody')!.querySelectorAll('tr')).toHaveLength(1);
     expect(host.querySelector('.st-elevprov .st-matris tbody')!.textContent).toContain('Omar Provlund');
@@ -2897,7 +2899,7 @@ describe('Del 141: elevfilter för hela dashboarden, fällbara widgets, fråga +
     act(() => { (filter.querySelector('button[aria-label="Återställ alla filter till helklass"]') as HTMLButtonElement).click(); });
     expect(status()).toBe('');
     expect(host.querySelector('.st-urvalsrad')).toBeNull();
-    expect(knapp(host, '📄 Word-rapporter · Klassen (3)')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Elevrapporter för Klassen (3)"]')!.textContent).toContain('📄 Rapporter · Klassen (3)');
   });
 
   it('Del 148: aktivera elevnamn ur ett kluster — klustrets elever lyser, namn kan väljas till/från och avvikelse markeras på klusterchippen', async () => {

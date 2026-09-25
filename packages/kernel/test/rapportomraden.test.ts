@@ -50,6 +50,20 @@ describe('Del 151: rapportens områden', () => {
     expect(r.fokus[0].text).toContain('cellkärna, mitokondrie — rätt tidigare, fel de två senaste gångerna (senast fre 25 sep)');
     expect(r.fokus[1].rubrik).toBe('Lär in begreppen som är kvar');
     expect(r.fokus[1].text).toContain('L4, fre 25 sep');
+    expect(r.prov).toBeNull();                                   // inga DigiExam-prov → inget provområde
+  });
+
+  it('Del 153: DigiExam-prov ger ett provområde med poäng och klassens snitt', () => {
+    let s = laggTillElev(bas(), { id: 'e2', klassId: 'k', namn: 'Omar Provlund', grupp: 'B' });
+    const provet = (prov: string, datum: string, pia: number, omar: number) => {
+      s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'digiexam', prov, datum, rader: [{ namn: 'Pia Övnegård', poang: pia, maxPoang: 20 }, { namn: 'Omar Provlund', poang: omar, maxPoang: 20 }] }).s;
+    };
+    provet('Prov kap 6 E', '2026-10-01', 12, 16);
+    provet('Prov kap 6 CA', '2026-10-08', 15, 11);
+    const r = rapportOmraden(elevanalys(s, 'e1', { klassId: 'k', amneId: 'bi' }));
+    expect(r.prov!.rader.map((x) => [x.prov, x.procent, x.klassSnitt, x.mot])).toEqual([['Prov kap 6 E', 60, 70, -10], ['Prov kap 6 CA', 75, 65, 10]]);
+    expect(r.prov!.slutsats).toBe('Senaste provet, Prov kap 6 CA (tor 8 okt): 15 av 20 poäng (75 %), 10 procentenheter över klassens snitt. Från första till senaste provet: +15 procentenheter. Provet bedöms per förmåga i DigiExam; betyget är lärarens sammanvägda bedömning.');
+    expect(r.prov!.nyckeltal[1]).toEqual({ etikett: 'Klassens snitt', varde: '65 %', under: 'samma prov' });
   });
 
   it('utan resultat: inget underlag i alla områden och inga fokus', () => {

@@ -9,7 +9,7 @@
  * (Ring 1, I2: ingen fetch/DOM/lagring.)
  */
 import type { Elev, Struktur } from './typer.js';
-import { kravFor, niva, resultatProcent, type ResultatKalla } from './resultat.js';
+import { kravFor, niva, resultatProcent, type Resultat, type ResultatKalla } from './resultat.js';
 import {
   elevKurva, elevLektionstest, elevNarvaro, provTillfallen, sokElever, trendFor,
   type DashboardFilter, type KurvPunkt, type ProvTillfalle, type Trend,
@@ -72,6 +72,8 @@ export interface Elevanalys {
   matris: Fragematris;
   /** Del 151: minnet — begrepp som kunnats och sedan blivit fel (upprepat = flagga, enstaka = notering). */
   glomska: Glomska;
+  /** Del 153: provresultat (DigiExam) med poäng och klassens snitt på samma prov. */
+  prov: ElevProvRad[];
   /** Vad eleven kan NU — senaste svaret på varje fråga. */
   nu: Nulage;
   /** Övningar som återanvänder läxförhörens eller exit ticketsens frågor. */
@@ -90,6 +92,9 @@ export interface Elevanalys {
   rad: Rad[];
   sammanfattning: string;
 }
+
+/** Del 153 · Ett skrivet prov (DigiExam) för eleven. */
+export interface ElevProvRad { prov: string; datum: string; poang: number; maxPoang: number; procent: number | null; klassSnitt: number | null; klassAntal: number }
 
 /** Delkapitel där andelen rätt gick ned från exit ticket till nästa läxförhör. */
 function exitTillLaxTapp(segment: SegmentTillfalle[]): Array<{ kod: string; exitProcent: number; exitDatum: string; laxProcent: number; laxDatum: string }> {
@@ -113,6 +118,15 @@ const KALLNAMN: Record<ResultatKalla, string> = {
 
 function snitt(v: number[]): number | null {
   return v.length === 0 ? null : Math.round(v.reduce((a, b) => a + b, 0) / v.length);
+}
+
+/** Elevens DigiExam-prov i datumordning, med klassens snitt på samma provtillfälle. */
+function provRader(s: Struktur, egna: Resultat[], f: DashboardFilter): ElevProvRad[] {
+  const klass = provTillfallen(s, { ...f, kallor: ['digiexam'] });
+  return egna.filter((r) => r.kalla === 'digiexam').sort((a, b) => a.datum.localeCompare(b.datum)).map((r) => {
+    const t = klass.find((x) => x.prov === r.prov && x.sessioner.includes(r.datum)) ?? klass.find((x) => x.prov === r.prov);
+    return { prov: r.prov, datum: r.datum, poang: r.poang, maxPoang: r.maxPoang, procent: resultatProcent(r), klassSnitt: t?.snittProcent ?? null, klassAntal: t?.antal ?? 0 };
+  });
 }
 
 /** Hela analysen för en elev i ett ämne. */
@@ -429,7 +443,7 @@ export function elevanalys(sIn: Struktur, elevId: string, f: DashboardFilter & {
     glomt: tkElev?.glomt ?? 0,
     trendsteg: tkElev?.steg ?? [],
     lektionsarbete, ovar, befasta: [...befasta].sort(),
-    segment, matris, glomska: glomskaAnalys(matris), nu, ovningsDubbletter: dubblettOvningar, inkluderadeOvningar: harm.inkluderade, fastnat, ovningar, filmer, rapport, laget, rad, sammanfattning,
+    segment, matris, glomska: glomskaAnalys(matris), prov: provRader(s, egna, f), nu, ovningsDubbletter: dubblettOvningar, inkluderadeOvningar: harm.inkluderade, fastnat, ovningar, filmer, rapport, laget, rad, sammanfattning,
   };
 }
 

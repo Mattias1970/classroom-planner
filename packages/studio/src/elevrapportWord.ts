@@ -109,6 +109,35 @@ export async function elevrapportTillWord(a: Elevanalys, meta: RapportMeta = {})
   laddaNer(await elevrapportDocx(a, meta), rapportFilnamn(a));
 }
 
+/** Del 153 · Filnamn för PDF-versionen. */
+export function rapportFilnamnPdf(a: Elevanalys): string {
+  return rapportFilnamn(a).replace(/\.docx$/, '.pdf');
+}
+
+/** Del 153 · Bygger och laddar ner en elevs rapport som PDF (skapas i webbläsaren). */
+export async function elevrapportTillPdf(a: Elevanalys, meta: RapportMeta = {}): Promise<void> {
+  const { elevrapportPdfBlob } = await import('./elevrapportPdf.js');
+  laddaNer(await elevrapportPdfBlob(a, meta), rapportFilnamnPdf(a));
+}
+
+/** Del 153 · En PDF per elev i ett zip-arkiv. */
+export async function klassrapporterTillPdf(
+  analyser: Elevanalys[], arkivNamn: string, steg?: (klar: number, av: number) => void, meta: RapportMeta = {},
+): Promise<void> {
+  if (analyser.length === 0) return;
+  const [{ default: JSZip }, { elevrapportPdfBlob }] = await Promise.all([import('jszip'), import('./elevrapportPdf.js')]);
+  const zip = new JSZip();
+  const anvanda = new Set<string>();
+  for (const [i, a] of analyser.entries()) {
+    let namn = rapportFilnamnPdf(a);
+    if (anvanda.has(namn)) namn = namn.replace(/\.pdf$/, `-${i + 1}.pdf`);
+    anvanda.add(namn);
+    zip.file(namn, await elevrapportPdfBlob(a, meta));
+    steg?.(i + 1, analyser.length);
+  }
+  laddaNer(await zip.generateAsync({ type: 'blob' }), `${arkivNamn} pdf.zip`.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '-'));
+}
+
 /**
  * En Word-fil per elev, packade i ett zip-arkiv — webbläsare blockerar
  * dussintals nedladdningar i rad, och en zip är enklare att lägga i en mapp.

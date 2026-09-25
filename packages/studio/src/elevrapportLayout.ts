@@ -20,20 +20,21 @@ import { kortDatum, rapportOmraden, type Elevanalys, type GlomskaBegrepp, type O
 
 // ── Formspråk ──────────────────────────────────────────────────
 const TEXT = '1F2937'; const MUTED = '6B7280'; const LINJE = 'E5E7EB'; const YTA = 'F3F4F6';
-const OMRADE = {
+export const OMRADE = {
   lektioner: { farg: '2F5AA8', ljus: 'E8EFFA', ikon: '🎯', namn: 'Lektionerna', fraga: 'Hur mycket lär du dig på lektionen?' },
   laxor: { farg: '1A2A6B', ljus: 'E8EAF6', ikon: '📚', namn: 'Läxorna', fraga: 'Läser du läxan och ökar från gång till gång?' },
   minne: { farg: '00838F', ljus: 'E0F2F1', ikon: '🧠', namn: 'Minnet', fraga: 'Minns du begreppen du kunnat?' },
+  prov: { farg: 'BF360C', ljus: 'FBE9E7', ikon: '📝', namn: 'Proven', fraga: 'Hur gick det på proven?' },
 } as const;
-const TON: Record<OmradeTon, { fyll: string; text: string; markor: string }> = {
+export const TON: Record<OmradeTon, { fyll: string; text: string; markor: string }> = {
   bra: { fyll: 'E8F5E9', text: '1B5E20', markor: '●' },
   okej: { fyll: 'FFF8E1', text: '8D6E00', markor: '●' },
   oro: { fyll: 'FFEBEE', text: 'B71C1C', markor: '●' },
   ingen: { fyll: YTA, text: MUTED, markor: '○' },
 };
 /** Skärmens färger i frågematrisen (App.tsx: .st-fmruta, .st-typ, .st-fmgrupp). */
-const FM = { ratt: '4CAF50', fel: 'D32F2F', tom: 'F7F8FA', grupp: 'E8ECF3', gruppText: '465060', gruppUnder: '7A8494', gstart: 'C9D2E0', nr: '9AA3AE' };
-const TYP: Record<ResultatKalla, { fyll: string; text: string; namn: string }> = {
+export const FM = { ratt: '4CAF50', fel: 'D32F2F', tom: 'F7F8FA', grupp: 'E8ECF3', gruppText: '465060', gruppUnder: '7A8494', gstart: 'C9D2E0', nr: '9AA3AE' };
+export const TYP: Record<ResultatKalla, { fyll: string; text: string; namn: string }> = {
   'socrative-laxforhor': { fyll: 'E8EAF6', text: '1A2A6B', namn: 'Läxförhör' },
   'socrative-exit': { fyll: 'E3F2FD', text: '2F5AA8', namn: 'Exit ticket' },
   'socrative-ovning': { fyll: 'E0F2F1', text: '00838F', namn: 'Övning' },
@@ -178,7 +179,7 @@ function kravlinje(ctx: CanvasRenderingContext2D, x0: number, y: number, b: numb
 const etikettDatum = (d: string) => `${Number(d.slice(8, 10))}/${Number(d.slice(5, 7))}`;
 
 /** Exit ticket per lektion: staplar, grön när kravet nås. */
-function lektionsBild(o: RapportOmraden['lektioner']): Promise<ArrayBuffer | null> {
+export function lektionsBild(o: RapportOmraden['lektioner']): Promise<ArrayBuffer | null> {
   const B = 640; const H = 210; const x0 = 32; const y0 = 12; const b = B - x0 - 8; const h = H - y0 - 34;
   return rita(B, H, (ctx) => {
     axlar(ctx, x0, y0, b, h);
@@ -195,7 +196,7 @@ function lektionsBild(o: RapportOmraden['lektioner']): Promise<ArrayBuffer | nul
 }
 
 /** Läxförhör för läxförhör: linje med punkter, kravlinje 90 %. */
-function laxBild(o: RapportOmraden['laxor']): Promise<ArrayBuffer | null> {
+export function laxBild(o: RapportOmraden['laxor']): Promise<ArrayBuffer | null> {
   const B = 640; const H = 210; const x0 = 32; const y0 = 12; const b = B - x0 - 16; const h = H - y0 - 34;
   return rita(B, H, (ctx) => {
     axlar(ctx, x0, y0, b, h);
@@ -238,7 +239,7 @@ function forstaSidan(a: Elevanalys, r: RapportOmraden, meta: RapportMeta): Array
     : r.lektioner.rader.length + r.laxor.rader.length > 0
       ? `${kortDatum([...r.lektioner.rader, ...r.laxor.rader].map((x) => x.datum).sort()[0])} – ${kortDatum([...r.lektioner.rader, ...r.laxor.rader].map((x) => x.datum).sort().pop()!)}`
       : 'hela perioden';
-  const b = Math.floor(INNER / 3);
+  const b = Math.floor(INNER / (r.prov === null ? 3 : 4));
   const lek = r.lektioner; const lax = r.laxor; const min = r.minne;
   return [
     p([t('ELEVRAPPORT', { bold: true, size: 18, color: MUTED })], { after: 0 }),
@@ -246,7 +247,7 @@ function forstaSidan(a: Elevanalys, r: RapportOmraden, meta: RapportMeta): Array
     p([t([a.amneNamn, meta.klassNamn, meta.grupp].filter((x) => x !== undefined && x !== '').join(' · '), { size: 24, color: '374151' })], { after: 40 }),
     p([t(`Period ${period} · skapad ${kortDatum(idag)} ${idag.slice(0, 4)}`, { size: 17, color: MUTED })], { after: 200 }),
     new Table({
-      width: { size: INNER, type: WidthType.DXA }, columnWidths: [b, b, b], layout: TableLayoutType.FIXED,
+      width: { size: INNER, type: WidthType.DXA }, columnWidths: r.prov === null ? [b, b, b] : [b, b, b, b], layout: TableLayoutType.FIXED,
       rows: [new TableRow({ children: [
         oversiktsRuta(OMRADE.lektioner, '1', lek.ton, lek.status, lek.snitt === null ? '—' : `${lek.snitt} %`,
           lek.rader.length === 0 ? 'Inga exit tickets i perioden.' : `Exit ticket i snitt. Nådde 70 % på ${lek.klarade} av ${lek.rader.length} lektioner.`, b),
@@ -254,6 +255,8 @@ function forstaSidan(a: Elevanalys, r: RapportOmraden, meta: RapportMeta): Array
           lax.rader.length === 0 ? 'Inga läxförhör i perioden.' : `Senaste läxförhöret. ${lax.vantTotalt} begrepp vända från fel till rätt.`, b),
         oversiktsRuta(OMRADE.minne, '3', min.ton, min.status, min.testadeIgen === 0 ? '—' : `${Math.round((min.hallerI / min.testadeIgen) * 100)} %`,
           min.testadeIgen === 0 ? 'Inget kunnat begrepp har testats igen ännu.' : `av kunnade begrepp var rätt igen. ${min.flaggade.length} börjar glömmas.`, b),
+        ...(r.prov === null ? [] : [oversiktsRuta(OMRADE.prov, '4', r.prov.ton, r.prov.status, r.prov.nyckeltal[0].varde,
+          `Senaste provet (${kortDatum(r.prov.rader[r.prov.rader.length - 1].datum)}). Klassens snitt ${r.prov.nyckeltal[1].varde}.`, b)]),
       ] })],
     }),
     luft(200),
@@ -356,8 +359,23 @@ function minnesOmrade(r: RapportOmraden): Array<Paragraph | Table> {
   return u;
 }
 
+function provOmrade(r: RapportOmraden): Array<Paragraph | Table> {
+  const o = r.prov; if (o === null) return [];
+  const u: Array<Paragraph | Table> = [...omradesBand('4', OMRADE.prov, true)];
+  u.push(liten('Proven skrivs i DigiExam och bedöms per förmåga. Här visas poängen och klassens snitt på samma prov — betyget sätts av läraren utifrån förmågorna.'));
+  u.push(slutsats(o.ton, o.status, o.slutsats), luft(100));
+  const nt = nyckeltalRad(o.nyckeltal, OMRADE.prov.farg); if (nt !== null) u.push(nt, luft(100));
+  const tal = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(1).replace('.', ','));
+  u.push(underrubrik('Prov för prov'));
+  u.push(dataTabell(['Datum', 'Prov', 'Poäng', 'Resultat', 'Klassens snitt', 'Mot klassen'], [15, 33, 13, 12, 14, 13],
+    o.rader.map((x) => [kortDatum(x.datum), x.prov, `${tal(x.poang)} / ${tal(x.maxPoang)}`, { text: x.procent !== null ? `${x.procent} %` : '—', bold: true },
+      x.klassSnitt !== null ? `${x.klassSnitt} %` : '—',
+      x.mot === null ? '—' : { text: `${x.mot > 0 ? '+' : ''}${x.mot}`, farg: x.mot >= 0 ? '1B5E20' : 'B71C1C', bold: true }])));
+  return u;
+}
+
 // ── Bilaga A: frågematrisen, som på skärmen ─────────────────────
-function veckaFor(datum: string): number {
+export function veckaFor(datum: string): number {
   const d = new Date(`${datum}T00:00:00Z`); const dag = d.getUTCDay() || 7;
   d.setUTCDate(d.getUTCDate() + 4 - dag);
   const ar = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
@@ -412,7 +430,8 @@ function matrisBlock(a: Elevanalys, fran: number, till: number): Table {
       return tc([cellP([])], { b: rut, fyll, kant: kantFor(fr.nr) });
     }),
   ] }));
-  const utan = m.utanSvar.map((u) => new TableRow({ cantSplit: true, children: [
+  // Som på skärmen: bara Socrative-förhör hör hemma i frågematrisen (prov och Magma har egna vyer)
+  const utan = m.utanSvar.filter((u) => u.kalla.startsWith('socrative')).map((u) => new TableRow({ cantSplit: true, children: [
     tc([cellP([t(`v${veckaFor(u.datum)}`, { size: 14, color: MUTED })])], { b: FM_ETIKETT[0] }),
     tc([cellP([t(kortDatum(u.datum), { size: 14, color: MUTED })])], { b: FM_ETIKETT[1] }),
     tc([cellP([t(TYP[u.kalla].namn, { bold: true, size: 13, color: TYP[u.kalla].text })])], { b: FM_ETIKETT[2], fyll: TYP[u.kalla].fyll }),
@@ -528,6 +547,7 @@ export async function elevrapportDokument(a: Elevanalys, meta: RapportMeta = {})
     ...(await lektionsOmrade(r)),
     ...(await laxOmrade(r)),
     ...minnesOmrade(r),
+    ...provOmrade(r),
   ];
   return new Document({
     creator: 'Classroom Planner', title: `Elevrapport ${a.elev.namn} ${a.amneNamn}`,

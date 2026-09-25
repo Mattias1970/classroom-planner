@@ -70,10 +70,17 @@ export interface MinnesOmrade extends OmradeBas {
   testadeIgen: number;
 }
 
+/** Del 153 · Proven (DigiExam) — finns bara när prov är inrapporterade. */
+export interface ProvOmrade extends OmradeBas {
+  rader: Array<{ prov: string; datum: string; poang: number; maxPoang: number; procent: number | null; klassSnitt: number | null; mot: number | null }>;
+}
+
 export interface RapportOmraden {
   lektioner: LektionOmrade;
   laxor: LaxOmrade;
   minne: MinnesOmrade;
+  /** null när inga DigiExam-prov finns i perioden. */
+  prov: ProvOmrade | null;
   /** Högst två fokus, med underlag — 'Så går du vidare'. */
   fokus: Array<{ rubrik: string; text: string }>;
 }
@@ -181,6 +188,25 @@ function minne(a: Elevanalys): MinnesOmrade {
   };
 }
 
+function prov(a: Elevanalys): ProvOmrade | null {
+  if (a.prov.length === 0) return null;
+  const rader = a.prov.map((p) => ({ ...p, mot: p.procent === null || p.klassSnitt === null ? null : Math.round(p.procent - p.klassSnitt) }));
+  const sista = rader[rader.length - 1];
+  const tal = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(1).replace('.', ','));
+  const jamfor = sista.mot === null ? '' : sista.mot >= 0 ? `, ${sista.mot} procentenheter över klassens snitt` : `, ${-sista.mot} procentenheter under klassens snitt`;
+  const utv = rader.length >= 2 && rader[0].procent !== null && sista.procent !== null ? ` Från första till senaste provet: ${tecken(Math.round(sista.procent - rader[0].procent))} procentenheter.` : '';
+  return {
+    ton: 'ingen', status: `${rader.length} prov`,
+    slutsats: `Senaste provet, ${sista.prov} (${kortDatum(sista.datum)}): ${tal(sista.poang)} av ${tal(sista.maxPoang)} poäng${sista.procent !== null ? ` (${sista.procent} %)` : ''}${jamfor}.${utv} Provet bedöms per förmåga i DigiExam; betyget är lärarens sammanvägda bedömning.`,
+    nyckeltal: [
+      { etikett: 'Senaste provet', varde: sista.procent !== null ? `${sista.procent} %` : '—', under: `${tal(sista.poang)} av ${tal(sista.maxPoang)} poäng` },
+      { etikett: 'Klassens snitt', varde: sista.klassSnitt !== null ? `${sista.klassSnitt} %` : '—', under: 'samma prov' },
+      { etikett: 'Prov i perioden', varde: String(rader.length) },
+    ],
+    rader,
+  };
+}
+
 const namnPa = (x: { begrepp?: string; fraga: string }) => x.begrepp ?? x.fraga;
 
 /** Bygger rapportens tre områden och högst två fokus ur elevanalysen. */
@@ -204,5 +230,5 @@ export function rapportOmraden(a: Elevanalys): RapportOmraden {
   if (fokus.length === 0 && lax.rader.length + lek.rader.length > 0) {
     fokus.push({ rubrik: 'Fortsätt som nu', text: 'Resultaten når förhörsgränserna. Fortsätt läsa läxan inför varje läxförhör och gör exit ticketen noggrant.' });
   }
-  return { lektioner: lek, laxor: lax, minne: min, fokus };
+  return { lektioner: lek, laxor: lax, minne: min, prov: prov(a), fokus };
 }

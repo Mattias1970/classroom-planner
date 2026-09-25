@@ -3668,7 +3668,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
   };
   const oppnaKlusterAnalys = () => { setVisaKlusterAnalys(true); gaTill('st-sekt-jamf'); };
   /** Del 149: en Word-rapport per elev (zip) för klassen eller gruppen som visas. */
-  const rapporterTillWord = () => {
+  const rapporterTillWord = (format: 'word' | 'pdf' = 'word') => {
     const ids = urval.elevIds === null ? null : new Set(urval.elevIds);
     const medResultat = rapportOversikt(sBas, f, '').filter((r) => r.antalProv > 0 && (ids === null || ids.has(r.elev.id)));
     if (medResultat.length === 0) { window.alert('Ingen elev i urvalet har resultat.'); return; }
@@ -3678,7 +3678,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
     // Rapporten har egna områden för exit tickets och läxförhör — källfiltret på sidan gäller inte där
     const { kallor: _k, ...rapportF } = f;
     void import('./elevrapportWord.js')
-      .then(({ klassrapporterTillWord }) => klassrapporterTillWord(
+      .then((m) => (format === 'pdf' ? m.klassrapporterTillPdf : m.klassrapporterTillWord)(
         medResultat.map((r) => elevanalys(sBas, r.elev.id, rapportF)), arkiv, (klar, av) => setRapportPagar(`${klar} av ${av}`),
         { klassNamn, ...(urval.grupp !== null ? { grupp: `Grupp ${urval.grupp}` } : {}) },
       ))
@@ -4839,7 +4839,8 @@ function EnkelRapportVy({ s, elev, f, periodText, onTillbaka, onFull, onStudie, 
         <UtskriftVal s={s} rubrik={`Skriv ut rapport för ${elev.namn}`} onStang={() => setVal(false)} onDesign={onDesign}
           val={[
             { id: 'word:enkel', namn: 'Enkel rapport', beskrivning: 'Kort Word-fil: trend, förhör, begrepp, två diagram' },
-            { id: 'word:full', namn: 'Fullständig rapport', beskrivning: 'Word-fil med aktuellt kunnande, nästa steg, historik och bilagor' },
+            { id: 'word:full', namn: 'Fullständig rapport (Word)', beskrivning: 'Lektionerna, läxorna, minnet och proven — frågematris och att läsa i bilagor' },
+            { id: 'pdf:full', namn: 'Fullständig rapport (PDF)', beskrivning: 'Samma rapport som PDF, skapad direkt i appen' },
             ...(f.amneId !== undefined ? [{ id: 'word:studie', namn: 'Studieguide inför provet', beskrivning: 'Plan per dag, begrepp att plugga, rum och filmer' }] : []),
           ]}
           onValj={(id) => {
@@ -4847,7 +4848,8 @@ function EnkelRapportVy({ s, elev, f, periodText, onTillbaka, onFull, onStudie, 
             setSkriver(true);
             void import('./elevrapportWord.js').then(async (m) => {
               if (id === 'word:enkel') await m.enkelRapportTillWord(r);
-              else if (id === 'word:full') await m.elevrapportTillWord(elevanalys(s, elev.id, f));
+              else if (id === 'word:full') await m.elevrapportTillWord(elevanalys(s, elev.id, f), { klassNamn: s.klasser.find((k) => k.id === elev.klassId)?.namn });
+              else if (id === 'pdf:full') await m.elevrapportTillPdf(elevanalys(s, elev.id, f), { klassNamn: s.klasser.find((k) => k.id === elev.klassId)?.namn });
               else await m.studieguideTillWord(studieguide(s, elev.id, { ...f, amneId: f.amneId! }, new Date().toISOString().slice(0, 10)));
             }).catch(() => window.alert('Rapporten kunde inte skapas.')).finally(() => setSkriver(false));
           }} />
@@ -4969,13 +4971,13 @@ function RapportVy({ s, kor, meddela, topp }: { s: Struktur; kor: (fn: () => Str
       .finally(() => { setSkriver(''); setForlopp(''); });
   };
   /** En Word-fil per elev, packade i ett zip-arkiv. */
-  const allaTillWord = () => {
+  const allaTillWord = (format: 'word' | 'pdf' = 'word') => {
     const medResultat = rader.filter((r) => r.antalProv > 0);
     if (medResultat.length === 0) { window.alert('Ingen elev har resultat i urvalet.'); return; }
     setSkriver('alla'); setForlopp(`0 av ${medResultat.length}`);
     const arkiv = `${klass.namn} ${amnen.find((a) => a.id === valtAmne)?.namn ?? ''} rapporter`;
     void import('./elevrapportWord.js')
-      .then(({ klassrapporterTillWord }) => klassrapporterTillWord(
+      .then((m) => (format === 'pdf' ? m.klassrapporterTillPdf : m.klassrapporterTillWord)(
         medResultat.map((r) => elevanalys(s, r.elev.id, f)), arkiv,
         (klar, av) => setForlopp(`${klar} av ${av}`), { klassNamn: klass.namn },
       ))
@@ -5048,9 +5050,10 @@ function RapportVy({ s, kor, meddela, topp }: { s: Struktur; kor: (fn: () => Str
         <UtskriftVal s={s} rubrik={`Skriv ut ${rader.filter((r) => r.antalProv > 0).length} elever`} onStang={() => setValAlla(false)} onDesign={() => setDesign(true)}
           val={[
             { id: 'word:enkel', namn: 'Enkla rapporter (zip)', beskrivning: 'En kort Word-fil per elev med två diagram' },
-            { id: 'word:full', namn: 'Fullständiga rapporter (zip)', beskrivning: 'Aktuellt kunnande, nästa steg, historik och bilagor' },
+            { id: 'word:full', namn: 'Fullständiga rapporter, Word (zip)', beskrivning: 'Lektionerna, läxorna, minnet och proven — en Word-fil per elev' },
+            { id: 'pdf:full', namn: 'Fullständiga rapporter, PDF (zip)', beskrivning: 'Samma rapporter som PDF, skapade direkt i appen' },
           ]}
-          onValj={(id) => { if (id.startsWith('mall:')) setMallAlla(id.slice(5)); else if (id === 'word:enkel') allaEnklaTillWord(); else allaTillWord(); }} />
+          onValj={(id) => { if (id.startsWith('mall:')) setMallAlla(id.slice(5)); else if (id === 'word:enkel') allaEnklaTillWord(); else allaTillWord(id === 'pdf:full' ? 'pdf' : 'word'); }} />
       )}
 
       {analys === null || valdElev === null ? (

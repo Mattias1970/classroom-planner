@@ -32,8 +32,8 @@ export function ElevFilter({ elever, kluster, narvaro, val, valda, etikett, grup
   onAterstall?: () => void;
   /** Andra filter än elevurvalet är aktiva (period, dag, sök …) — då visas återställningsknappen ändå. */
   andraFilter?: boolean;
-  /** Del 149: Word-rapporter för dem som visas (klassen eller gruppen). */
-  rapport?: { onKlick: () => void; pagar: string };
+  /** Del 149/153: elevrapporter (Word eller PDF) för dem som visas — klassen eller gruppen. */
+  rapport?: { onKlick: (format: 'word' | 'pdf') => void; pagar: string };
 }) {
   const [sok, setSok] = useState('');
   const [panel, setPanel] = useState(false);
@@ -98,8 +98,15 @@ export function ElevFilter({ elever, kluster, narvaro, val, valda, etikett, grup
           {filtrerat && <span className="st-urvalsbar-status" role="status">Alla grafer visar grupp <b>{gruppNamn}</b> · {antal} av {elever.length} elever.</span>}
           {(filtrerat || andraFilter === true) && <button type="button" className="btn sec sm st-aterstall" aria-label="Återställ alla filter till helklass" title="Återställ period, dag, sök, frågefilter och elevurval — hela klassen"
             onClick={aterstall}>↺ Helklass</button>}
-          {rapport !== undefined && <button type="button" className="btn sm st-rapportknapp" disabled={rapport.pagar !== ''} title={`En Word-rapport per elev (zip) för ${visasFor.toLowerCase()}`}
-            onClick={rapport.onKlick}>{rapport.pagar !== '' ? `… skapar ${rapport.pagar}` : <>📄 Word-rapporter · {visasFor}</>}</button>}
+          {rapport !== undefined && (
+            <span className="st-rapportgrupp" role="group" aria-label={`Elevrapporter för ${visasFor}`}>
+              <span className="st-rapportgrupp-text">📄 Rapporter · {visasFor}</span>
+              {rapport.pagar !== '' ? <span className="small muted">… skapar {rapport.pagar}</span> : (<>
+                <button type="button" className="btn sm st-rapportknapp" title={`En Word-rapport per elev (zip) för ${visasFor.toLowerCase()}`} onClick={() => rapport.onKlick('word')}>Word</button>
+                <button type="button" className="btn sm st-rapportknapp" title={`En PDF per elev (zip) för ${visasFor.toLowerCase()}`} onClick={() => rapport.onKlick('pdf')}>PDF</button>
+              </>)}
+            </span>
+          )}
         </span>
       </div>
 
