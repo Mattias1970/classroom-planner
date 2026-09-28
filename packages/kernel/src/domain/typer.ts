@@ -256,6 +256,45 @@ export interface Planering {
   version?: number;
   /** Unikt namn, t.ex. 'Matematik 8B · Prio Matematik 8 · v2 (2026-08-27)'. */
   namn?: string;
+  /**
+   * Del 156 · Genomförd planering (facit), återskapad ur quizzarna och godkänd av läraren.
+   * Pass före `till` visar det som faktiskt gjordes; därefter fortsätter boken från nästa
+   * avsnitt. Ligger på planeringsversionen så att den följer med vid arkiv/återställning.
+   */
+  genomfort?: GenomfordPlanering;
+}
+
+/** Del 156 · Vad ett genomfört pass innehöll. */
+export type GenomfordTyp = 'avsnitt' | 'extra' | 'laboration' | 'prov' | 'annat' | 'installd';
+
+/** Del 156 · Lärarens val för ett pass i återskapandet ('auto' = förslaget ur quizzarna). */
+export type AterskapaValTyp = 'auto' | 'nasta' | 'extra' | 'laboration' | 'prov' | 'installd' | 'annat';
+
+/** Del 156 · Ett genomfört pass i facit. */
+export interface GenomfordLektion {
+  /** Passets datum och starttid (gruppens schema). */
+  datum: IsoDatum;
+  start: string;
+  typ: GenomfordTyp;
+  /** Bokens rader (radnycklar) passet gick igenom — för 'extra' raden det var extra på. */
+  rader?: string[];
+  /** Delkapitlet passet arbetade med ('4.1'). */
+  kod?: string;
+  rubrik: string;
+  /** Quizzarna som visar vad som gjordes: 'Exit · Biologi41'. */
+  underlag?: string[];
+  /** Lärarens val när förslaget ändrades (så att ett nytt återskapande minns det). */
+  vald?: AterskapaValTyp;
+}
+
+/** Del 156 · Facit för en planering: helklass/grupp A och (halvklass) grupp B. */
+export interface GenomfordPlanering {
+  /** Facit gäller pass före detta datum (dagen det godkändes). */
+  till: IsoDatum;
+  a: GenomfordLektion[];
+  b?: GenomfordLektion[];
+  /** När facit godkändes (ISO). */
+  aterskapad: string;
 }
 
 export interface PlaneradLektion {

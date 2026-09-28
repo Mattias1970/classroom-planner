@@ -33,3 +33,4 @@ export * from './domain/vantande.js';
 export * from './domain/glomska.js';
 export * from './domain/rapportomraden.js';
 export * from './domain/klassguide.js';
+export * from './domain/aterskapa.js';

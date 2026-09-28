@@ -7,7 +7,7 @@ import { bokLektioner, delkapitelKod, NIVA_GRON_BLA_ROD, byggKapitel } from './b
 import { NO_TK_AMNEN } from './amnen.js';
 import { isoVecka, passSparr } from './skolar.js';
 import type {
-  Amne, Bok, EgenRad, Elev, Klass, Laboration, Larare, Lektion, LektionsPlan, LektionsVal, Pass, PassVal, PlaneradLektion,
+  Amne, Bok, EgenRad, Elev, GenomfordLektion, GenomfordPlanering, Klass, Laboration, Larare, Lektion, LektionsPlan, LektionsVal, Pass, PassVal, PlaneradLektion,
   Planering, Skolar, StodPass, Struktur, Tjanst } from './typer.js';
 
 let seq = 0;
@@ -549,6 +549,75 @@ export function planeringsRader(bok: Bok, val: PlanInstallning): PlanRad[] {
   return ut;
 }
 
+// ── Del 156: genomförd planering (facit) ─────────────────────
+
+/** Nyckel för ett pass i facit: 'YYYY-MM-DD|HH:MM'. */
+export function facitNyckel(datum: string, start: string): string { return `${datum}|${start}`; }
+
+/** Radnyckel för ett facitpass som inte är en av bokens rader. */
+export function facitRadNyckel(g: Pick<GenomfordLektion, 'datum' | 'start'>): string { return `fa:${g.datum}|${g.start}`; }
+
+/** Bokens rader som ett facitpass gick igenom (avsnitt och prov ur boken) — det som "förbrukar" boken. */
+export function facitForbrukar(g: GenomfordLektion): string[] {
+  return g.typ === 'avsnitt' || g.typ === 'prov' ? (g.rader ?? []) : [];
+}
+
+/** Ett facitpass som lektion i planen; null för inställda pass. */
+export function facitTillLektion(g: GenomfordLektion, rader: PlanRad[], labbar: Laboration[], labNr: number): PlanRad | null {
+  if (g.typ === 'installd') return null;
+  const bas = (g.rader ?? []).map((n) => rader.find((r) => r.nyckel === n)).find((r) => r !== undefined);
+  if ((g.typ === 'avsnitt' || g.typ === 'prov') && bas !== undefined) {
+    const flera = (g.rader ?? []).length > 1;
+    return { kapitel: bas.kapitel, nyckel: bas.nyckel, lektion: flera ? { ...bas.lektion, avsnitt: g.rubrik } : bas.lektion };
+  }
+  const nyckel = facitRadNyckel(g);
+  if (g.typ === 'laboration') {
+    const lab = labbar[labNr] ?? null;
+    const l = laborationTillLektion(lab, labNr + 1);
+    return { kapitel: bas?.kapitel ?? 1, nyckel: lab === null ? nyckel : `lab:${lab.id}`, lektion: { ...l, avsnitt: g.rubrik !== '' ? g.rubrik : l.avsnitt } };
+  }
+  if (g.typ === 'extra' && bas !== undefined) {
+    // Extra lektion på avsnittet: samma begrepp, uppgifter och sidor — egen rubrik
+    return { kapitel: bas.kapitel, nyckel, lektion: { ...bas.lektion, avsnitt: g.rubrik, del: bas.lektion.del + 1 } };
+  }
+  const typ: EgenRad['typ'] = g.typ === 'prov' ? 'prov' : g.typ === 'extra' ? 'ovning' : 'annat';
+  return { kapitel: bas?.kapitel ?? 1, nyckel, lektion: egenRadTillLektion({ id: nyckel, position: 0, rubrik: g.rubrik, typ }) };
+}
+
+/**
+ * Den genomförda delen av en grupps plan ur facit: ett facitpass per slot före `till`
+ * (slots utan facitpass och inställda pass ger ingen lektion). `nasta` är index för
+ * bokens nästa rad — raden efter den sista facit gick igenom — och `labbar` antalet
+ * laborationer som redan gjorts (listan fortsätter därifrån).
+ */
+export function facitDel(slots: Slot[], facit: GenomfordLektion[], till: string, rader: PlanRad[], labbar: Laboration[]):
+  { genomforda: PlaneradLektion[]; nasta: number; labbar: number } {
+  const perPass = new Map(facit.map((g) => [facitNyckel(g.datum, g.start), g] as const));
+  const index = new Map(rader.map((r, i) => [r.nyckel, i] as const));
+  const genomforda: PlaneradLektion[] = [];
+  let sista = -1; let labNr = 0;
+  for (const x of slots.filter((y) => y.datum < till)) {
+    const g = perPass.get(facitNyckel(x.datum, x.start));
+    if (g === undefined) continue;
+    const r = facitTillLektion(g, rader, labbar, labNr);
+    if (g.typ === 'laboration') labNr += 1;
+    for (const n of facitForbrukar(g)) sista = Math.max(sista, index.get(n) ?? -1);
+    if (r !== null) genomforda.push({ kapitel: r.kapitel, lektion: r.lektion, nyckel: r.nyckel, datum: x.datum, vecka: x.vecka, start: x.start, slutTid: x.slut });
+  }
+  return { genomforda, nasta: sista + 1, labbar: labNr };
+}
+
+/** Den aktiva planeringens facit för ämnet, om ett sådant godkänts. */
+export function aktivtFacit(s: Struktur, amneId: string): GenomfordPlanering | undefined {
+  return s.planeringar.find((p) => p.amneId === amneId)?.genomfort;
+}
+
+/** Planen för ett schema med facit: genomförda pass ur facit, sedan boken från nästa rad. */
+function planMedFacit(slots: Slot[], rader: PlanRad[], facit: GenomfordLektion[], till: string, labbar: Laboration[]): PlaneradLektion[] {
+  const f = facitDel(slots, facit, till, rader, labbar);
+  return [...f.genomforda, ...laggPaSlots(rader.slice(f.nasta), slots.filter((x) => x.datum >= till))];
+}
+
 /** Lägger en lektionsföljd på slots: rad i → slot i (rader som inte ryms får datum null). */
 function laggPaSlots(rader: PlanRad[], slots: Slot[]): PlaneradLektion[] {
   return rader.map(({ kapitel, lektion, nyckel }, i) => {
@@ -757,12 +826,13 @@ export function passValFor(amne: Amne, nyckel: string): PassVal | null {
  *
  * Bokens lektioner som inte ryms får datum null som förut.
  */
-export function skapaHalvklassPlanering(skolar: Skolar, amne: Amne, bok: Bok, offset = 0, idag?: string): HalvklassPlanering {
+export function skapaHalvklassPlanering(skolar: Skolar, amne: Amne, bok: Bok, offset = 0, idag?: string, facit?: GenomfordPlanering): HalvklassPlanering {
   const lektioner = planeringsRader(bok, amne);
   const budget = amne.noGrupp !== undefined ? noBudget(skolar, amne.schema) : Number.POSITIVE_INFINITY;
   const slotsA = samlaSlots(skolar, amne.schema).slice(offset, budget === Number.POSITIVE_INFINITY ? undefined : offset + budget);
   const slotsB = samlaSlots(skolar, amne.schemaB ?? []).slice(offset, budget === Number.POSITIVE_INFINITY ? undefined : offset + budget);
-  const fryst = amne.planFrystTill ?? idag ?? '';
+  // Del 156: med facit är det godkända facit som är den genomförda delen
+  const fryst = facit !== undefined ? facit.till : (amne.planFrystTill ?? idag ?? '');
   const genomford = (datum: string) => datum < (idag ?? '');
   const bAvNyckel = new Map(slotsB.map((x) => [sessionsNyckel(x.datum, x.start), x]));
   const helklass = new Set(slotsA.filter((x) => bAvNyckel.has(sessionsNyckel(x.datum, x.start))).map((x) => sessionsNyckel(x.datum, x.start)));
@@ -772,25 +842,42 @@ export function skapaHalvklassPlanering(skolar: Skolar, amne: Amne, bok: Bok, of
   const lagg = (lista: PlaneradLektion[], kapitel: number, lektion: Lektion, nyckel: string, x: { datum: string; vecka: number; start: string; slut: string }) =>
     lista.push({ kapitel, lektion, nyckel, datum: x.datum, vecka: x.vecka, start: x.start, slutTid: x.slut });
 
-  // ── Genomförd del: den vanliga följden, grupp för grupp ──
+  // ── Genomförd del: facit (Del 156) eller den vanliga följden, grupp för grupp ──
   const frystaA = slotsA.filter((x) => x.datum < fryst);
   const frystaB = slotsB.filter((x) => x.datum < fryst);
-  frystaA.forEach((x, i) => { const l = lektioner[i]; if (l !== undefined) lagg(a, l.kapitel, l.lektion, l.nyckel, x); });
-  frystaB.forEach((x, i) => { const l = lektioner[i]; if (l !== undefined) lagg(b, l.kapitel, l.lektion, l.nyckel, x); });
   const frystaHalvB = frystaB.filter((x) => !helklass.has(sessionsNyckel(x.datum, x.start))).length;
-  for (const x of frystaA) {
-    const nyckel = sessionsNyckel(x.datum, x.start);
-    const arHel = helklass.has(nyckel);
-    const idx = frystaA.indexOf(x);
-    const l = lektioner[idx];
-    sessioner.push({
-      nyckel, vecka: x.vecka, helklass: arHel, fryst: true, genomford: true, a: x, b: arHel ? (bAvNyckel.get(nyckel) ?? null) : null, typ: 'teori',
-      standard: true, val: null, laboration: null, rubrik: l?.lektion.avsnitt ?? '(boken är slut)',
-    });
+  let nastaLektion = frystaA.length; let nastaLab = 0; let halvIdx = frystaHalvB;
+  if (facit !== undefined) {
+    const fa = facitDel(frystaA, facit.a, fryst, lektioner, labbar);
+    const fb = facitDel(frystaB, facit.b ?? facit.a, fryst, lektioner, labbar);
+    a.push(...fa.genomforda); b.push(...fb.genomforda);
+    nastaLektion = fa.nasta; nastaLab = fa.labbar;
+    const perPass = new Map(facit.a.map((g) => [facitNyckel(g.datum, g.start), g] as const));
+    for (const x of frystaA) {
+      const nyckel = sessionsNyckel(x.datum, x.start);
+      const arHel = helklass.has(nyckel);
+      const g = perPass.get(nyckel);
+      sessioner.push({
+        nyckel, vecka: x.vecka, helklass: arHel, fryst: true, genomford: true, a: x, b: arHel ? (bAvNyckel.get(nyckel) ?? null) : null,
+        typ: g?.typ === 'laboration' ? 'lab' : 'teori', standard: true, val: null, laboration: null, rubrik: g?.rubrik ?? '—',
+      });
+    }
+  } else {
+    frystaA.forEach((x, i) => { const l = lektioner[i]; if (l !== undefined) lagg(a, l.kapitel, l.lektion, l.nyckel, x); });
+    frystaB.forEach((x, i) => { const l = lektioner[i]; if (l !== undefined) lagg(b, l.kapitel, l.lektion, l.nyckel, x); });
+    for (const x of frystaA) {
+      const nyckel = sessionsNyckel(x.datum, x.start);
+      const arHel = helklass.has(nyckel);
+      const idx = frystaA.indexOf(x);
+      const l = lektioner[idx];
+      sessioner.push({
+        nyckel, vecka: x.vecka, helklass: arHel, fryst: true, genomford: true, a: x, b: arHel ? (bAvNyckel.get(nyckel) ?? null) : null, typ: 'teori',
+        standard: true, val: null, laboration: null, rubrik: l?.lektion.avsnitt ?? '(boken är slut)',
+      });
+    }
   }
 
   // ── Kommande del: laborationer på halvklasspassen ──
-  let nastaLektion = frystaA.length; let nastaLab = 0; let halvIdx = frystaHalvB;
   for (const x of slotsA.filter((x) => x.datum >= fryst)) {
     const nyckel = sessionsNyckel(x.datum, x.start);
     const arHel = helklass.has(nyckel);
@@ -887,14 +974,25 @@ export interface AmnesPlan {
  * Halvklassämnen med laborationsstandard räknas via skapaHalvklassPlanering, övriga via
  * skapaPlanering (grupp A och B var för sig med samma lektionsföljd).
  */
-export function amnesPlan(skolar: Skolar, amne: Amne, bok: Bok, offset = 0, idag?: string): AmnesPlan {
+export function amnesPlan(skolar: Skolar, amne: Amne, bok: Bok, offset = 0, idag?: string, facit?: GenomfordPlanering): AmnesPlan {
   if (harLaborationsstandard(amne)) {
-    const h = skapaHalvklassPlanering(skolar, amne, bok, offset, idag);
+    const h = skapaHalvklassPlanering(skolar, amne, bok, offset, idag, facit);
     return { a: h.a, b: h.b, sessioner: h.sessioner };
+  }
+  const halvB = amne.halvklass === true && amne.schemaB !== undefined;
+  if (facit !== undefined) {
+    // Del 156: genomförda pass ur facit, sedan boken från raden efter det som gjorts
+    const rader = planeringsRader(bok, amne);
+    const labbar = amne.laborationer ?? [];
+    return {
+      a: planMedFacit(samlaSlots(skolar, amne.schema).slice(offset), rader, facit.a, facit.till, labbar),
+      b: halvB ? planMedFacit(samlaSlots(skolar, amne.schemaB ?? []).slice(offset), rader, facit.b ?? facit.a, facit.till, labbar) : [],
+      sessioner: null,
+    };
   }
   return {
     a: skapaPlanering(skolar, amne.schema, bok, offset, amne),
-    b: amne.halvklass === true && amne.schemaB !== undefined ? skapaPlanering(skolar, amne.schemaB, bok, offset, amne) : [],
+    b: halvB ? skapaPlanering(skolar, amne.schemaB ?? [], bok, offset, amne) : [],
     sessioner: null,
   };
 }
@@ -917,7 +1015,7 @@ export function amnesPlanFor(s: Struktur, amneId: string, idag?: string, kravPla
   const bok = s.bocker.find((b) => b.id === amne.bokId);
   if (skolar === undefined || bok === undefined) return null;
   if (kravPlanering && !s.planeringar.some((pl) => pl.amneId === amneId)) return null;
-  return amnesPlan(skolar, amne, bok, amnesOffset(skolar, amne), idag);
+  return amnesPlan(skolar, amne, bok, amnesOffset(skolar, amne), idag, aktivtFacit(s, amneId));
 }
 
 /**

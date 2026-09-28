@@ -56,6 +56,7 @@ import { SparaMeny } from './SparaMeny.js';
 import { StWidget, MiniTal, MiniRemsa, useWidgetLage } from './StWidget.js';
 import { ElevFilter } from './ElevFilter.js';
 import { KlassGuide } from './KlassGuide.js';
+import { AterskapaLage } from './AterskapaLage.js';
 import {
   hamtaBockerFranGitHub, konfigKomplett, laddaFranGitHub, lasGitHubConfig, sparaGitHubConfig, sparaTillGitHub,
   type GitHubConfig,
@@ -1400,7 +1401,8 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
   // En plats för planeringen: amnesPlan är samma funktion som kalendern, SuperTeach och
   // studieguiden använder — ändras planeringen här ändras den överallt
   const idag = new Date().toISOString().slice(0, 10);
-  const ap = useMemo(() => (a && la && bok ? amnesPlan(la, a, bok, amnesOffset(la, a), idag) : null), [a, la, bok, idag]);
+  const facit = s.planeringar.find((p) => p.amneId === id)?.genomfort;
+  const ap = useMemo(() => (a && la && bok ? amnesPlan(la, a, bok, amnesOffset(la, a), idag, facit) : null), [a, la, bok, idag, facit]);
   const plan = ap?.a ?? TOM_PLAN;
   const planB = ap?.b ?? TOM_PLAN;
   const halvklassPlan = ap?.sessioner ?? null;
@@ -5897,6 +5899,8 @@ function PlaneringVy({ s, kor, setVald, hopp, amneIdIn, dolAmnesval, meddela, on
     return alternativ.some((x) => x.a.id === senaste) ? senaste : s.planeringar[0]?.amneId ?? alternativ[0]?.a.id ?? '';
   });
   const setAmneId = (id: string) => { setAmneIdRaw(id); sparaInstallning('cp.planeringAmne', id); };
+  // Del 156: återskapa-läget (genomförd planering ur quizzarna)
+  const [aterskapa, setAterskapa] = useState(false);
   useEffect(() => { if (hopp != null) setAmneId(hopp.amneId); }, [hopp?.n]);   // kalenderklick → rätt ämne
   useEffect(() => { if (amneIdIn !== undefined && amneIdIn !== '') setAmneId(amneIdIn); }, [amneIdIn]); // v3: ämnessidan
   const valt = alternativ.some((x) => x.a.id === amneId) ? amneId : alternativ[0]?.a.id ?? '';
@@ -5925,10 +5929,18 @@ function PlaneringVy({ s, kor, setVald, hopp, amneIdIn, dolAmnesval, meddela, on
           )}
           {dolAmnesval === true && valtAlt !== undefined && <b>📋 {valtAlt.klass.namn} · {valtAlt.a.namn}</b>}
           <span className="spacer" />
+          {valt !== '' && (() => {
+            const facit = s.planeringar.find((pl) => pl.amneId === valt)?.genomfort;
+            return facit !== undefined ? <span className="ak-facitchip" title={`Genomförd planering återskapad ur quizzarna ${facit.aterskapad.slice(0, 10)}`}>🕰 Facit t.o.m. {facit.till}</span> : null;
+          })()}
+          {valt !== '' && valtAlt?.a.bokId !== undefined && (
+            <button type="button" className="btn sec ak-oppna" onClick={() => setAterskapa(true)} title="Läs exit tickets, läxförhör och övningar och återskapa det som gjorts på varje pass">🕰 Återskapa genomförd planering</button>
+          )}
           {valt !== '' && <SparaMeny typ="planering" s={s} amneId={valt} kor={kor} meddela={meddela} />}
         </div>
       </div>
       {valt !== '' && <AmnePanel key={valt} s={s} id={valt} kor={kor} setVald={setVald} hopp={hopp} />}
+      {aterskapa && valt !== '' && <AterskapaLage s={s} amneId={valt} kor={kor} onStang={() => setAterskapa(false)} />}
     </>
   );
 }

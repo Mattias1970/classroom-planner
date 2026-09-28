@@ -246,10 +246,13 @@ export function importeraResultat(s: Struktur, u: ImportUnderlag): ImportUtfall 
       ...(u.amneId !== undefined ? { amneId: u.amneId } : {}),
     });
   }
-  const ersatta = new Set(nya.map((r) => `${r.elevId}|${r.kalla}|${r.prov}`));
-  const kvar = (s.resultat ?? []).filter((r) => !ersatta.has(`${r.elevId}|${r.kalla}|${r.prov}`));
+  // Samma fil igen (samma quiz, typ och datum) ersätter raderna. Del 156: samma quiz en ANNAN
+  // dag är ett nytt tillfälle (förhöret körs igen) och sparas bredvid — annars försvinner
+  // beviset för en extra lektion.
+  const ersatta = new Set(nya.map((r) => `${r.elevId}|${r.kalla}|${r.prov}|${r.datum}`));
+  const kvar = (s.resultat ?? []).filter((r) => !ersatta.has(`${r.elevId}|${r.kalla}|${r.prov}|${r.datum}`));
   // Väntande rader: en omkörning av samma fil ersätter raden med samma namn på samma prov
-  const vNyckel = (v: VantandeResultat) => `${v.klassId}|${v.kalla}|${v.prov}|${normalisera(v.namn)}`;
+  const vNyckel = (v: VantandeResultat) => `${v.klassId}|${v.kalla}|${v.prov}|${v.datum}|${normalisera(v.namn)}`;
   const vErsatta = new Set(vantande.map(vNyckel));
   const vKvar = (s.vantandeResultat ?? []).filter((v) => !vErsatta.has(vNyckel(v)));
   const allaVantande = [...vKvar, ...vantande];

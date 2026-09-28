@@ -1196,3 +1196,59 @@ input.fel { border-color: #B71C1C; }
 .kg-komigang p { margin: 4px 0 0; }
 .kg-genvag { display: flex; justify-content: flex-end; margin-bottom: 10px; }
 .kg-tradknapp { margin-top: 6px; }
+
+/* ── Del 156 · Återskapa-läge ── */
+.ak-bak { position: fixed; inset: 0; z-index: 1000; background: rgba(40, 28, 8, .55); display: flex; justify-content: center; align-items: flex-start; padding: 3vh 16px; overflow: auto; }
+.ak { background: #fffdf7; width: min(1180px, 100%); max-height: 94vh; display: flex; flex-direction: column; border-radius: 14px; overflow: hidden; box-shadow: 0 14px 44px rgba(0,0,0,.3); border: 3px solid #d9901a; }
+.ak-band { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 16px; background: repeating-linear-gradient(135deg, #f7c65a 0 14px, #f3b93f 14px 28px); color: #3b2500; }
+.ak-lage { background: #3b2500; color: #ffd978; font-weight: 800; letter-spacing: .02em; padding: 3px 10px; border-radius: 999px; }
+.ak-band small { color: #5a3a00; }
+.ak-stang { color: #3b2500; }
+.ak-kropp { padding: 12px 16px; overflow: auto; }
+.ak-kontroller { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.ak-kontroller select, .ak-kontroller input { border: 1px solid var(--ram); border-radius: 6px; padding: 4px 8px; font: inherit; }
+.ak-regler { margin: 6px 0 10px; border: 1px dashed #e0b25a; border-radius: 8px; padding: 6px 10px; background: #fff8e6; }
+.ak-regler summary { cursor: pointer; font-weight: 600; color: #8a5a00; }
+.ak-regler ul { margin: 6px 0 2px; padding-left: 20px; }
+.ak-summa { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 10px; }
+.ak-chip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--ram); background: #fff; border-radius: 999px; padding: 2px 10px; font-size: 13px; font: inherit; font-size: 13px; }
+.ak-chip-ok { border-color: #2e7d32; color: #2e7d32; background: #f1f8f2; }
+button.ak-chip { cursor: pointer; }
+.ak-kontroll { border-color: #d9901a; color: #8a5a00; background: #fff8e6; font-weight: 600; }
+.ak-kontroll.act { background: #d9901a; color: #fff; }
+.ak-kontroll:disabled { opacity: .5; cursor: default; }
+.ak-flikar { display: flex; gap: 6px; margin-bottom: 8px; }
+.ak-flik { border: 1px solid var(--ram); background: #fff; border-radius: 8px 8px 0 0; padding: 5px 14px; cursor: pointer; font: inherit; }
+.ak-flik.act { border-color: #d9901a; border-bottom: 3px solid #d9901a; font-weight: 700; }
+.ak-tabell { width: 100%; }
+.ak-tabell td { vertical-align: middle; }
+.ak-v { color: #7a6a50; font-variant-numeric: tabular-nums; }
+.ak-pass { white-space: nowrap; }
+.ak-pass small { display: block; color: #7a6a50; }
+.ak-quiz { max-width: 280px; }
+.ak-q { display: inline-block; margin: 1px 3px 1px 0; padding: 1px 7px; border-radius: 5px; font-size: 12px; border: 1px solid; white-space: nowrap; }
+.ak-q-exit { border-color: #2e7d32; background: #eef7ef; color: #1f5e23; }
+.ak-q-laxforhor { border-color: #2f5aa8; background: #eef3fb; color: #23447f; }
+.ak-q-ovning { border-color: #7b5aa8; background: #f4effa; color: #56367f; }
+.ak-q-digiexam { border-color: #b3261e; background: #fdeeed; color: #8c1d17; }
+.ak-valcell select { max-width: 260px; }
+.ak-valcell input { display: block; margin-top: 4px; width: 240px; border: 1px solid var(--ram); border-radius: 6px; padding: 3px 7px; font: inherit; }
+.ak-blir b { font-weight: 600; }
+.ak-skal { display: block; color: #4a6b4c; font-size: 12px; }
+.ak-varna { color: #8a5a00; }
+.ak-osaker { background: #fffaf0; }
+.ak-osaker td:first-child { box-shadow: inset 4px 0 0 #d9901a; }
+.ak-saker td:first-child { box-shadow: inset 4px 0 0 #2e7d32; }
+.ak-installd .ak-blir b { text-decoration: line-through; color: #888; }
+.ak-typ { display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; border-radius: 4px; padding: 1px 6px; background: #eee; color: #444; }
+.ak-typ-avsnitt { background: #e3ecfa; color: #23447f; }
+.ak-typ-extra { background: #f4effa; color: #56367f; }
+.ak-typ-laboration { background: #e6f4ea; color: #1f5e23; }
+.ak-typ-prov { background: #fdeeed; color: #8c1d17; }
+.ak-typ-installd { background: #eee; color: #777; }
+.ak-efter { margin-top: 12px; padding: 10px 12px; border-left: 4px solid #d9901a; background: #fff8e6; border-radius: 6px; }
+.ak-efter p { margin: 4px 0; }
+.ak-fot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 16px; border-top: 1px solid #ecd9b0; background: #fff8e6; }
+.ak-godkann { background: #2e7d32; border-color: #2e7d32; font-weight: 700; }
+.ak-oppna { border-color: #d9901a; color: #8a5a00; }
+.ak-facitchip { font-size: 12px; border: 1px solid #d9901a; color: #8a5a00; background: #fff8e6; border-radius: 999px; padding: 2px 9px; }
