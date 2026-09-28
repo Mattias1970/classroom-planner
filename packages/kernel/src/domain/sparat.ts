@@ -92,7 +92,7 @@ function nastaVersion<T extends { namn: string; version: number }>(lista: T[], n
   return Math.max(0, ...lista.filter((x) => x.namn.trim().toLowerCase() === namn.trim().toLowerCase()).map((x) => x.version)) + 1;
 }
 
-function laggIn<T extends { id: string; namn: string; version: number }>(lista: T[], post: T, lage: SparLage): T[] {
+export function laggIn<T extends { id: string; namn: string; version: number }>(lista: T[], post: T, lage: SparLage): T[] {
   const namn = lage.typ === 'ersatt' ? undefined : lage.namn.trim();
   if (namn !== undefined && namn === '') throw new Error('Ge sparfilen ett namn.');
   if (lage.typ === 'nytt') {

@@ -7,7 +7,7 @@ import { bokLektioner, delkapitelKod, NIVA_GRON_BLA_ROD, byggKapitel } from './b
 import { NO_TK_AMNEN } from './amnen.js';
 import { isoVecka, passSparr } from './skolar.js';
 import type {
-  Amne, Bok, EgenRad, Elev, GenomfordLektion, GenomfordPlanering, Klass, Laboration, Larare, Lektion, LektionsPlan, LektionsVal, Pass, PassVal, PlaneradLektion,
+  Amne, Bok, EgenRad, Elev, GenomfordLektion, GenomfordPlanering, Klass, SammansattPaPlanering, Laboration, Larare, Lektion, LektionsPlan, LektionsVal, Pass, PassVal, PlaneradLektion,
   Planering, Skolar, StodPass, Struktur, Tjanst } from './typer.js';
 
 let seq = 0;
@@ -618,6 +618,52 @@ function planMedFacit(slots: Slot[], rader: PlanRad[], facit: GenomfordLektion[]
   return [...f.genomforda, ...laggPaSlots(rader.slice(f.nasta), slots.filter((x) => x.datum >= till))];
 }
 
+// ── Del 157: sammansatt följd på kommande pass ──────────────
+
+/** Radnyckel för det i:te kortet i en sammansatt följd. */
+export function sammansattNyckel(i: number): string { return `ko:${i}`; }
+
+/** Kan passet få ett kort ur den sammansatta följden? Teoripass från `fran`, inte laborationer eller egna passlektioner. */
+function utbytbar(p: PlaneradLektion, fran: string): boolean {
+  if (p.datum === null) return true;
+  const n = p.nyckel ?? '';
+  return p.datum >= fran && p.lektion.typ !== 'laboration' && !n.startsWith('pass:') && !n.startsWith('fa:');
+}
+
+/**
+ * Lägger den sammansatta följden på en grupps plan: pass före `fran` rörs inte;
+ * teoripassen från `fran` får korten i ordning och därefter ämnets egen bok från
+ * raden efter den sista som gåtts igenom före `fran` — rader som redan finns bland
+ * korten hoppas över (inga dubbletter). Det som inte ryms får datum null som förut.
+ */
+export function medSammansatt(lista: PlaneradLektion[], rader: PlanRad[], k: SammansattPaPlanering, bokId: string, slots: Slot[] = []): PlaneradLektion[] {
+  const index = new Map(rader.map((r, i) => [r.nyckel, i] as const));
+  let sista = -1;
+  for (const p of lista) if (p.datum !== null && p.datum < k.fran) sista = Math.max(sista, index.get(p.nyckel ?? '') ?? -1);
+  const anvanda = new Set(k.lektioner.filter((l) => l.bokId === bokId).map((l) => l.nyckel));
+  const ko: PlanRad[] = [
+    ...k.lektioner.map((l, i) => ({ kapitel: l.kapitel, lektion: l.lektion, nyckel: sammansattNyckel(i) })),
+    ...rader.slice(sista + 1).filter((r) => !anvanda.has(r.nyckel)),
+  ];
+  // Platserna för följden: utbytbara pass i planen + schemats pass från `fran` som planen inte använt (boken tog slut)
+  const kvar = lista.filter((p) => p.datum !== null && !utbytbar(p, k.fran));
+  const upptagna = new Set(lista.filter((p) => p.datum !== null).map((p) => `${p.datum}|${p.start}`));
+  const platser: Array<{ datum: string; vecka: number | null; start: string | null; slutTid: string | null }> = [
+    ...lista.filter((p) => p.datum !== null && utbytbar(p, k.fran)).map((p) => ({ datum: p.datum!, vecka: p.vecka, start: p.start, slutTid: p.slutTid })),
+    ...slots.filter((x) => x.datum >= k.fran && !upptagna.has(`${x.datum}|${x.start}`)).map((x) => ({ datum: x.datum, vecka: x.vecka, start: x.start, slutTid: x.slut })),
+  ].sort((a, b) => a.datum.localeCompare(b.datum) || (a.start ?? '').localeCompare(b.start ?? ''));
+  const lagda: PlaneradLektion[] = [];
+  platser.forEach((x, i) => { const r = ko[i]; if (r !== undefined) lagda.push({ kapitel: r.kapitel, lektion: r.lektion, nyckel: r.nyckel, ...x }); });
+  const ut = [...kvar, ...lagda].sort((a, b) => a.datum!.localeCompare(b.datum!) || (a.start ?? '').localeCompare(b.start ?? ''));
+  for (let i = platser.length; i < ko.length; i += 1) ut.push({ kapitel: ko[i].kapitel, lektion: ko[i].lektion, nyckel: ko[i].nyckel, datum: null, vecka: null, start: null, slutTid: null });
+  return ut;
+}
+
+/** Den aktiva planeringens sammansatta följd för ämnet, om en kopplats. */
+export function aktivSammansatt(s: Struktur, amneId: string): SammansattPaPlanering | undefined {
+  return s.planeringar.find((p) => p.amneId === amneId)?.sammansatt;
+}
+
 /** Lägger en lektionsföljd på slots: rad i → slot i (rader som inte ryms får datum null). */
 function laggPaSlots(rader: PlanRad[], slots: Slot[]): PlaneradLektion[] {
   return rader.map(({ kapitel, lektion, nyckel }, i) => {
@@ -974,7 +1020,27 @@ export interface AmnesPlan {
  * Halvklassämnen med laborationsstandard räknas via skapaHalvklassPlanering, övriga via
  * skapaPlanering (grupp A och B var för sig med samma lektionsföljd).
  */
-export function amnesPlan(skolar: Skolar, amne: Amne, bok: Bok, offset = 0, idag?: string, facit?: GenomfordPlanering): AmnesPlan {
+export function amnesPlan(skolar: Skolar, amne: Amne, bok: Bok, offset = 0, idag?: string, facit?: GenomfordPlanering, sammansatt?: SammansattPaPlanering): AmnesPlan {
+  const bas = amnesPlanBas(skolar, amne, bok, offset, idag, facit);
+  if (sammansatt === undefined) return bas;
+  // Del 157: den sammansatta följden på teoripassen från `fran`, i båda grupperna
+  const rader = planeringsRader(bok, amne);
+  // Gruppens pass (samma urval som planen: NO-blockets budget när halvklasspassen är laborationer)
+  const lab = harLaborationsstandard(amne);
+  const budget = lab && amne.noGrupp !== undefined ? noBudget(skolar, amne.schema) : undefined;
+  const passFor = (schema: Pass[]) => samlaSlots(skolar, schema).slice(offset, budget === undefined ? undefined : offset + budget);
+  const a = medSammansatt(bas.a, rader, sammansatt, bok.id, passFor(amne.schema));
+  const b = bas.b.length > 0 ? medSammansatt(bas.b, rader, sammansatt, bok.id, passFor(amne.schemaB ?? [])) : bas.b;
+  const perPass = new Map(a.filter((p) => p.datum !== null).map((p) => [sessionsNyckel(p.datum!, p.start!), p] as const));
+  const sessioner = bas.sessioner === null ? null : bas.sessioner.map((x) => {
+    if (x.typ !== 'teori' || x.a.datum < sammansatt.fran) return x;
+    const p = perPass.get(x.nyckel);
+    return { ...x, rubrik: p?.lektion.avsnitt ?? '(boken är slut)' };
+  });
+  return { a, b, sessioner };
+}
+
+function amnesPlanBas(skolar: Skolar, amne: Amne, bok: Bok, offset: number, idag: string | undefined, facit: GenomfordPlanering | undefined): AmnesPlan {
   if (harLaborationsstandard(amne)) {
     const h = skapaHalvklassPlanering(skolar, amne, bok, offset, idag, facit);
     return { a: h.a, b: h.b, sessioner: h.sessioner };
@@ -1015,7 +1081,7 @@ export function amnesPlanFor(s: Struktur, amneId: string, idag?: string, kravPla
   const bok = s.bocker.find((b) => b.id === amne.bokId);
   if (skolar === undefined || bok === undefined) return null;
   if (kravPlanering && !s.planeringar.some((pl) => pl.amneId === amneId)) return null;
-  return amnesPlan(skolar, amne, bok, amnesOffset(skolar, amne), idag, aktivtFacit(s, amneId));
+  return amnesPlan(skolar, amne, bok, amnesOffset(skolar, amne), idag, aktivtFacit(s, amneId), aktivSammansatt(s, amneId));
 }
 
 /**

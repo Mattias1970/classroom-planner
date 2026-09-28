@@ -68,7 +68,7 @@ export function kalenderHandelser(s: Struktur, skolarId: string, idag?: string):
     const amnesFarg = amneBakgrund(amne.namn);
     // En plats för planeringen: samma funktion som ämnessidan, SuperTeach och
     // studieguiden, så kalendern visar exakt det planeringen visar
-    const ap = amnesPlan(skolar, amne, bok, amnesOffset(skolar, amne), idag, plan.genomfort);
+    const ap = amnesPlan(skolar, amne, bok, amnesOffset(skolar, amne), idag, plan.genomfort, plan.sammansatt);
     const grupper: Array<{ grupp?: 'A' | 'B'; plan: PlaneradLektion[] }> = amne.halvklass === true
       ? [{ grupp: 'A', plan: ap.a }, { grupp: 'B', plan: ap.b }]
       : [{ grupp: undefined, plan: ap.a }];

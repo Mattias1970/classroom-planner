@@ -262,6 +262,44 @@ export interface Planering {
    * avsnitt. Ligger på planeringsversionen så att den följer med vid arkiv/återställning.
    */
   genomfort?: GenomfordPlanering;
+  /** Del 157 · Sammansatt följd kopplad till planeringen: läggs på passen från `fran`. */
+  sammansatt?: SammansattPaPlanering;
+}
+
+/** Del 157 · Ett lektionskort i en sammansatt planering — hämtat ur en planering eller en bok. */
+export interface SammansattLektion {
+  /** Boken kortet kommer från. */
+  bokId: string;
+  kapitel: number;
+  /** Radnyckeln i källboken ('4:12', '4:12#2', 'er:…'). */
+  nyckel: string;
+  /** Lektionen som den såg ut i källan (avsnitt, uppgifter, sidor, begrepp …). */
+  lektion: Lektion;
+  /** Varifrån kortet hämtades: '8A Biologi · Spektrum Biologi' eller bokens titel. */
+  kalla: string;
+  /** Kopia av källans detaljplanering för lektionen (ändras kopian påverkas inte originalet). */
+  plan?: Omit<LektionsPlan, 'id' | 'amneId' | 'lektionsIndex'>;
+}
+
+/** Del 157 · En sammansatt planering: namngiven, versionerad följd av lektionskort. */
+export interface SammansattPlanering {
+  schema: 'classroom-planner-sammansatt';
+  schemaVersion: 1;
+  id: string;
+  namn: string;
+  version: number;
+  sparad: string;
+  lektioner: SammansattLektion[];
+}
+
+/** Del 157 · Den sammansatta följden som den kopplats till ett ämnes planering. */
+export interface SammansattPaPlanering {
+  /** Sparfilens namn och version (för visning). */
+  namn: string;
+  version: number;
+  /** Följden läggs på passen från och med detta datum; allt före rörs inte. */
+  fran: IsoDatum;
+  lektioner: SammansattLektion[];
 }
 
 /** Del 156 · Vad ett genomfört pass innehöll. */
@@ -401,6 +439,8 @@ export interface Struktur {
   lektionsregler?: Record<string, import('./lektionsregler.js').Lektionsregel[]>;
   /** Del 138: namngivna sparade planeringar (namn + version) — kan öppnas igen eller ligga i datarepot. */
   sparadePlaneringar?: import('./sparat.js').SparadPlanering[];
+  /** Del 157: sammansatta planeringar (lektionskort ur olika planeringar och böcker). */
+  sammansattaPlaneringar?: SammansattPlanering[];
   /** Del 138: namngivna sparade SuperTeach-data (resultat + filregister) med koppling till planering. */
   sparadSuperTeach?: import('./sparat.js').SparadSuperTeach[];
   /** SuperTeach: importerade provresultat (läxförhör, exit tickets, Magma, DigiExam). */
