@@ -223,11 +223,13 @@ function stapelFarg(andel: number | null): string {
   return andel < 50 ? '#C62828' : andel < 70 ? '#EF6C00' : '#2E7D32';
 }
 
-/** Stapeldiagram: andel rätt per uppgift för ett prov. */
-function UppgiftsStaplar({ uppgifter }: { uppgifter: MagmaAnalys['prov'][number]['uppgifter'] }) {
+/** Stapeldiagram: andel rätt per uppgift för ett prov (delas med DigiExam-importen, Del 150). */
+export function UppgiftsStaplar({ uppgifter, etikett = 'Andel rätt per uppgift', fotnot = 'uppgift · % av eleverna som hade rätt' }: {
+  uppgifter: Array<{ nr: string; ratt: number; fel: number; andelRatt: number | null }>; etikett?: string; fotnot?: string;
+}) {
   const w = Math.max(320, uppgifter.length * 34 + 40); const h = 170; const bas = 130; const topp = 14;
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="st-diagram st-magma-diagram" role="img" aria-label="Andel rätt per uppgift">
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="st-diagram st-magma-diagram" role="img" aria-label={etikett}>
       {[0, 50, 70, 100].map((y) => {
         const yy = bas - ((bas - topp) * y) / 100;
         return <g key={y}><line x1={30} x2={w - 4} y1={yy} y2={yy} stroke={y === 50 ? '#C62828' : y === 70 ? '#EF6C00' : '#e0e0e0'} strokeDasharray={y === 50 || y === 70 ? '3 3' : undefined} /><text x={26} y={yy + 3} fontSize={9} textAnchor="end" fill="#666">{y}</text></g>;
@@ -243,7 +245,7 @@ function UppgiftsStaplar({ uppgifter }: { uppgifter: MagmaAnalys['prov'][number]
           </g>
         );
       })}
-      <text x={w / 2} y={h - 2} fontSize={9} textAnchor="middle" fill="#666">uppgift · % av eleverna som hade rätt</text>
+      <text x={w / 2} y={h - 2} fontSize={9} textAnchor="middle" fill="#666">{fotnot}</text>
     </svg>
   );
 }

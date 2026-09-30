@@ -110,7 +110,7 @@ export function laggTillElev(s: Struktur, elev: Elev): Struktur {
   if (elev.namn.trim() === '') throw new Error('Eleven behöver ett namn.');
   return { ...s, elever: [...s.elever, elev] };
 }
-export function uppdateraElev(s: Struktur, id: string, patch: Partial<Pick<Elev, 'namn' | 'grupp'>>): Struktur {
+export function uppdateraElev(s: Struktur, id: string, patch: Partial<Pick<Elev, 'namn' | 'grupp' | 'epost' | 'socrativeId'>>): Struktur {
   return { ...s, elever: s.elever.map((e) => (e.id === id ? { ...e, ...patch } : e)) };
 }
 export function taBortElev(s: Struktur, id: string): Struktur {

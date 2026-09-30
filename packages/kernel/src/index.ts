@@ -13,6 +13,7 @@ export * from './domain/oversikt.js';
 export * from './domain/resultat.js';
 export * from './domain/socrative.js';
 export * from './domain/magmaprov.js';
+export * from './domain/digiexam.js';
 export * from './domain/roster.js';
 export * from './domain/elevrapport.js';
 export * from './domain/trendkoll.js';

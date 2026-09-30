@@ -45,6 +45,7 @@ import {
 import { exportJson, importJson, lasInstallning, lasStruktur, sparaInstallning, sparaStruktur } from './store.js';
 import { RapportdesignVy, MallRendering, Trendsteg } from './rapportdesign.js';
 import { MagmaImport } from './MagmaImport.js';
+import { DigiExamImport } from './DigiExamImport.js';
 import { Skal, Kort, type Filter, type V3Vy } from './v3/Skal.js';
 import { Oversikt } from './v3/Oversikt.js';
 import { Amnessida } from './v3/Amnessida.js';
@@ -5302,7 +5303,7 @@ type ImportApp = 'socrative' | 'magma' | 'digiexam' | 'pptx' | 'elever';
 const IMPORT_APPAR: Array<{ id: ImportApp; bokstav: string; namn: string; under: string; kalla?: ResultatKalla }> = [
   { id: 'socrative', bokstav: 'S', namn: 'Socrative', under: 'quiz-rapporter (.xlsx) · rum & QR', kalla: 'socrative-exit' },
   { id: 'magma', bokstav: 'M', namn: 'Magma', under: 'provresultat (.xlsx) · rätt/fel per uppgift', kalla: 'magma' },
-  { id: 'digiexam', bokstav: 'D', namn: 'DigiExam', under: 'provresultat', kalla: 'digiexam' },
+  { id: 'digiexam', bokstav: 'D', namn: 'DigiExam', under: 'provresultat (.xlsx) · poäng per fråga', kalla: 'digiexam' },
   { id: 'pptx', bokstav: 'P', namn: 'PowerPoint', under: 'placeringar (.pptx)' },
   { id: 'elever', bokstav: '👥', namn: 'Elever', under: 'Socrative-lista · grupper A/B' },
 ];
@@ -5610,6 +5611,9 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn }: {
       {/* ── Import: Magma-prov ur xlsx (Del 146) ── */}
       {importApp === 'magma' && <MagmaImport s={s} klass={klass} amne={amne} kor={kor} />}
 
+      {/* ── Import: DigiExam-prov ur xlsx (Del 150) — egen tolkare, egen källa ── */}
+      {importApp === 'digiexam' && <DigiExamImport s={s} klass={klass} amne={amne} kor={kor} />}
+
       {/* ── Import: klistra in (Magma, DigiExam och fri text) ── */}
       {(importApp === 'magma' || importApp === 'digiexam' || importApp === 'socrative') && (
       <div className="uppg-kort st-klistra">
@@ -5617,7 +5621,7 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn }: {
         <small className="muted">{importApp === 'magma'
           ? <>Har du ingen exportfil: markera resultattabellen i Magma (namn och poäng) och klistra in här. Inklistrade resultat saknar rätt/fel per uppgift — använd Excel-exporten ovan när den finns.</>
           : importApp === 'digiexam'
-            ? <>Markera resultatlistan i DigiExam (namn och poäng) och klistra in här. En DigiExam-export läses in som fil när tolkaren finns.</>
+            ? <>Har du ingen exportfil: markera resultatlistan i DigiExam (namn och poäng) och klistra in här. Inklistrade resultat saknar poäng per fråga — använd Excel-exporten ovan när den finns.</>
             : <>Rader från valfri export: <code>Namn ⇥ Poäng ⇥ Max</code> (Max kan utelämnas — fältet nedan används). Inklistrade resultat saknar svar per fråga: de räknas i korten men syns inte i frågematrisen eller trendkollen — för det krävs Excel-filen.</>}</small>
         <div className="rad" style={{ flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
           <select aria-label="Källa" value={kalla} onChange={(e) => setKalla(e.target.value as ResultatKalla)}>

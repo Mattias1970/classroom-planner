@@ -1129,3 +1129,9 @@ input.fel { border-color: #B71C1C; }
 .kurs-pilar { display: inline-flex; gap: 2px; margin-left: 4px; vertical-align: middle; }
 .kurs-pilar .icon-btn { font-size: 10px; line-height: 1; padding: 0 3px; }
 .sch-lekt .kurs-pilar { position: absolute; right: 2px; bottom: 2px; }
+
+/* ── Del 150 · DigiExam-import ── */
+.st-de-full { color: #2E7D32; font-weight: 600; }
+.st-de-del { color: #EF6C00; font-weight: 600; }
+.st-de-noll { color: #C62828; }
+.st-de-import .st-magma-tabell td:first-child { white-space: nowrap; }

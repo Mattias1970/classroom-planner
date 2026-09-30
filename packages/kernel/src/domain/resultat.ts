@@ -2,7 +2,7 @@
  * SuperTeach · Resultat — ren domänlogik (Ring 1, I2: ingen fetch/DOM/lagring).
  *
  * Tar emot NORMALISERADE rader (namn + poäng) från valfri källa — Socrative-
- * export (xlsx), Magma-resultat (xlsx), DigiExam — och matchar dem mot
+ * export (xlsx), Magma-resultat (xlsx), DigiExam-export (xlsx) — och matchar dem mot
  * klassens elever. Själva filparsningen sker i UI-lagret (adaptrar);
  * här bor matchning, krav och sammanställning.
  *
@@ -66,7 +66,7 @@ export function begreppUrFacit(facit: string | undefined | null): string | null 
   const b = facit.replace(/^[a-eA-E]\s*(?:[.)]|[•·])\s*/, '').replace(/[•·]/g, ' ').replace(/\s+/g, ' ').trim();
   return b === '' ? null : b;
 }
-export interface ImportRad { namn: string; poang: number; maxPoang: number; /** Student ID ur Socrative-rapporten (valfritt). */ sidId?: string; svar?: FragaSvar[]; }
+export interface ImportRad { namn: string; poang: number; maxPoang: number; /** Student ID ur Socrative-rapporten (valfritt). */ sidId?: string; /** E-post ur filen (DigiExam) — matchas mot Elev.epost före namnet. */ epost?: string; svar?: FragaSvar[]; }
 
 export interface ImportUnderlag {
   klassId: string;
@@ -201,7 +201,7 @@ export function importeraResultat(s: Struktur, u: ImportUnderlag): ImportUtfall 
   const omatchade: string[] = [];
   const nya: Resultat[] = [];
   for (const rad of u.rader) {
-    const elev = matchaElev(s, u.klassId, rad.namn, rad.sidId);
+    const elev = (rad.epost !== undefined && rad.epost.trim() !== '' ? matchaElev(s, u.klassId, rad.epost) : null) ?? matchaElev(s, u.klassId, rad.namn, rad.sidId);
     if (elev === null) { omatchade.push(rad.namn); continue; }
     nya.push({
       id: nyttId('res'), elevId: elev.id, kalla: u.kalla, prov: u.prov.trim(),

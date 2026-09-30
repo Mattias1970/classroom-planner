@@ -2113,7 +2113,7 @@ describe('👥 Socrative-roster', () => {
     // Rostern finns också i SuperTeach-fliken — under importnavets flik Elever (Del 142)
     act(() => { knapp(host, '📊 SuperTeach').click(); });
     expect([...host.querySelectorAll('.st-importnav [role="tab"]')].map((b) => b.textContent)).toEqual([
-      'SSocrativequiz-rapporter (.xlsx) · rum & QR', 'MMagmaprovresultat (.xlsx) · rätt/fel per uppgift', 'DDigiExamprovresultat', 'PPowerPointplaceringar (.pptx)', '👥EleverSocrative-lista · grupper A/B',
+      'SSocrativequiz-rapporter (.xlsx) · rum & QR', 'MMagmaprovresultat (.xlsx) · rätt/fel per uppgift', 'DDigiExamprovresultat (.xlsx) · poäng per fråga', 'PPowerPointplaceringar (.pptx)', '👥EleverSocrative-lista · grupper A/B',
     ]);
     act(() => { ([...host.querySelectorAll<HTMLButtonElement>('.st-importnav [role="tab"]')].find((b) => b.textContent?.includes('Elever')))!.click(); });
     expect(host.textContent).toContain('3 elever registrerade');
