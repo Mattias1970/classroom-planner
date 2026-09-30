@@ -6,12 +6,13 @@
  * klassens elever. Själva filparsningen sker i UI-lagret (adaptrar);
  * här bor matchning, krav och sammanställning.
  *
- * BAM-kraven: läxförhör ≥ 90 %, exit ticket ≥ 70 %. Magma/DigiExam har inget
- * fast krav — de bedöms i sitt sammanhang.
+ * BAM-kraven: läxförhör ≥ 90 %, exit ticket ≥ 70 %. Magma-prov: ≥ 70 % Godkänt
+ * (85 Bra, 95 Utmärkt — se magmaprov.ts). DigiExam har inget fast krav.
  */
 import type { Elev, PlaneradLektion, Struktur } from './typer.js';
 import { nyttId } from './struktur.js';
 import { koderForProv } from './delkapitelkoder.js';
+import { MAGMA_GRANSER, magmaOmdome } from './magmaprov.js';
 
 /**
  * Källa/testtyp. Socrative-testerna delas i tre typer: läxförhör (början av
@@ -90,23 +91,29 @@ export interface ImportUtfall {
   omatchade: string[];
 }
 
-/** BAM-kravet för en källa i procent, eller null när inget fast krav finns. */
+/** BAM-kravet för en källa i procent, eller null när inget fast krav finns (DigiExam). */
 export function kravFor(kalla: ResultatKalla): number | null {
   if (kalla === 'socrative-laxforhor' || kalla === 'socrative-ovning') return 90;
   if (kalla === 'socrative-exit') return 70;
+  if (kalla === 'magma') return MAGMA_GRANSER.godkant;
   return null;
 }
 
 /** Bedömningsnivå över godkänd gräns; null = under gränsen eller källa utan gräns. */
-export type Niva = 'Bra' | 'Mycket bra' | 'Utmärkt';
+export type Niva = 'Godkänt' | 'Bra' | 'Mycket bra' | 'Utmärkt';
 
 /**
  * Bedömning i ord. Läxförhör och övning: 90–93 Bra, 94–96 Mycket bra, 97–100 Utmärkt.
  * Exit ticket (lektionsarbete): 70–80 Bra, 81–90 Mycket bra, 91–100 Utmärkt.
- * Under gränsen: 'Under godkänd nivå'. Källor utan gräns (Magma, DigiExam): null.
+ * Magma-prov: 70–<85 Godkänt, 85–<95 Bra, 95–100 Utmärkt (procenten avrundas inte).
+ * Under gränsen: 'Under godkänd nivå'. Källa utan gräns (DigiExam): null.
  */
 export function niva(kalla: ResultatKalla, procent: number | null): Niva | 'Under godkänd nivå' | null {
   if (procent === null) return null;
+  if (kalla === 'magma') {
+    const o = magmaOmdome(procent);
+    return o === 'Under godkänt' ? 'Under godkänd nivå' : o;
+  }
   const p = Math.round(procent);
   if (kalla === 'socrative-exit') {
     if (p < 70) return 'Under godkänd nivå';

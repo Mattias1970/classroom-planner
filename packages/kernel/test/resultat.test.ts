@@ -25,10 +25,10 @@ function bygg(): Struktur {
 }
 
 describe('BAM-kraven per källa', () => {
-  it('läxförhör 90, exit 70, Magma/DigiExam utan fast krav', () => {
+  it('läxförhör 90, exit 70, Magma 70 (Godkänt), DigiExam utan fast krav', () => {
     expect(kravFor('socrative-laxforhor')).toBe(90);
     expect(kravFor('socrative-exit')).toBe(70);
-    expect(kravFor('magma')).toBeNull();
+    expect(kravFor('magma')).toBe(70);
     expect(kravFor('digiexam')).toBeNull();
   });
 
@@ -38,7 +38,9 @@ describe('BAM-kraven per källa', () => {
     expect(klaratKrav({ poang: 9, maxPoang: 10, kalla: 'socrative-laxforhor' })).toBe(true);
     expect(klaratKrav({ poang: 8, maxPoang: 10, kalla: 'socrative-laxforhor' })).toBe(false);
     expect(klaratKrav({ poang: 7, maxPoang: 10, kalla: 'socrative-exit' })).toBe(true);
-    expect(klaratKrav({ poang: 5, maxPoang: 10, kalla: 'magma' })).toBeNull();
+    expect(klaratKrav({ poang: 5, maxPoang: 10, kalla: 'magma' })).toBe(false);
+    expect(klaratKrav({ poang: 7, maxPoang: 10, kalla: 'magma' })).toBe(true);
+    expect(klaratKrav({ poang: 5, maxPoang: 10, kalla: 'digiexam' })).toBeNull();
   });
 });
 
@@ -323,8 +325,17 @@ describe('Del 122: bedömningsnivåer', async () => {
     expect(niva('socrative-exit', 90)).toBe('Mycket bra');
     expect(niva('socrative-exit', 91)).toBe('Utmärkt');
   });
+  it('Magma-prov: 70–<85 Godkänt, 85–<95 Bra, 95–100 Utmärkt (utan avrundning)', () => {
+    expect(niva('magma', 100)).toBe('Utmärkt');
+    expect(niva('magma', 95)).toBe('Utmärkt');
+    expect(niva('magma', 94.9)).toBe('Bra');
+    expect(niva('magma', 85)).toBe('Bra');
+    expect(niva('magma', 84.6)).toBe('Godkänt');
+    expect(niva('magma', 70)).toBe('Godkänt');
+    expect(niva('magma', 69.9)).toBe('Under godkänd nivå');
+  });
   it('källor utan gräns och saknat värde', () => {
-    expect(niva('magma', 100)).toBeNull();
+    expect(niva('digiexam', 100)).toBeNull();
     expect(niva('socrative-exit', null)).toBeNull();
     expect(nivaText('digiexam', 80)).toBe('—');
     expect(nivaText('socrative-exit', 85)).toBe('Mycket bra');

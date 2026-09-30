@@ -1101,3 +1101,17 @@ input.fel { border-color: #B71C1C; }
 .bam-red table.tbl input:not([type="number"]) { width: 100%; min-width: 90px; }
 .bam-red .icon-btn { border: none; background: none; cursor: pointer; font-size: 14px; padding: 0 3px; }
 .bam-red .icon-btn:disabled { opacity: .3; cursor: default; }
+
+/* Del 146 · Magma-prov: rätt/fel per uppgift och omdöme (70 Godkänt · 85 Bra · 95 Utmärkt) */
+.st-krav.st-magma.bra { background: #E3F2FD; color: #0D47A1; border: 1px solid #90CAF9; }
+.st-krav.st-magma.utmarkt { background: #F3E5F5; color: #4A148C; border: 1px solid #CE93D8; }
+.st-magma-fil { margin-top: 8px; padding-top: 6px; border-top: 1px dashed #ddd; }
+.st-magma-tabell { margin-top: 6px; }
+.st-magma-tabell th, .st-magma-tabell td { text-align: center; padding: 2px 4px; }
+.st-magma-tabell th:first-child, .st-magma-tabell td:first-child { text-align: left; white-space: nowrap; }
+.st-magma-ratt { color: #1B5E20; font-weight: 800; }
+.st-magma-fel { color: #B71C1C; font-weight: 800; }
+.st-magma-tabell tr.st-magma-omatchad td { background: #FFF8E6; }
+.st-magma-tabell tr.st-magma-stat td { border-top: 2px solid #ccc; font-size: 10px; }
+.st-magma-tabell td.st-magma-svag { background: #FFEBEE; color: #B71C1C; font-weight: 800; }
+.st-magma-sparade { margin-top: 10px; }

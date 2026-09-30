@@ -44,6 +44,7 @@ import {
 } from '@planner/kernel';
 import { exportJson, importJson, lasInstallning, lasStruktur, sparaInstallning, sparaStruktur } from './store.js';
 import { RapportdesignVy, MallRendering, Trendsteg } from './rapportdesign.js';
+import { MagmaImport } from './MagmaImport.js';
 import { Skal, Kort, type Filter, type V3Vy } from './v3/Skal.js';
 import { Oversikt } from './v3/Oversikt.js';
 import { Amnessida } from './v3/Amnessida.js';
@@ -5249,7 +5250,7 @@ function SocrativeLankPanel({ s, klass, amnen, planFor, kor }: {
 type ImportApp = 'socrative' | 'magma' | 'digiexam' | 'pptx' | 'elever';
 const IMPORT_APPAR: Array<{ id: ImportApp; bokstav: string; namn: string; under: string; kalla?: ResultatKalla }> = [
   { id: 'socrative', bokstav: 'S', namn: 'Socrative', under: 'quiz-rapporter (.xlsx) · rum & QR', kalla: 'socrative-exit' },
-  { id: 'magma', bokstav: 'M', namn: 'Magma', under: 'resultat · frågor · läs-screening', kalla: 'magma' },
+  { id: 'magma', bokstav: 'M', namn: 'Magma', under: 'provresultat (.xlsx) · rätt/fel per uppgift', kalla: 'magma' },
   { id: 'digiexam', bokstav: 'D', namn: 'DigiExam', under: 'provresultat', kalla: 'digiexam' },
   { id: 'pptx', bokstav: 'P', namn: 'PowerPoint', under: 'placeringar (.pptx)' },
   { id: 'elever', bokstav: '👥', namn: 'Elever', under: 'Socrative-lista · grupper A/B' },
@@ -5550,12 +5551,15 @@ function SuperTeachVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Strukt
       </div>
       </>)}
 
+      {/* ── Import: Magma-prov ur xlsx (Del 146) ── */}
+      {importApp === 'magma' && <MagmaImport s={s} klass={klass} amne={amne} kor={kor} />}
+
       {/* ── Import: klistra in (Magma, DigiExam och fri text) ── */}
       {(importApp === 'magma' || importApp === 'digiexam' || importApp === 'socrative') && (
       <div className="uppg-kort st-klistra">
         <b>{importApp === 'magma' ? '📗 Magma resultat' : importApp === 'digiexam' ? '📘 DigiExam resultat' : '📥 Klistra in resultat'}</b>{' '}
         <small className="muted">{importApp === 'magma'
-          ? <>Markera resultattabellen i Magma (namn och poäng) och klistra in här. Screeningen i läsning (förmåga, förståelse, hastighet) görs också i Magma — när du skickat en export läses den och Magmas frågor in direkt ur filen; tills dess går resultat att klistra in.</>
+          ? <>Har du ingen exportfil: markera resultattabellen i Magma (namn och poäng) och klistra in här. Inklistrade resultat saknar rätt/fel per uppgift — använd Excel-exporten ovan när den finns.</>
           : importApp === 'digiexam'
             ? <>Markera resultatlistan i DigiExam (namn och poäng) och klistra in här. En DigiExam-export läses in som fil när tolkaren finns.</>
             : <>Rader från valfri export: <code>Namn ⇥ Poäng ⇥ Max</code> (Max kan utelämnas — fältet nedan används). Inklistrade resultat saknar svar per fråga: de räknas i korten men syns inte i frågematrisen eller trendkollen — för det krävs Excel-filen.</>}</small>
@@ -5621,7 +5625,7 @@ function SuperTeachVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Strukt
                   <td>{resultat !== null ? `${resultat.poang}/${resultat.maxPoang}` : <span className="muted">saknas</span>}</td>
                   <td>{resultat !== null ? `${resultatProcent(resultat) ?? '—'} %` : ''}</td>
                   <td>{resultat !== null && klaratKrav(resultat) !== null
-                    ? <span className={`st-krav ${klaratKrav(resultat) === true ? 'ok' : 'ej'}`}>{klaratKrav(resultat) === true ? 'Godkänt' : 'Ej godkänt'}</span>
+                    ? <span className={`st-krav ${klaratKrav(resultat) === true ? 'ok' : 'ej'}`}>{resultat.kalla === 'magma' ? (niva('magma', resultat.maxPoang > 0 ? (resultat.poang / resultat.maxPoang) * 100 : null) ?? '—') : klaratKrav(resultat) === true ? 'Godkänt' : 'Ej godkänt'}</span>
                     : ''}</td>
                 </tr>
               ))}</tbody>
