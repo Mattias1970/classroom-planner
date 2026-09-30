@@ -1959,6 +1959,13 @@ describe('Detaljplanering som egen flik', () => {
     skriv(input(host, 'Ny film'), 'Fotosyntes|https://binogi.se/f');
     act(() => { knapp(host, '+ Lägg till film').click(); });
     expect(lasStruktur().lektionsplaner.find((p) => p.lektionsIndex === 1)?.filmer).toEqual(['Fotosyntes|https://binogi.se/f']);
+    // Del 148: lektionen kan tas bort från lektionssidan — efterföljande flyttas fram; ämnet finns kvar
+    const antalFore = lasStruktur().amnen.length;
+    window.confirm = () => true;
+    act(() => { knapp(host, '🗑 Ta bort denna lektion').click(); });
+    expect(panel.textContent).toContain('Lektion 1 av 1');
+    expect(lasStruktur().amnen).toHaveLength(antalFore);
+    expect(panel.querySelector('.modal-actions')).toBeNull();     // ingen ämnesknapp under lektionerna — bara länken i panelhuvudet
   });
 })
 

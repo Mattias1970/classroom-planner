@@ -1396,7 +1396,14 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
     <div className="card">
       <h2>📖 {klass.namn} · {a.namn}{halv ? <span className="pillm">halvklass A/B</span> : null}{a.noGrupp !== undefined ? <span className="pillm">NO+Tk block {(a.noOrder ?? 0) + 1}/4</span> : null}</h2>
       {bok && harPlanering && plan.length > 0 && <KapitelHeader bok={bok} plan={plan} s={s} amneId={a.id} />}
-      <p className="muted">Socrative-rum: <b>{rum}</b>{halv ? ' (delas av Grupp A och B)' : ''} — läxförhör och exit tickets.</p>
+      <p className="muted">Socrative-rum: <b>{rum}</b>{halv ? ' (delas av Grupp A och B)' : ''} — läxförhör och exit tickets.
+        <button className="linkbtn warn no-print" style={{ marginLeft: 12 }} title="Tar bort hela ämnet med all planering — enskilda lektioner tas bort på lektionssidan" onClick={() => {
+          if (!window.confirm(`Vill du ta bort hela ämnet ${a.namn} (${klass.namn}) och alla kurser i det?\n\nAll planering, alla lektionsplaner och arkiverade versioner raderas. Resultaten i SuperTeach finns kvar. Detta går inte att ångra.`)) return;
+          const klassId = klass.id;
+          kor(() => taBortAmne(lasStruktur(), id), `Ämnet ${a.namn} (${klass.namn}) är borttaget.`);
+          setVald({ typ: 'klass', id: klassId });
+        }}>🗑 Ta bort ämne</button>
+      </p>
 
       {overBudget && (
         <p className="status warn">⚠ {bok!.titel} har {bok!.kapitel.reduce((n, k2) => n + k2.delkapitel.reduce((m, d) => m + d.lektioner.length, 0) + k2.extraLektioner.length, 0)} lektioner men blocket rymmer bara {budget}. De sista lektionerna trängs in i nästa delämnes block — korta boken eller lägg fler NO-pass.</p>
@@ -1550,13 +1557,6 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
           rum={rum} rubrik={`${klass.namn} · rum ${rum} — en klass, gemensam planering`} s={s} amneId={a.id} kor={kor} amne={harPlanering ? a : undefined} idag={idag} />
       )}
       </>)}
-      <div className="modal-actions">
-        <button className="btn warn" onClick={() => {
-          const klassId = klass.id;
-          kor(() => taBortAmne(lasStruktur(), id), 'Ämne borttaget.');
-          setVald({ typ: 'klass', id: klassId });
-        }}>🗑 Ta bort ämne</button>
-      </div>
     </div>
   );
 }
@@ -1982,6 +1982,20 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
         kor(() => laggTillEgenRad(lasStruktur(), amneId, { id: nyttId('er'), position, rubrik: rubrik.trim(), typ: 'ovning' as const }, new Date().toISOString().slice(0, 10)),
           `\"${rubrik.trim()}\" infogad efter lektion ${i + 1} — bokens lektioner skjuts framåt.`);
       }}>➕ Lägg till lektion efter denna</button>
+      {rad.nyckel !== undefined && (
+        <button className="btn sec ls-nyrad ls-bortrad no-print" onClick={() => {
+          const namn = lektionsNamn(rad.lektion, lp);
+          const harPlan = lp !== null;
+          if (!window.confirm(`Ta bort lektion ${i + 1} (${namn}) ur planeringen?${harPlan ? ' Lektionens detaljplanering försvinner.' : ''} Efterföljande lektioner flyttas fram ett pass. Ämnet och övriga lektioner påverkas inte.`)) return;
+          const nyckel = rad.nyckel!;
+          const idagIso = new Date().toISOString().slice(0, 10);
+          kor(() => (nyckel.startsWith('er:')
+            ? taBortEgenRad(lasStruktur(), amneId, nyckel.slice(3), idagIso)
+            : sattLektionsVal(lasStruktur(), amneId, nyckel, { bort: true }, idagIso)),
+          `Lektion ${i + 1} (${namn}) borttagen — efterföljande lektioner flyttade fram ett pass.`);
+          setIdx(Math.max(0, i - (i >= plan.length - 1 ? 1 : 0)));
+        }}>🗑 Ta bort denna lektion (efterföljande flyttas fram)</button>
+      )}
       {arHalvklass(amnesNamn) && (
         <NoPlanering key={`${amneId}-${i}`} s={s} amneId={amneId} lektionsIndex={i} kor={kor}
           amnesNamn={amnesNamn} rad={rad} bok={bok} alltidOppen />

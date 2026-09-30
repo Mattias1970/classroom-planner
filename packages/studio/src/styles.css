@@ -1121,3 +1121,5 @@ input.fel { border-color: #B71C1C; }
 .st-magma-remsa { display: inline-flex; width: 220px; height: 16px; border-radius: 8px; overflow: hidden; border: 1px solid #ccc; }
 .st-magma-remsa-del { display: inline-block; height: 100%; color: #fff; font-size: 10px; font-weight: 800; text-align: center; line-height: 16px; min-width: 14px; }
 .st-magma-tabell tr.st-magma-markerad td { background: #FFEBEE; }
+.linkbtn.warn { color: #B71C1C; }
+.ls-bortrad { margin-left: 8px; border-color: #EF9A9A; color: #B71C1C; }
