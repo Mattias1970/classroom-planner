@@ -66,3 +66,33 @@ describe('MagmaImport', () => {
     expect(div.textContent).toContain('Utmärkt 1 · Bra 0 · Godkänt 1 · Under godkänt 0');
   });
 });
+
+describe('MagmaImport — klass utan elever och analys', () => {
+  it('skapar eleverna från filen när klassen är tom, och visar analysrutan med grafer efter import', async () => {
+    let s = bygg();
+    s = { ...s, elever: [] };
+    sparaStruktur(s);
+    const kor = (fn: () => Struktur) => { s = fn(); sparaStruktur(s); rendera(); };
+    const div = document.createElement('div'); document.body.appendChild(div);
+    const root = createRoot(div);
+    const rendera = () => act(() => root.render(<MagmaImport s={s} klass={s.klasser[0]} amne={s.amnen[0]} kor={kor} />));
+    rendera();
+    expect(div.textContent).toContain('8B har inga elever än');
+    const input = div.querySelector('input[aria-label="Magma-filer"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File(['x'], '1.1_-_1.3_Test.xlsx')] });
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await sov(); await sov(); });
+    expect(div.textContent).toContain('0 matchade');
+    expect(div.textContent).toContain('2 nya elever skapas');
+    const knapp = [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Importera 1 Magma-prov'))!;
+    expect(knapp.disabled).toBe(false);
+    await act(async () => { knapp.click(); });
+    expect(s.elever.map((e) => e.namn).sort()).toEqual(['Anna Berg', 'Omar Ali']);   // Pia deltog inte → skapas inte
+    expect((s.resultat ?? []).filter((r) => r.kalla === 'magma')).toHaveLength(2);
+    // Analysrutan: staplar per uppgift, utvecklingslinjer och elevtabell
+    expect(div.textContent).toContain('Magma-analys');
+    expect(div.querySelector('svg[aria-label="Andel rätt per uppgift"]')).not.toBeNull();
+    expect(div.querySelector('svg[aria-label="Utveckling över Magma-proven"]')).not.toBeNull();
+    expect(div.textContent).toContain('Medel 88 %');
+    expect(div.textContent).toContain('alla uppgifter klarades av minst hälften');
+  });
+});

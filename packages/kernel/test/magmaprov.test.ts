@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { magmaOmdome, tolkaMagmaRapport, magmaUppgiftsStatistik, magmaDatumUrBladnamn, magmaProvnamnUrFilnamn, type MagmaCell } from '../src/domain/magmaprov';
+import { magmaAnalys, magmaOmdome, tolkaMagmaRapport, magmaUppgiftsStatistik, magmaDatumUrBladnamn, magmaProvnamnUrFilnamn, type MagmaCell } from '../src/domain/magmaprov';
 import { importeraResultat, resultatForElev, niva, resultatProcent } from '../src/domain/resultat';
 import { laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst } from '../src/domain/struktur';
 import { tomStruktur } from '../src/domain/typer';
@@ -113,5 +113,35 @@ describe('Magma-resultat sparas per elev', () => {
     expect(niva('magma', resultatProcent(omar[0]))).toBe('Godkänt');
     expect(niva('magma', resultatProcent(resultatForElev(u.s, 'e1')[0]))).toBe('Utmärkt');
     expect(niva('magma', resultatProcent(resultatForElev(u.s, 'e3')[0]))).toBe('Under godkänd nivå');
+  });
+});
+
+describe('magmaAnalys — sparade prov per klass', () => {
+  it('ger andel rätt per uppgift, omdömesfördelning, svaga uppgifter och elevernas serier med trend', () => {
+    const elever = [
+      { id: 'e1', klassId: 'k', namn: 'Anna Berg' }, { id: 'e2', klassId: 'k', namn: 'Omar Ali' }, { id: 'e3', klassId: 'k', namn: 'Pia Provlund' }, { id: 'x', klassId: 'annan', namn: 'Elsa Lindqvist' },
+    ];
+    const sv = (...r: boolean[]) => r.map((ratt, i) => ({ fraga: `Uppgift ${i + 1}`, svar: ratt ? '1' : '0', ratt }));
+    const resultat = [
+      { id: '1', elevId: 'e1', amneId: 'ma', kalla: 'magma', prov: 'T1', datum: '2026-09-03', poang: 4, maxPoang: 4, svar: sv(true, true, true, true) },
+      { id: '2', elevId: 'e2', amneId: 'ma', kalla: 'magma', prov: 'T1', datum: '2026-09-03', poang: 1, maxPoang: 4, svar: sv(true, false, false, false) },
+      { id: '2b', elevId: 'e3', amneId: 'ma', kalla: 'magma', prov: 'T1', datum: '2026-09-03', poang: 2, maxPoang: 4, svar: sv(true, false, true, false) },
+      { id: '3', elevId: 'e1', amneId: 'ma', kalla: 'magma', prov: 'T2', datum: '2026-09-30', poang: 3, maxPoang: 4, svar: sv(true, true, true, false) },
+      { id: '4', elevId: 'e2', amneId: 'ma', kalla: 'magma', prov: 'T2', datum: '2026-09-30', poang: 4, maxPoang: 4, svar: sv(true, true, true, true) },
+      { id: '5', elevId: 'x', amneId: 'ma', kalla: 'magma', prov: 'T2', datum: '2026-09-30', poang: 0, maxPoang: 4 },
+      { id: '6', elevId: 'e1', amneId: 'ma', kalla: 'socrative-exit', prov: 'Q', datum: '2026-09-30', poang: 1, maxPoang: 1 },
+    ];
+    const a = magmaAnalys({ elever, resultat }, 'k', 'ma');
+    expect(a.prov.map((p) => p.prov)).toEqual(['T1', 'T2']);
+    expect(a.prov[0]).toMatchObject({ antal: 3, medel: 58, svaga: ['2', '4'] });
+    expect(a.prov[0].fordelning).toEqual({ 'Under godkänt': 2, 'Godkänt': 0, 'Bra': 0, 'Utmärkt': 1 });
+    expect(a.prov[0].uppgifter.find((u) => u.nr === '2')).toEqual({ nr: '2', ratt: 1, fel: 2, andelRatt: 33 });
+    expect(a.prov[0].uppgifter.find((u) => u.nr === '3')).toEqual({ nr: '3', ratt: 2, fel: 1, andelRatt: 67 });
+    expect(a.prov[1]).toMatchObject({ antal: 2, medel: 88, svaga: [] });
+    expect(a.elever.map((e) => e.namn)).toEqual(['Anna Berg', 'Omar Ali', 'Pia Provlund']);
+    expect(a.elever[0]).toMatchObject({ procent: [100, 75], senaste: 75, trend: -25, omdome: 'Godkänt' });
+    expect(a.elever[1]).toMatchObject({ procent: [25, 100], senaste: 100, trend: 75, omdome: 'Utmärkt' });
+    expect(a.elever[2]).toMatchObject({ procent: [50, null], senaste: 50, trend: null, omdome: 'Under godkänt' });
+    expect(magmaAnalys({ elever, resultat }, 'k', 'bi').prov).toEqual([]);
   });
 });

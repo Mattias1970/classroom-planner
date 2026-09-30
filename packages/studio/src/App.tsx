@@ -196,7 +196,7 @@ export function App() {
             planering={(amneId) => <Kort rubrik="Planering och lektioner" under="lektionsplan, detaljplanering, begrepp, filmer, Word"><PlaneringVy s={s} kor={kor} setVald={setVald} hopp={lektionsHopp} amneIdIn={amneId} dolAmnesval meddela={setMsg} /></Kort>} />}
           {vy.typ === 'kalender' && <Kort rubrik="Kalender" hoger={<button className="v3-lank" onClick={() => setVy({ typ: 'planering' })}>Planering →</button>}><KalenderVy s={s} onOppnaLektion={(amneId, i) => { setLektionsHopp({ amneId, i, n: Date.now() }); setVy({ typ: 'planering' }); }} /></Kort>}
           {vy.typ === 'classroom' && <Classroom s={s} filter={filter} setVy={setVy} />}
-          {vy.typ === 'resultat' && <SuperTeachVy s={s} kor={kor} meddela={setMsg} />}
+          {vy.typ === 'resultat' && <SuperTeachVy s={s} kor={kor} meddela={setMsg} klassIdIn={filter.klassId} amneIdIn={filter.amneId} />}
           {vy.typ === 'elever' && <RapportVy s={s} kor={kor} meddela={setMsg} />}
           {vy.typ === 'foraldrakontakt' && <Foraldrakontakt s={s} filter={filter} setVy={setVy} />}
           {vy.typ === 'datarepo' && <Datarepo s={s} spara={spara} kor={kor} meddela={setMsg} />}
@@ -5256,12 +5256,17 @@ const IMPORT_APPAR: Array<{ id: ImportApp; bokstav: string; namn: string; under:
   { id: 'elever', bokstav: '👥', namn: 'Elever', under: 'Socrative-lista · grupper A/B' },
 ];
 
-function SuperTeachVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur, m: string) => void; meddela?: (m: string) => void }) {
+function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn }: {
+  s: Struktur; kor: (fn: () => Struktur, m: string) => void; meddela?: (m: string) => void;
+  /** v3: toppradens klass-/ämnesfilter styr vilken klass och vilket ämne som visas (Del 147). */
+  klassIdIn?: string; amneIdIn?: string;
+}) {
   const klasser = [...s.klasser].sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
-  const [klassId, setKlassId] = useState(klasser[0]?.id ?? '');
+  const [klassId, setKlassId] = useState(klassIdIn !== undefined && klassIdIn !== '' ? klassIdIn : klasser[0]?.id ?? '');
   const klass = klasser.find((k) => k.id === klassId) ?? klasser[0];
   const amnen = s.amnen.filter((a) => a.klassId === klass?.id);
-  const [amneId, setAmneId] = useState('');
+  const [amneId, setAmneId] = useState(amneIdIn ?? '');
+  useEffect(() => { if (klassIdIn !== undefined && klassIdIn !== '') { setKlassId(klassIdIn); setAmneId(amneIdIn ?? ''); } }, [klassIdIn, amneIdIn]);
   const amne = amnen.find((a) => a.id === amneId);
   const [kalla, setKalla] = useState<ResultatKalla>('socrative-exit');
   const [prov, setProv] = useState('');

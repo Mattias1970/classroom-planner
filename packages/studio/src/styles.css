@@ -1115,3 +1115,9 @@ input.fel { border-color: #B71C1C; }
 .st-magma-tabell tr.st-magma-stat td { border-top: 2px solid #ccc; font-size: 10px; }
 .st-magma-tabell td.st-magma-svag { background: #FFEBEE; color: #B71C1C; font-weight: 800; }
 .st-magma-sparade { margin-top: 10px; }
+/* Del 147 · Magma-analys */
+.st-magma-analys { margin-top: 10px; }
+.st-magma-diagram { display: block; max-width: 100%; margin-top: 6px; }
+.st-magma-remsa { display: inline-flex; width: 220px; height: 16px; border-radius: 8px; overflow: hidden; border: 1px solid #ccc; }
+.st-magma-remsa-del { display: inline-block; height: 100%; color: #fff; font-size: 10px; font-weight: 800; text-align: center; line-height: 16px; min-width: 14px; }
+.st-magma-tabell tr.st-magma-markerad td { background: #FFEBEE; }

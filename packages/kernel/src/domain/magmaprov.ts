@@ -169,3 +169,92 @@ export function magmaUppgiftsStatistik(rapport: MagmaRapport): Array<{ nr: strin
     return { nr: u.nr, ratt, fel, andelRatt: ratt + fel > 0 ? Math.round((ratt / (ratt + fel)) * 100) : null };
   });
 }
+
+// ── Analys av sparade Magma-prov (per klass/ämne) ─────────────────────────────
+
+export interface MagmaProvNyckel { datum: string; prov: string; }
+
+export interface MagmaUppgiftUtfall { nr: string; ratt: number; fel: number; andelRatt: number | null; }
+
+export interface MagmaProvAnalys extends MagmaProvNyckel {
+  antal: number;
+  /** Klassens medelprocent (avrundad) för provet. */
+  medel: number | null;
+  fordelning: Record<MagmaOmdome, number>;
+  uppgifter: MagmaUppgiftUtfall[];
+  /** Uppgifter där mindre än hälften hade rätt — de som bör tas upp igen. */
+  svaga: string[];
+}
+
+export interface MagmaElevSerie {
+  elevId: string;
+  namn: string;
+  /** Procent per prov i samma ordning som `prov` i analysen; null = saknar resultat. */
+  procent: Array<number | null>;
+  senaste: number | null;
+  /** Förändring i procentenheter mellan de två senaste proven eleven gjort; null om färre än två. */
+  trend: number | null;
+  omdome: MagmaOmdome | null;
+}
+
+export interface MagmaAnalys {
+  prov: MagmaProvAnalys[];
+  elever: MagmaElevSerie[];
+}
+
+/** Procent 0–100 utan avrundning ur ett resultat; null vid maxpoäng 0. */
+export function magmaProcent(r: { poang: number; maxPoang: number }): number | null {
+  return r.maxPoang > 0 ? (r.poang / r.maxPoang) * 100 : null;
+}
+
+interface MinimalResultat { elevId: string; amneId?: string; kalla: string; prov: string; datum: string; poang: number; maxPoang: number; svar?: FragaSvar[]; }
+interface MinimalElev { id: string; klassId: string; namn: string; }
+
+/**
+ * Sammanställer klassens sparade Magma-prov: per prov andel rätt per uppgift,
+ * omdömesfördelning och svaga uppgifter; per elev procentserien över proven
+ * (äldst → senast), senaste omdöme och trend.
+ */
+export function magmaAnalys(
+  s: { elever: MinimalElev[]; resultat?: MinimalResultat[] }, klassId: string, amneId?: string,
+): MagmaAnalys {
+  const elever = s.elever.filter((e) => e.klassId === klassId).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
+  const elevIds = new Set(elever.map((e) => e.id));
+  const rs = (s.resultat ?? []).filter((r) => r.kalla === 'magma' && elevIds.has(r.elevId) && (amneId === undefined || amneId === '' || r.amneId === amneId));
+  const nycklar = [...new Map(rs.map((r) => [`${r.datum}|${r.prov}`, { datum: r.datum, prov: r.prov }])).values()]
+    .sort((a, b) => a.datum.localeCompare(b.datum) || a.prov.localeCompare(b.prov, 'sv'));
+  const prov: MagmaProvAnalys[] = nycklar.map((n) => {
+    const egna = rs.filter((r) => r.datum === n.datum && r.prov === n.prov);
+    const fordelning: Record<MagmaOmdome, number> = { 'Under godkänt': 0, 'Godkänt': 0, 'Bra': 0, 'Utmärkt': 0 };
+    const procenten: number[] = [];
+    const perUppgift = new Map<string, { ratt: number; fel: number }>();
+    for (const r of egna) {
+      const p = magmaProcent(r);
+      if (p !== null) { procenten.push(p); fordelning[magmaOmdome(p)!] += 1; }
+      for (const sv of r.svar ?? []) {
+        const nr = sv.fraga.replace(/^Uppgift\s*/i, '');
+        const u = perUppgift.get(nr) ?? { ratt: 0, fel: 0 };
+        if (sv.ratt === true) u.ratt += 1; else u.fel += 1;
+        perUppgift.set(nr, u);
+      }
+    }
+    const uppgifter = [...perUppgift.entries()].map(([nr, u]) => ({ nr, ...u, andelRatt: u.ratt + u.fel > 0 ? Math.round((u.ratt / (u.ratt + u.fel)) * 100) : null }));
+    return {
+      ...n, antal: egna.length,
+      medel: procenten.length > 0 ? Math.round(procenten.reduce((a, b) => a + b, 0) / procenten.length) : null,
+      fordelning, uppgifter,
+      svaga: uppgifter.filter((u) => u.andelRatt !== null && u.andelRatt < 50).map((u) => u.nr),
+    };
+  });
+  const serier: MagmaElevSerie[] = elever.map((e) => {
+    const procent = nycklar.map((n) => { const r = rs.find((x) => x.elevId === e.id && x.datum === n.datum && x.prov === n.prov); return r === undefined ? null : magmaProcent(r); });
+    const gjorda = procent.filter((p): p is number => p !== null);
+    const senaste = gjorda.length > 0 ? gjorda[gjorda.length - 1] : null;
+    return {
+      elevId: e.id, namn: e.namn, procent, senaste,
+      trend: gjorda.length >= 2 ? Math.round(gjorda[gjorda.length - 1] - gjorda[gjorda.length - 2]) : null,
+      omdome: magmaOmdome(senaste),
+    };
+  });
+  return { prov, elever: serier };
+}
