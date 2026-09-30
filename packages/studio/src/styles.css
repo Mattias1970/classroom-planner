@@ -1123,3 +1123,9 @@ input.fel { border-color: #B71C1C; }
 .st-magma-tabell tr.st-magma-markerad td { background: #FFEBEE; }
 .linkbtn.warn { color: #B71C1C; }
 .ls-bortrad { margin-left: 8px; border-color: #EF9A9A; color: #B71C1C; }
+/* Del 149 · Kursordning och kursflytt */
+.kursordning { margin: 6px 0 10px; }
+.kurs-tabell td, .kurs-tabell th { padding: 2px 8px; }
+.kurs-pilar { display: inline-flex; gap: 2px; margin-left: 4px; vertical-align: middle; }
+.kurs-pilar .icon-btn { font-size: 10px; line-height: 1; padding: 0 3px; }
+.sch-lekt .kurs-pilar { position: absolute; right: 2px; bottom: 2px; }

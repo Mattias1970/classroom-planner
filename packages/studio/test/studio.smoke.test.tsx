@@ -3132,3 +3132,61 @@ describe('Del 144: vägen till provet på ämnessidan — alla avsnitt som boxar
     expect(host.querySelector('.v3-vag .v3-vag-info')).toBeNull();
   });
 });
+
+describe('Del 149: kurser (delkapitel) flyttas fram och tillbaka', () => {
+  const BOK149 = JSON.stringify({
+    schema: 'classroom-planner-bok', version: 1,
+    bok: { id: 'bok-149', titel: 'Matematik Z', förlag: 'Test', ämne: 'Matematik', årskurs: 8, kapitelMeta: { '1': { name: 'Tal', col: '#2f5aa8' } } },
+    lektioner: { '1': [
+      { id: 1, type: 'regular', avsnitt: '1.1 Tal', del: 1, ett: '1–8', två: '9–16', tre: '17–20' },
+      { id: 2, type: 'regular', avsnitt: '1.1 Tal', del: 2, ett: '—', två: '21–26', tre: '27–30' },
+      { id: 3, type: 'regular', avsnitt: '1.2 Potenser', del: 1, ett: '1–6', två: '7–12', tre: '13–15' },
+      { id: 4, type: 'regular', avsnitt: '1.3 Bråk', del: 1, ett: '1–6', två: '7–12', tre: '13–15' },
+      { id: 5, type: 'exam', avsnitt: 'Prov kap 1', del: 1 },
+    ] },
+  });
+  const avsnitten = (host: HTMLElement) => [...host.querySelectorAll('table.plan tbody tr')].map((tr) => tr.querySelector('td.lekt-avsnitt')?.textContent ?? '');
+
+  it('▲/▼ i lektionsplanen byter plats på hela kursen; kalendern visar samma följd och har pilar på kursens första lektion', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-18T10:00:00Z'));
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host, BOK149);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'bok-149');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '📋 Planering').click(); });
+    expect(avsnitten(host).slice(0, 4)).toEqual(['1.1 Tal', '1.1 Tal', '1.2 Potenser', '1.3 Bråk']);
+    // Kurslistan: 1.3 Bråk tidigare → hamnar före 1.2 Potenser
+    expect(host.textContent).toContain('Kursernas ordning');
+    const pil = (label: string) => host.querySelector(`button[aria-label="${label}"]`) as HTMLButtonElement;
+    act(() => { pil('Flytta 1.3 Bråk tidigare').click(); });
+    expect(avsnitten(host).slice(0, 4)).toEqual(['1.1 Tal', '1.1 Tal', '1.3 Bråk', '1.2 Potenser']);
+    // Hela kursen 1.1 Tal (två lektioner) senare → efter 1.3 Bråk
+    act(() => { pil('Flytta 1.1 Tal senare').click(); });
+    expect(avsnitten(host).slice(0, 4)).toEqual(['1.3 Bråk', '1.1 Tal', '1.1 Tal', '1.2 Potenser']);
+    const amneId = lasStruktur().amnen[0].id;
+    expect(lasStruktur().amnen[0].kursOrdning).toEqual(['1:1.3', '1:1.1', '1:1.2', '1:5']);
+    // Kalendern följer och har pilar på kursens första lektion (inte på den andra)
+    act(() => { knapp(host, '📆 Kalender').click(); });
+    act(() => { [...host.querySelectorAll('button')].find((b) => b.textContent === 'Månad')?.click(); });
+    const chips = [...host.querySelectorAll('.kh')].map((c) => c.textContent ?? '');
+    expect(chips[0]).toContain('1.3 Bråk'); expect(chips[1]).toContain('1.1 Tal'); expect(chips[2]).toContain('1.1 Tal');
+    expect(host.querySelector('button[aria-label="Flytta kursen 1.1 Tal tidigare"]')).not.toBeNull();
+    expect(host.querySelectorAll('button[aria-label="Flytta kursen 1.1 Tal tidigare"]')).toHaveLength(1);
+    act(() => { (host.querySelector('button[aria-label="Flytta kursen 1.1 Tal tidigare"]') as HTMLButtonElement).click(); });
+    expect(lasStruktur().amnen.find((a) => a.id === amneId)!.kursOrdning).toEqual(['1:1.1', '1:1.3', '1:1.2', '1:5']);
+    vi.useRealTimers();
+  });
+});

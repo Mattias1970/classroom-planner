@@ -112,6 +112,12 @@ export interface Amne {
   antalLektioner?: Record<string, number>;
   /** Del 129: borttagna och ersatta lektioner, per radnyckel ('kapitel:lektionsId', 'er:<id>' eller '…#2'). */
   lektionsVal?: Record<string, LektionsVal>;
+  /**
+   * Del 149: kursernas (delkapitlens) ordning i planeringen — gruppnycklar ('4:4.2', 'er:<id>')
+   * i den följd de ska läsas. Nycklarna byter plats med varandra: kurser som inte står med
+   * behåller sin plats i bokens ordning. Sätts av flyttaKurs.
+   */
+  kursOrdning?: string[];
 }
 
 /**

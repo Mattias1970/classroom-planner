@@ -5,7 +5,7 @@
  * eller .ics), tjänst (lärare valfri), klass, ämne med eget schema, bok på
  * ämnet → "Skapa planering" ger datumsatt planering. Sidregister → Excel.
  */
-import { Fragment, useMemo, useRef, useState, useEffect } from 'react';
+import { Fragment, createContext, useContext, useMemo, useRef, useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import {
@@ -37,7 +37,7 @@ import {
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
-  resultatProcent, saknadeResultat, planForAmne, harLaborationsstandard, amnesPlan, amnesOffset, sattLaborationsstandard, sattPlanFrystTill, sparaLaborationer, sattPassVal, type HalvklassSession, type Laboration, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type Elev, type KalenderDagRuta, type KalenderHandelse,
+  resultatProcent, saknadeResultat, planForAmne, harLaborationsstandard, kursLista, flyttaKurs, amnesPlanFor, type Kurs, amnesPlan, amnesOffset, sattLaborationsstandard, sattPlanFrystTill, sparaLaborationer, sattPassVal, type HalvklassSession, type Laboration, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type Elev, type KalenderDagRuta, type KalenderHandelse,
   pedagogiskPlanering, gruppNyckel, grundRader, planeringsRader, antalIBoken, lektionerPerDelkapitel, sattLektionerPerDelkapitel, sattAntalLektioner, sattLektionsVal, laggTillEgenRad, taBortEgenRad, bokLektioner, type LektionsVal,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
@@ -194,7 +194,7 @@ export function App() {
           {vy.typ === 'amne' && <Amnessida s={s} amneNamn={vy.amneNamn} filter={filter} setVy={setVy}
             oppnaLektion={(amneId, i) => setLektionsHopp({ amneId, i, n: Date.now() })}
             planering={(amneId) => <Kort rubrik="Planering och lektioner" under="lektionsplan, detaljplanering, begrepp, filmer, Word"><PlaneringVy s={s} kor={kor} setVald={setVald} hopp={lektionsHopp} amneIdIn={amneId} dolAmnesval meddela={setMsg} /></Kort>} />}
-          {vy.typ === 'kalender' && <Kort rubrik="Kalender" hoger={<button className="v3-lank" onClick={() => setVy({ typ: 'planering' })}>Planering →</button>}><KalenderVy s={s} onOppnaLektion={(amneId, i) => { setLektionsHopp({ amneId, i, n: Date.now() }); setVy({ typ: 'planering' }); }} /></Kort>}
+          {vy.typ === 'kalender' && <Kort rubrik="Kalender" hoger={<button className="v3-lank" onClick={() => setVy({ typ: 'planering' })}>Planering →</button>}><KalenderVy s={s} kor={kor} onOppnaLektion={(amneId, i) => { setLektionsHopp({ amneId, i, n: Date.now() }); setVy({ typ: 'planering' }); }} /></Kort>}
           {vy.typ === 'classroom' && <Classroom s={s} filter={filter} setVy={setVy} />}
           {vy.typ === 'resultat' && <SuperTeachVy s={s} kor={kor} meddela={setMsg} klassIdIn={filter.klassId} amneIdIn={filter.amneId} />}
           {vy.typ === 'elever' && <RapportVy s={s} kor={kor} meddela={setMsg} />}
@@ -244,7 +244,7 @@ export function App() {
           {msg && <p className="status">{msg}</p>}
           {huvudvy === 'rapporter' && <RapportVy s={s} kor={kor} meddela={setMsg} />}
           {huvudvy === 'superteach' && <SuperTeachVy s={s} kor={kor} />}
-          {huvudvy === 'kalender' && <KalenderVy s={s} onOppnaLektion={(amneId, i) => { setLektionsHopp({ amneId, i, n: Date.now() }); setHuvudvy('planering'); }} />}
+          {huvudvy === 'kalender' && <KalenderVy s={s} kor={kor} onOppnaLektion={(amneId, i) => { setLektionsHopp({ amneId, i, n: Date.now() }); setHuvudvy('planering'); }} />}
         </main>
       ) : huvudvy === 'planering' ? (
         <main className="panel full">
@@ -2445,6 +2445,42 @@ function KapitelDetalj({ s, bok, kap, kor }: { s: Struktur; bok: Bok; kap: Kapit
   );
 }
 
+/**
+ * Del 149 · Kurserna (delkapitlen) i lärarens ordning. ▲ flyttar kursen tidigare, ▼ senare;
+ * hela kursens lektioner följer med och kalendern visar den nya följden. Genomförda kurser låses.
+ */
+function KursOrdning({ plan, amneId, kor, idag }: { plan: PlaneradLektion[]; amneId: string; kor: (fn: () => Struktur, m: string) => void; idag: string }) {
+  const kurser = kursLista(plan, idag);
+  if (kurser.length < 2) return null;
+  const flytta = (k: Kurs, steg: -1 | 1) => kor(() => flyttaKurs(lasStruktur(), amneId, k.nyckel, steg, idag),
+    `${k.titel} flyttad ${steg < 0 ? 'tidigare' : 'senare'} — hela kursen (${k.antalLektioner} lektion${k.antalLektioner === 1 ? '' : 'er'}) och efterföljande kurser har fått nya datum.`);
+  return (
+    <details className="uppg-kort kursordning no-print">
+      <summary>🧩 Kursernas ordning <small className="muted">· {kurser.length} kurser (delkapitel) — flytta en kurs fram eller tillbaka i tid, lektionerna följer med</small></summary>
+      <table className="tbl small kurs-tabell">
+        <thead><tr><th>#</th><th>Kurs</th><th>Lektioner</th><th>Startar</th><th>Flytta</th></tr></thead>
+        <tbody>{kurser.map((k, i) => {
+          const fore = kurser[i - 1]; const efter = kurser[i + 1];
+          const kanUpp = !k.genomford && fore !== undefined && !fore.genomford;
+          const kanNer = !k.genomford && efter !== undefined && !efter.genomford;
+          return (
+            <tr key={k.nyckel} className={k.genomford ? 'muted' : ''}>
+              <td>{i + 1}</td>
+              <td>{k.titel}{k.genomford && <small className="muted"> · genomförd</small>}</td>
+              <td>{k.antalLektioner}</td>
+              <td>{k.datum !== null ? kortDatum(k.datum) : <span className="muted">ryms ej</span>}</td>
+              <td>
+                <button className="icon-btn" aria-label={`Flytta ${k.titel} tidigare`} title="Tidigare — byter plats med kursen före" disabled={!kanUpp} onClick={() => flytta(k, -1)}>▲</button>
+                <button className="icon-btn" aria-label={`Flytta ${k.titel} senare`} title="Senare — byter plats med kursen efter" disabled={!kanNer} onClick={() => flytta(k, 1)}>▼</button>
+              </td>
+            </tr>
+          );
+        })}</tbody>
+      </table>
+    </details>
+  );
+}
+
 // ── Planeringstabell (helklass eller en grupp) + lektionskort ─
 function GruppPlanering(props: {
   plan: PlaneradLektion[]; planB?: PlaneradLektion[]; bok: Bok; amnesNamn: string; klassNamn: string;
@@ -2520,6 +2556,7 @@ function GruppPlanering(props: {
     <>
       {rubrik !== undefined && <h3 className="grupp-h">{rubrik}</h3>}
       {kanAndra && <p className="note no-print">Lektioner som ligger framåt i tiden kan tas bort, ersättas eller få fler lektioner på delkapitlet. Genomförda lektioner ändras aldrig. Lektionsplanerna följer sina lektioner när följden ändras.</p>}
+      {kanAndra && <KursOrdning plan={plan} amneId={amneId!} kor={kor!} idag={idag!} />}
       <table className="tbl plan clickable">
         <thead><tr><th title="Avklarad">✓</th><th>Nr</th><th>Datum</th><th>Dag</th><th>V.</th><th>Tid</th>{halvklassAmne && <th>Klass</th>}<th>Kap</th><th>Avsnitt</th>{bokHarNivaer(bok) && <><th>{bok.nivaer.niva1}</th><th>{bok.nivaer.niva2}</th><th>{bok.nivaer.niva3}</th></>}{kanAndra && <><th title="Antal lektioner på delkapitlet">Lekt.</th><th></th></>}</tr></thead>
         <tbody>{rader.map(({ r, index: i, klassTyp }, radNr) => {
@@ -5718,8 +5755,27 @@ function startAnkare(la?: Skolar): string {
   return la && idag >= la.start && idag <= la.slut ? idag : la?.start ?? '2026-08-17';
 }
 
-function KalenderVy({ s, onOppnaLektion }: { s: Struktur; onOppnaLektion?: (amneId: string, i: number) => void }) {
+function KalenderVy({ s, onOppnaLektion, kor }: { s: Struktur; onOppnaLektion?: (amneId: string, i: number) => void; kor?: (fn: () => Struktur, m: string) => void }) {
   const [skolarId, setSkolarId] = useState(s.skolar[0]?.id ?? '');
+  // Del 149: kursernas första lektion får ▲/▼ i kalendern
+  const idagIso = new Date().toISOString().slice(0, 10);
+  const kursFlytt = useMemo(() => {
+    if (kor === undefined) return null;
+    const perAmne = new Map<string, Kurs[]>();
+    return (amneId: string, lektionsIndex: number): KursFlytt | null => {
+      if (!perAmne.has(amneId)) perAmne.set(amneId, kursLista(amnesPlanFor(s, amneId, idagIso, false)?.a ?? [], idagIso));
+      const kurser = perAmne.get(amneId)!;
+      const i = kurser.findIndex((k) => k.forsta === lektionsIndex);
+      if (i === -1) return null;
+      const k = kurser[i]; const fore = kurser[i - 1]; const efter = kurser[i + 1];
+      return {
+        kurs: k,
+        kanUpp: !k.genomford && fore !== undefined && !fore.genomford,
+        kanNer: !k.genomford && efter !== undefined && !efter.genomford,
+        flytta: (steg) => kor(() => flyttaKurs(lasStruktur(), amneId, k.nyckel, steg, idagIso), `${k.titel} flyttad ${steg < 0 ? 'tidigare' : 'senare'} — kursens ${k.antalLektioner} lektion${k.antalLektioner === 1 ? '' : 'er'} och efterföljande kurser har fått nya datum.`),
+      };
+    };
+  }, [s, kor, idagIso]);
   const [lage, setLage] = useState<'lasar' | 'termin' | 'manad' | 'vecka'>('vecka');
   const [klassFilter, setKlassFilter] = useState<string>('__alla__');
   const [amnesFilter, setAmnesFilter] = useState<string>('__alla__');
@@ -5791,6 +5847,7 @@ function KalenderVy({ s, onOppnaLektion }: { s: Struktur; onOppnaLektion?: (amne
   }
 
   return (
+    <KursFlyttContext.Provider value={kursFlytt}>
     <div className="card kalender">
       <div className="rad kal-topp">
         <h2>📆 Kalender <small className="muted">{skolar.namn}</small></h2>
@@ -5846,6 +5903,28 @@ function KalenderVy({ s, onOppnaLektion }: { s: Struktur; onOppnaLektion?: (amne
       )}
       <Kapitelforklaring handelser={filtrerade} />
     </div>
+    </KursFlyttContext.Provider>
+  );
+}
+
+/**
+ * Del 149 · Kursflytt i kalendern: på kursens första lektion visas ▲/▼ som byter plats med
+ * grannkursen (samma funktion som i lektionsplanen). Kontexten sätts av KalenderVy när den
+ * kan ändra strukturen.
+ */
+interface KursFlytt { kurs: Kurs; kanUpp: boolean; kanNer: boolean; flytta: (steg: -1 | 1) => void; }
+const KursFlyttContext = createContext<((amneId: string, lektionsIndex: number) => KursFlytt | null) | null>(null);
+
+function KursPilar({ h }: { h: KalenderHandelse }) {
+  const slaUpp = useContext(KursFlyttContext);
+  if (slaUpp === null || h.amneId === undefined || h.lektionsIndex === undefined || h.grupp === 'B') return null;
+  const kf = slaUpp(h.amneId, h.lektionsIndex);
+  if (kf === null || (!kf.kanUpp && !kf.kanNer)) return null;
+  return (
+    <span className="kurs-pilar no-print" onClick={(e) => e.stopPropagation()}>
+      <button className="icon-btn" aria-label={`Flytta kursen ${kf.kurs.titel} tidigare`} title={`Kursen ${kf.kurs.titel} (${kf.kurs.antalLektioner} lektioner) tidigare — byter plats med kursen före`} disabled={!kf.kanUpp} onClick={() => kf.flytta(-1)}>▲</button>
+      <button className="icon-btn" aria-label={`Flytta kursen ${kf.kurs.titel} senare`} title={`Kursen ${kf.kurs.titel} (${kf.kurs.antalLektioner} lektioner) senare — byter plats med kursen efter`} disabled={!kf.kanNer} onClick={() => kf.flytta(1)}>▼</button>
+    </span>
   );
 }
 
@@ -5855,7 +5934,7 @@ function Handelsechip({ h, onOppna }: { h: KalenderHandelse; onOppna?: (amneId: 
     <span className="kh" style={{ background: h.amnesFarg, cursor: klickbar ? 'pointer' : undefined }}
       onClick={klickbar ? () => onOppna(h.amneId!, h.lektionsIndex!) : undefined}
       title={`${h.start}–${h.slut} ${h.klassNamn} ${h.amnesNamn}${h.grupp !== undefined ? ` ${h.grupp}` : ''} · ${h.avsnitt}${klickbar ? ' — klicka för lektionsplaneringen' : ''}`}>
-      <b style={{ color: klassFarg(h.klassNamn) }}>{h.klassNamn} {h.amnesNamn}{h.grupp !== undefined ? ` ${h.grupp}` : ''}</b> {h.start} {h.avsnitt}
+      <b style={{ color: klassFarg(h.klassNamn) }}>{h.klassNamn} {h.amnesNamn}{h.grupp !== undefined ? ` ${h.grupp}` : ''}</b> {h.start} {h.avsnitt}<KursPilar h={h} />
     </span>
   );
 }
@@ -5933,6 +6012,7 @@ function VeckoSchema({ rutor, onPrev, onNext, onIdag, onOppna }: {
                 <b style={{ color: klassFarg(h.klassNamn) }}>{h.klassNamn} {h.amnesNamn}{h.grupp !== undefined ? ` ${h.grupp}` : ''}</b>
                 <span>{h.avsnitt}</span>
                 <small>{h.start}–{h.slut}</small>
+                <KursPilar h={h} />
               </div>
               );
             })}

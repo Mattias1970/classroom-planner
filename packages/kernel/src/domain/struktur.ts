@@ -470,7 +470,7 @@ export function medEgnaRader<T extends { kapitel: number; lektion: Lektion; nyck
 }
 
 /** Det som styr lektionsföljden utöver boken — ämnets planeringsfält. */
-export type PlanInstallning = Pick<Amne, 'egnaRader' | 'lektionerPerDelkapitel' | 'antalLektioner' | 'lektionsVal'>;
+export type PlanInstallning = Pick<Amne, 'egnaRader' | 'lektionerPerDelkapitel' | 'antalLektioner' | 'lektionsVal' | 'kursOrdning'>;
 
 /** Ämnets inställning 'lektioner per delkapitel' (senaste loggposten), 1–4, standard 1. */
 export function lektionerPerDelkapitel(val: PlanInstallning): number {
@@ -527,7 +527,7 @@ export function planeringsRader(bok: Bok, val: PlanInstallning): PlanRad[] {
     }
     extraEfter.set(sista, extra);
   }
-  const medExtra = grund.flatMap((r, i) => [r, ...(extraEfter.get(i) ?? [])]);
+  const medExtra = ordnaKurser(grund.flatMap((r, i) => [r, ...(extraEfter.get(i) ?? [])]), val.kursOrdning);
   // ── Steg 3–4: ersättningar och borttag ──
   const ut: PlanRad[] = [];
   for (const r of medExtra) {
@@ -547,6 +547,83 @@ export function planeringsRader(bok: Bok, val: PlanInstallning): PlanRad[] {
     ut.push(r);
   }
   return ut;
+}
+
+/**
+ * Del 149 — kurser (delkapitel) i lärarens ordning. Raderna grupperas per gruppnyckel
+ * (delkapitel, egen rad) i bokens följd; kurser som nämns i `ordning` byter plats med
+ * varandra i den följd de står, medan onämnda kurser behåller sina platser. Lektionerna
+ * inom en kurs behåller sin inbördes ordning.
+ */
+export function ordnaKurser<T extends { kapitel: number; lektion: Lektion; nyckel: string }>(rader: T[], ordning: string[] | undefined): T[] {
+  if (ordning === undefined || ordning.length === 0) return rader;
+  const grupper: string[] = [];
+  const per = new Map<string, T[]>();
+  for (const r of rader) {
+    const g = gruppNyckel(r);
+    if (!per.has(g)) { per.set(g, []); grupper.push(g); }
+    per.get(g)!.push(r);
+  }
+  const namnda = ordning.filter((g) => per.has(g));
+  const namndSet = new Set(namnda);
+  let k = 0;
+  const ny = grupper.map((g) => (namndSet.has(g) ? namnda[k++] : g));
+  return ny.flatMap((g) => per.get(g)!);
+}
+
+export interface Kurs {
+  /** Gruppnyckel: '4:4.2' för ett delkapitel, 'er:<id>' för en egen rad, radnyckeln för lektioner utan delkapitelkod. */
+  nyckel: string;
+  kapitel: number;
+  /** Delkapitlets namn ('4.2 Energi och materia') eller den egna radens rubrik. */
+  titel: string;
+  antalLektioner: number;
+  /** Index i planen för kursens första och sista lektion. */
+  forsta: number;
+  sista: number;
+  /** Första lektionens datum (null när den inte ryms i skolåret). */
+  datum: string | null;
+  /** Kursen har minst en genomförd lektion (datum före idag) — då flyttas den inte. */
+  genomford: boolean;
+}
+
+/** Kurserna (delkapitlen) i ämnets plan, i den ordning de läses. */
+export function kursLista(plan: PlaneradLektion[], idag?: string): Kurs[] {
+  const ut: Kurs[] = [];
+  const index = new Map<string, number>();
+  plan.forEach((r, i) => {
+    const g = gruppNyckel(r);
+    const k = index.get(g);
+    const genomford = idag !== undefined && r.datum !== null && r.datum < idag;
+    if (k === undefined) {
+      index.set(g, ut.length);
+      const kod = delkapitelKod(r.lektion.avsnitt);
+      ut.push({ nyckel: g, kapitel: r.kapitel, titel: kod === null ? r.lektion.avsnitt : r.lektion.avsnitt.replace(/\s*·?\s*Del \d+$/i, ''), antalLektioner: 1, forsta: i, sista: i, datum: r.datum, genomford });
+    } else {
+      const kurs = ut[k];
+      kurs.antalLektioner += 1; kurs.sista = i; kurs.genomford = kurs.genomford || genomford;
+    }
+  });
+  return ut;
+}
+
+/**
+ * Flyttar en kurs ett steg bakåt (steg −1, tidigare) eller framåt (steg +1, senare) i
+ * ämnets planering genom att byta plats med grannkursen. Genomförda kurser (och grannar
+ * med genomförda lektioner) flyttas inte. Lektionsplanerna följer sina lektioner.
+ */
+export function flyttaKurs(s: Struktur, amneId: string, kursNyckel: string, steg: -1 | 1, idag?: string): Struktur {
+  const plan = amnesPlanFor(s, amneId, idag, false);
+  if (plan === null) throw new Error('Ämnet saknar bok eller skolår.');
+  const kurser = kursLista(plan.a, idag);
+  const i = kurser.findIndex((k) => k.nyckel === kursNyckel);
+  if (i === -1) throw new Error('Okänd kurs.');
+  const j = i + steg;
+  if (j < 0 || j >= kurser.length) return s;
+  if (kurser[i].genomford || kurser[j].genomford) throw new Error('Genomförda lektioner flyttas inte — bara kommande kurser kan byta plats.');
+  const ordning = kurser.map((k) => k.nyckel);
+  [ordning[i], ordning[j]] = [ordning[j], ordning[i]];
+  return andraPlanering(s, amneId, { kursOrdning: ordning }, idag);
 }
 
 /** Lägger en lektionsföljd på slots: rad i → slot i (rader som inte ryms får datum null). */
