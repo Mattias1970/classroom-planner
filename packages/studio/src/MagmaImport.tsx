@@ -12,6 +12,7 @@ import {
   type Amne, type Klass, type MagmaAnalys, type MagmaOmdome, type MagmaRapport, type Resultat, type Struktur,
 } from '@planner/kernel';
 import { lasStruktur } from './store.js';
+import { MagmaUppgifter } from './MagmaUppgifter.js';
 
 const OMDOME_KLASS: Record<MagmaOmdome, string> = { 'Under godkänt': 'ej', 'Godkänt': 'ok', 'Bra': 'bra', 'Utmärkt': 'utmarkt' };
 
@@ -160,6 +161,7 @@ export function MagmaImport({ s, klass, amne, kor }: {
         </div>
       )}
 
+      <MagmaUppgifter s={s} klass={klass} amne={amne} kor={kor} />
       <MagmaAnalysVy s={s} klass={klass} amne={amne} />
       <MagmaSparade s={s} klass={klass} amne={amne} />
     </div>

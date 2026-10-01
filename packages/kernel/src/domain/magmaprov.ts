@@ -216,15 +216,24 @@ interface MinimalElev { id: string; klassId: string; namn: string; }
  * (äldst → senast), senaste omdöme och trend.
  */
 export function magmaAnalys(
-  s: { elever: MinimalElev[]; resultat?: MinimalResultat[] }, klassId: string, amneId?: string,
+  s: { elever: MinimalElev[]; resultat?: MinimalResultat[]; magmaTester?: Array<{ titel: string; filnamn: string; testNyckel: string }> }, klassId: string, amneId?: string,
 ): MagmaAnalys {
   const elever = s.elever.filter((e) => e.klassId === klassId).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
   const elevIds = new Set(elever.map((e) => e.id));
   const rs = (s.resultat ?? []).filter((r) => r.kalla === 'magma' && elevIds.has(r.elevId) && (amneId === undefined || amneId === '' || r.amneId === amneId));
-  const nycklar = [...new Map(rs.map((r) => [`${r.datum}|${r.prov}`, { datum: r.datum, prov: r.prov }])).values()]
-    .sort((a, b) => a.datum.localeCompare(b.datum) || a.prov.localeCompare(b.prov, 'sv'));
+  // Del 153: prov med samma uppgifter (samma test, olika kopior/namn) räknas som ett test
+  const norm = (x: string) => x.toLowerCase().replace(/\.(pdf|xlsx|xls)$/i, '').replace(/[_–—-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const testFor = (prov: string) => (s.magmaTester ?? []).find((t) => norm(t.titel) === norm(prov) || norm(t.filnamn) === norm(prov));
+  const grupp = (r: MinimalResultat) => { const t = testFor(r.prov); return t !== undefined ? `T:${t.testNyckel}` : `${r.datum}|${r.prov}`; };
+  const grupper = new Map<string, MinimalResultat[]>();
+  for (const r of rs) grupper.set(grupp(r), [...(grupper.get(grupp(r)) ?? []), r]);
+  const nycklar = [...grupper.entries()].map(([g, lista]) => ({
+    g, datum: lista.map((r) => r.datum).sort()[0], prov: [...new Set(lista.map((r) => r.prov))].sort((a, b) => a.localeCompare(b, 'sv')).join(' = '),
+    // Per elev: senaste försöket när eleven gjort testet flera gånger
+    egna: [...new Map(lista.slice().sort((a, b) => a.datum.localeCompare(b.datum)).map((r) => [r.elevId, r])).values()],
+  })).sort((a, b) => a.datum.localeCompare(b.datum) || a.prov.localeCompare(b.prov, 'sv'));
   const prov: MagmaProvAnalys[] = nycklar.map((n) => {
-    const egna = rs.filter((r) => r.datum === n.datum && r.prov === n.prov);
+    const egna = n.egna;
     const fordelning: Record<MagmaOmdome, number> = { 'Under godkänt': 0, 'Godkänt': 0, 'Bra': 0, 'Utmärkt': 0 };
     const procenten: number[] = [];
     const perUppgift = new Map<string, { ratt: number; fel: number }>();
@@ -240,14 +249,14 @@ export function magmaAnalys(
     }
     const uppgifter = [...perUppgift.entries()].map(([nr, u]) => ({ nr, ...u, andelRatt: u.ratt + u.fel > 0 ? Math.round((u.ratt / (u.ratt + u.fel)) * 100) : null }));
     return {
-      ...n, antal: egna.length,
+      datum: n.datum, prov: n.prov, antal: egna.length,
       medel: procenten.length > 0 ? Math.round(procenten.reduce((a, b) => a + b, 0) / procenten.length) : null,
       fordelning, uppgifter,
       svaga: uppgifter.filter((u) => u.andelRatt !== null && u.andelRatt < 50).map((u) => u.nr),
     };
   });
   const serier: MagmaElevSerie[] = elever.map((e) => {
-    const procent = nycklar.map((n) => { const r = rs.find((x) => x.elevId === e.id && x.datum === n.datum && x.prov === n.prov); return r === undefined ? null : magmaProcent(r); });
+    const procent = nycklar.map((n) => { const r = n.egna.find((x) => x.elevId === e.id); return r === undefined ? null : magmaProcent(r); });
     const gjorda = procent.filter((p): p is number => p !== null);
     const senaste = gjorda.length > 0 ? gjorda[gjorda.length - 1] : null;
     return {

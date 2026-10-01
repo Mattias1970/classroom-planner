@@ -1154,3 +1154,13 @@ input.fel { border-color: #B71C1C; }
 .provlarm-elev.saknas { border-style: dashed; color: #7f0000; }
 .provlarm-ok { color: #1B5E20; background: #E8F5E9; border-radius: 6px; padding: 4px 8px; margin: 6px 0; }
 .st-de-saknas td { background: #FFEBEE; }
+
+/* ── Del 153 · Magma-uppgifter och delkapitelanalys ── */
+.st-magma-uppg { border-top: 1px dashed var(--ram); margin-top: 10px; padding-top: 8px; }
+.st-magma-tester td { vertical-align: top; }
+.st-magma-uppglista .st-magma-uppgtext, .st-magma-dk .st-magma-uppgtext { font-family: ui-monospace, monospace; font-size: 12px; max-width: 420px; }
+.st-magma-formaga { margin-right: 6px; font-weight: 700; }
+.st-magma-formaga input { margin-right: 2px; }
+.st-magma-andrad td:first-child { border-left: 3px solid #EF6C00; }
+.st-magma-dktabell td { text-align: center; }
+.st-magma-dktabell td:first-child { text-align: left; }

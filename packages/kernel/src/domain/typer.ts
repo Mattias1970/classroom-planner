@@ -376,6 +376,10 @@ export interface Struktur {
   resultat?: import('./resultat.js').Resultat[];
   /** SuperTeach: register över importerade resultatfiler per ämne. */
   filregister?: import('./resultat.js').FilPost[];
+  /** Del 153: Magma-testens uppgifter ur testens PDF (en post per test). */
+  magmaTester?: import('./magmauppgifter.js').MagmaTestDef[];
+  /** Del 153: lärarens klassning av Magma-uppgifter (uppgiftsnyckel → delkapitel och förmågor) — gäller i alla test där uppgiften finns. */
+  magmaKlassning?: Record<string, import('./magmauppgifter.js').MagmaKlass>;
   /** SuperTeach: sittplatsplaceringar importerade från PowerPoint. */
   sittplatser?: import('./sittplatser.js').Sittplatsering[];
   skolar: Skolar[];

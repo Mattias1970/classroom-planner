@@ -25,3 +25,17 @@ export async function lasPdfItems(fil: File): Promise<PdfTextItem[]> {
   }
   return ut;
 }
+
+/** Del 153 · Alla sidors text-items med höjd och sidnummer (Magma-testens uppgifter). */
+export async function lasPdfAllaSidor(fil: File): Promise<import('@planner/kernel').MagmaPdfItem[]> {
+  const data = await fil.arrayBuffer();
+  const doc = await pdfjs.getDocument({ data }).promise;
+  const ut: import('@planner/kernel').MagmaPdfItem[] = [];
+  for (let p = 1; p <= doc.numPages; p++) {
+    const innehall = await (await doc.getPage(p)).getTextContent();
+    for (const item of innehall.items) {
+      if ('str' in item && item.str.trim() !== '') ut.push({ text: item.str, x: item.transform[4], y: item.transform[5], h: item.height, sida: p });
+    }
+  }
+  return ut;
+}
