@@ -47,6 +47,7 @@ import { exportJson, importJson, lasInstallning, lasStruktur, sparaInstallning, 
 import { RapportdesignVy, MallRendering, Trendsteg } from './rapportdesign.js';
 import { MagmaImport } from './MagmaImport.js';
 import { DigiExamImport } from './DigiExamImport.js';
+import { DigiExamLarmPanel } from './ProvLarm.js';
 import { ProvlappPanel } from './Provlapp.js';
 import { Skal, Kort, type Filter, type V3Vy } from './v3/Skal.js';
 import { Oversikt } from './v3/Oversikt.js';
@@ -5466,6 +5467,8 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn }: {
   return (
     <div className="card superteach">
       <h2>📊 SuperTeach — resultat <small className="muted" style={{ fontWeight: 400 }}>· {omf.etikett}</small></h2>
+      {/* Del 152: provlarm — alla ska vara godkända på DigiExam-proven */}
+      <DigiExamLarmPanel s={s} klassId={klass.id} {...(amne !== undefined ? { amneId: amne.id } : {})} tyst />
       <div className="rad" style={{ flexWrap: 'wrap', gap: 8 }}>
         <label>Klass:{' '}
           <select aria-label="SuperTeach klass" value={klass.id} onChange={(e) => { setKlassId(e.target.value); setAmneId(''); }}>

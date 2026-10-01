@@ -9,15 +9,22 @@
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
-  arFilImporterad, digiexamAnalys, digiexamDatumUrFilnamn, digiexamFrageStatistik, digiexamProvnamnUrFilnamn, digiexamSvar, importeraResultat,
-  laggTillElev, matchaElev, nyttId, registreraFil, resultatProcent, tolkaDigiExamRapport, uppdateraElev,
+  arFilImporterad, digiexamAnalys, digiexamDatumUrFilnamn, digiexamFrageStatistik, digiexamProvInfo, digiexamSvar, eProvGrans, godkantGransFor, importeraResultat,
+  laggTillElev, matchaElev, nyttId, omprovNamn, registreraFil, resultatProcent, tolkaDigiExamRapport, uppdateraElev, type DigiExamProvInfo,
   type Amne, type DigiExamElevRad, type DigiExamRapport, type Klass, type Resultat, type Struktur,
 } from '@planner/kernel';
 import { lasStruktur } from './store.js';
 import { UppgiftsStaplar } from './MagmaImport.js';
+import { DigiExamLarmPanel } from './ProvLarm.js';
 
 interface DigiExamFil {
   filnamn: string;
+  /** Del 152: provets identitet ur filnamnet — filer med samma nyckel är samma prov. */
+  info: DigiExamProvInfo;
+  /** Ordinarie eller omprov (förvalt ur filnamnet, läraren kan ändra). */
+  roll: 'ordinarie' | 'omprov';
+  /** Gräns för godkänt i poäng — förifylld för E-prov (mer än hälften), annars måste läraren ange den. */
+  grans: string;
   prov: string;
   datum: string;
   /** Maxpoäng för provet — härledd ur filen, ändras av läraren när provet har fler poäng än någon fick. */
@@ -54,29 +61,51 @@ export function DigiExamImport({ s, klass, amne, kor }: {
     if (lista === null) return;
     const ut: DigiExamFil[] = [];
     for (const fil of Array.from(lista)) {
-      const prov = digiexamProvnamnUrFilnamn(fil.name);
+      const info = digiexamProvInfo(fil.name);
+      const roll = info.omprov ? 'omprov' as const : 'ordinarie' as const;
+      const prov = roll === 'omprov' ? omprovNamn(info.namn) : info.namn;
       const datum = digiexamDatumUrFilnamn(fil.name) ?? idag;
       try {
         const wb = XLSX.read(await fil.arrayBuffer(), { type: 'array' });
         const blad = wb.SheetNames.find((n) => /grades|resultat|betyg/i.test(n)) ?? wb.SheetNames[0];
         const matris = XLSX.utils.sheet_to_json<Array<string | number | null>>(wb.Sheets[blad], { header: 1, raw: true, defval: null });
         const rapport = tolkaDigiExamRapport(matris);
-        ut.push({ filnamn: fil.name, prov, datum, maxPoang: String(rapport.maxPoang), rapport, fel: null, redanInne: amne !== undefined && arFilImporterad(s, amne.id, fil.name) });
+        const grans = info.typ === 'E' ? String(eProvGrans(rapport.maxPoang)) : '';
+        ut.push({ filnamn: fil.name, info, roll, grans, prov, datum, maxPoang: String(rapport.maxPoang), rapport, fel: null, redanInne: amne !== undefined && arFilImporterad(s, amne.id, fil.name) });
       } catch (e) {
-        ut.push({ filnamn: fil.name, prov, datum, maxPoang: '', rapport: null, fel: e instanceof Error ? e.message : 'kunde inte läsas', redanInne: false });
+        ut.push({ filnamn: fil.name, info, roll, grans: '', prov, datum, maxPoang: '', rapport: null, fel: e instanceof Error ? e.message : 'kunde inte läsas', redanInne: false });
       }
     }
+    // Ordinarie filer av samma prov: den största först, så att dubbletter i mindre filer blir omprov
+    ut.sort((a, b) => a.info.nyckel.localeCompare(b.info.nyckel) || (a.roll === b.roll ? 0 : a.roll === 'ordinarie' ? -1 : 1) || (b.rapport?.rader.length ?? 0) - (a.rapport?.rader.length ?? 0));
     setFiler(ut);
   };
 
   const andra = (i: number, patch: Partial<DigiExamFil>) => setFiler(filer.map((f, j) => (j === i ? { ...f, ...patch } : f)));
+  const sattRoll = (i: number, roll: DigiExamFil['roll']) => { const f = filer[i]; andra(i, { roll, prov: roll === 'omprov' ? omprovNamn(f.info.namn) : f.info.namn }); };
+  const gransFor = (f: DigiExamFil): number | null => { const n = Number(f.grans.replace(',', '.')); return f.grans.trim() !== '' && Number.isFinite(n) && n > 0 ? n : null; };
+  /**
+   * Elever som redan finns i en tidigare (större) ordinarie fil av samma prov — deras rad i
+   * den här filen sparas som omprov i stället för att skriva över det ordinarie resultatet.
+   */
+  const dubbletter = (i: number): Set<string> => {
+    const f = filer[i];
+    if (f.roll !== 'ordinarie' || f.rapport === null) return new Set();
+    const nyckel = (r: DigiExamElevRad) => (r.epost !== '' ? r.epost : r.namn.toLowerCase());
+    const tidigare = new Set(filer.slice(0, i).filter((g) => g.roll === 'ordinarie' && g.info.nyckel === f.info.nyckel && g.rapport !== null)
+      .flatMap((g) => g.rapport!.rader.filter((r) => !r.nollrad).map(nyckel)));
+    return new Set(f.rapport.rader.filter((r) => !r.nollrad && tidigare.has(nyckel(r))).map(nyckel));
+  };
+  const arDubblett = (i: number, r: DigiExamElevRad) => dubbletter(i).has(r.epost !== '' ? r.epost : r.namn.toLowerCase());
+  const ordinarieDatum = (f: DigiExamFil) => filer.filter((g) => g.roll === 'ordinarie' && g.info.nyckel === f.info.nyckel).map((g) => g.datum).sort()[0];
   const maxFor = (f: DigiExamFil) => { const n = Number(f.maxPoang.replace(',', '.')); return Number.isFinite(n) && n > 0 ? n : (f.rapport?.maxPoang ?? 0); };
   const matchning = (f: DigiExamFil) => {
     const deltagare = f.rapport?.rader.filter((r) => medNollrader || !r.nollrad) ?? [];
     const omatchade = deltagare.filter((r) => elevFor(s, klass.id, r) === null).map((r) => r.namn);
     return { deltagare, omatchade, matchade: deltagare.length - omatchade.length };
   };
-  const importerbara = filer.filter((f) => f.rapport !== null && f.prov.trim() !== '' && maxFor(f) > 0 && (importeraOm || !f.redanInne) && (matchning(f).matchade > 0 || (skapaElever && matchning(f).omatchade.length > 0)));
+  const importerbara = filer.filter((f) => f.rapport !== null && f.prov.trim() !== '' && maxFor(f) > 0 && gransFor(f) !== null && (importeraOm || !f.redanInne) && (matchning(f).matchade > 0 || (skapaElever && matchning(f).omatchade.length > 0)));
+  const utanGrans = filer.filter((f) => f.rapport !== null && gransFor(f) === null);
 
   const importera = () => {
     if (amne === undefined) return;
@@ -94,10 +123,23 @@ export function DigiExamImport({ s, klass, amne, kor }: {
             st = uppdateraElev(st, elev.id, { epost: r.epost }); eposter += 1;
           }
         }
-        const u = importeraResultat(st, {
+        const i = filer.indexOf(f);
+        const grans = gransFor(f)!;
+        const rad = (r: DigiExamElevRad) => ({ namn: r.namn, epost: r.epost, poang: r.poang, maxPoang: maxFor(f), svar: digiexamSvar(f.rapport!, r) });
+        const vanliga = deltagare.filter((r) => !arDubblett(i, r));
+        const somOmprov = deltagare.filter((r) => arDubblett(i, r));
+        let u = importeraResultat(st, {
           klassId: klass.id, amneId: amne.id, kalla: 'digiexam', prov: f.prov.trim(), datum: f.datum,
-          rader: deltagare.map((r) => ({ namn: r.namn, epost: r.epost, poang: r.poang, maxPoang: maxFor(f), svar: digiexamSvar(f.rapport!, r) })),
+          godkantGrans: grans, provNyckel: f.info.nyckel, ...(f.roll === 'omprov' ? { omprov: true } : {}),
+          rader: vanliga.map(rad),
         });
+        if (somOmprov.length > 0) {
+          const v = importeraResultat(u.s, {
+            klassId: klass.id, amneId: amne.id, kalla: 'digiexam', prov: omprovNamn(f.info.namn), datum: f.datum,
+            godkantGrans: grans, provNyckel: f.info.nyckel, omprov: true, rader: somOmprov.map(rad),
+          });
+          u = { s: v.s, traffar: u.traffar + v.traffar, omatchade: [...u.omatchade, ...v.omatchade] };
+        }
         st = registreraFil(u.s, { amneId: amne.id, filnamn: f.filnamn, importerad: new Date().toISOString(), kalla: 'digiexam', prov: f.prov.trim(), datum: f.datum, traffar: u.traffar });
         sparade += u.traffar;
       }
@@ -131,7 +173,15 @@ export function DigiExamImport({ s, klass, amne, kor }: {
               {f.fel !== null ? <span className="st-krav ej">{f.fel}</span> : (<>
                 <label>Prov:{' '}<input aria-label={`Provnamn för ${f.filnamn}`} value={f.prov} onChange={(e) => andra(i, { prov: e.target.value })} style={{ width: 200 }} /></label>
                 <label>Provdatum:{' '}<input aria-label={`Provdatum för ${f.filnamn}`} type="date" value={f.datum} onChange={(e) => andra(i, { datum: e.target.value })} /></label>
-                <label>Max:{' '}<input aria-label={`Maxpoäng för ${f.filnamn}`} value={f.maxPoang} onChange={(e) => andra(i, { maxPoang: e.target.value })} style={{ width: 50 }} /></label>
+                <label>Max:{' '}<input aria-label={`Maxpoäng för ${f.filnamn}`} value={f.maxPoang} onChange={(e) => { const n = Number(e.target.value.replace(',', '.')); andra(i, { maxPoang: e.target.value, ...(f.info.typ === 'E' && Number.isFinite(n) && n > 0 ? { grans: String(eProvGrans(n)) } : {}) }); }} style={{ width: 50 }} /></label>
+                <label>Godkänt från:{' '}<input aria-label={`Gräns för godkänt för ${f.filnamn}`} value={f.grans} placeholder="poäng" onChange={(e) => andra(i, { grans: e.target.value })} style={{ width: 50 }} className={gransFor(f) === null ? 'fel' : ''} /> p</label>
+                <label>Som:{' '}<select aria-label={`Roll för ${f.filnamn}`} value={f.roll} onChange={(e) => sattRoll(i, e.target.value as DigiExamFil['roll'])}>
+                  <option value="ordinarie">ordinarie prov</option><option value="omprov">omprov</option></select></label>
+                <span className="st-krav ok" title={`Prov-id: ${f.info.nyckel}`}>{filer.filter((g) => g.info.nyckel === f.info.nyckel).length > 1 ? `samma prov som ${filer.filter((g) => g.info.nyckel === f.info.nyckel && g !== f).length} fil(er) till — redovisas ihop` : f.info.namn}</span>
+                {gransFor(f) === null && <span className="status warn small">⚠ Gränsen för godkänt går inte att tolka ur provnamnet ({f.info.typ === null ? 'ingen provtyp E/CA/ECA i namnet' : `${f.info.typ}-prov`}) — ange hur många poäng som krävs.</span>}
+                {f.info.typ === 'E' && gransFor(f) !== null && <span className="small muted">E-prov: mer än hälften av {maxFor(f)} p = {eProvGrans(maxFor(f))} p</span>}
+                {dubbletter(i).size > 0 && <span className="status warn small">⚠ {dubbletter(i).size} elev(er) finns redan i en större fil av samma prov — deras resultat här sparas som <b>omprov</b>.</span>}
+                {f.roll === 'omprov' && ordinarieDatum(f) !== undefined && f.datum <= ordinarieDatum(f)! && <span className="status warn small">⚠ Omprovet ska ha ett senare datum än provet ({ordinarieDatum(f)}).</span>}
                 <span className="small muted">{f.rapport!.fragor.length} frågor · {m.deltagare.length} elever · {m.matchade} matchade{m.omatchade.length > 0 ? ` · ⚠ omatchade: ${m.omatchade.join(', ')}` : ''}{nollrader > 0 && !medNollrader ? ` · ${nollrader} med 0 poäng hoppas över` : ''}</span>
                 {f.rapport!.avvikandeSumma && <span className="status warn small">⚠ Final Grade skiljer sig från summan av frågepoängen för någon elev — filens totalpoäng används.</span>}
                 {f.redanInne && <span className="muted small">redan importerad</span>}
@@ -140,7 +190,7 @@ export function DigiExamImport({ s, klass, amne, kor }: {
             </div>
             {f.rapport !== null && (
               <table className="tbl small st-magma-tabell">
-                <thead><tr><th>Elev</th>{f.rapport.fragor.map((q) => <th key={q.nr} title={`${q.rubrik} · max ${q.max}`}>{q.nr}</th>)}<th>Poäng</th><th>%</th></tr></thead>
+                <thead><tr><th>Elev</th>{f.rapport.fragor.map((q) => <th key={q.nr} title={`${q.rubrik} · max ${q.max}`}>{q.nr}</th>)}<th>Poäng</th><th>%</th><th>Godkänt</th></tr></thead>
                 <tbody>
                   {f.rapport.rader.map((r) => {
                     const elev = elevFor(s, klass.id, r);
@@ -148,19 +198,20 @@ export function DigiExamImport({ s, klass, amne, kor }: {
                     const procent = maxFor(f) > 0 ? Math.round((r.poang / maxFor(f)) * 100) : null;
                     return (
                       <tr key={r.epost !== '' ? r.epost : r.namn} className={hoppas ? 'muted' : elev === null ? 'st-magma-omatchad' : ''}>
-                        <td title={elev === null ? 'ingen elev i klassen matchar e-posten eller namnet' : `${elev.namn}${r.epost !== '' ? ` · ${r.epost}` : ''}`}>{r.namn}{elev === null && !hoppas ? ' ⚠' : ''}</td>
+                        <td title={elev === null ? 'ingen elev i klassen matchar e-posten eller namnet' : `${elev.namn}${r.epost !== '' ? ` · ${r.epost}` : ''}`}>{r.namn}{elev === null && !hoppas ? ' ⚠' : ''}{arDubblett(i, r) ? <span className="st-krav ej" style={{ marginLeft: 4 }}>omprov</span> : null}</td>
                         {hoppas
                           ? <td colSpan={f.rapport!.fragor.length} className="muted small">0 poäng — hoppas över (ej genomfört?)</td>
                           : f.rapport!.fragor.map((q, j) => <td key={q.nr}><Poang p={r.fragePoang[j]} max={q.max} /></td>)}
                         <td>{String(r.poang).replace('.', ',')}/{maxFor(f)}</td>
                         <td>{hoppas || procent === null ? '—' : `${procent} %`}</td>
+                        <td>{hoppas ? '—' : gransFor(f) === null ? <span className="muted">?</span> : r.poang >= gransFor(f)! ? <span className="st-krav ok">✓</span> : <span className="st-krav ej">✗ ej godkänd</span>}</td>
                       </tr>
                     );
                   })}
                   <tr className="st-magma-stat">
                     <td><b>Medel per fråga</b></td>
                     {stat.map((q) => <td key={q.nr} title={`${q.full} full poäng · ${q.del} delpoäng · ${q.noll} noll`} className={q.medel !== null && q.medel < 50 ? 'st-magma-svag' : ''}>{q.medel !== null ? `${q.medel}` : '–'}</td>)}
-                    <td colSpan={2} className="small muted">% av frågans max · under 50 % markeras</td>
+                    <td colSpan={3} className="small muted">% av frågans max · under 50 % markeras</td>
                   </tr>
                 </tbody>
               </table>
@@ -170,10 +221,12 @@ export function DigiExamImport({ s, klass, amne, kor }: {
       })}
       {filer.length > 0 && (
         <div className="rad"><span className="spacer" />
-          <button className="btn" disabled={amne === undefined || importerbara.length === 0} title={amne === undefined ? 'Välj ämne först' : ''} onClick={importera}>💾 Importera {importerbara.length} DigiExam-prov</button>
+          {utanGrans.length > 0 && <span className="status warn small">⚠ {utanGrans.length} fil(er) saknar gräns för godkänt och importeras inte förrän den är ifylld.</span>}
+          <button className="btn" disabled={amne === undefined || importerbara.length === 0} title={amne === undefined ? 'Välj ämne först' : ''} onClick={importera}>💾 Importera {importerbara.length} DigiExam-fil{importerbara.length === 1 ? '' : 'er'}</button>
         </div>
       )}
 
+      <DigiExamLarmPanel s={s} klassId={klass.id} amneId={amne?.id} />
       <DigiExamAnalysVy s={s} klass={klass} amne={amne} />
       <DigiExamSparade s={s} klass={klass} amne={amne} />
     </div>
@@ -244,10 +297,10 @@ function DigiExamSparade({ s, klass, amne }: { s: Struktur; klass: Klass; amne: 
         <span className="small muted">{rs.length} elever · medel {medel ?? '—'} %</span>
       </div>
       <table className="tbl small st-magma-tabell">
-        <thead><tr><th>Elev</th>{fragor.map((q) => <th key={q} title={q}>{q.replace(/^Fråga\s*/i, '')}</th>)}<th>Poäng</th><th>%</th></tr></thead>
+        <thead><tr><th>Elev</th>{fragor.map((q) => <th key={q} title={q}>{q.replace(/^Fråga\s*/i, '')}</th>)}<th>Poäng</th><th>%</th><th>Godkänt</th></tr></thead>
         <tbody>{elever.map((e) => {
           const r = perElev.get(e.id);
-          if (r === undefined) return <tr key={e.id} className="muted"><td>{e.namn}</td><td colSpan={fragor.length + 2} className="small">saknar resultat</td></tr>;
+          if (r === undefined) return <tr key={e.id} className="st-de-saknas"><td>{e.namn}</td><td colSpan={fragor.length + 2} className="small">saknar resultat</td><td><span className="st-krav ej">✗ har inte skrivit</span></td></tr>;
           const svar = new Map((r.svar ?? []).map((x) => [x.fraga, x]));
           return (
             <tr key={e.id}>
@@ -255,6 +308,7 @@ function DigiExamSparade({ s, klass, amne }: { s: Struktur; klass: Klass; amne: 
               {fragor.map((q) => { const x = svar.get(q); return <td key={q}>{x === undefined || x.svar === '' ? <span className="muted">–</span> : <span className={x.ratt === true ? 'st-de-full' : Number(x.svar.replace(',', '.')) > 0 ? 'st-de-del' : 'st-de-noll'}>{x.svar}</span>}</td>; })}
               <td>{String(r.poang).replace('.', ',')}/{r.maxPoang}</td>
               <td>{resultatProcent(r) ?? '—'} %</td>
+              <td>{(() => { const g = godkantGransFor(r); return g === null ? <span className="muted" title="gräns saknas">?</span> : r.poang >= g ? <span className="st-krav ok">✓</span> : <span className="st-krav ej">✗ ej godkänd</span>; })()}</td>
             </tr>
           );
         })}</tbody>

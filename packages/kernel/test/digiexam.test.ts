@@ -123,3 +123,62 @@ describe('Del 150 · DigiExam-export', () => {
     expect(digiexamAnalys(s, 'k', 'ma').prov).toEqual([]);
   });
 });
+
+import { digiexamLarm, digiexamProvInfo, omprovNamn } from '../src/domain/digiexam.js';
+import { digiexamProvTyp, eProvGrans, godkantGransFor, klaratKrav } from '../src/domain/resultat.js';
+
+describe('Del 152 · samma prov, omprov, gräns och larm', () => {
+  it('samma prov oavsett klass, exporttid och ordföljd; omprov känns igen', () => {
+    const a = digiexamProvInfo('2026-09-30-2249-8a-e-prov-ekologi.xlsx');
+    const b = digiexamProvInfo('2026-09-30-2249-ekologi-eprov.xlsx');
+    const c = digiexamProvInfo('2026-09-30-2248-8b-ekologi-eprov.xlsx');
+    const o = digiexamProvInfo('2026-09-30-2248-8b-ekologi-omprov-e-prov.xlsx');
+    expect(a).toEqual({ nyckel: 'ekologi eprov', namn: 'Ekologi E-prov', omprov: false, typ: 'E' });
+    expect(b.nyckel).toBe('ekologi eprov'); expect(c.nyckel).toBe('ekologi eprov');
+    expect(o).toEqual({ nyckel: 'ekologi eprov', namn: 'Ekologi E-prov', omprov: true, typ: 'E' });
+    expect(digiexamProvInfo('Cellen CA-prov.xlsx')).toMatchObject({ nyckel: 'caprov cellen', namn: 'Cellen CA-prov', typ: 'CA' });
+    expect(digiexamProvInfo('kemi-slutprov.xlsx')).toMatchObject({ typ: null });
+    expect(omprovNamn('Ekologi E-prov')).toBe('Ekologi E-prov – omprov');
+  });
+
+  it('E-prov: mer än hälften av poängen — 14 → 8, 21 → 11; andra prov saknar gräns tills läraren anger den', () => {
+    expect(eProvGrans(14)).toBe(8); expect(eProvGrans(21)).toBe(11); expect(eProvGrans(20)).toBe(11);
+    expect(digiexamProvTyp('Ekologi E-prov')).toBe('E'); expect(digiexamProvTyp('Ekologi ECA-prov')).toBe('ECA');
+    expect(godkantGransFor({ kalla: 'digiexam', prov: 'Ekologi E-prov', maxPoang: 14 })).toBe(8);
+    expect(godkantGransFor({ kalla: 'digiexam', prov: 'Ekologi ECA-prov', maxPoang: 30 })).toBeNull();
+    expect(godkantGransFor({ kalla: 'digiexam', prov: 'Ekologi ECA-prov', maxPoang: 30, godkantGrans: 12 })).toBe(12);
+    expect(klaratKrav({ kalla: 'digiexam', prov: 'Ekologi E-prov', poang: 8, maxPoang: 14 })).toBe(true);
+    expect(klaratKrav({ kalla: 'digiexam', prov: 'Ekologi E-prov', poang: 7, maxPoang: 14 })).toBe(false);
+    expect(klaratKrav({ kalla: 'digiexam', prov: 'Kemi', poang: 7, maxPoang: 14 })).toBeNull();
+  });
+
+  it('larm: ej godkända och ej skrivit; omprov räknas ihop med provet och kan göra eleven godkänd', () => {
+    let s = bygg();   // Anna, Omar, Karl
+    s = laggTillElev(s, { id: 'e4', klassId: 'k', namn: 'Pia Provlund', grupp: 'B' });
+    const imp = (prov: string, datum: string, rader: Array<[string, number]>, omprov = false) => {
+      s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'digiexam', prov, datum, provNyckel: 'ekologi eprov', ...(omprov ? { omprov: true } : {}), rader: rader.map(([namn, poang]) => ({ namn, poang, maxPoang: 14 })) }).s;
+    };
+    imp('Ekologi E-prov', '2026-09-25', [['Anna Berg', 12], ['Omar Ali', 6], ['Karl Testsson', 7]]);
+    let [l] = digiexamLarm(s, 'k', 'bi');
+    expect(l).toMatchObject({ prov: 'Ekologi E-prov', grans: 8, maxPoang: 14, godkanda: 1, antalElever: 4, larm: true });
+    expect(l.ejGodkanda.map((e) => [e.namn, e.poang])).toEqual([['Karl Testsson', 7], ['Omar Ali', 6]]);
+    expect(l.ejSkrivit.map((e) => e.namn)).toEqual(['Pia Provlund']);
+    // Omprovet: Omar 10 (godkänd), Karl 7 igen (fortfarande inte), Pia skriver omprovet (9)
+    imp(omprovNamn('Ekologi E-prov'), '2026-10-05', [['Omar Ali', 10], ['Karl Testsson', 7], ['Pia Provlund', 9]], true);
+    [l] = digiexamLarm(s, 'k', 'bi');
+    expect(digiexamLarm(s, 'k', 'bi')).toHaveLength(1);              // ordinarie + omprov = ett prov
+    expect(l).toMatchObject({ godkanda: 3, larm: true });
+    expect(l.ejGodkanda.map((e) => e.namn)).toEqual(['Karl Testsson']);
+    expect(l.ejSkrivit).toEqual([]);
+    expect(l.godkandaPaOmprov.map((e) => [e.namn, e.forePoang, e.poang])).toEqual([['Omar Ali', 6, 10]]);
+    imp(omprovNamn('Ekologi E-prov'), '2026-10-05', [['Omar Ali', 10], ['Karl Testsson', 9], ['Pia Provlund', 9]], true);
+    expect(digiexamLarm(s, 'k', 'bi')[0]).toMatchObject({ godkanda: 4, larm: false });
+  });
+
+  it('larmar när gränsen inte går att tolka (inte E-prov och ingen gräns angiven)', () => {
+    const s = importeraResultat(bygg(), { klassId: 'k', amneId: 'bi', kalla: 'digiexam', prov: 'Ekologi ECA-prov', datum: '2026-09-25', rader: [{ namn: 'Anna Berg', poang: 20, maxPoang: 30 }, { namn: 'Omar Ali', poang: 5, maxPoang: 30 }, { namn: 'Karl Testsson', poang: 9, maxPoang: 30 }] }).s;
+    const [l] = digiexamLarm(s, 'k', 'bi');
+    expect(l).toMatchObject({ grans: null, larm: true, godkanda: 0 });
+    expect(l.ejGodkanda).toHaveLength(3);
+  });
+});

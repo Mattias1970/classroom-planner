@@ -53,6 +53,12 @@ export interface Resultat {
   autoTyp?: boolean;
   poang: number;
   maxPoang: number;
+  /** Del 152: poänggräns för godkänt (DigiExam). Saknas → E-prov härleds ur namnet (mer än hälften av poängen). */
+  godkantGrans?: number;
+  /** Del 152: resultatet är ett omprov (redovisas som eget, senare tillfälle). */
+  omprov?: boolean;
+  /** Del 152: provets identitet oberoende av klass och export ('ekologi eprov') — ordinarie och omprov delar den. */
+  provNyckel?: string;
 }
 
 /** En rad ur en resultatfil, före elevmatchning. */
@@ -80,6 +86,10 @@ export interface ImportUnderlag {
   amneId?: string;
   /** Typen valdes automatiskt av importen (inte av läraren). */
   autoTyp?: boolean;
+  /** Del 152 (DigiExam): gräns för godkänt, omprov och provnyckel sätts på varje resultat. */
+  godkantGrans?: number;
+  omprov?: boolean;
+  provNyckel?: string;
   rader: ImportRad[];
 }
 
@@ -141,8 +151,36 @@ export function resultatProcent(r: Pick<Resultat, 'poang' | 'maxPoang'>): number
   return Math.round((r.poang / r.maxPoang) * 100);
 }
 
+/**
+ * Del 152 · Poänggräns för godkänt på ett DigiExam-prov: lärarens/importens gräns, annars
+ * för E-prov mer än hälften av poängen (14 → 8, 21 → 11); null när gränsen inte går att tolka.
+ */
+export function godkantGransFor(r: Pick<Resultat, 'kalla' | 'prov' | 'maxPoang' | 'godkantGrans'>): number | null {
+  if (r.kalla !== 'digiexam') return null;
+  if (r.godkantGrans !== undefined) return r.godkantGrans;
+  return digiexamProvTyp(r.prov) === 'E' ? eProvGrans(r.maxPoang) : null;
+}
+
+/** E-prov: mer än hälften av alla E-poäng. 14 → 8, 21 → 11. */
+export function eProvGrans(maxPoang: number): number {
+  return Math.floor(maxPoang / 2) + 1;
+}
+
+/** Provtyp ur namnet: E-prov, CA-prov, ECA-prov — null när namnet inte säger det. */
+export function digiexamProvTyp(namn: string): 'E' | 'CA' | 'ECA' | null {
+  const t = ` ${namn.toLowerCase().replace(/[-_]/g, ' ').replace(/\s+/g, ' ')} `;
+  if (/\seca\s?prov\s/.test(t)) return 'ECA';
+  if (/\sca\s?prov\s/.test(t)) return 'CA';
+  if (/\se\s?prov\s/.test(t)) return 'E';
+  return null;
+}
+
 /** true/false mot källans BAM-krav; null när källan saknar krav eller procent saknas. */
-export function klaratKrav(r: Pick<Resultat, 'poang' | 'maxPoang' | 'kalla'>): boolean | null {
+export function klaratKrav(r: Pick<Resultat, 'poang' | 'maxPoang' | 'kalla'> & Partial<Pick<Resultat, 'prov' | 'godkantGrans'>>): boolean | null {
+  if (r.kalla === 'digiexam') {
+    const g = godkantGransFor({ kalla: r.kalla, prov: r.prov ?? '', maxPoang: r.maxPoang, ...(r.godkantGrans !== undefined ? { godkantGrans: r.godkantGrans } : {}) });
+    return g === null ? null : r.poang >= g;
+  }
   const krav = kravFor(r.kalla);
   const pct = resultatProcent(r);
   if (krav === null || pct === null) return null;
@@ -211,6 +249,9 @@ export function importeraResultat(s: Struktur, u: ImportUnderlag): ImportUtfall 
       ...(u.autoTyp === true ? { autoTyp: true } : {}),
       ...(rad.svar !== undefined && rad.svar.length > 0 ? { svar: rad.svar } : {}),
       ...(u.amneId !== undefined ? { amneId: u.amneId } : {}),
+      ...(u.godkantGrans !== undefined ? { godkantGrans: u.godkantGrans } : {}),
+      ...(u.omprov === true ? { omprov: true } : {}),
+      ...(u.provNyckel !== undefined ? { provNyckel: u.provNyckel } : {}),
     });
   }
   const ersatta = new Set(nya.map((r) => `${r.elevId}|${r.kalla}|${r.prov}`));

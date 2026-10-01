@@ -13,7 +13,7 @@
  * Eleven kopplas i första hand via e-posten (Elev.epost), annars via namnet.
  * DigiExam har inget fast procentkrav — provet bedöms per förmåga av läraren.
  */
-import type { FragaSvar } from './resultat.js';
+import { digiexamProvTyp, godkantGransFor, type FragaSvar } from './resultat.js';
 
 export type DigiExamCell = string | number | boolean | null | undefined;
 
@@ -224,4 +224,111 @@ export function digiexamAnalys(s: { elever: MinimalElev[]; resultat?: MinimalRes
     return { elevId: e.id, namn: e.namn, procent, senaste: gjorda.length > 0 ? gjorda[gjorda.length - 1] : null };
   });
   return { prov, elever: serier };
+}
+
+// ── Del 152 · Samma prov, omprov, gräns för godkänt och larm ──────────────────
+
+export interface DigiExamProvInfo {
+  /** Provets identitet oberoende av klass, ordföljd och export: 'ekologi eprov'. */
+  nyckel: string;
+  /** Visningsnamn för det ordinarie provet: 'Ekologi E-prov'. */
+  namn: string;
+  /** Filen är ett omprov ('omprov', 'omtag' i namnet). */
+  omprov: boolean;
+  typ: 'E' | 'CA' | 'ECA' | null;
+}
+
+const TYP_ORD: Record<string, string> = { eprov: 'E-prov', caprov: 'CA-prov', ecaprov: 'ECA-prov' };
+
+/**
+ * Identifierar provet ur filnamnet eller provnamnet: '2026-09-30-2249-8a-e-prov-ekologi.xlsx',
+ * 'ekologi-eprov' och '8b-ekologi-omprov-e-prov' är alla provet 'ekologi eprov'
+ * (klassbeteckning, exporttid och ordföljd spelar ingen roll); det sista är ett omprov.
+ */
+export function digiexamProvInfo(filEllerProv: string): DigiExamProvInfo {
+  const bas = digiexamProvnamnUrFilnamn(filEllerProv).toLowerCase()
+    .replace(/\b(e|ca|eca)\s+prov\b/g, '$1prov');
+  const ord = bas.split(/\s+/).filter((w) => w !== '');
+  const omprov = ord.some((w) => /^(omprov|omtag|omtentamen)$/.test(w));
+  const karna = ord.filter((w) => !/^\d[a-zåäö]{1,2}$/.test(w) && !/^(omprov|omtag|omtentamen|prov)$/.test(w) && !/^\d{4}$/.test(w));
+  const nyckel = [...karna].sort().join(' ');
+  const typOrd = karna.find((w) => w in TYP_ORD);
+  const ovriga = karna.filter((w) => !(w in TYP_ORD)).map((w, i) => (i === 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w));
+  const namn = [...ovriga, ...(typOrd !== undefined ? [TYP_ORD[typOrd]] : [])].join(' ') || filEllerProv;
+  return { nyckel, namn, omprov, typ: digiexamProvTyp(namn) };
+}
+
+/** Provnamnet för ett omprov: 'Ekologi E-prov – omprov'. */
+export function omprovNamn(namn: string): string { return `${namn} – omprov`; }
+
+export interface DigiExamLarmElev { elevId: string; namn: string; poang: number | null; maxPoang: number | null; }
+
+export interface DigiExamLarm {
+  /** Ordinarie provets namn. */
+  prov: string;
+  provNyckel: string;
+  datum: string;
+  grans: number | null;
+  maxPoang: number | null;
+  /** Elever som inte nått gränsen på något försök (ordinarie eller omprov). */
+  ejGodkanda: DigiExamLarmElev[];
+  /** Elever i klassen utan resultat på provet (varken ordinarie eller omprov). */
+  ejSkrivit: DigiExamLarmElev[];
+  /** Elever som blev godkända först på omprovet. */
+  godkandaPaOmprov: Array<DigiExamLarmElev & { forePoang: number }>;
+  /** Antal godkända av klassens elever. */
+  godkanda: number;
+  antalElever: number;
+  /** true när någon inte är godkänd, inte har skrivit, eller gränsen saknas. */
+  larm: boolean;
+}
+
+interface LarmResultat { elevId: string; amneId?: string; kalla: string; prov: string; datum: string; poang: number; maxPoang: number; godkantGrans?: number; omprov?: boolean; provNyckel?: string; }
+
+/**
+ * Larm per DigiExam-prov i klassen (ämnet): alla ska vara godkända. Ett prov och
+ * dess omprov räknas ihop — en elev är godkänd om något försök når gränsen.
+ * Gränsen är mer än hälften av poängen på E-prov; saknas gräns larmas det också.
+ */
+export function digiexamLarm(
+  s: { elever: Array<{ id: string; klassId: string; namn: string }>; resultat?: LarmResultat[] }, klassId: string, amneId?: string,
+): DigiExamLarm[] {
+  const elever = s.elever.filter((e) => e.klassId === klassId).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
+  const ids = new Set(elever.map((e) => e.id));
+  const rs = (s.resultat ?? []).filter((r) => r.kalla === 'digiexam' && ids.has(r.elevId) && (amneId === undefined || amneId === '' || r.amneId === amneId));
+  const grupper = new Map<string, LarmResultat[]>();
+  for (const r of rs) {
+    const k = r.provNyckel ?? digiexamProvInfo(r.prov).nyckel;
+    grupper.set(k, [...(grupper.get(k) ?? []), r]);
+  }
+  const ut: DigiExamLarm[] = [];
+  for (const [nyckel, lista] of grupper) {
+    const ord = lista.filter((r) => r.omprov !== true && !/omprov|omtag/i.test(r.prov));
+    const bas = (ord.length > 0 ? ord : lista).slice().sort((a, b) => a.datum.localeCompare(b.datum))[0];
+    const grans = godkantGransFor({ kalla: 'digiexam', prov: bas.prov, maxPoang: bas.maxPoang, ...(bas.godkantGrans !== undefined ? { godkantGrans: bas.godkantGrans } : {}) });
+    const ejGodkanda: DigiExamLarmElev[] = []; const ejSkrivit: DigiExamLarmElev[] = [];
+    const godkandaPaOmprov: DigiExamLarm['godkandaPaOmprov'] = [];
+    let godkanda = 0;
+    for (const e of elever) {
+      const egna = lista.filter((r) => r.elevId === e.id).sort((a, b) => a.datum.localeCompare(b.datum));
+      if (egna.length === 0) { ejSkrivit.push({ elevId: e.id, namn: e.namn, poang: null, maxPoang: null }); continue; }
+      const gr = (r: LarmResultat) => godkantGransFor({ kalla: 'digiexam', prov: r.prov, maxPoang: r.maxPoang, ...(r.godkantGrans !== undefined ? { godkantGrans: r.godkantGrans } : {}) }) ?? grans;
+      const klarade = egna.filter((r) => { const g = gr(r); return g !== null && r.poang >= g; });
+      const basta = egna.reduce((a, b) => (b.poang / Math.max(1, b.maxPoang) > a.poang / Math.max(1, a.maxPoang) ? b : a));
+      if (klarade.length > 0) {
+        godkanda += 1;
+        const forstaOrd = egna.find((r) => r.omprov !== true && !/omprov|omtag/i.test(r.prov));
+        const viaOmprov = klarade.every((r) => r.omprov === true || /omprov|omtag/i.test(r.prov));
+        if (viaOmprov && forstaOrd !== undefined) godkandaPaOmprov.push({ elevId: e.id, namn: e.namn, poang: klarade[0].poang, maxPoang: klarade[0].maxPoang, forePoang: forstaOrd.poang });
+      } else {
+        ejGodkanda.push({ elevId: e.id, namn: e.namn, poang: basta.poang, maxPoang: basta.maxPoang });
+      }
+    }
+    ut.push({
+      prov: bas.prov.replace(/\s*–\s*omprov$/i, ''), provNyckel: nyckel, datum: bas.datum, grans, maxPoang: bas.maxPoang,
+      ejGodkanda, ejSkrivit, godkandaPaOmprov, godkanda, antalElever: elever.length,
+      larm: grans === null || ejGodkanda.length > 0 || ejSkrivit.length > 0,
+    });
+  }
+  return ut.sort((a, b) => a.datum.localeCompare(b.datum) || a.prov.localeCompare(b.prov, 'sv'));
 }

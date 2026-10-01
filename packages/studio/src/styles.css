@@ -1144,3 +1144,13 @@ input.fel { border-color: #B71C1C; }
 .provlapp-vy ul { margin: 2px 0 6px; }
 .provlapp-avsnitt { margin: 4px 0 8px; }
 .provlapp-ovningar td:first-child { white-space: nowrap; }
+
+/* ── Del 152 · Provlarm ── */
+.provlarm { border: 2px solid #C62828; background: #FFEBEE; border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
+.provlarm-rubrik { font-weight: 800; color: #B71C1C; margin-bottom: 4px; }
+.provlarm-prov { border-top: 1px solid #f3c2c2; padding: 4px 0; }
+.provlarm-prov:first-of-type { border-top: 0; }
+.provlarm-elev { display: inline-block; background: #fff; border: 1px solid #e57373; border-radius: 10px; padding: 0 7px; margin: 2px 4px 2px 0; }
+.provlarm-elev.saknas { border-style: dashed; color: #7f0000; }
+.provlarm-ok { color: #1B5E20; background: #E8F5E9; border-radius: 6px; padding: 4px 8px; margin: 6px 0; }
+.st-de-saknas td { background: #FFEBEE; }

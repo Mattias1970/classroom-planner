@@ -49,9 +49,10 @@ describe('Del 150 · DigiExamImport', () => {
     Object.defineProperty(input, 'files', { value: [new File(['x'], FILNAMN)] });
     await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await sov(); await sov(); });
     expect(div.textContent).toContain('4 frågor · 2 elever · 2 matchade · 1 med 0 poäng hoppas över');
-    expect((div.querySelector(`input[aria-label="Provnamn för ${FILNAMN}"]`) as HTMLInputElement).value).toBe('8b ekologi eprov');
+    expect((div.querySelector(`input[aria-label="Provnamn för ${FILNAMN}"]`) as HTMLInputElement).value).toBe('Ekologi E-prov');
     expect((div.querySelector(`input[aria-label="Provdatum för ${FILNAMN}"]`) as HTMLInputElement).value).toBe('2026-09-30');
     expect((div.querySelector(`input[aria-label="Maxpoäng för ${FILNAMN}"]`) as HTMLInputElement).value).toBe('4');
+    expect((div.querySelector(`input[aria-label="Gräns för godkänt för ${FILNAMN}"]`) as HTMLInputElement).value).toBe('3');   // E-prov: mer än hälften av 4
     expect(div.textContent).toContain('0 poäng — hoppas över');
     expect(div.querySelectorAll('.st-de-del')).toHaveLength(1);   // Annas fråga 3 = 0,5
     expect(div.querySelectorAll('.st-de-noll')).toHaveLength(2);  // Omars fråga 2 och 4
@@ -61,13 +62,13 @@ describe('Del 150 · DigiExamImport', () => {
     const max = div.querySelector(`input[aria-label="Maxpoäng för ${FILNAMN}"]`) as HTMLInputElement;
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
     await act(async () => { setter.call(max, '5'); max.dispatchEvent(new Event('input', { bubbles: true })); });
-    const knapp = [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Importera 1 DigiExam-prov'))!;
+    const knapp = [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Importera 1 DigiExam-fil'))!;
     await act(async () => { knapp.click(); });
 
     const res = (s.resultat ?? []).filter((r) => r.kalla === 'digiexam');
     expect(res).toHaveLength(2);
     const omar = res.find((r) => r.elevId === 'e2')!;
-    expect(omar).toMatchObject({ prov: '8b ekologi eprov', datum: '2026-09-30', amneId: 'bi', poang: 2, maxPoang: 5 });
+    expect(omar).toMatchObject({ prov: 'Ekologi E-prov', datum: '2026-09-30', amneId: 'bi', poang: 2, maxPoang: 5, godkantGrans: 3, provNyckel: 'ekologi eprov' });
     expect(omar.svar?.map((x) => [x.svar, x.ratt])).toEqual([['1', true], ['0', false], ['1', true], ['0', false]]);
     const anna = res.find((r) => r.elevId === 'e1')!;
     expect(anna.svar?.[2]).toEqual({ fraga: 'Fråga 3', svar: '0,5', ratt: false });
@@ -95,9 +96,84 @@ describe('Del 150 · DigiExamImport', () => {
     Object.defineProperty(input, 'files', { value: [new File(['x'], FILNAMN)] });
     await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await sov(); await sov(); });
     expect(div.textContent).toContain('2 nya elever skapas');
-    const knapp = [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Importera 1 DigiExam-prov'))!;
+    const knapp = [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Importera 1 DigiExam-fil'))!;
     await act(async () => { knapp.click(); });
     expect(s.elever.map((e) => [e.namn, e.epost])).toEqual([['Anna Berg', 'anna.berg@elevmail.test'], ['Omar Ali', 'omar.ali@elevmail.test']]);
     expect((s.resultat ?? []).filter((r) => r.kalla === 'digiexam')).toHaveLength(2);
+  });
+});
+
+describe('Del 152 · samma prov, omprov, gräns och provlarm', () => {
+  it('två ordinarie filer redovisas ihop, dubblett i den mindre blir omprov, omprovsfil sparas som omprov — och larmet visar vem som inte är godkänd', async () => {
+    let s = bygg();
+    s = laggTillElev(s, { id: 'e3', klassId: 'k', namn: 'Pia Provlund', grupp: 'A' });
+    s = laggTillElev(s, { id: 'e4', klassId: 'k', namn: 'Kalle Testsson', grupp: 'B' });
+    sparaStruktur(s);
+    const kor = (fn: () => Struktur) => { s = fn(); sparaStruktur(s); rendera(); };
+    const div = document.createElement('div'); document.body.appendChild(div);
+    const root = createRoot(div);
+    const rendera = () => act(() => root.render(<DigiExamImport s={s} klass={s.klasser[0]} amne={s.amnen[0]} kor={kor} />));
+    rendera();
+    // Mocken ger samma blad för alla filer: Anna 3,5 · Omar 2 · Pia 0 (nollrad). Max 4 → gräns 3.
+    const input = div.querySelector('input[aria-label="DigiExam-filer"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [
+      new File(['x'], '2026-09-30-2249-ekologi-eprov.xlsx'),
+      new File(['x'], '2026-09-30-2248-8b-ekologi-eprov.xlsx'),
+      new File(['x'], '2026-09-30-2248-8b-ekologi-omprov-e-prov.xlsx'),
+    ] });
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await sov(); await sov(); });
+    expect(div.textContent).toContain('samma prov som 2 fil(er) till — redovisas ihop');
+    expect(div.textContent).toContain('2 elev(er) finns redan i en större fil av samma prov');
+    expect((div.querySelector('select[aria-label="Roll för 2026-09-30-2248-8b-ekologi-omprov-e-prov.xlsx"]') as HTMLSelectElement).value).toBe('omprov');
+    expect((div.querySelector('input[aria-label="Provnamn för 2026-09-30-2248-8b-ekologi-omprov-e-prov.xlsx"]') as HTMLInputElement).value).toBe('Ekologi E-prov – omprov');
+    // Omprovet får ett senare datum
+    const omDatum = div.querySelector('input[aria-label="Provdatum för 2026-09-30-2248-8b-ekologi-omprov-e-prov.xlsx"]') as HTMLInputElement;
+    expect(div.textContent).toContain('Omprovet ska ha ett senare datum');
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => { setter.call(omDatum, '2026-10-07'); omDatum.dispatchEvent(new Event('input', { bubbles: true })); });
+    const knapp = [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Importera 3 DigiExam-filer'))!;
+    await act(async () => { knapp.click(); });
+
+    const res = (s.resultat ?? []).filter((r) => r.kalla === 'digiexam');
+    const ord = res.filter((r) => r.prov === 'Ekologi E-prov');
+    expect(ord.map((r) => r.elevId).sort()).toEqual(['e1', 'e2']);                  // ett resultat per elev på det ordinarie provet
+    expect(ord.every((r) => r.omprov !== true && r.provNyckel === 'ekologi eprov' && r.godkantGrans === 3)).toBe(true);
+    const om = res.filter((r) => r.prov === 'Ekologi E-prov – omprov');
+    expect(om.every((r) => r.omprov === true)).toBe(true);
+    expect(om.some((r) => r.datum === '2026-10-07')).toBe(true);
+
+    // Larmet: Omar 2/4 på alla försök → inte godkänd; Pia och Kalle har inte skrivit
+    const larm = div.querySelector('[aria-label="Provlarm"]')!;
+    expect(larm.textContent).toContain('Alla är inte godkända');
+    expect(larm.textContent).toContain('Ekologi E-prov');
+    expect(larm.textContent).toContain('godkänt från 3 av 4 p · 1 av 4 godkända');
+    expect(larm.textContent).toMatch(/Inte godkända \(1\):\s*Omar A\./);
+    expect(larm.textContent).toContain('Har inte skrivit (2):');
+    expect(larm.textContent).toContain('Kalle Testsson');
+    expect(div.textContent).toContain('✗ har inte skrivit');
+  });
+
+  it('prov utan tolkbar gräns importeras inte förrän läraren anger den', async () => {
+    let s = bygg();
+    sparaStruktur(s);
+    const kor = (fn: () => Struktur) => { s = fn(); sparaStruktur(s); rendera(); };
+    const div = document.createElement('div'); document.body.appendChild(div);
+    const root = createRoot(div);
+    const rendera = () => act(() => root.render(<DigiExamImport s={s} klass={s.klasser[0]} amne={s.amnen[0]} kor={kor} />));
+    rendera();
+    const input = div.querySelector('input[aria-label="DigiExam-filer"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File(['x'], 'ekologi-slutprov.xlsx')] });
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await sov(); await sov(); });
+    expect(div.textContent).toContain('Gränsen för godkänt går inte att tolka');
+    expect(div.textContent).toContain('1 fil(er) saknar gräns för godkänt');
+    const knapp = () => [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Importera'))!;
+    expect(knapp().textContent).toContain('Importera 0');
+    expect((knapp() as HTMLButtonElement).disabled).toBe(true);
+    const grans = div.querySelector('input[aria-label="Gräns för godkänt för ekologi-slutprov.xlsx"]') as HTMLInputElement;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => { setter.call(grans, '3'); grans.dispatchEvent(new Event('input', { bubbles: true })); });
+    expect((knapp() as HTMLButtonElement).disabled).toBe(false);
+    await act(async () => { knapp().click(); });
+    expect((s.resultat ?? []).every((r) => r.godkantGrans === 3)).toBe(true);
   });
 });

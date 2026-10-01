@@ -16,6 +16,7 @@ import {
 } from '@planner/kernel';
 import { Ikon, amnesIkon } from './ikoner.js';
 import { DataSaknas, Kort, Kpi, type Filter, type V3Vy } from './Skal.js';
+import { ProvLarmOversikt } from '../ProvLarm.js';
 
 export function Oversikt({ s, filter, setVy, struktur }: {
   s: Struktur; filter: Filter; setVy: (v: V3Vy) => void;
@@ -70,6 +71,8 @@ export function Oversikt({ s, filter, setVy, struktur }: {
 
   return (
     <div className="v3-sida-innehall">
+      {/* Del 152: provlarm överst — alla ska vara godkända */}
+      <ProvLarmOversikt s={s} klassIds={klasser.map((k) => k.id)} onOppna={() => setVy({ typ: 'resultat' })} />
       <div className="v3-kpi-rad">
         <Kpi ikon={Ikon.elever} rubrik="Närvaro" varde={narvaro === null ? '—' : `${narvaro} %`} under="registrerade quizsvar" ton="bla" onKlick={() => setVy({ typ: 'resultat' })} />
         <Kpi ikon={Ikon.bok} rubrik="Aktiva ämnen" varde={aktiva.length} under={`${amnen.length} ämnen totalt`} ton="gron" onKlick={() => setVy({ typ: 'planering' })} />
