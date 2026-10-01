@@ -33,7 +33,7 @@ import {
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
   elevrapport, elevrapportText, tillfalleEtiketter, normeradSpridning, klusterKurvor, normeraBand, taBortFil, rensaResultat,
   NORM_BAND, NORM_MAX, amnesKallor, lektionstester, elevLektionstest, tillfalleKortEtikett, KLUSTER_NAMN, TID_PASS, type Kluster,
-  begransaTillElever, elevUrval, klassensElever, type ElevUrvalVal, arSocrative, elevIKlassen, sattElevStatus,
+  begransaTillElever, elevUrval, klassensElever, type ElevUrvalVal, arSocrative, elevIKlassen, sattElevStatus, rattaNamnordning,
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
@@ -1161,7 +1161,12 @@ function Elevlista({ s, klassId, klassNamn, kor }: {
   return (
     <div className="elevlista">
       <h3>Elever <small className="muted">{elever.length} i klassen · Grupp A: {antal('A')} · Grupp B: {antal('B')}</small>{' '}
-        <button className="btn sec sm" aria-expanded={visaSlutade} disabled={slutade.length === 0} onClick={() => setVisaSlutade(!visaSlutade)}>👋 Elever som slutat ({slutade.length})</button></h3>
+        <button className="btn sec sm" aria-expanded={visaSlutade} disabled={slutade.length === 0} onClick={() => setVisaSlutade(!visaSlutade)}>👋 Elever som slutat ({slutade.length})</button>{' '}
+        {alla.some((e) => e.namn.includes(',')) && (
+          <button className="btn sec sm" title="Namn som står 'Efternamn, Förnamn' skrivs om till 'Förnamn Efternamn'"
+            onClick={() => { const r = rattaNamnordning(lasStruktur(), klassId); kor(() => r.s, `${r.rattade.length} namn rättade: ${r.rattade.map((x) => `${x.fore} → ${x.efter}`).join(' · ')}.`); }}>
+            ⇄ Rätta namnordning ({alla.filter((e) => e.namn.includes(',')).length})</button>
+        )}</h3>
       {visaSlutade && slutade.length > 0 && (
         <table className="tbl small st-slutade" aria-label={`Elever som slutat i ${klassNamn}`}>
           <tbody>{slutade.map((e, nr) => (

@@ -1282,7 +1282,7 @@ describe('Kalenderklick öppnar lektionsplaneringen', () => {
     expect(host.textContent).toContain('2 elever tillagda i Grupp B');
     const st = lasStruktur();
     expect(st.elever).toHaveLength(3);
-    expect(st.elever.map((e) => e.namn)).toContain('Testsson, Ted');
+    expect(st.elever.map((e) => e.namn)).toContain('Ted Testsson');   // 'Testsson, Ted' lagras som Förnamn Efternamn (Del 157)
   });
 
   it('veckovyns lektionsblock är klickbara och Läsår-dagar hoppar till veckovyn; gruppkoden sist i etiketten', async () => {
@@ -2099,7 +2099,7 @@ describe('👥 Socrative-roster', () => {
     act(() => { knapp(host, '📥 Importera till 8B').click(); });
     const elever = lasStruktur().elever;
     expect(elever).toHaveLength(3);
-    expect(elever.find((e) => e.namn === 'Berg, Anna')).toMatchObject({ grupp: 'A', socrativeId: 'ANNA', epost: 'anna@skola.se' });
+    expect(elever.find((e) => e.namn === 'Anna Berg')).toMatchObject({ grupp: 'A', socrativeId: 'ANNA', epost: 'anna@skola.se' });   // inlagd som 'Berg, Anna'
     expect(elever.find((e) => e.namn === 'Omar Ali')).toMatchObject({ grupp: 'A', socrativeId: 'OMAR' });
     expect(host.textContent).toContain('8B: 2 elever tillagda, 1 kompletterade.');
 

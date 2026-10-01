@@ -69,3 +69,45 @@ describe('Del 154 · Elevkortet', () => {
     expect(s.elever[0].slutDatum).toBeUndefined();
   });
 });
+
+describe('Del 157 · byt namn i elevkortet', () => {
+  it('✏️ Byt namn sparar nytt namn och visar det tidigare; krock ger fel', async () => {
+    let s = bygg();
+    s = { ...s, elever: [...s.elever, { id: 'e2', klassId: 'k', namn: 'Omar Ali', grupp: 'B' as const }] };
+    sparaStruktur(s);
+    const kor = (fn: () => Struktur) => { s = fn(); sparaStruktur(s); rendera(); };
+    const div = document.createElement('div'); document.body.appendChild(div);
+    const root = createRoot(div);
+    const rendera = () => act(() => root.render(<Elevkort s={s} elevId="e1" amneId="ma" kor={kor} onTillbaka={() => {}} />));
+    rendera();
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    const namnfalt = () => div.querySelector('input[aria-label="Elevens nya namn"]') as HTMLInputElement;
+    await act(async () => { (div.querySelector('button[aria-label="Byt namn"]') as HTMLButtonElement).click(); });
+    await act(async () => { setter.call(namnfalt(), 'Omar Ali'); namnfalt().dispatchEvent(new Event('input', { bubbles: true })); });
+    await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Spara'))!.click(); });
+    expect(div.querySelector('[role="alert"]')!.textContent).toContain('Det finns redan en elev som heter Omar Ali');
+    await act(async () => { setter.call(namnfalt(), 'Anna Berg-Lund'); namnfalt().dispatchEvent(new Event('input', { bubbles: true })); });
+    await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Spara'))!.click(); });
+    expect(s.elever.find((e) => e.id === 'e1')).toMatchObject({ namn: 'Anna Berg-Lund', tidigareNamn: ['Anna Berg'] });
+    expect(div.textContent).toContain('🪪 Anna Berg-Lund');
+    expect(div.textContent).toContain('Tidigare namn: Anna Berg');
+  });
+});
+
+describe('Del 157 · byt ordning på för- och efternamn', () => {
+  it('⇄ Byt ordning vänder George Loa till Loa George', async () => {
+    let s = bygg();
+    s = { ...s, elever: s.elever.map((e) => (e.id === 'e1' ? { ...e, namn: 'George Loa' } : e)) };
+    sparaStruktur(s);
+    const kor = (fn: () => Struktur) => { s = fn(); sparaStruktur(s); rendera(); };
+    const div = document.createElement('div'); document.body.appendChild(div);
+    const root = createRoot(div);
+    const rendera = () => act(() => root.render(<Elevkort s={s} elevId="e1" kor={kor} onTillbaka={() => {}} />));
+    rendera();
+    await act(async () => { (div.querySelector('button[aria-label="Byt namn"]') as HTMLButtonElement).click(); });
+    await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Byt ordning'))!.click(); });
+    expect((div.querySelector('input[aria-label="Elevens nya namn"]') as HTMLInputElement).value).toBe('Loa George');
+    await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Spara'))!.click(); });
+    expect(s.elever.find((e) => e.id === 'e1')!.namn).toBe('Loa George');
+  });
+});

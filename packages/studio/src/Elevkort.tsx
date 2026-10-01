@@ -7,7 +7,7 @@
  */
 import { useState } from 'react';
 import {
-  elevIKlassen, elevkort, giltigEpost, laggTillVardnadshavare, sattElevStatus, taBortVardnadshavare, vardnadshavareMailto,
+  bytElevNamn, vandNamnordning, elevIKlassen, elevkort, giltigEpost, laggTillVardnadshavare, sattElevStatus, taBortVardnadshavare, vardnadshavareMailto,
   type ElevkortSerie, type ResultatKalla, type Struktur,
 } from '@planner/kernel';
 import { lasStruktur } from './store.js';
@@ -51,6 +51,7 @@ export function Elevkort({ s, elevId, amneId, kor, onTillbaka }: {
   const [epost, setEpost] = useState('');
   const [namn, setNamn] = useState('');
   const [fel, setFel] = useState<string | null>(null);
+  const [nyttNamn, setNyttNamn] = useState<string | null>(null);
   const k = elevkort(s, elevId, amneId);
   if (k === null) return <p className="muted">Eleven finns inte.</p>;
   const { elev } = k;
@@ -64,16 +65,37 @@ export function Elevkort({ s, elevId, amneId, kor, onTillbaka }: {
     kor(() => laggTillVardnadshavare(lasStruktur(), elev.id, { epost, ...(namn.trim() !== '' ? { namn } : {}) }), `Vårdnadshavare tillagd för ${elev.namn}.`);
     setEpost(''); setNamn(''); setFel(null);
   };
+  function sparaNamn() {
+    if (nyttNamn === null) return;
+    const fore = elev.namn;
+    try {
+      const nytt = bytElevNamn(lasStruktur(), elev.id, nyttNamn);
+      kor(() => nytt, `${fore} heter nu ${nyttNamn.replace(/\s+/g, ' ').trim()} — resultatfiler med det gamla namnet matchar fortfarande.`);
+      setNyttNamn(null); setFel(null);
+    } catch (e) { setFel(e instanceof Error ? e.message : 'Kunde inte byta namn.'); }
+  }
   const mailto = vardnadshavareMailto(elev, `${k.amne ?? 'Skolan'} ${k.klass} – ${elev.namn}`);
 
   return (
     <div className="uppg-kort st-widget elevkort" aria-label={`Elevkort ${elev.namn}`}>
       <div className="rad" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <button className="btn sm" onClick={onTillbaka}>← Alla elever</button>
-        <h3 style={{ margin: 0 }}>🪪 {elev.namn}</h3>
+        {nyttNamn === null ? (<>
+          <h3 style={{ margin: 0 }}>🪪 {elev.namn}</h3>
+          <button className="linkbtn small" aria-label="Byt namn" title="Byt elevens namn" onClick={() => setNyttNamn(elev.namn)}>✏️ Byt namn</button>
+        </>) : (
+          <span className="rad" style={{ gap: 6 }}>
+            <input aria-label="Elevens nya namn" value={nyttNamn} autoFocus onChange={(e) => setNyttNamn(e.target.value)} style={{ width: 220 }}
+              onKeyDown={(e) => { if (e.key === 'Enter') sparaNamn(); if (e.key === 'Escape') setNyttNamn(null); }} />
+            <button className="btn sec sm" title="Byt plats på förnamn och efternamn (t.ex. George Loa → Loa George)" onClick={() => setNyttNamn(vandNamnordning(nyttNamn))}>⇄ Byt ordning</button>
+            <button className="btn sm" onClick={sparaNamn}>💾 Spara</button>
+            <button className="btn sec sm" onClick={() => { setNyttNamn(null); setFel(null); }}>Avbryt</button>
+          </span>
+        )}
         <small className="muted">{k.klass}{k.amne !== null ? ` · ${k.amne}` : ' · alla ämnen'} · grupp {elev.grupp} · {k.antal} resultat</small>
         {!iKlassen && <span className="st-krav ej">ingår inte i klassen — ingen rapportering</span>}
       </div>
+      {(elev.tidigareNamn ?? []).length > 0 && <p className="small muted" style={{ margin: '2px 0 0' }}>Tidigare namn: {elev.tidigareNamn!.join(', ')} <small>(resultatfiler med dessa namn matchar eleven)</small></p>}
 
       {/* ── Status i klassen ── */}
       <div className="ek-status rad" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>

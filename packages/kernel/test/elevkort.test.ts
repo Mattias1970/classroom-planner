@@ -127,3 +127,46 @@ describe('Del 155 · klassen kompletteras ur Socrative-rapportens roster', () =>
     expect(() => laggTillSaknadeElever(s, 'finns-inte', [], 'A', () => 'x', matchaElev)).toThrow('Okänd klass');
   });
 });
+
+import { bytElevNamn } from '../src/index.js';
+
+describe('Del 157 · byt namn på elev', () => {
+  it('nytt namn, gamla namnet sparas och matchar fortfarande resultatfiler; krockar och tomma namn avvisas', () => {
+    let s = bygg();
+    s = bytElevNamn(s, 'e2', '  Omar   Ali Hassan ');
+    expect(s.elever.find((e) => e.id === 'e2')).toMatchObject({ namn: 'Omar Ali Hassan', tidigareNamn: ['Omar Ali'] });
+    expect(matchaElev(s, 'k', 'Ali, Omar')?.id).toBe('e2');                 // gamla namnet i Socrative-format
+    expect(matchaElev(s, 'k', 'Omar Ali Hassan')?.id).toBe('e2');
+    s = importeraResultat(s, { klassId: 'k', amneId: 'ma', kalla: 'magma', prov: 'T', datum: '2026-09-30', rader: [{ namn: 'Omar Ali', poang: 3, maxPoang: 4 }] }).s;
+    expect((s.resultat ?? []).find((r) => r.prov === 'T')!.elevId).toBe('e2');
+    expect(() => bytElevNamn(s, 'e2', 'Berg, Anna')).toThrow('Det finns redan en elev som heter Anna Berg');
+    expect(() => bytElevNamn(s, 'e2', '  ')).toThrow('Eleven behöver ett namn');
+    // Tillbaka till ursprungsnamnet: det nuvarande blir tidigare, inga dubbletter
+    s = bytElevNamn(s, 'e2', 'Omar Ali');
+    expect(s.elever.find((e) => e.id === 'e2')).toMatchObject({ namn: 'Omar Ali', tidigareNamn: ['Omar Ali Hassan'] });
+    expect(bytElevNamn(s, 'e2', 'Omar Ali')).toBe(s);
+  });
+});
+
+import { laggTillElev as lagg, normaliseraElevnamn, rattaNamnordning, vandNamnordning } from '../src/index.js';
+
+describe('Del 157 · namnordning', () => {
+  it('Efternamn, Förnamn blir Förnamn Efternamn; vänd ordning byter första och sista ordet', () => {
+    expect(normaliseraElevnamn('George,  Loa ')).toBe('Loa George');
+    expect(normaliseraElevnamn('Abdi Nurre, Abdulaziz Abdishakur')).toBe('Abdulaziz Abdishakur Abdi Nurre');
+    expect(normaliseraElevnamn('Loa George')).toBe('Loa George');
+    expect(vandNamnordning('George Loa')).toBe('Loa George');
+    expect(vandNamnordning('Berg Anna Maria')).toBe('Maria Anna Berg');
+    expect(vandNamnordning('Loa')).toBe('Loa');
+  });
+
+  it('nya elever sparas som Förnamn Efternamn; befintliga kommanamn rättas för hela klassen', () => {
+    let s = lagg(bygg(), { id: 'n1', klassId: 'k', namn: 'George, Loa', grupp: 'A' });
+    expect(s.elever.find((e) => e.id === 'n1')!.namn).toBe('Loa George');
+    s = { ...s, elever: [...s.elever, { id: 'n2', klassId: 'k', namn: 'Testsson, Ted', grupp: 'B' }] };   // gammal data
+    const r = rattaNamnordning(s, 'k');
+    expect(r.rattade).toEqual([{ fore: 'Testsson, Ted', efter: 'Ted Testsson' }]);
+    expect(r.s.elever.find((e) => e.id === 'n2')!.namn).toBe('Ted Testsson');
+    expect(r.s.elever.find((e) => e.id === 'n2')!.tidigareNamn).toBeUndefined();   // samma namn i annan ordning matchar ändå
+  });
+});

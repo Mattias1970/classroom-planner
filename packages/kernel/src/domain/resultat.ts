@@ -219,6 +219,9 @@ export function matchaElev(s: Struktur, klassId: string, namn: string, sidId?: s
   const nyckel = namnNyckel(namn);
   const flippad = elever.filter((e) => namnNyckel(e.namn) === nyckel);
   if (flippad.length === 1) return flippad[0];
+  // Del 157: elever som bytt namn matchas också på sina tidigare namn
+  const tidigare = elever.filter((e) => (e.tidigareNamn ?? []).some((n) => normalisera(n) === mal || namnNyckel(n) === nyckel));
+  if (tidigare.length === 1) return tidigare[0];
   const fornamn = elever.filter((e) => normalisera(e.namn).split(' ')[0] === mal);
   if (fornamn.length === 1) return fornamn[0];
   return null;

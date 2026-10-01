@@ -71,7 +71,7 @@ describe('importeraRoster', () => {
     expect(ut.hoppade).toEqual([]);
     const elever = ut.struktur.elever.filter((e) => e.klassId === 'k8b');
     expect(elever).toHaveLength(3);
-    expect(elever.find((e) => e.id === 'e1')).toMatchObject({ namn: 'Testsson, Ted', grupp: 'B', epost: 'ted@skola.se', socrativeId: 'TED' });
+    expect(elever.find((e) => e.id === 'e1')).toMatchObject({ namn: 'Ted Testsson', grupp: 'B', epost: 'ted@skola.se', socrativeId: 'TED' }); // inlagd som 'Testsson, Ted' — lagras som Förnamn Efternamn (Del 157)
     expect(elever.find((e) => e.id === 'e2')).toMatchObject({ socrativeId: 'PIA' });
     expect(elever.find((e) => e.id === 'e-ny-1')).toMatchObject({ namn: 'Öjvind Övnegård', grupp: 'A', epost: 'ojvind@skola.se', socrativeId: 'ÖJVIND' });
     // Ursprunget orört (ren funktion)

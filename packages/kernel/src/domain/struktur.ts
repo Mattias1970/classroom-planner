@@ -105,10 +105,39 @@ export function taBortKlass(s: Struktur, id: string): Struktur {
 }
 
 // ── Elever (Grupp A/B per klass) ─────────────────────────────
+/**
+ * Del 157 · Elevnamn lagras som 'Förnamn Efternamn'. 'Efternamn, Förnamn' (Socratives
+ * format, ofta i inklistrade listor) vänds rätt; extra mellanslag tas bort.
+ */
+export function normaliseraElevnamn(namn: string): string {
+  const n = namn.replace(/\s+/g, ' ').trim();
+  if (!n.includes(',')) return n;
+  const [efter, ...rest] = n.split(',');
+  const fornamn = rest.join(' ').replace(/\s+/g, ' ').trim();
+  return fornamn === '' ? efter.trim() : `${fornamn} ${efter.trim()}`;
+}
+
+/** Del 157 · Byter plats på första och sista ordet: 'George Loa' → 'Loa George'; mellannamn står kvar. */
+export function vandNamnordning(namn: string): string {
+  const ord = normaliseraElevnamn(namn).split(' ');
+  if (ord.length < 2) return ord.join(' ');
+  return [ord[ord.length - 1], ...ord.slice(1, -1), ord[0]].join(' ');
+}
+
 export function laggTillElev(s: Struktur, elev: Elev): Struktur {
   if (!s.klasser.some((k) => k.id === elev.klassId)) throw new Error('Eleven måste höra till en klass.');
   if (elev.namn.trim() === '') throw new Error('Eleven behöver ett namn.');
-  return { ...s, elever: [...s.elever, elev] };
+  return { ...s, elever: [...s.elever, { ...elev, namn: normaliseraElevnamn(elev.namn) }] };
+}
+
+/** Del 157 · Klassens elever vars namn står som 'Efternamn, Förnamn' rättas till 'Förnamn Efternamn' (gamla formen sparas som tidigare namn). */
+export function rattaNamnordning(s: Struktur, klassId: string): { s: Struktur; rattade: Array<{ fore: string; efter: string }> } {
+  let ut = s; const rattade: Array<{ fore: string; efter: string }> = [];
+  for (const e of s.elever.filter((x) => x.klassId === klassId && x.namn.includes(','))) {
+    const efter = normaliseraElevnamn(e.namn);
+    try { ut = bytElevNamn(ut, e.id, efter); rattade.push({ fore: e.namn, efter }); } catch { /* krock med befintlig elev — lämnas åt läraren */ }
+  }
+  return { s: ut, rattade };
 }
 export function uppdateraElev(s: Struktur, id: string, patch: Partial<Pick<Elev, 'namn' | 'grupp' | 'epost' | 'socrativeId'>>): Struktur {
   return { ...s, elever: s.elever.map((e) => (e.id === id ? { ...e, ...patch } : e)) };
@@ -146,6 +175,25 @@ export function sattElevStatus(s: Struktur, id: string, andring: { aktiv?: boole
   const { aktiv: _a, startDatum: _s, slutDatum: _e, ...bas } = elev;
   const ny: Elev = { ...bas, ...(aktiv === false ? { aktiv: false } : {}), ...(start !== undefined ? { startDatum: start } : {}), ...(slut !== undefined ? { slutDatum: slut } : {}) };
   return { ...s, elever: s.elever.map((e) => (e.id === id ? ny : e)) };
+}
+
+/**
+ * Del 157 · Byter elevens namn. Det gamla namnet sparas i `tidigareNamn` så att
+ * resultatfiler (Socrative, Magma, DigiExam) med det gamla namnet fortfarande
+ * matchar eleven. Kastar svenska fel vid tomt namn eller om en annan elev i
+ * klassen redan heter så.
+ */
+export function bytElevNamn(s: Struktur, id: string, nyttNamn: string): Struktur {
+  const elev = s.elever.find((e) => e.id === id);
+  if (elev === undefined) throw new Error('Eleven finns inte.');
+  const namn = normaliseraElevnamn(nyttNamn);
+  if (namn === '') throw new Error('Eleven behöver ett namn.');
+  if (namn === elev.namn) return s;
+  const nyckel = (n: string) => n.toLowerCase().replace(/,/g, ' ').replace(/\s+/g, ' ').trim().split(' ').sort().join(' ');
+  const krock = s.elever.find((e) => e.id !== id && e.klassId === elev.klassId && nyckel(e.namn) === nyckel(namn));
+  if (krock !== undefined) throw new Error(`Det finns redan en elev som heter ${krock.namn} i klassen.`);
+  const tidigare = [...new Set([...(elev.tidigareNamn ?? []), elev.namn])].filter((n) => nyckel(n) !== nyckel(namn));
+  return { ...s, elever: s.elever.map((e) => (e.id === id ? { ...e, namn, ...(tidigare.length > 0 ? { tidigareNamn: tidigare } : {}) } : e)) };
 }
 
 export function taBortElev(s: Struktur, id: string): Struktur {
