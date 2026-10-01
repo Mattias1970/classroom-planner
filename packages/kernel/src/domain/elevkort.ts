@@ -145,3 +145,67 @@ export function vardnadshavareMailto(elev: Pick<Elev, 'vardnadshavare'>, amne = 
   const delar = [amne !== '' ? `subject=${encodeURIComponent(amne)}` : '', text !== '' ? `body=${encodeURIComponent(text)}` : ''].filter((x) => x !== '');
   return `mailto:${till}${delar.length > 0 ? `?${delar.join('&')}` : ''}`;
 }
+
+// ── Del 160 · Slå ihop två elever ───────────────────────────────────────────
+
+export interface Sammanslagning {
+  s: Struktur;
+  /** Resultat som flyttades till eleven som behålls. */
+  flyttade: number;
+  /** Resultat som fanns hos båda (samma källa, prov, datum, tid och ämne) — elevens egna behålls. */
+  dubbletter: number;
+}
+
+/**
+ * Slår ihop två elevposter som är samma elev: allt från `franId` (resultat, sittplatser,
+ * vårdnadshavare, tidigare namn) flyttas till `tillId`, som behåller namn och grupp.
+ * Namnet på den sammanslagna posten blir ett tidigare namn, så resultatfiler med det
+ * namnet matchar eleven även framöver. Posten `franId` tas bort.
+ */
+export function slaIhopElever(s: Struktur, franId: string, tillId: string): Sammanslagning {
+  if (franId === tillId) throw new Error('Välj två olika elever.');
+  const fran = s.elever.find((e) => e.id === franId);
+  const till = s.elever.find((e) => e.id === tillId);
+  if (fran === undefined || till === undefined) throw new Error('Eleven finns inte.');
+  if (fran.klassId !== till.klassId) throw new Error('Eleverna går i olika klasser — byt klass först.');
+
+  const nyckel = (r: Resultat) => [r.kalla, r.prov.trim().toLowerCase(), r.datum, r.tid ?? '', r.amneId ?? ''].join('|');
+  const tillsNycklar = new Set((s.resultat ?? []).filter((r) => r.elevId === tillId).map(nyckel));
+  let flyttade = 0; let dubbletter = 0;
+  const resultat: Resultat[] = [];
+  for (const r of s.resultat ?? []) {
+    if (r.elevId !== franId) { resultat.push(r); continue; }
+    if (tillsNycklar.has(nyckel(r))) { dubbletter += 1; continue; }
+    resultat.push({ ...r, elevId: tillId }); flyttade += 1;
+  }
+
+  const norm = (n: string) => n.toLowerCase().replace(/\s+/g, ' ').trim();
+  const tidigare = [...new Set([...(till.tidigareNamn ?? []), fran.namn, ...(fran.tidigareNamn ?? [])])].filter((n) => norm(n) !== norm(till.namn));
+  const vh = [...(till.vardnadshavare ?? [])];
+  for (const v of fran.vardnadshavare ?? []) if (!vh.some((x) => x.epost === v.epost)) vh.push(v);
+  const start = [till.startDatum, fran.startDatum].filter((d): d is string => d !== undefined).sort()[0];
+  const slut = till.slutDatum === undefined || fran.slutDatum === undefined ? undefined : [till.slutDatum, fran.slutDatum].sort()[1];
+  const aktiv = till.aktiv !== false || fran.aktiv !== false;
+  const { tidigareNamn: _t, vardnadshavare: _v, startDatum: _s, slutDatum: _e, aktiv: _a, ...bas } = till;
+  void _t; void _v; void _s; void _e; void _a;
+  const ny: Elev = {
+    ...bas,
+    ...(till.epost === undefined && fran.epost !== undefined ? { epost: fran.epost } : {}),
+    ...(till.socrativeId === undefined && fran.socrativeId !== undefined ? { socrativeId: fran.socrativeId } : {}),
+    ...(tidigare.length > 0 ? { tidigareNamn: tidigare } : {}),
+    ...(vh.length > 0 ? { vardnadshavare: vh } : {}),
+    ...(start !== undefined && (till.startDatum !== undefined && fran.startDatum !== undefined) ? { startDatum: start } : {}),
+    ...(slut !== undefined ? { slutDatum: slut } : {}),
+    ...(aktiv ? {} : { aktiv: false }),
+  };
+
+  const ut: Struktur = {
+    ...s,
+    elever: s.elever.filter((e) => e.id !== franId).map((e) => (e.id === tillId ? ny : e)),
+    ...(s.resultat !== undefined ? { resultat } : {}),
+    ...(s.sittplatser !== undefined ? {
+      sittplatser: s.sittplatser.map((x) => ({ ...x, platser: x.platser.map((p) => (p.elevId === franId ? { ...p, elevId: tillId } : p)) })),
+    } : {}),
+  };
+  return { s: ut, flyttade, dubbletter };
+}

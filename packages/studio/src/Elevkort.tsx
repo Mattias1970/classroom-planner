@@ -7,7 +7,7 @@
  */
 import { useState } from 'react';
 import {
-  bytElevNamn, vandNamnordning, elevIKlassen, elevkort, giltigEpost, laggTillVardnadshavare, sattElevStatus, taBortVardnadshavare, vardnadshavareMailto,
+  bytElevNamn, slaIhopElever, vandNamnordning, elevIKlassen, elevkort, giltigEpost, laggTillVardnadshavare, sattElevStatus, taBortVardnadshavare, vardnadshavareMailto,
   type ElevkortSerie, type ResultatKalla, type Struktur,
 } from '@planner/kernel';
 import { lasStruktur } from './store.js';
@@ -52,6 +52,7 @@ export function Elevkort({ s, elevId, amneId, kor, onTillbaka }: {
   const [namn, setNamn] = useState('');
   const [fel, setFel] = useState<string | null>(null);
   const [nyttNamn, setNyttNamn] = useState<string | null>(null);
+  const [ihop, setIhop] = useState('');
   const k = elevkort(s, elevId, amneId);
   if (k === null) return <p className="muted">Eleven finns inte.</p>;
   const { elev } = k;
@@ -73,6 +74,18 @@ export function Elevkort({ s, elevId, amneId, kor, onTillbaka }: {
       kor(() => nytt, `${fore} heter nu ${nyttNamn.replace(/\s+/g, ' ').trim()} — resultatfiler med det gamla namnet matchar fortfarande.`);
       setNyttNamn(null); setFel(null);
     } catch (e) { setFel(e instanceof Error ? e.message : 'Kunde inte byta namn.'); }
+  }
+  // Del 160: slå ihop en annan elevpost (samma elev) med denna — denna behålls
+  const klasskamrater = s.elever.filter((e) => e.klassId === elev.klassId && e.id !== elev.id).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
+  function slaIhop() {
+    const annan = s.elever.find((e) => e.id === ihop);
+    if (annan === undefined) return;
+    if (!window.confirm(`Slå ihop ${annan.namn} med ${elev.namn}?\n\nAlla prov och resultat för ${annan.namn} flyttas till ${elev.namn}. ${annan.namn} tas bort ur elevlistan, och namnet sparas som tidigare namn så att nya resultatfiler matchar ${elev.namn}.`)) return;
+    try {
+      const r = slaIhopElever(lasStruktur(), annan.id, elev.id);
+      kor(() => r.s, `${annan.namn} är ihopslagen med ${elev.namn}: ${r.flyttade} resultat flyttade${r.dubbletter > 0 ? `, ${r.dubbletter} fanns redan hos ${elev.namn}` : ''}.`);
+      setIhop(''); setFel(null);
+    } catch (e) { setFel(e instanceof Error ? e.message : 'Kunde inte slå ihop.'); }
   }
   const mailto = vardnadshavareMailto(elev, `${k.amne ?? 'Skolan'} ${k.klass} – ${elev.namn}`);
 
@@ -96,6 +109,19 @@ export function Elevkort({ s, elevId, amneId, kor, onTillbaka }: {
         {!iKlassen && <span className="st-krav ej">ingår inte i klassen — ingen rapportering</span>}
       </div>
       {(elev.tidigareNamn ?? []).length > 0 && <p className="small muted" style={{ margin: '2px 0 0' }}>Tidigare namn: {elev.tidigareNamn!.join(', ')} <small>(resultatfiler med dessa namn matchar eleven)</small></p>}
+
+      {/* ── Del 160 · Slå ihop (samma elev under två namn) ── */}
+      <details className="ek-ihop no-print">
+        <summary className="small">🔗 Slå ihop med en annan elev (samma elev under två namn)</summary>
+        <div className="rad" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 4 }}>
+          <select aria-label="Elev att slå ihop" value={ihop} onChange={(e) => setIhop(e.target.value)}>
+            <option value="">— välj elev —</option>
+            {klasskamrater.map((e) => <option key={e.id} value={e.id}>{e.namn}{e.aktiv === false ? ' (av)' : ''}</option>)}
+          </select>
+          <button className="btn sm" disabled={ihop === ''} onClick={slaIhop}>🔗 Slå ihop — behåll {elev.namn}</button>
+          <small className="muted">Den valda elevens prov flyttas hit och posten tas bort.</small>
+        </div>
+      </details>
 
       {/* ── Status i klassen ── */}
       <div className="ek-status rad" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>

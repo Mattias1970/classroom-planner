@@ -111,3 +111,28 @@ describe('Del 157 · byt ordning på för- och efternamn', () => {
     expect(s.elever.find((e) => e.id === 'e1')!.namn).toBe('Loa George');
   });
 });
+
+describe('Del 160 · slå ihop två elever i elevkortet', () => {
+  it('🔗 flyttar den valda elevens prov hit och tar bort posten', async () => {
+    let s = bygg();
+    s = importeraResultat({ ...s, elever: [...s.elever, { id: 'e2', klassId: 'k', namn: 'Anna Berg Provlund', grupp: 'B' as const }] },
+      { klassId: 'k', amneId: 'ma', kalla: 'socrative-laxforhor', prov: 'Matte12', datum: '2026-09-08', rader: [{ namn: 'Anna Berg Provlund', poang: 10, maxPoang: 10 }] }).s;
+    sparaStruktur(s);
+    const kor = (fn: () => Struktur) => { s = fn(); sparaStruktur(s); rendera(); };
+    const div = document.createElement('div'); document.body.appendChild(div);
+    const root = createRoot(div);
+    const rendera = () => act(() => root.render(<Elevkort s={s} elevId="e2" kor={kor} onTillbaka={() => {}} />));
+    rendera();
+    const sel = div.querySelector('select[aria-label="Elev att slå ihop"]') as HTMLSelectElement;
+    const ssetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!;
+    await act(async () => { ssetter.call(sel, 'e1'); sel.dispatchEvent(new Event('change', { bubbles: true })); });
+    const conf = window.confirm; window.confirm = () => true;
+    await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Slå ihop — behåll'))!.click(); });
+    window.confirm = conf;
+    expect(s.elever.map((e) => e.namn)).toEqual(['Anna Berg Provlund']);
+    expect(s.elever[0].tidigareNamn).toEqual(['Anna Berg']);
+    expect((s.resultat ?? []).every((r) => r.elevId === 'e2')).toBe(true);
+    expect((s.resultat ?? []).length).toBe(5);
+    expect(div.textContent).toContain('Tidigare namn: Anna Berg');
+  });
+});
