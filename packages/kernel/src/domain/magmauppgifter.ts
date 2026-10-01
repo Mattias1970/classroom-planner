@@ -15,6 +15,7 @@
  * Analysen räknar sedan per uppgift, per delkapitel och per förmåga — så att
  * olika test kan jämföras genom delkapitlen när uppgifterna inte är desamma.
  */
+import { elevernaIKlassen } from './struktur.js';
 import type { FragaSvar } from './resultat.js';
 
 export type MagmaFormaga = 'B' | 'M' | 'P' | 'R';
@@ -325,7 +326,7 @@ const kodOrdning = (a: string, b: string) => { const [a1, a2] = a.split('.').map
  * elev gjort samma test två gånger (två kopior) räknas det senaste försöket.
  */
 export function magmaDelkapitelAnalys(s: MedMagma & { elever: MinElev[]; resultat?: MinRes[] }, klassId: string, amneId?: string): MagmaDelkapitelAnalys {
-  const elever = s.elever.filter((e) => e.klassId === klassId).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
+  const elever = elevernaIKlassen(s, klassId).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
   const ids = new Set(elever.map((e) => e.id));
   const rs = (s.resultat ?? []).filter((r) => r.kalla === 'magma' && ids.has(r.elevId) && (amneId === undefined || amneId === '' || r.amneId === amneId));
   const utanPdf = new Set<string>();

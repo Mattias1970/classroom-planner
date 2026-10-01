@@ -4,11 +4,11 @@
  * Prioriteringslistan byggs ur samma underlag som rapporterna (rapportOversikt:
  * låga snitt, saknade quizsvar, begrepp som fastnat). Meddelandeförslaget är
  * den enkla rapportens text — beskrivande, utan orsaksslutsatser. Kontakt-
- * status (skickat / väntar / ej granskat) sparas lokalt per elev; vårdnads-
- * havarnas kontaktuppgifter finns inte i datan än och visas som "Data saknas".
+ * status (skickat / väntar / ej granskat) sparas lokalt per elev. Vårdnads-
+ * havarnas e-post läggs in på elevkortet (Del 154) och används för ✉-knappen.
  */
 import React, { useMemo, useState } from 'react';
-import { enkelRapport, rapportOversikt, tolkaVeckor, type Struktur } from '@planner/kernel';
+import { enkelRapport, rapportOversikt, tolkaVeckor, vardnadshavareMailto, type Struktur } from '@planner/kernel';
 import { lasInstallning, sparaInstallning } from '../store.js';
 import { Ikon } from './ikoner.js';
 import { DataSaknas, Kort, Kpi, type Filter, type V3Vy } from './Skal.js';
@@ -94,7 +94,14 @@ export function Foraldrakontakt({ s, filter, setVy }: { s: Struktur; filter: Fil
                   <button className="v3-knapp" onClick={() => { const t = (document.querySelector('.v3-meddelande') as HTMLTextAreaElement | null)?.value ?? meddelande; void navigator.clipboard?.writeText(t); satt(valdRad.elev.id, 'vantar'); }}>Kopiera och märk som skickat</button>
                   <button className="v3-knapp sek" onClick={() => setVy({ typ: 'elever' })}>Öppna rapporten</button>
                 </div>
-                <DataSaknas text="Vårdnadshavarnas e-post finns inte i datan än. Klistra in meddelandet i Teams, Schoolsoft eller e-post." />
+                {(valdRad.elev.vardnadshavare ?? []).length > 0 ? (
+                  <p className="small" style={{ marginTop: 8 }}>
+                    <a className="v3-knapp" href={vardnadshavareMailto(valdRad.elev, `${klass.namn} – ${valdRad.elev.namn}`, (document.querySelector('.v3-meddelande') as HTMLTextAreaElement | null)?.value ?? meddelande)}
+                      onClick={(e) => { const tx = (document.querySelector('.v3-meddelande') as HTMLTextAreaElement | null)?.value ?? meddelande; e.currentTarget.href = vardnadshavareMailto(valdRad.elev, `${klass.namn} – ${valdRad.elev.namn}`, tx); satt(valdRad.elev.id, 'vantar'); }}>
+                      ✉ Skicka till vårdnadshavare</a>{' '}
+                    <small className="muted">{(valdRad.elev.vardnadshavare ?? []).map((v) => v.epost).join(', ')}</small>
+                  </p>
+                ) : <DataSaknas text="Ingen e-post till vårdnadshavare för eleven. Lägg till den på elevkortet (Elever → 🪪 Elevkort), eller klistra in meddelandet i Teams, Schoolsoft eller e-post." atgard={{ text: 'Öppna elevkortet', onKlick: () => setVy({ typ: 'elever' }) }} />}
               </>)}
         </Kort>
       </div>

@@ -113,6 +113,41 @@ export function laggTillElev(s: Struktur, elev: Elev): Struktur {
 export function uppdateraElev(s: Struktur, id: string, patch: Partial<Pick<Elev, 'namn' | 'grupp' | 'epost' | 'socrativeId'>>): Struktur {
   return { ...s, elever: s.elever.map((e) => (e.id === id ? { ...e, ...patch } : e)) };
 }
+/**
+ * Del 154 · Ingår eleven i klassen ett visst datum? Av (aktiv: false) = aldrig;
+ * annars mellan start- och slutdatum (båda valfria, slutdatum är sista dagen).
+ */
+export function elevIKlassen(e: Pick<Elev, 'aktiv' | 'startDatum' | 'slutDatum'>, datum: string = new Date().toISOString().slice(0, 10)): boolean {
+  if (e.aktiv === false) return false;
+  if (e.startDatum !== undefined && datum < e.startDatum) return false;
+  if (e.slutDatum !== undefined && datum > e.slutDatum) return false;
+  return true;
+}
+
+/** Del 154 · Klassens elever som ingår i klassen `datum` (idag om inget anges) — underlaget för all rapportering. */
+export function elevernaIKlassen<E extends Pick<Elev, 'klassId' | 'aktiv' | 'startDatum' | 'slutDatum'>>(s: { elever: E[] }, klassId: string, datum?: string): E[] {
+  return s.elever.filter((e) => e.klassId === klassId && elevIKlassen(e, datum));
+}
+
+/**
+ * Del 154 · Sätter elevens status: på/av samt start- och slutdatum. null tar bort ett datum.
+ * Resultaten finns kvar; en elev som är av eller har slutat räknas inte i klassens rapportering.
+ */
+export function sattElevStatus(s: Struktur, id: string, andring: { aktiv?: boolean; startDatum?: string | null; slutDatum?: string | null }): Struktur {
+  const elev = s.elever.find((e) => e.id === id);
+  if (elev === undefined) throw new Error('Eleven finns inte.');
+  const iso = /^\d{4}-\d{2}-\d{2}$/;
+  const start = andring.startDatum === undefined ? elev.startDatum : andring.startDatum ?? undefined;
+  const slut = andring.slutDatum === undefined ? elev.slutDatum : andring.slutDatum ?? undefined;
+  if (start !== undefined && !iso.test(start)) throw new Error('Startdatum måste vara ÅÅÅÅ-MM-DD.');
+  if (slut !== undefined && !iso.test(slut)) throw new Error('Slutdatum måste vara ÅÅÅÅ-MM-DD.');
+  if (start !== undefined && slut !== undefined && slut < start) throw new Error('Slutdatum kan inte ligga före startdatum.');
+  const aktiv = andring.aktiv ?? elev.aktiv;
+  const { aktiv: _a, startDatum: _s, slutDatum: _e, ...bas } = elev;
+  const ny: Elev = { ...bas, ...(aktiv === false ? { aktiv: false } : {}), ...(start !== undefined ? { startDatum: start } : {}), ...(slut !== undefined ? { slutDatum: slut } : {}) };
+  return { ...s, elever: s.elever.map((e) => (e.id === id ? ny : e)) };
+}
+
 export function taBortElev(s: Struktur, id: string): Struktur {
   return { ...s, elever: s.elever.filter((e) => e.id !== id) };
 }

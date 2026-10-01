@@ -33,7 +33,7 @@ import {
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
   elevrapport, elevrapportText, tillfalleEtiketter, normeradSpridning, klusterKurvor, normeraBand, taBortFil, rensaResultat,
   NORM_BAND, NORM_MAX, amnesKallor, lektionstester, elevLektionstest, tillfalleKortEtikett, KLUSTER_NAMN, TID_PASS, type Kluster,
-  begransaTillElever, elevUrval, klassensElever, type ElevUrvalVal,
+  begransaTillElever, elevUrval, klassensElever, type ElevUrvalVal, arSocrative, elevIKlassen,
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
@@ -48,6 +48,7 @@ import { RapportdesignVy, MallRendering, Trendsteg } from './rapportdesign.js';
 import { MagmaImport } from './MagmaImport.js';
 import { DigiExamImport } from './DigiExamImport.js';
 import { DigiExamLarmPanel } from './ProvLarm.js';
+import { Elevkort } from './Elevkort.js';
 import { ProvlappPanel } from './Provlapp.js';
 import { Skal, Kort, type Filter, type V3Vy } from './v3/Skal.js';
 import { Oversikt } from './v3/Oversikt.js';
@@ -3638,7 +3639,8 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
   const elevId = fokus[0] ?? null;
   const setElevId = (id: string | null) => { setFokus(id === null ? [] : [id]); setFokusRubrik(''); };
   const fokuseraGrupp = (ids: string[], rubrik: string) => { setFokus(ids); setFokusRubrik(rubrik); };
-  const [fokusKallor, setFokusKallor] = useState<ResultatKalla[]>(['socrative-laxforhor', 'socrative-exit', 'magma', 'digiexam']);
+  // Del 154: fokusvyns diagram är Socrative — DigiExam och Magma har egna diagram
+  const [fokusKallor, setFokusKallor] = useState<ResultatKalla[]>(['socrative-laxforhor', 'socrative-exit']);
   const [visaTrend, setVisaTrend] = useState(false);
   const [laggTillSok, setLaggTillSok] = useState('');
   useEffect(() => {
@@ -4483,12 +4485,13 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
 
               {/* Filter: källor + trend */}
               <div className="rad st-fokus-filter">
-                {amnesKallor(amneId === '' ? undefined : s.amnen.find((a) => a.id === amneId)?.namn).map((k) => (
+                {amnesKallor(amneId === '' ? undefined : s.amnen.find((a) => a.id === amneId)?.namn).filter(arSocrative).map((k) => (
                   <label key={k} className="small"><input type="checkbox" checked={fokusKallor.includes(k)}
                     onChange={(ev) => setFokusKallor(ev.target.checked ? [...fokusKallor, k] : fokusKallor.filter((x) => x !== k))} />
                     <i className="st-legend-prick" style={{ background: KORT_FARG[k] }} /> {KORT_RUBRIK[k]}</label>
                 ))}
                 <label className="small"><input type="checkbox" checked={visaTrend} onChange={(ev) => setVisaTrend(ev.target.checked)} /> trendlinjer</label>
+                <small className="muted">DigiExam- och Magma-resultat visas i egna diagram (Importera → DigiExam/Magma, och elevkortet).</small>
                 <span className="spacer" />
                 <small className="muted">{till.length} tillfällen i urvalet</small>
               </div>
@@ -4898,6 +4901,8 @@ function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur,
   const [periodText, setPeriodText] = useState('');
   const [elevId, setElevId] = useState('');
   const [lage, setLage] = useState<'enkel' | 'full' | 'studie'>('enkel');
+  // Del 154: elevkortet — eget läge, öppnas från listan (även för elever som inte ingår i klassen)
+  const [kortElev, setKortElev] = useState('');
   const [sok, setSok] = useState('');
   const [skriver, setSkriver] = useState('');
   const [forlopp, setForlopp] = useState('');
@@ -5022,12 +5027,14 @@ function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur,
           onValj={(id) => { if (id.startsWith('mall:')) setMallAlla(id.slice(5)); else if (id === 'word:enkel') allaEnklaTillWord(); else allaTillWord(); }} />
       )}
 
-      {analys === null || valdElev === null ? (
+      {kortElev !== '' ? (
+        <Elevkort s={s} elevId={kortElev} {...(valtAmne !== '' ? { amneId: valtAmne } : {})} kor={kor} onTillbaka={() => setKortElev('')} />
+      ) : analys === null || valdElev === null ? (
         <div className="uppg-kort st-widget">
           <b>Välj elev</b> <small className="muted">klicka på en rad för att öppna rapporten</small>
           <div className="st-scroll" style={{ maxHeight: 560 }}>
             <table className="tbl st-tabell">
-              <thead><tr><th>Elev</th><th>Grupp</th><th>Läxförhör</th><th>Exit</th><th>Närvaro</th><th>Svåra begrepp</th><th>Läget</th><th></th></tr></thead>
+              <thead><tr><th>Elev</th><th>Grupp</th><th>Läxförhör</th><th>Exit</th><th>Närvaro</th><th>Svåra begrepp</th><th>Läget</th><th></th><th></th></tr></thead>
               <tbody>{rader.map((r) => (
                 <tr key={r.elev.id} className="st-rapportrad" onClick={() => setElevId(r.elev.id)}>
                   <td><button className="linkbtn">{r.elev.namn}</button></td>
@@ -5041,10 +5048,22 @@ function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur,
                       : <span className="st-krav ej">{r.oro} sak{r.oro > 1 ? 'er' : ''} att ta tag i</span>}</td>
                   <td><button className="btn sm" disabled={r.antalProv === 0} title="Öppna rapporten och välj mall"
                     onClick={(ev) => { ev.stopPropagation(); setElevId(r.elev.id); }}>🖨 Skriv ut…</button></td>
+                  <td><button className="btn sec sm" aria-label={`Elevkort ${r.elev.namn}`} title="Resultat per källa, vårdnadshavare och status i klassen"
+                    onClick={(ev) => { ev.stopPropagation(); setKortElev(r.elev.id); }}>🪪 Elevkort</button></td>
                 </tr>
               ))}</tbody>
             </table>
           </div>
+          {(() => {
+            const utanfor = s.elever.filter((e) => e.klassId === klass.id && !elevIKlassen(e)).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
+            if (utanfor.length === 0) return null;
+            return (
+              <p className="small muted" style={{ marginTop: 6 }}>Ingår inte i klassen nu (ingen rapportering): {utanfor.map((e) => (
+                <button key={e.id} className="linkbtn small" onClick={() => setKortElev(e.id)} title="Öppna elevkortet för att slå på eleven eller ändra datum">
+                  🪪 {e.namn} <small>({e.aktiv === false ? 'av' : e.slutDatum !== undefined && e.slutDatum < new Date().toISOString().slice(0, 10) ? `slutade ${e.slutDatum}` : `börjar ${e.startDatum ?? ''}`})</small>
+                </button>))}</p>
+            );
+          })()}
         </div>
       ) : lage === 'studie' && valtAmne !== '' ? (
         <StudieguideVy s={s} elev={valdElev} f={{ ...f, amneId: valtAmne }} onTillbaka={() => setElevId('')} onLage={setLage} />

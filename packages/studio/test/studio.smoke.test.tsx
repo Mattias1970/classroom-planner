@@ -1423,7 +1423,7 @@ describe('📊 SuperTeach', () => {
     // Frågekorten
     const kort = [...host.querySelectorAll('.st-kort')];
     expect(kort.map((k) => k.querySelector('.st-kort-fraga')?.textContent)).toEqual([
-      'Gör eleven läxor?', 'Lär sig eleven på lektionen?', 'Kan eleven begreppen?', 'Klarar eleven proven?', 'Hur går det sammantaget?',
+      'Gör eleven läxor?', 'Lär sig eleven på lektionen?', 'Kan eleven begreppen?', 'Klarar eleven proven?', 'Hur går det sammantaget i läxförhör, exit och övningar?',
       'Är eleven på lektionen?', 'Elever som trendar tillsammans',
     ]);
     // Övningskortet visas bara när det finns övningar
@@ -1615,7 +1615,8 @@ describe('📊 SuperTeach', () => {
     expect(host.querySelector('.st-elev')!.textContent).toContain('4 tillfällen i urvalet');
     act(() => { (host.querySelector('.st-elev input[type="checkbox"]') as HTMLInputElement).click(); }); // Läxförhör av
     expect(host.querySelector('.st-elev')!.textContent).toContain('3 tillfällen i urvalet'); // bara exit tickets kvar
-    act(() => { (host.querySelectorAll('.st-elev input[type="checkbox"]')[5] as HTMLInputElement).click(); }); // trendlinjer på
+    act(() => { ([...host.querySelectorAll('.st-elev label')].find((l) => l.textContent?.includes('trendlinjer'))!.querySelector('input') as HTMLInputElement).click(); }); // trendlinjer på
+    expect(host.querySelector('.st-elev')!.textContent).toContain('DigiExam- och Magma-resultat visas i egna diagram');
     expect(host.querySelector('.st-elev .st-diagram')!.querySelectorAll('polyline, path').length).toBeGreaterThan(1);
     skriv(input(host, 'Lägg till elev i fokus'), 'Anna');
     act(() => { knapp(host, '+ Anna Berg').click(); });

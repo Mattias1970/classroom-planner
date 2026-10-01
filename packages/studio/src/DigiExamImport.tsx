@@ -9,13 +9,15 @@
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
-  arFilImporterad, digiexamAnalys, digiexamDatumUrFilnamn, digiexamFrageStatistik, digiexamProvInfo, digiexamSvar, eProvGrans, godkantGransFor, importeraResultat,
+  arFilImporterad, digiexamAnalys, digiexamProvForFil, tolkaDigiExamProvlista, type DigiExamProvPost, digiexamDatumUrFilnamn, digiexamFrageStatistik, digiexamProvInfo, digiexamSvar, eProvGrans, godkantGransFor, importeraResultat,
   laggTillElev, matchaElev, nyttId, omprovNamn, registreraFil, resultatProcent, tolkaDigiExamRapport, uppdateraElev, type DigiExamProvInfo,
   type Amne, type DigiExamElevRad, type DigiExamRapport, type Klass, type Resultat, type Struktur,
 } from '@planner/kernel';
-import { lasStruktur } from './store.js';
+import { lasInstallning, lasStruktur, sparaInstallning } from './store.js';
 import { UppgiftsStaplar } from './MagmaImport.js';
 import { DigiExamLarmPanel } from './ProvLarm.js';
+
+const PROVLISTA_NYCKEL = 'cp.digiexamProvlista';
 
 interface DigiExamFil {
   filnamn: string;
@@ -27,6 +29,8 @@ interface DigiExamFil {
   grans: string;
   prov: string;
   datum: string;
+  /** Var datumet kommer ifrån: DigiExams provlista (starttid) eller exportens datum i filnamnet. */
+  datumKalla: 'provlista' | 'export';
   /** Maxpoäng för provet — härledd ur filen, ändras av läraren när provet har fler poäng än någon fick. */
   maxPoang: string;
   rapport: DigiExamRapport | null;
@@ -50,6 +54,16 @@ export function DigiExamImport({ s, klass, amne, kor }: {
   s: Struktur; klass: Klass; amne: Amne | undefined; kor: (fn: () => Struktur, m: string) => void;
 }) {
   const [filer, setFiler] = useState<DigiExamFil[]>([]);
+  // Del 154: DigiExams provlista (inklistrad) — ger provens riktiga datum; sparas mellan importerna
+  const [provlistaText, setProvlistaText] = useState<string>(() => lasInstallning<string>(PROVLISTA_NYCKEL, ''));
+  const provlista = tolkaDigiExamProvlista(provlistaText);
+  const datumFor = (filnamn: string, lista: DigiExamProvPost[]): string | null => digiexamProvForFil(lista, filnamn)[0]?.datum ?? null;
+  const sattProvlista = (text: string) => {
+    setProvlistaText(text); sparaInstallning(PROVLISTA_NYCKEL, text);
+    const lista = tolkaDigiExamProvlista(text);
+    // Inlästa filer får provets datum direkt
+    setFiler((fs) => fs.map((f) => { const d = datumFor(f.filnamn, lista); return d !== null ? { ...f, datum: d, datumKalla: 'provlista' as const } : f; }));
+  };
   const [importeraOm, setImporteraOm] = useState(false);
   const [medNollrader, setMedNollrader] = useState(false);
   const [sparaEpost, setSparaEpost] = useState(true);
@@ -64,20 +78,22 @@ export function DigiExamImport({ s, klass, amne, kor }: {
       const info = digiexamProvInfo(fil.name);
       const roll = info.omprov ? 'omprov' as const : 'ordinarie' as const;
       const prov = roll === 'omprov' ? omprovNamn(info.namn) : info.namn;
-      const datum = digiexamDatumUrFilnamn(fil.name) ?? idag;
+      const listDatum = datumFor(fil.name, provlista);
+      const datum = listDatum ?? digiexamDatumUrFilnamn(fil.name) ?? idag;
+      const datumKalla = listDatum !== null ? 'provlista' as const : 'export' as const;
       try {
         const wb = XLSX.read(await fil.arrayBuffer(), { type: 'array' });
         const blad = wb.SheetNames.find((n) => /grades|resultat|betyg/i.test(n)) ?? wb.SheetNames[0];
         const matris = XLSX.utils.sheet_to_json<Array<string | number | null>>(wb.Sheets[blad], { header: 1, raw: true, defval: null });
         const rapport = tolkaDigiExamRapport(matris);
         const grans = info.typ === 'E' ? String(eProvGrans(rapport.maxPoang)) : '';
-        ut.push({ filnamn: fil.name, info, roll, grans, prov, datum, maxPoang: String(rapport.maxPoang), rapport, fel: null, redanInne: amne !== undefined && arFilImporterad(s, amne.id, fil.name) });
+        ut.push({ filnamn: fil.name, info, roll, grans, prov, datum, datumKalla, maxPoang: String(rapport.maxPoang), rapport, fel: null, redanInne: amne !== undefined && arFilImporterad(s, amne.id, fil.name) });
       } catch (e) {
-        ut.push({ filnamn: fil.name, info, roll, grans: '', prov, datum, maxPoang: '', rapport: null, fel: e instanceof Error ? e.message : 'kunde inte läsas', redanInne: false });
+        ut.push({ filnamn: fil.name, info, roll, grans: '', prov, datum, datumKalla, maxPoang: '', rapport: null, fel: e instanceof Error ? e.message : 'kunde inte läsas', redanInne: false });
       }
     }
     // Ordinarie filer av samma prov: den största först, så att dubbletter i mindre filer blir omprov
-    ut.sort((a, b) => a.info.nyckel.localeCompare(b.info.nyckel) || (a.roll === b.roll ? 0 : a.roll === 'ordinarie' ? -1 : 1) || (b.rapport?.rader.length ?? 0) - (a.rapport?.rader.length ?? 0));
+    ut.sort((a, b) => a.info.nyckel.localeCompare(b.info.nyckel) || (a.roll === b.roll ? 0 : a.roll === 'ordinarie' ? -1 : 1) || a.datum.localeCompare(b.datum) || (b.rapport?.rader.length ?? 0) - (a.rapport?.rader.length ?? 0));
     setFiler(ut);
   };
 
@@ -92,7 +108,10 @@ export function DigiExamImport({ s, klass, amne, kor }: {
     const f = filer[i];
     if (f.roll !== 'ordinarie' || f.rapport === null) return new Set();
     const nyckel = (r: DigiExamElevRad) => (r.epost !== '' ? r.epost : r.namn.toLowerCase());
-    const tidigare = new Set(filer.slice(0, i).filter((g) => g.roll === 'ordinarie' && g.info.nyckel === f.info.nyckel && g.rapport !== null)
+    const storlek = (g: DigiExamFil) => g.rapport?.rader.length ?? 0;
+    // Ordinarie = det tidigaste tillfället (vid samma datum: den största filen); senare tillfällen för samma elev blir omprov
+    const fore = (g: DigiExamFil, j: number) => g.datum < f.datum || (g.datum === f.datum && (storlek(g) > storlek(f) || (storlek(g) === storlek(f) && j < i)));
+    const tidigare = new Set(filer.filter((g, j) => g !== f && fore(g, j) && g.roll === 'ordinarie' && g.info.nyckel === f.info.nyckel && g.rapport !== null)
       .flatMap((g) => g.rapport!.rader.filter((r) => !r.nollrad).map(nyckel)));
     return new Set(f.rapport.rader.filter((r) => !r.nollrad && tidigare.has(nyckel(r))).map(nyckel));
   };
@@ -161,6 +180,16 @@ export function DigiExamImport({ s, klass, amne, kor }: {
         {amne === undefined && <span className="status warn small">⚠ Välj ämne ovan — DigiExam-resultat sparas ämnesvis.</span>}
         {antalElever === 0 && <span className="status warn small">⚠ {klass.namn} har inga elever än — med rutan ibockad skapas de från filen vid import.</span>}
       </div>
+      <details className="st-de-provlista" open={provlista.length === 0 && filer.length > 0}>
+        <summary>📅 Provdatum från DigiExam <small className="muted">{provlista.length > 0 ? `· ${provlista.length} prov i listan` : '· klistra in provlistan så får filerna provets datum'}</small></summary>
+        <small className="muted">Markera provlistan i DigiExam (titel, ämne, <i>Start time</i>, <i>Exam ID</i>) och klistra in här. Filerna kopplas till proven via titeln och får starttidens datum. Listan sparas till nästa import.</small>
+        <textarea aria-label="DigiExams provlista" rows={4} value={provlistaText} onChange={(e) => sattProvlista(e.target.value)} placeholder={'8B Ekologi - Eprov\nBiologi\nStart time: 2026-09-15 12:50\nExam ID: 18 46 26 72 92'} style={{ width: '100%', fontFamily: 'ui-monospace, monospace' }} />
+        {provlista.length > 0 && (
+          <table className="tbl small"><thead><tr><th>Prov i DigiExam</th><th>Ämne</th><th>Start</th><th>Exam ID</th></tr></thead>
+            <tbody>{provlista.map((p) => <tr key={p.examId !== '' ? p.examId : `${p.titel}${p.datum}${p.tid}`}><td>{p.url !== null ? <a href={p.url} target="_blank" rel="noreferrer">{p.titel}</a> : p.titel}</td><td>{p.amne}</td><td>{p.datum} {p.tid}</td><td>{p.examId}</td></tr>)}</tbody></table>
+        )}
+        {provlistaText !== '' && <button className="linkbtn small" onClick={() => sattProvlista('')}>Töm listan</button>}
+      </details>
 
       {filer.map((f, i) => {
         const m = matchning(f);
@@ -172,7 +201,9 @@ export function DigiExamImport({ s, klass, amne, kor }: {
               <span title={f.filnamn}>📄 {f.filnamn}</span>
               {f.fel !== null ? <span className="st-krav ej">{f.fel}</span> : (<>
                 <label>Prov:{' '}<input aria-label={`Provnamn för ${f.filnamn}`} value={f.prov} onChange={(e) => andra(i, { prov: e.target.value })} style={{ width: 200 }} /></label>
-                <label>Provdatum:{' '}<input aria-label={`Provdatum för ${f.filnamn}`} type="date" value={f.datum} onChange={(e) => andra(i, { datum: e.target.value })} /></label>
+                <label>Provdatum:{' '}<input aria-label={`Provdatum för ${f.filnamn}`} type="date" value={f.datum} onChange={(e) => andra(i, { datum: e.target.value, datumKalla: 'provlista' })} /></label>
+                {f.datumKalla === 'export' && <span className="status warn small" title="Klistra in provlistan från DigiExam nedan så sätts provets datum">⚠ exportens datum — inte provets</span>}
+                {f.datumKalla === 'provlista' && digiexamProvForFil(provlista, f.filnamn).length > 0 && <span className="small muted">📅 {digiexamProvForFil(provlista, f.filnamn).map((p) => `${p.datum} ${p.tid}`).join(' och ')}</span>}
                 <label>Max:{' '}<input aria-label={`Maxpoäng för ${f.filnamn}`} value={f.maxPoang} onChange={(e) => { const n = Number(e.target.value.replace(',', '.')); andra(i, { maxPoang: e.target.value, ...(f.info.typ === 'E' && Number.isFinite(n) && n > 0 ? { grans: String(eProvGrans(n)) } : {}) }); }} style={{ width: 50 }} /></label>
                 <label>Godkänt från:{' '}<input aria-label={`Gräns för godkänt för ${f.filnamn}`} value={f.grans} placeholder="poäng" onChange={(e) => andra(i, { grans: e.target.value })} style={{ width: 50 }} className={gransFor(f) === null ? 'fel' : ''} /> p</label>
                 <label>Som:{' '}<select aria-label={`Roll för ${f.filnamn}`} value={f.roll} onChange={(e) => sattRoll(i, e.target.value as DigiExamFil['roll'])}>
@@ -180,7 +211,7 @@ export function DigiExamImport({ s, klass, amne, kor }: {
                 <span className="st-krav ok" title={`Prov-id: ${f.info.nyckel}`}>{filer.filter((g) => g.info.nyckel === f.info.nyckel).length > 1 ? `samma prov som ${filer.filter((g) => g.info.nyckel === f.info.nyckel && g !== f).length} fil(er) till — redovisas ihop` : f.info.namn}</span>
                 {gransFor(f) === null && <span className="status warn small">⚠ Gränsen för godkänt går inte att tolka ur provnamnet ({f.info.typ === null ? 'ingen provtyp E/CA/ECA i namnet' : `${f.info.typ}-prov`}) — ange hur många poäng som krävs.</span>}
                 {f.info.typ === 'E' && gransFor(f) !== null && <span className="small muted">E-prov: mer än hälften av {maxFor(f)} p = {eProvGrans(maxFor(f))} p</span>}
-                {dubbletter(i).size > 0 && <span className="status warn small">⚠ {dubbletter(i).size} elev(er) finns redan i en större fil av samma prov — deras resultat här sparas som <b>omprov</b>.</span>}
+                {dubbletter(i).size > 0 && <span className="status warn small">⚠ {dubbletter(i).size} elev(er) finns redan på ett tidigare tillfälle av samma prov (tidigare datum, annars större fil) — deras resultat här sparas som <b>omprov</b>.</span>}
                 {f.roll === 'omprov' && ordinarieDatum(f) !== undefined && f.datum <= ordinarieDatum(f)! && <span className="status warn small">⚠ Omprovet ska ha ett senare datum än provet ({ordinarieDatum(f)}).</span>}
                 <span className="small muted">{f.rapport!.fragor.length} frågor · {m.deltagare.length} elever · {m.matchade} matchade{m.omatchade.length > 0 ? ` · ⚠ omatchade: ${m.omatchade.join(', ')}` : ''}{nollrader > 0 && !medNollrader ? ` · ${nollrader} med 0 poäng hoppas över` : ''}</span>
                 {f.rapport!.avvikandeSumma && <span className="status warn small">⚠ Final Grade skiljer sig från summan av frågepoängen för någon elev — filens totalpoäng används.</span>}

@@ -14,6 +14,7 @@
  * DigiExam har inget fast procentkrav — provet bedöms per förmåga av läraren.
  */
 import { digiexamProvTyp, godkantGransFor, type FragaSvar } from './resultat.js';
+import { elevIKlassen } from './struktur.js';
 
 export type DigiExamCell = string | number | boolean | null | undefined;
 
@@ -189,11 +190,11 @@ export interface DigiExamElevSerie {
 export interface DigiExamAnalys { prov: DigiExamProvAnalys[]; elever: DigiExamElevSerie[]; }
 
 interface MinimalResultat { elevId: string; amneId?: string; kalla: string; prov: string; datum: string; poang: number; maxPoang: number; svar?: FragaSvar[]; }
-interface MinimalElev { id: string; klassId: string; namn: string; }
+interface MinimalElev { id: string; klassId: string; namn: string; aktiv?: boolean; startDatum?: string; slutDatum?: string; }
 
 /** Sammanställer klassens sparade DigiExam-prov: per prov medel och andel full poäng per fråga; per elev procentserien (äldst → senast). */
 export function digiexamAnalys(s: { elever: MinimalElev[]; resultat?: MinimalResultat[] }, klassId: string, amneId?: string): DigiExamAnalys {
-  const elever = s.elever.filter((e) => e.klassId === klassId).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
+  const elever = s.elever.filter((e) => e.klassId === klassId && elevIKlassen(e)).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
   const elevIds = new Set(elever.map((e) => e.id));
   const rs = (s.resultat ?? []).filter((r) => r.kalla === 'digiexam' && elevIds.has(r.elevId) && (amneId === undefined || amneId === '' || r.amneId === amneId));
   const nycklar = [...new Map(rs.map((r) => [`${r.datum}|${r.prov}`, { datum: r.datum, prov: r.prov }])).values()]
@@ -291,9 +292,10 @@ interface LarmResultat { elevId: string; amneId?: string; kalla: string; prov: s
  * Gränsen är mer än hälften av poängen på E-prov; saknas gräns larmas det också.
  */
 export function digiexamLarm(
-  s: { elever: Array<{ id: string; klassId: string; namn: string }>; resultat?: LarmResultat[] }, klassId: string, amneId?: string,
+  s: { elever: MinimalElev[]; resultat?: LarmResultat[] }, klassId: string, amneId?: string, idag?: string,
 ): DigiExamLarm[] {
-  const elever = s.elever.filter((e) => e.klassId === klassId).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
+  // Del 154: elever som är av eller har slutat ingår inte — rapporteringen kring dem är avslutad
+  const elever = s.elever.filter((e) => e.klassId === klassId && elevIKlassen(e, idag)).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
   const ids = new Set(elever.map((e) => e.id));
   const rs = (s.resultat ?? []).filter((r) => r.kalla === 'digiexam' && ids.has(r.elevId) && (amneId === undefined || amneId === '' || r.amneId === amneId));
   const grupper = new Map<string, LarmResultat[]>();
@@ -309,7 +311,9 @@ export function digiexamLarm(
     const ejGodkanda: DigiExamLarmElev[] = []; const ejSkrivit: DigiExamLarmElev[] = [];
     const godkandaPaOmprov: DigiExamLarm['godkandaPaOmprov'] = [];
     let godkanda = 0;
-    for (const e of elever) {
+    // Bara elever som gick i klassen när provet skrevs (börjat före provdatum)
+    const iKlassen = elever.filter((e) => elevIKlassen(e, bas.datum));
+    for (const e of iKlassen) {
       const egna = lista.filter((r) => r.elevId === e.id).sort((a, b) => a.datum.localeCompare(b.datum));
       if (egna.length === 0) { ejSkrivit.push({ elevId: e.id, namn: e.namn, poang: null, maxPoang: null }); continue; }
       const gr = (r: LarmResultat) => godkantGransFor({ kalla: 'digiexam', prov: r.prov, maxPoang: r.maxPoang, ...(r.godkantGrans !== undefined ? { godkantGrans: r.godkantGrans } : {}) }) ?? grans;
@@ -326,9 +330,76 @@ export function digiexamLarm(
     }
     ut.push({
       prov: bas.prov.replace(/\s*–\s*omprov$/i, ''), provNyckel: nyckel, datum: bas.datum, grans, maxPoang: bas.maxPoang,
-      ejGodkanda, ejSkrivit, godkandaPaOmprov, godkanda, antalElever: elever.length,
+      ejGodkanda, ejSkrivit, godkandaPaOmprov, godkanda, antalElever: iKlassen.length,
       larm: grans === null || ejGodkanda.length > 0 || ejSkrivit.length > 0,
     });
   }
   return ut.sort((a, b) => a.datum.localeCompare(b.datum) || a.prov.localeCompare(b.prov, 'sv'));
+}
+
+// ── Del 154 · Provdatum ur DigiExams provlista (inklistrad) ───────────────────
+
+export interface DigiExamProvPost {
+  /** Provets titel i DigiExam ('8B Ekologi - Omprov E-prov'). */
+  titel: string;
+  /** Ämnesraden under titeln ('Biologi'). */
+  amne: string;
+  /** Starttid: datum YYYY-MM-DD och tid HH:MM. */
+  datum: string;
+  tid: string;
+  /** Exam ID utan mellanslag ('1860008132'). */
+  examId: string;
+  url: string | null;
+}
+
+/** Titel eller filnamn som jämförbar nyckel: '8B Ekologi - Omprov E-prov' och '2026-09-30-2248-8b-ekologi-omprov-e-prov.xlsx' → '8b-ekologi-omprov-e-prov'. */
+export function digiexamSlug(titelEllerFil: string): string {
+  return titelEllerFil.toLowerCase()
+    .replace(/\.(xlsx|xls|csv)$/i, '')
+    .replace(/^\d{4}-\d{2}-\d{2}-\d{4}-?/, '')
+    .replace(/[^a-z0-9åäö]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/**
+ * Tolkar DigiExams provlista som den ser ut när den kopieras ur sidan:
+ *   [8B Ekologi - Eprov](https://app.digiexam.com/…/1846267292)   (eller bara titeln)
+ *   Biologi
+ *   Start time: 2026-09-15 12:50
+ *   Exam ID: 18 46 26 72 92
+ *   [View result](…)
+ * Varje post börjar vid en titel och slutar vid Exam ID.
+ */
+export function tolkaDigiExamProvlista(text: string): DigiExamProvPost[] {
+  const rader = text.split(/\r?\n/).map((r) => r.trim()).filter((r) => r !== '');
+  const ut: DigiExamProvPost[] = [];
+  let i = 0;
+  while (i < rader.length) {
+    const start = rader.findIndex((r, j) => j > i && /^(start time|starttid|start)\s*:/i.test(r));
+    if (start === -1) break;
+    // Titeln: närmaste rad före ämnesraden som inte är 'View result' eller en Exam ID-rad
+    const ar = (r: string) => !/^\[?view result\]?/i.test(r) && !/^(exam id|prov-?id)\s*:/i.test(r) && !/^(start time|starttid)\s*:/i.test(r);
+    const amneRad = start - 1 > i - 1 && ar(rader[start - 1]) ? start - 1 : -1;
+    const titelRad = amneRad > 0 && ar(rader[amneRad - 1]) && amneRad - 1 >= i ? amneRad - 1 : amneRad;
+    const tid = /(\d{4}-\d{2}-\d{2})[ T](\d{1,2}:\d{2})/.exec(rader[start]);
+    const idRad = rader.slice(start + 1, start + 4).find((r) => /^(exam id|prov-?id)\s*:/i.test(r));
+    if (titelRad >= 0 && tid !== null) {
+      const t = /^\[(.+?)\]\((https?:[^)]+)\)$/.exec(rader[titelRad]);
+      ut.push({
+        titel: (t !== null ? t[1] : rader[titelRad]).trim(),
+        amne: titelRad !== amneRad ? rader[amneRad] : '',
+        datum: tid[1], tid: tid[2].padStart(5, '0'),
+        examId: idRad === undefined ? '' : idRad.replace(/^[^:]*:\s*/, '').replace(/\s+/g, ''),
+        url: t !== null ? t[2] : null,
+      });
+    }
+    i = start + 1;
+  }
+  return ut;
+}
+
+/** Posterna i provlistan som hör till en exportfil (samma titel). Flera = samma titel skrivits flera gånger. */
+export function digiexamProvForFil(lista: DigiExamProvPost[], filnamn: string): DigiExamProvPost[] {
+  const slug = digiexamSlug(filnamn);
+  return lista.filter((p) => digiexamSlug(p.titel) === slug).sort((a, b) => `${a.datum} ${a.tid}`.localeCompare(`${b.datum} ${b.tid}`));
 }

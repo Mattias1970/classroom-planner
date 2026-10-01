@@ -14,6 +14,7 @@
  * ('Biologi412' = ämne Biologi, kapitel 4, delkapitel 1 och 2), men
  * funktionerna fungerar för vilket ämne som helst.
  */
+import { elevernaIKlassen } from './struktur.js';
 import type { Elev, Struktur } from './typer.js';
 import type { Resultat, ResultatKalla } from './resultat.js';
 
@@ -191,7 +192,7 @@ export interface TrendkollFilter { klassId: string; amneId?: string; kallor?: Re
  * mot nästa som delar minst en fråga) och summerar lärt/glömt.
  */
 export function trendkoll(s: Struktur, f: TrendkollFilter): Trendkoll {
-  const elever = s.elever.filter((e) => e.klassId === f.klassId);
+  const elever = elevernaIKlassen(s, f.klassId);
   const elevIds = new Set(elever.map((e) => e.id));
   const rs = (s.resultat ?? []).filter((r) => elevIds.has(r.elevId)
     && (f.amneId === undefined || r.amneId === f.amneId)

@@ -7,6 +7,7 @@
  * grafer — kort, frågematris, trendkoll, kluster, närvaro — räknas på samma
  * elever utan att någon kernel-funktion behöver känna till filtret.
  */
+import { elevernaIKlassen } from './struktur.js';
 import type { Elev, Struktur } from './typer.js';
 import { KLUSTER_NAMN, type Kluster, type KlusterGrupp, type ElevNarvaro } from './dashboard.js';
 
@@ -65,5 +66,5 @@ export function begransaTillElever(s: Struktur, elevIds: string[] | null): Struk
 
 /** Elever i klassen sorterade på namn — grunden för bocklistan i filtret. */
 export function klassensElever(s: Struktur, klassId: string): Elev[] {
-  return s.elever.filter((e) => e.klassId === klassId).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
+  return elevernaIKlassen(s, klassId).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
 }

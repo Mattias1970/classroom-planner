@@ -10,7 +10,7 @@
  * (85 Bra, 95 Utmärkt — se magmaprov.ts). DigiExam har inget fast krav.
  */
 import type { Elev, PlaneradLektion, Struktur } from './typer.js';
-import { nyttId } from './struktur.js';
+import { elevernaIKlassen, nyttId } from './struktur.js';
 import { koderForProv } from './delkapitelkoder.js';
 import { MAGMA_GRANSER, magmaOmdome } from './magmaprov.js';
 
@@ -364,13 +364,13 @@ function oversiktFor(s: Struktur, elever: Elev[], f: ResultatFilter | undefined)
 export function amnesOversikt(s: Struktur, amneId: string, kallor?: ResultatKalla[]): ElevAggregatRad[] {
   const amne = s.amnen.find((a) => a.id === amneId);
   if (!amne) throw new Error('Okänt ämne.');
-  const elever = s.elever.filter((e) => e.klassId === amne.klassId);
+  const elever = elevernaIKlassen(s, amne.klassId);
   return oversiktFor(s, elever, { amneId, ...(kallor !== undefined ? { kallor } : {}) });
 }
 
 /** Aggregerad översikt över ALLA aktuella ämnen för en klass, med källfilter. */
 export function klassOversikt(s: Struktur, klassId: string, f?: ResultatFilter): ElevAggregatRad[] {
-  return oversiktFor(s, s.elever.filter((e) => e.klassId === klassId), f);
+  return oversiktFor(s, elevernaIKlassen(s, klassId), f);
 }
 
 // ── Filregister: vilka resultatfiler som importerats, per ämne ──

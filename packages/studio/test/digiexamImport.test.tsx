@@ -123,7 +123,7 @@ describe('Del 152 · samma prov, omprov, gräns och provlarm', () => {
     ] });
     await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await sov(); await sov(); });
     expect(div.textContent).toContain('samma prov som 2 fil(er) till — redovisas ihop');
-    expect(div.textContent).toContain('2 elev(er) finns redan i en större fil av samma prov');
+    expect(div.textContent).toContain('2 elev(er) finns redan på ett tidigare tillfälle av samma prov');
     expect((div.querySelector('select[aria-label="Roll för 2026-09-30-2248-8b-ekologi-omprov-e-prov.xlsx"]') as HTMLSelectElement).value).toBe('omprov');
     expect((div.querySelector('input[aria-label="Provnamn för 2026-09-30-2248-8b-ekologi-omprov-e-prov.xlsx"]') as HTMLInputElement).value).toBe('Ekologi E-prov – omprov');
     // Omprovet får ett senare datum
@@ -175,5 +175,37 @@ describe('Del 152 · samma prov, omprov, gräns och provlarm', () => {
     expect((knapp() as HTMLButtonElement).disabled).toBe(false);
     await act(async () => { knapp().click(); });
     expect((s.resultat ?? []).every((r) => r.godkantGrans === 3)).toBe(true);
+  });
+});
+
+describe('Del 154 · provdatum ur DigiExams provlista', () => {
+  it('inklistrad provlista ger filerna provets datum; den senare sittningen blir omprov för elever som redan skrivit', async () => {
+    let s = bygg();
+    sparaStruktur(s);
+    const kor = (fn: () => Struktur) => { s = fn(); sparaStruktur(s); rendera(); };
+    const div = document.createElement('div'); document.body.appendChild(div);
+    const root = createRoot(div);
+    const rendera = () => act(() => root.render(<DigiExamImport s={s} klass={s.klasser[0]} amne={s.amnen[0]} kor={kor} />));
+    rendera();
+    const input = div.querySelector('input[aria-label="DigiExam-filer"]') as HTMLInputElement;
+    // Den mindre filen ('8b-…', 3 rader i verkligheten) skrevs först i sorteringen men DAGEN EFTER — mocken ger samma blad
+    Object.defineProperty(input, 'files', { value: [new File(['x'], '2026-09-30-2248-8b-ekologi-eprov.xlsx'), new File(['x'], '2026-09-30-2249-ekologi-eprov.xlsx')] });
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await sov(); await sov(); });
+    expect(div.textContent).toContain('⚠ exportens datum — inte provets');
+    const lista = div.querySelector('textarea[aria-label="DigiExams provlista"]') as HTMLTextAreaElement;
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
+    await act(async () => {
+      setter.call(lista, '[8B Ekologi - Eprov](https://app.digiexam.com/app#/exam/grades/1)\nBiologi\nStart time: 2026-09-15 12:50\nExam ID: 1\n[Ekologi - Eprov](https://app.digiexam.com/app#/exam/grades/2)\nBiologi\nStart time: 2026-09-14 09:14\nExam ID: 2');
+      lista.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(div.textContent).toContain('2 prov i listan');
+    expect((div.querySelector('input[aria-label="Provdatum för 2026-09-30-2249-ekologi-eprov.xlsx"]') as HTMLInputElement).value).toBe('2026-09-14');
+    expect((div.querySelector('input[aria-label="Provdatum för 2026-09-30-2248-8b-ekologi-eprov.xlsx"]') as HTMLInputElement).value).toBe('2026-09-15');
+    expect(div.textContent).not.toContain('exportens datum — inte provets');
+    await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Importera 2 DigiExam-filer'))!.click(); });
+    const res = (s.resultat ?? []).filter((r) => r.kalla === 'digiexam');
+    expect(res.filter((r) => r.prov === 'Ekologi E-prov').map((r) => r.datum)).toEqual(['2026-09-14', '2026-09-14']);
+    expect(res.filter((r) => r.omprov === true).map((r) => [r.prov, r.datum])).toEqual([['Ekologi E-prov – omprov', '2026-09-15'], ['Ekologi E-prov – omprov', '2026-09-15']]);
+    expect(localStorage.getItem('cp.digiexamProvlista') ?? '').toContain('Ekologi - Eprov');   // sparas till nästa import
   });
 });

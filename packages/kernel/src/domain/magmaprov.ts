@@ -11,6 +11,7 @@
  * andelen rätt. Omdömet följer lärarens skala:
  *   70 – <85 % Godkänt · 85 – <95 % Bra · 95 – 100 % Utmärkt · under 70 % Under godkänt.
  */
+import { elevernaIKlassen } from './struktur.js';
 import type { FragaSvar } from './resultat.js';
 
 export type MagmaCell = string | number | boolean | null | undefined;
@@ -218,7 +219,7 @@ interface MinimalElev { id: string; klassId: string; namn: string; }
 export function magmaAnalys(
   s: { elever: MinimalElev[]; resultat?: MinimalResultat[]; magmaTester?: Array<{ titel: string; filnamn: string; testNyckel: string }> }, klassId: string, amneId?: string,
 ): MagmaAnalys {
-  const elever = s.elever.filter((e) => e.klassId === klassId).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
+  const elever = elevernaIKlassen(s, klassId).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
   const elevIds = new Set(elever.map((e) => e.id));
   const rs = (s.resultat ?? []).filter((r) => r.kalla === 'magma' && elevIds.has(r.elevId) && (amneId === undefined || amneId === '' || r.amneId === amneId));
   // Del 153: prov med samma uppgifter (samma test, olika kopior/namn) räknas som ett test

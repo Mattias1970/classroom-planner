@@ -6,6 +6,7 @@
  * utveckling över tid, en elev × provtillfälle-matris och en kurva per
  * elev. All filtrering (ämne, källor, veckointervall, elevsökning) sker här.
  */
+import { elevernaIKlassen } from './struktur.js';
 import { isoVecka } from './skolar.js';
 import { klaratKrav, kravFor, resultatProcent, type Resultat, type ResultatKalla } from './resultat.js';
 import { koderForProv } from './delkapitelkoder.js';
@@ -31,8 +32,7 @@ export interface DashboardFilter {
 /** Elever i klassen som matchar fritextsökning på namn/e-post/Student ID. */
 export function sokElever(s: Struktur, klassId: string, sok: string): Elev[] {
   const q = sok.toLowerCase().trim();
-  return s.elever
-    .filter((e) => e.klassId === klassId)
+  return elevernaIKlassen(s, klassId)
     .filter((e) => q === '' || [e.namn, e.epost ?? '', e.socrativeId ?? ''].some((t) => t.toLowerCase().includes(q)))
     .sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
 }
@@ -71,6 +71,21 @@ export function kapitelMatchar(kapitel: number | undefined, prov: string, rum: s
   return koderForProv(prov, rum).some((k) => k.split('.')[0] === String(kapitel));
 }
 
+/** Del 154 · Socrative-källorna (läxförhör, exit, övning) — de enda som delar diagram. */
+export const SOCRATIVE_KALLOR: ResultatKalla[] = ['socrative-laxforhor', 'socrative-exit', 'socrative-ovning'];
+export const arSocrative = (k: ResultatKalla): boolean => SOCRATIVE_KALLOR.includes(k);
+
+/**
+ * Del 154 · DigiExam och Magma visas aldrig i samma diagram som Socrative.
+ * Filter utan källor eller med någon Socrative-källa → bara Socrative-källorna;
+ * ett filter med enbart DigiExam (eller Magma) lämnas orört (eget diagram).
+ */
+export function diagramFilter(f: DashboardFilter): DashboardFilter {
+  const valda = f.kallor === undefined || f.kallor.length === 0 ? SOCRATIVE_KALLOR : f.kallor;
+  const socr = valda.filter(arSocrative);
+  return { ...f, kallor: socr.length > 0 ? socr : valda };
+}
+
 export function dashboardResultat(s: Struktur, f: DashboardFilter): Resultat[] {
   let per = resultatCache.get(s);
   if (per === undefined) { per = new Map(); resultatCache.set(s, per); }
@@ -83,7 +98,7 @@ export function dashboardResultat(s: Struktur, f: DashboardFilter): Resultat[] {
 }
 
 function dashboardResultatRaknad(s: Struktur, f: DashboardFilter): Resultat[] {
-  const elevIds = new Set(s.elever.filter((e) => e.klassId === f.klassId).map((e) => e.id));
+  const elevIds = new Set(elevernaIKlassen(s, f.klassId).map((e) => e.id));
   return (s.resultat ?? [])
     .filter((r) => elevIds.has(r.elevId))
     .filter((r) => amneMatchar(f, r.amneId))
@@ -202,7 +217,7 @@ export const KORT_FRAGA: Record<KortKalla, { rubrik: string; fraga: string }> = 
   'socrative-ovning': { rubrik: 'Övning', fraga: 'Hur går det på övningarna?' },
   magma: { rubrik: 'Magma test', fraga: 'Kan eleven begreppen?' },
   digiexam: { rubrik: 'DigiExam prov', fraga: 'Klarar eleven proven?' },
-  helhet: { rubrik: 'Helhet', fraga: 'Hur går det sammantaget?' },
+  helhet: { rubrik: 'Helhet', fraga: 'Hur går det sammantaget i läxförhör, exit och övningar?' },
 };
 
 export interface FrageKort {
@@ -226,8 +241,9 @@ export function frageKort(s: Struktur, f: DashboardFilter): FrageKort[] {
   const alla = provTillfallen(s, f);
   const rs = dashboardResultat(s, f);
   return KORT_ORDNING.map((kalla) => {
-    const t = kalla === 'helhet' ? alla : alla.filter((x) => x.kalla === kalla);
-    const r = kalla === 'helhet' ? rs : rs.filter((x) => x.kalla === kalla);
+    // Helhet = Socrative (läxförhör, exit, övning); DigiExam och Magma har egna kort
+    const t = kalla === 'helhet' ? alla.filter((x) => arSocrative(x.kalla)) : alla.filter((x) => x.kalla === kalla);
+    const r = kalla === 'helhet' ? rs.filter((x) => arSocrative(x.kalla)) : rs.filter((x) => x.kalla === kalla);
     const serie = t.map((x) => x.snittProcent).filter((p): p is number => p !== null);
     const bedomda = r.map(klaratKrav).filter((k): k is boolean => k !== null);
     return {
@@ -248,7 +264,8 @@ export interface MatrisRad { elev: Elev; celler: Array<MatrisCell | null>; snitt
 export interface ElevMatris { tillfallen: ProvTillfalle[]; rader: MatrisRad[]; }
 
 /** Elev × provtillfälle med procent/krav per cell (heatmap-underlag). */
-export function elevMatris(s: Struktur, f: DashboardFilter, sok = ''): ElevMatris {
+export function elevMatris(s: Struktur, fIn: DashboardFilter, sok = ''): ElevMatris {
+  const f = diagramFilter(fIn);
   const tillfallen = provTillfallen(s, f);
   const index = new Map(tillfallen.map((t, i) => [t.nyckel, i]));
   const rs = dashboardResultat(s, f);
@@ -274,7 +291,7 @@ export interface KurvPunkt { datum: string; vecka: number; kalla: ResultatKalla;
 
 /** En elevs resultat som kurvpunkter, kronologiskt. */
 export function elevKurva(s: Struktur, elevId: string, f: DashboardFilter): KurvPunkt[] {
-  return dashboardResultat(s, f)
+  return dashboardResultat(s, diagramFilter(f))
     .filter((r) => r.elevId === elevId)
     .map((r) => ({ datum: r.datum, vecka: isoVecka(r.datum), kalla: r.kalla, prov: r.prov,
       procent: resultatProcent(r) ?? 0, krav: kravFor(r.kalla), klarat: klaratKrav(r) }))
@@ -283,7 +300,7 @@ export function elevKurva(s: Struktur, elevId: string, f: DashboardFilter): Kurv
 
 /** Klassens kurva: snitt + andel klarade per provtillfälle. */
 export function klassKurva(s: Struktur, f: DashboardFilter): ProvTillfalle[] {
-  return provTillfallen(s, f).filter((t) => t.snittProcent !== null);
+  return provTillfallen(s, diagramFilter(f)).filter((t) => t.snittProcent !== null);
 }
 
 /** Tolkar 'v.35–43', '35-43' eller '35' till ett veckointervall. */
@@ -305,7 +322,7 @@ export function veckoSerier(s: Struktur, f: DashboardFilter): VeckoSerier {
   const veckor = [...new Set(rs.map((r) => isoVecka(r.datum)))];
   // kronologisk ordning bevaras eftersom dashboardResultat är datumsorterad
   const per = (k: KortKalla): Array<number | null> => veckor.map((v) => snitt(rs
-    .filter((r) => isoVecka(r.datum) === v && (k === 'helhet' || r.kalla === k))
+    .filter((r) => isoVecka(r.datum) === v && (k === 'helhet' ? arSocrative(r.kalla) : r.kalla === k))
     .map(resultatProcent).filter((p): p is number => p !== null)));
   return { veckor, serier: {
     'socrative-laxforhor': per('socrative-laxforhor'), 'socrative-exit': per('socrative-exit'),
@@ -408,11 +425,11 @@ export interface GruppSnitt { grupp: 'A' | 'B'; antalElever: number; perKalla: R
 /** Snitt per grupp (A/B) och källa — 'Grupp A vs B'-widgeten. */
 export function gruppSnitt(s: Struktur, f: DashboardFilter): GruppSnitt[] {
   const rs = dashboardResultat(s, f);
-  const elever = s.elever.filter((e) => e.klassId === f.klassId);
+  const elever = elevernaIKlassen(s, f.klassId);
   return (['A', 'B'] as const).map((grupp) => {
     const ids = new Set(elever.filter((e) => e.grupp === grupp).map((e) => e.id));
     const egna = rs.filter((r) => ids.has(r.elevId));
-    const per = (k: KortKalla) => snitt(egna.filter((r) => k === 'helhet' || r.kalla === k).map(resultatProcent).filter((p): p is number => p !== null));
+    const per = (k: KortKalla) => snitt(egna.filter((r) => (k === 'helhet' ? arSocrative(r.kalla) : r.kalla === k)).map(resultatProcent).filter((p): p is number => p !== null));
     return { grupp, antalElever: ids.size, perKalla: {
       'socrative-laxforhor': per('socrative-laxforhor'), 'socrative-exit': per('socrative-exit'),
       'socrative-ovning': per('socrative-ovning'), magma: per('magma'), digiexam: per('digiexam'), helhet: per('helhet') } };
@@ -578,7 +595,7 @@ export function tidPaDagen(s: Struktur, f: DashboardFilter): TidCell[] {
 
 /** Korrelation elevens närvaro ↔ elevens helhetssnitt (Pearson r), null vid < 3 elever. */
 export function sambandNarvaro(s: Struktur, f: DashboardFilter): { r: number; n: number } | null {
-  const rs = dashboardResultat(s, { ...f, kallor: undefined });
+  const rs = dashboardResultat(s, { ...f, kallor: SOCRATIVE_KALLOR });
   const helhet = new Map<string, number[]>();
   for (const r of rs) { const p = resultatProcent(r); if (p !== null) helhet.set(r.elevId, [...(helhet.get(r.elevId) ?? []), p]); }
   const par = elevNarvaro(s, f).filter((e) => e.narvaroProcent !== null && helhet.has(e.elev.id));

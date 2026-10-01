@@ -182,3 +182,55 @@ describe('Del 152 · samma prov, omprov, gräns och larm', () => {
     expect(l.ejGodkanda).toHaveLength(3);
   });
 });
+
+import { digiexamProvForFil, digiexamSlug, tolkaDigiExamProvlista } from '../src/domain/digiexam.js';
+
+describe('Del 154 · provdatum ur DigiExams provlista', () => {
+  const LISTA = `[8B Ekologi - Eprov](https://app.digiexam.com/app#/exam/grades/1846267292)
+Biologi
+Start time: 2026-09-15 12:50
+Exam ID: 18 46 26 72 92
+[View result](https://app.digiexam.com/app#/exam/grades/1846267292)
+[8B Ekologi - Omprov E-prov](https://app.digiexam.com/app#/exam/grades/1860008132)
+Biologi
+Start time: 2026-09-17 14:44
+Exam ID: 18 60 00 81 32
+[View result](https://app.digiexam.com/app#/exam/grades/1860008132)
+[8A E-prov Ekologi](https://app.digiexam.com/app#/exam/grades/1865627216)
+Biologi
+Start time: 2026-09-14 14:19
+Exam ID: 18 65 62 72 16
+[View result](https://app.digiexam.com/app#/exam/grades/1865627216)
+[8A E-prov Ekologi](https://app.digiexam.com/app#/exam/grades/1844637185)
+Biologi
+Start time: 2026-09-14 10:55
+Exam ID: 18 44 63 71 85
+[View result](https://app.digiexam.com/app#/exam/grades/1844637185)
+Ekologi - Eprov
+Biologi
+Start time: 2026-09-14 09:14
+Exam ID: 18 26 70 71 04
+View result`;
+
+  it('läser titel, ämne, starttid och Exam ID — med eller utan länkar', () => {
+    const l = tolkaDigiExamProvlista(LISTA);
+    expect(l.map((p) => [p.titel, p.amne, p.datum, p.tid, p.examId])).toEqual([
+      ['8B Ekologi - Eprov', 'Biologi', '2026-09-15', '12:50', '1846267292'],
+      ['8B Ekologi - Omprov E-prov', 'Biologi', '2026-09-17', '14:44', '1860008132'],
+      ['8A E-prov Ekologi', 'Biologi', '2026-09-14', '14:19', '1865627216'],
+      ['8A E-prov Ekologi', 'Biologi', '2026-09-14', '10:55', '1844637185'],
+      ['Ekologi - Eprov', 'Biologi', '2026-09-14', '09:14', '1826707104'],
+    ]);
+    expect(l[0].url).toBe('https://app.digiexam.com/app#/exam/grades/1846267292');
+    expect(l[4].url).toBeNull();
+  });
+
+  it('kopplar exportfilerna till provlistan via titeln', () => {
+    const l = tolkaDigiExamProvlista(LISTA);
+    expect(digiexamSlug('8B Ekologi - Omprov E-prov')).toBe(digiexamSlug('2026-09-30-2248-8b-ekologi-omprov-e-prov.xlsx'));
+    expect(digiexamProvForFil(l, '2026-09-30-2249-ekologi-eprov.xlsx').map((p) => p.datum)).toEqual(['2026-09-14']);
+    expect(digiexamProvForFil(l, '2026-09-30-2248-8b-ekologi-eprov.xlsx').map((p) => p.datum)).toEqual(['2026-09-15']);
+    expect(digiexamProvForFil(l, '2026-09-30-2248-8a-e-prov-ekologi.xlsx').map((p) => p.tid)).toEqual(['10:55', '14:19']);   // två tillfällen samma dag
+    expect(digiexamProvForFil(l, 'kemi.xlsx')).toEqual([]);
+  });
+});

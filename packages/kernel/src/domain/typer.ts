@@ -51,7 +51,12 @@ export interface Klass { id: string; tjanstId: string; namn: string; }
  * ämnen (Biologi/Fysik/Kemi/Teknik) läses gruppvis med olika tider, så
  * gruppen avgör vilka lektioner som gäller för eleven.
  */
-export interface Elev { id: string; klassId: string; namn: string; grupp: 'A' | 'B'; /** E-post (valfri) — används vid resultatmatchning. */ epost?: string; /** Student ID i Socratives roster (valfri) — säkraste matchningen. */ socrativeId?: string; }
+export interface Elev { id: string; klassId: string; namn: string; grupp: 'A' | 'B'; /** E-post (valfri) — används vid resultatmatchning. */ epost?: string; /** Student ID i Socratives roster (valfri) — säkraste matchningen. */ socrativeId?: string; /** Del 154: vårdnadshavarnas kontaktuppgifter (elevkortet). */ vardnadshavare?: Vardnadshavare[];
+  /** Del 154: false = eleven ingår inte i klassen (av) — rapporteringen kring eleven avslutas. Saknas = på. */ aktiv?: boolean;
+  /** Del 154: eleven börjar i klassen detta datum (YYYY-MM-DD). */ startDatum?: string;
+  /** Del 154: eleven slutar i klassen detta datum (sista dagen, YYYY-MM-DD). */ slutDatum?: string; }
+/** Del 154 · En vårdnadshavare: e-post (krävs) och namn (valfritt). */
+export interface Vardnadshavare { epost: string; namn?: string; }
 
 /** Lektionspass: veckodag 1=mån … 5=fre, tider 'HH:MM'. */
 export interface Pass { dag: number; start: string; slut: string; }

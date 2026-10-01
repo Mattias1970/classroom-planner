@@ -9,6 +9,7 @@
  *
  * (Ring 1, I2: ingen fetch/DOM/lagring.)
  */
+import { elevernaIKlassen } from './struktur.js';
 import type { Elev, Struktur } from './typer.js';
 import { begreppUrFacit, type Resultat, type ResultatKalla } from './resultat.js';
 import { fragenyckel, svarText } from './trendkoll.js';
@@ -54,7 +55,7 @@ function tillfallenFor(s: Struktur, f: DelkapitelFilter): Tillfalle[] {
 
 /** Resultaten som filtret släpper igenom — oavsett om de har svar per fråga. */
 function resultatIFilter(s: Struktur, f: DelkapitelFilter): Resultat[] {
-  const elevIds = new Set(s.elever.filter((e) => e.klassId === f.klassId).map((e) => e.id));
+  const elevIds = new Set(elevernaIKlassen(s, f.klassId).map((e) => e.id));
   return (s.resultat ?? []).filter((r) => elevIds.has(r.elevId)
     && amneMatchar(f, r.amneId)
     && kapitelMatchar(f.kapitel, r.prov, r.rum)
@@ -266,7 +267,7 @@ export function aterkommandeFelKlass(s: Struktur, f: DelkapitelFilter): KlassBeg
   const tillfallen = tillfallenFor(s, f);
   const hemvist = fragansDelkapitel(tillfallen);
   const perElevTillfalle = tillfallen.map((t) => new Map(t.resultat.map((r) => [r.elevId, r])));
-  for (const elev of s.elever.filter((e) => e.klassId === f.klassId)) {
+  for (const elev of elevernaIKlassen(s, f.klassId)) {
     for (const b of aterkommandeFelUr(elev.id, tillfallen, hemvist, perElevTillfalle)) {
       const n = fragenyckel(b.fraga);
       const post = per.get(n) ?? { fraga: b.fraga, kod: b.kod, elever: [], antalElever: 0 };
