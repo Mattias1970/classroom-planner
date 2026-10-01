@@ -1186,3 +1186,39 @@ input.fel { border-color: #B71C1C; }
 /* ── Del 155 · Numrerad elevlista, slutade elever ── */
 .st-elevnr { width: 2.2em; text-align: right; font-variant-numeric: tabular-nums; }
 .st-slutade { margin-top: 6px; background: #fafafa; }
+
+/* ── Del 158 · Planeringstavlan ── */
+.pt-yta { display: flex; gap: 12px; align-items: flex-start; margin-top: 10px; }
+.pt-palett { flex: 0 0 240px; max-height: 70vh; overflow-y: auto; border: 1px solid var(--ram); border-radius: 8px; padding: 8px; background: #fff; }
+.pt-palett h4 { margin: 6px 0 4px; font-size: 13px; }
+.pt-palett summary { cursor: pointer; padding-left: 6px; font-weight: 600; font-size: 13px; margin: 6px 0 2px; }
+.pt-grupp { margin: 4px 0 6px 6px; }
+.pt-grupptitel { font-size: 12px; color: var(--muted-varm, #66738a); margin-bottom: 2px; }
+.pt-nya { display: flex; flex-wrap: wrap; gap: 4px; }
+.pt-chip { display: inline-block; font: inherit; font-size: 12px; margin: 2px; padding: 3px 8px; border-radius: 12px; border: 1px solid var(--ram); background: var(--bg); cursor: grab; text-align: left; }
+.pt-chip.anvand { opacity: .55; }
+.pt-chip.fore { opacity: .45; cursor: default; border-style: dashed; }
+.pt-chip.valt { outline: 2px solid var(--bla); background: #fff; }
+.pt-spar { flex: 1; min-width: 0; }
+.pt-rad { display: flex; gap: 0; overflow-x: auto; padding-bottom: 8px; border-radius: 8px; }
+.pt-vecka { flex: 0 0 auto; padding: 6px; background: var(--bg); border-right: 1px solid var(--ram); }
+.pt-vecka.udda { background: var(--warm, #eef2f8); }
+.pt-vecka.rymsej { background: #fff3e0; }
+.pt-veckanr { font-weight: 700; font-size: 12px; margin-bottom: 4px; color: var(--muted-varm, #66738a); }
+.pt-veckakort { display: flex; gap: 6px; }
+.pt-kort { width: 150px; min-height: 120px; background: #fff; border: 1px solid var(--ram); border-top: 5px solid #5c6b7a; border-radius: 6px; padding: 6px; font-size: 12px; display: flex; flex-direction: column; gap: 3px; cursor: grab; }
+.pt-kort.tom { border-style: dashed; border-top-width: 1px; background: transparent; color: var(--muted-varm, #66738a); cursor: default; }
+.pt-kort.lab { background: #f1f8f2; }
+.pt-kort.prov { background: #fff4f4; }
+.pt-kort.provdag { box-shadow: 0 0 0 2px #c62828 inset; }
+.pt-tid { font-size: 11px; }
+.pt-tag { font-size: 10px; color: #2e7d32; }
+.pt-kod { align-self: flex-start; color: #fff; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 8px; }
+.pt-rubrik { font-weight: 600; line-height: 1.25; flex: 1; }
+.pt-provflagga { font-size: 11px; color: #c62828; }
+.pt-knappar { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; }
+.pt-redigering { margin-top: 12px; }
+.pt-faltgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; margin: 8px 0; }
+.pt-falt { display: flex; flex-direction: column; font-size: 12px; gap: 2px; }
+.pt-falt input, .pt-falt textarea, .pt-falt select { font: inherit; font-size: 13px; }
+@media (max-width: 800px) { .pt-yta { flex-direction: column; } .pt-palett { flex-basis: auto; width: 100%; max-height: 40vh; } }

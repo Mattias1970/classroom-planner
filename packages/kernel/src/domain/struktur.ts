@@ -8,7 +8,7 @@ import { NO_TK_AMNEN } from './amnen.js';
 import { isoVecka, passSparr } from './skolar.js';
 import type {
   Amne, Bok, EgenRad, Elev, Klass, Laboration, Larare, Lektion, LektionsPlan, LektionsVal, Pass, PassVal, PlaneradLektion,
-  Planering, Skolar, StodPass, Struktur, Tjanst } from './typer.js';
+  Planering, PlanFranUtkast, Skolar, StodPass, Struktur, Tjanst } from './typer.js';
 
 let seq = 0;
 // Sessionsunik bas: förhindrar att id:n återanvänds mellan sidladdningar
@@ -553,7 +553,7 @@ export function medEgnaRader<T extends { kapitel: number; lektion: Lektion; nyck
 }
 
 /** Det som styr lektionsföljden utöver boken — ämnets planeringsfält. */
-export type PlanInstallning = Pick<Amne, 'egnaRader' | 'lektionerPerDelkapitel' | 'antalLektioner' | 'lektionsVal' | 'kursOrdning'>;
+export type PlanInstallning = Pick<Amne, 'egnaRader' | 'lektionerPerDelkapitel' | 'antalLektioner' | 'lektionsVal' | 'kursOrdning' | 'planFranUtkast'>;
 
 /** Ämnets inställning 'lektioner per delkapitel' (senaste loggposten), 1–4, standard 1. */
 export function lektionerPerDelkapitel(val: PlanInstallning): number {
@@ -710,6 +710,40 @@ export function flyttaKurs(s: Struktur, amneId: string, kursNyckel: string, steg
 }
 
 /** Lägger en lektionsföljd på slots: rad i → slot i (rader som inte ryms får datum null). */
+/**
+ * Del 158 · Utkastets teorikö som planrader: bokens rader hämtas ur den vanliga följden
+ * (så extra lektioner, ersättningar och egna rader följer med), egna kort blir egna
+ * lektioner. Okända nycklar hoppas över.
+ */
+export function utkastTeoriRader(rader: PlanRad[], u: PlanFranUtkast): PlanRad[] {
+  const perNyckel = new Map(rader.map((r) => [r.nyckel, r]));
+  const egna = new Map(u.egna.map((k) => [`u:${k.id}`, k]));
+  const ut: PlanRad[] = [];
+  for (const n of u.teori) {
+    const r = perNyckel.get(n);
+    if (r !== undefined) { ut.push(r); continue; }
+    const k = egna.get(n);
+    if (k !== undefined) {
+      const kapitel = ut[ut.length - 1]?.kapitel ?? rader[0]?.kapitel ?? 1;
+      const lektion = k.typ === 'lab' ? laborationTillLektion({ id: n, rubrik: k.rubrik }, 0)
+        : egenRadTillLektion({ id: k.id, position: 0, rubrik: k.rubrik, typ: k.typ === 'lektion' ? 'annat' : k.typ, ...(k.beskrivning !== undefined && k.beskrivning !== '' ? { beskrivning: k.beskrivning } : {}) });
+      ut.push({ kapitel, lektion, nyckel: n });
+    }
+  }
+  return ut;
+}
+
+/** Del 158 · Utkastets laborationskö: laborationer ur ämnets lista eller egna kort. */
+export function utkastLabbar(labbar: Laboration[], u: PlanFranUtkast): Laboration[] {
+  const ut: Laboration[] = [];
+  for (const n of u.labbar) {
+    if (n.startsWith('lab:')) { const l = labbar.find((x) => x.id === n.slice(4)); if (l !== undefined) ut.push(l); continue; }
+    const k = u.egna.find((x) => `u:${x.id}` === n);
+    if (k !== undefined) ut.push({ id: n, rubrik: k.rubrik, ...(k.beskrivning !== undefined && k.beskrivning !== '' ? { syfte: k.beskrivning } : {}) });
+  }
+  return ut;
+}
+
 function laggPaSlots(rader: PlanRad[], slots: Slot[]): PlaneradLektion[] {
   return rader.map(({ kapitel, lektion, nyckel }, i) => {
     const s = slots[i];
@@ -721,7 +755,13 @@ function laggPaSlots(rader: PlanRad[], slots: Slot[]): PlaneradLektion[] {
 
 export function skapaPlanering(skolar: Skolar, schema: Pass[], bok: Bok, offset = 0, val: EgenRad[] | PlanInstallning = []): PlaneradLektion[] {
   const inst: PlanInstallning = Array.isArray(val) ? { egnaRader: val } : val;
-  return laggPaSlots(planeringsRader(bok, inst), samlaSlots(skolar, schema).slice(offset));
+  const rader = planeringsRader(bok, inst);
+  const slots = samlaSlots(skolar, schema).slice(offset);
+  const u = inst.planFranUtkast;
+  if (u === undefined) return laggPaSlots(rader, slots);
+  // Del 158: passen före utkastets startdatum behåller sina lektioner; därefter utkastets ordning
+  const fore = slots.filter((x) => x.datum < u.fran).length;
+  return laggPaSlots([...rader.slice(0, fore), ...utkastTeoriRader(rader, u)], slots);
 }
 
 /** Sätter tjänstens stödpass (t.ex. Ma/NO-stöd). */
@@ -919,6 +959,19 @@ export function passValFor(amne: Amne, nyckel: string): PassVal | null {
  */
 export function skapaHalvklassPlanering(skolar: Skolar, amne: Amne, bok: Bok, offset = 0, idag?: string): HalvklassPlanering {
   const lektioner = planeringsRader(bok, amne);
+  const labbar = amne.laborationer ?? [];
+  const u = amne.planFranUtkast;
+  if (u === undefined) return halvklassPlan(skolar, amne, lektioner, labbar, offset, idag);
+  // Del 158: räkna hur många teorilektioner och laborationer som gått åt före startdatum,
+  // och lägg sedan utkastets köer efter dem
+  const forsta = halvklassPlan(skolar, amne, lektioner, labbar, offset, idag);
+  const lektionsNycklar = new Set(lektioner.map((r) => r.nyckel));
+  const teoriFore = forsta.a.filter((r) => r.datum !== null && r.datum < u.fran && r.nyckel !== undefined && lektionsNycklar.has(r.nyckel)).length;
+  const labFore = forsta.sessioner.filter((x) => !x.fryst && x.a.datum < u.fran && x.typ === 'lab' && x.val?.kalla !== 'egen').length;
+  return halvklassPlan(skolar, amne, [...lektioner.slice(0, teoriFore), ...utkastTeoriRader(lektioner, u)], [...labbar.slice(0, labFore), ...utkastLabbar(labbar, u)], offset, idag);
+}
+
+function halvklassPlan(skolar: Skolar, amne: Amne, lektioner: PlanRad[], labbar: Laboration[], offset: number, idag?: string): HalvklassPlanering {
   const budget = amne.noGrupp !== undefined ? noBudget(skolar, amne.schema) : Number.POSITIVE_INFINITY;
   const slotsA = samlaSlots(skolar, amne.schema).slice(offset, budget === Number.POSITIVE_INFINITY ? undefined : offset + budget);
   const slotsB = samlaSlots(skolar, amne.schemaB ?? []).slice(offset, budget === Number.POSITIVE_INFINITY ? undefined : offset + budget);
@@ -927,7 +980,6 @@ export function skapaHalvklassPlanering(skolar: Skolar, amne: Amne, bok: Bok, of
   const bAvNyckel = new Map(slotsB.map((x) => [sessionsNyckel(x.datum, x.start), x]));
   const helklass = new Set(slotsA.filter((x) => bAvNyckel.has(sessionsNyckel(x.datum, x.start))).map((x) => sessionsNyckel(x.datum, x.start)));
   const halvB = slotsB.filter((x) => !helklass.has(sessionsNyckel(x.datum, x.start)));
-  const labbar = amne.laborationer ?? [];
   const a: PlaneradLektion[] = []; const b: PlaneradLektion[] = []; const sessioner: HalvklassSession[] = [];
   const lagg = (lista: PlaneradLektion[], kapitel: number, lektion: Lektion, nyckel: string, x: { datum: string; vecka: number; start: string; slut: string }) =>
     lista.push({ kapitel, lektion, nyckel, datum: x.datum, vecka: x.vecka, start: x.start, slutTid: x.slut });

@@ -124,7 +124,47 @@ export interface Amne {
    * behåller sin plats i bokens ordning. Sätts av flyttaKurs.
    */
   kursOrdning?: string[];
+  /**
+   * Del 158: ett planeringsutkast som lagts in från ett datum. Pass före `fran` behåller
+   * den vanliga planeringen; från `fran` läggs teorilektionerna och laborationerna ut i
+   * utkastets ordning. En kopia — senare ändringar i utkastet påverkar inte förrän det läggs in igen.
+   */
+  planFranUtkast?: PlanFranUtkast;
 }
+
+/** Del 158 · Ett eget kort i ett planeringsutkast: prov, repetition, diagnos, egen lektion eller egen laboration. */
+export interface UtkastKort {
+  id: string;
+  rubrik: string;
+  /** 'lektion' = tom lektion som läraren fyller i själv (BAM, genomgång, uppgifter …). */
+  typ: 'lektion' | 'prov' | 'diagnos' | 'ovning' | 'annat' | 'lab';
+  /** Kort beskrivning — blir lektionens genomgångstext. */
+  beskrivning?: string;
+}
+
+/** Del 158 · Lektionskortets delar i ett utkast — samma fält som en lektionsplan. */
+export type LektionsDetaljer = Omit<LektionsPlan, 'id' | 'amneId' | 'lektionsIndex' | 'klar'>;
+
+/** Del 158 · Utkastets innehåll: två köer från ett startdatum, valfritt med provdatum. */
+export interface PlanFranUtkast {
+  /** Utkastets namn (visas i planeringen). */
+  namn: string;
+  /** Första dagen utkastet gäller (YYYY-MM-DD). */
+  fran: string;
+  /** Provets datum: provet läggs på första teoripasset den dagen (eller närmast efter). */
+  provDatum?: string;
+  /** Teorilektionerna i ordning: bokens radnycklar ('4:12', '4:12#2', 'er:<id>') eller egna kort ('u:<id>'). */
+  teori: string[];
+  /** Laborationerna i ordning (halvklasspassen): 'lab:<laborationsId>' eller egna kort ('u:<id>'). */
+  labbar: string[];
+  /** Egna kort som används i köerna. */
+  egna: UtkastKort[];
+  /** Lektionskortens delar (BAM, genomgång, filmer …) per radnyckel — förs över till lektionsplanerna när utkastet läggs in. */
+  detaljer?: Record<string, LektionsDetaljer>;
+}
+
+/** Del 158 · Ett namngivet, sparat planeringsutkast för ett ämne. */
+export interface PlanUtkast extends PlanFranUtkast { id: string; amneId: string; skapad: string; }
 
 /**
  * Del 129: vad som hänt med en lektion i planeringen.
@@ -382,6 +422,8 @@ export interface Struktur {
   resultat?: import('./resultat.js').Resultat[];
   /** SuperTeach: register över importerade resultatfiler per ämne. */
   filregister?: import('./resultat.js').FilPost[];
+  /** Del 158: namngivna planeringsutkast (planeringstavlan). */
+  planUtkast?: PlanUtkast[];
   /** Del 153: Magma-testens uppgifter ur testens PDF (en post per test). */
   magmaTester?: import('./magmauppgifter.js').MagmaTestDef[];
   /** Del 153: lärarens klassning av Magma-uppgifter (uppgiftsnyckel → delkapitel och förmågor) — gäller i alla test där uppgiften finns. */

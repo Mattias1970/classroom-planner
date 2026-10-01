@@ -50,6 +50,8 @@ import { DigiExamImport } from './DigiExamImport.js';
 import { DigiExamLarmPanel } from './ProvLarm.js';
 import { Elevkort } from './Elevkort.js';
 import { ProvlappPanel } from './Provlapp.js';
+import { BamRedigering } from './BamRedigering.js';
+import { PlaneringsTavla } from './PlaneringsTavla.js';
 import { Skal, Kort, type Filter, type V3Vy } from './v3/Skal.js';
 import { Oversikt } from './v3/Oversikt.js';
 import { Amnessida } from './v3/Amnessida.js';
@@ -1404,7 +1406,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
       kor(() => sattPlanFrystTill(lasStruktur(), a.id, idag), `${a.namn}: genomförd planering till och med igår är låst; laborationerna gäller från ${idag}.`);
     }
   }, [a?.id, a?.planFrystTill, a?.laborationsstandard, harPlanering]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [flik, setFlik] = useState<'planering' | 'detalj' | 'oversikt' | 'uppgifter' | 'begrepp' | 'filmer' | 'magma' | 'anteckningar' | 'arsoversikt' | 'installningar' | 'laborationer'>('planering');
+  const [flik, setFlik] = useState<'planering' | 'tavla' | 'detalj' | 'oversikt' | 'uppgifter' | 'begrepp' | 'filmer' | 'magma' | 'anteckningar' | 'arsoversikt' | 'installningar' | 'laborationer'>('planering');
   // Om planen krymper (t.ex. laboration borttagen) får detaljindex inte peka utanför
   useEffect(() => { if (detaljIdxRef.current >= plan.length && plan.length > 0) setDetaljIdx(plan.length - 1); }, [plan.length]); // eslint-disable-line react-hooks/exhaustive-deps
   // Del 133: detaljplaneringen öppnar på dagens/nästa lektion, inte lektion 1
@@ -1436,6 +1438,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
       )}
       <div className="flikar no-print">
         <button className={`flik ${flik === 'planering' ? 'act' : ''}`} onClick={() => setFlik('planering')}>📝 Lektionsplan</button>
+        <button className={`flik ${flik === 'tavla' ? 'act' : ''}`} onClick={() => setFlik('tavla')} disabled={!bok} title={!bok ? 'Koppla en bok först' : 'Alla lektioner som kort i en rad — dra in kapitel, laborationer och egna kort'}>🗂 Planeringstavla</button>
         <button className={`flik ${flik === 'detalj' ? 'act' : ''}`} onClick={() => setFlik('detalj')}>🧭 Detaljplanering</button>
         {([['oversikt', 'ℹ Översikt'], ['uppgifter', '✏ Uppgifter'], ['begrepp', '💡 Begrepp'], ['filmer', '🎬 Filmer'], ['magma', '🟫 Magma'], ['anteckningar', '👥 Anteckningar']] as const)
           .filter(([id]) => id !== 'magma' || !arHalvklass(a.namn)) // Magma är mattemjukvara — finns inte i NO/Tk
@@ -1494,6 +1497,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
       </div>
       {flik === 'arsoversikt' && bok && <Arsoversikt s={s} bok={bok} plan={plan} kor={kor} />}
       {flik === 'arsoversikt' && !bok && <p className="muted">Koppla en bok för att se årsöversikten.</p>}
+      {flik === 'tavla' && bok && <PlaneringsTavla s={s} amneId={a.id} bok={bok} kor={kor} idag={idag} />}
       {flik === 'detalj' && bok && <DetaljFlik s={s} amneId={a.id} plan={plan} bok={bok} amnesNamn={a.namn} kor={kor} idx={detaljIdx} setIdx={setDetaljIdx} meddela={(m) => kor(() => lasStruktur(), m)} />}
       {flik === 'detalj' && !bok && <p className="muted">Koppla en bok till ämnet för att använda detaljplaneringen.</p>}
       {bok && flik === 'oversikt' && <OversiktFlik plan={plan} bok={bok} oppnaLektion={oppnaLektion} />}
@@ -1721,52 +1725,6 @@ function GruppVaxlare({ elev, kor }: { elev: Elev; kor: (fn: () => Struktur, m: 
           onClick={() => { if (elev.grupp !== g) kor(() => uppdateraElev(lasStruktur(), elev.id, { grupp: g }), `${elev.namn} flyttad till grupp ${g} — lektionerna följer gruppen.`); }}>{g}</button>
       ))}
     </span>
-  );
-}
-
-/** Del 143 · Redigera lektionens delar (BAM) med egna tider: namn, minuter, ikon, ordning. */
-const BAM_IKONER = ['📱', '🧑‍🏫', '✏️', '🎫', '📋', '📝', '🧪', '💬', '🎬', '☕', '▪'];
-function BamRedigering({ bam, standard, onSpara }: { bam: BamDel[] | undefined; standard: BamDel[]; onSpara: (bam: BamDel[] | undefined, m: string) => void }) {
-  const [oppen, setOppen] = useState(false);
-  const [delar, setDelar] = useState<BamDel[]>(bam ?? standard);
-  if (!oppen) {
-    return (
-      <div className="rad" style={{ gap: 6 }}>
-        <button className="btn sec sm" onClick={() => { setDelar(bam ?? standard); setOppen(true); }}>✏ Ändra BAM</button>
-        {bam !== undefined && <small className="muted">egna delar · <button className="linkbtn" onClick={() => onSpara(undefined, 'Lektionen följer standard-BAM igen.')}>↺ standard</button></small>}
-      </div>
-    );
-  }
-  const satt = (i: number, patch: Partial<BamDel>) => setDelar(delar.map((d, j) => (j === i ? { ...d, ...patch } : d)));
-  const flytta = (i: number, dir: -1 | 1) => { const j = i + dir; if (j < 0 || j >= delar.length) return; const n = [...delar]; [n[i], n[j]] = [n[j], n[i]]; setDelar(n); };
-  const summa = delar.reduce((a, d) => a + Math.max(0, Math.round(d.minuter)), 0);
-  return (
-    <div className="bam-red">
-      <table className="tbl small">
-        <thead><tr><th></th><th>Del</th><th>Minuter</th><th>Text på tavlan</th><th></th></tr></thead>
-        <tbody>{delar.map((d, i) => (
-          <tr key={i}>
-            <td><select aria-label={`Ikon del ${i + 1}`} value={d.ikon ?? '▪'} onChange={(e) => satt(i, { ikon: e.target.value })}>{BAM_IKONER.map((ik) => <option key={ik} value={ik}>{ik}</option>)}</select></td>
-            <td><input aria-label={`Namn del ${i + 1}`} value={d.namn} onChange={(e) => satt(i, { namn: e.target.value })} /></td>
-            <td><input aria-label={`Minuter del ${i + 1}`} type="number" min={0} step={5} value={d.minuter} style={{ width: 64 }} onChange={(e) => satt(i, { minuter: Number(e.target.value) })} /></td>
-            <td><input aria-label={`Text del ${i + 1}`} value={d.text ?? ''} placeholder="t.ex. rum, uppgifter" onChange={(e) => satt(i, { text: e.target.value })} /></td>
-            <td className="rad" style={{ gap: 2 }}>
-              <button className="icon-btn" aria-label={`Flytta upp del ${i + 1}`} disabled={i === 0} onClick={() => flytta(i, -1)}>↑</button>
-              <button className="icon-btn" aria-label={`Flytta ned del ${i + 1}`} disabled={i === delar.length - 1} onClick={() => flytta(i, 1)}>↓</button>
-              <button className="icon-btn" aria-label={`Ta bort del ${i + 1}`} onClick={() => setDelar(delar.filter((_, j) => j !== i))}>🗑</button>
-            </td>
-          </tr>
-        ))}</tbody>
-      </table>
-      <div className="rad" style={{ gap: 6, flexWrap: 'wrap' }}>
-        <button className="btn sec sm" onClick={() => setDelar([...delar, { namn: 'Ny del', minuter: 10, ikon: '▪' }])}>➕ Ny del</button>
-        <button className="btn sec sm" onClick={() => setDelar(standard)}>↺ Standard</button>
-        <small className="muted">summa {summa} min</small>
-        <span className="spacer" />
-        <button className="btn sec sm" onClick={() => setOppen(false)}>Avbryt</button>
-        <button className="btn sm" disabled={delar.length === 0 || delar.some((d) => d.namn.trim() === '')} onClick={() => { onSpara(delar.map((d) => ({ ...d, namn: d.namn.trim(), minuter: Math.max(0, Math.round(d.minuter)) })), 'Lektionens delar sparade.'); setOppen(false); }}>💾 Spara BAM</button>
-      </div>
-    </div>
   );
 }
 
