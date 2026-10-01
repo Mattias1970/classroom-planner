@@ -249,7 +249,8 @@ const TYP_ORD: Record<string, string> = { eprov: 'E-prov', caprov: 'CA-prov', ec
 export function digiexamProvInfo(filEllerProv: string): DigiExamProvInfo {
   const bas = digiexamProvnamnUrFilnamn(filEllerProv).toLowerCase()
     .replace(/\b(e|ca|eca)\s+prov\b/g, '$1prov');
-  const ord = bas.split(/\s+/).filter((w) => w !== '');
+  // Skiljetecken som egna ord ('–' i 'Ekologi E-prov – omprov') hör inte till namnet
+  const ord = bas.split(/\s+/).filter((w) => w !== '' && /[a-zåäö0-9]/i.test(w));
   const omprov = ord.some((w) => /^(omprov|omtag|omtentamen)$/.test(w));
   const karna = ord.filter((w) => !/^\d[a-zåäö]{1,2}$/.test(w) && !/^(omprov|omtag|omtentamen|prov)$/.test(w) && !/^\d{4}$/.test(w));
   const nyckel = [...karna].sort().join(' ');

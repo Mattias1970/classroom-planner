@@ -3227,3 +3227,40 @@ describe('Del 155 · numrerad elevlista, slutat och elever som slutat', () => {
     expect(lasStruktur().elever.find((e) => e.namn === 'Omar Ali')!.aktiv).toBeUndefined();
   });
 });
+
+import { importeraResultat as impRes, laggTillAmne as lAmne, laggTillElev as lElev, laggTillKlass as lKlass, laggTillSkolar as lSkolar, laggTillTjanst as lTjanst, tomStruktur as tomS, type ResultatKalla as RK } from '@planner/kernel';
+
+describe('Del 156 · frågematrisen i tre flikar', () => {
+  it('Socrative-quiz är standard; DigiExam och Magma visas i egna matriser', () => {
+    let st = lSkolar(tomS(), { id: 'la', namn: '26/27', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    st = lTjanst(st, { id: 'tj', skolarId: 'la', namn: 'Ma' });
+    st = lKlass(st, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    st = lAmne(st, { id: 'ma', klassId: 'k', namn: 'Matematik', schema: [{ dag: 1, start: '08:10', slut: '09:10' }] });
+    st = lElev(st, { id: 'e1', klassId: 'k', namn: 'Anna Berg', grupp: 'A' });
+    const imp = (kalla: RK, prov: string, datum: string, fragor: string[]) => {
+      st = impRes(st, { klassId: 'k', amneId: 'ma', kalla, prov, datum, rader: [{ namn: 'Anna Berg', poang: 1, maxPoang: fragor.length, svar: fragor.map((fraga, i) => ({ fraga, svar: i === 0 ? '1' : '0', ratt: i === 0 })) }] }).s;
+    };
+    imp('socrative-laxforhor', 'Matte11', '2026-09-01', ['Vad är en täljare?', 'Vad är en nämnare?']);
+    imp('digiexam', 'Ekologi E-prov', '2026-09-14', ['Fråga 1', 'Fråga 2', 'Fråga 3']);
+    imp('magma', '1.1 - 1.3 Test', '2026-09-20', ['Uppgift 1', 'Uppgift 2', 'Uppgift 3', 'Uppgift 4']);
+    localStorage.setItem('classroom-planner.studio.v2', JSON.stringify(st));
+    const host = render();
+    act(() => { knapp(host, '📊 SuperTeach').click(); });
+    valj(select(host, 'SuperTeach ämne'), 'ma');
+    const matris = () => host.querySelector('.st-fragematris')!;
+    const kolumner = () => matris().querySelectorAll('.st-fmtabell thead tr:last-child th').length - 4;
+    const flik = (namn: string) => [...matris().querySelectorAll('[role="tab"]')].find((b) => b.textContent?.includes(namn)) as HTMLButtonElement;
+    expect(flik('Socrative-quiz').getAttribute('aria-selected')).toBe('true');
+    expect(kolumner()).toBe(2);
+    expect(matris().textContent).toContain('Matte11');
+    expect(matris().textContent).not.toContain('Ekologi E-prov');
+    act(() => { flik('DigiExam-prov').click(); });
+    expect(kolumner()).toBe(3);
+    expect(matris().textContent).toContain('Ekologi E-prov');
+    expect(matris().textContent).not.toContain('Matte11');
+    act(() => { flik('Magma-test').click(); });
+    expect(kolumner()).toBe(4);
+    expect(matris().textContent).toContain('1.1 - 1.3 Test');
+    expect(matris().textContent).toContain('uppgifter');
+  });
+});

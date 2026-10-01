@@ -234,3 +234,9 @@ View result`;
     expect(digiexamProvForFil(l, 'kemi.xlsx')).toEqual([]);
   });
 });
+
+describe('Del 156 · omprovets namn med tankstreck', () => {
+  it('"Ekologi E-prov – omprov" är samma prov som "Ekologi E-prov"', () => {
+    expect(digiexamProvInfo('Ekologi E-prov – omprov')).toEqual({ nyckel: 'ekologi eprov', namn: 'Ekologi E-prov', omprov: true, typ: 'E' });
+  });
+});

@@ -3675,6 +3675,8 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
   const [fMax, setFMax] = useState(50);
   const [valdaTest, setValdaTest] = useState<string[]>([]);
   const [fmTyper, setFmTyper] = useState<ResultatKalla[]>([]);
+  // Del 156: frågematrisen visar en värld i taget — Socrative-quiz, DigiExam-prov eller Magma-test
+  const [fmVarld, setFmVarld] = useState<'socrative' | 'digiexam' | 'magma'>('socrative');
   const [fmNyastForst, setFmNyastForst] = useState(false);
   const zKlass = useZoom();
   const zNorm = useZoom(ZOOM_NORM);
@@ -3731,16 +3733,16 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
     return {
       led,
       delFarger: new Map([...new Set(led.flatMap((t) => t.segment.map((x) => x.kod)))].sort((a, b) => a.localeCompare(b, 'sv', { numeric: true })).map((kod, i) => [kod, DEL_FARGER[i % DEL_FARGER.length]])),
-      fm: fragematris(s, ledElev === null ? tkFilter : { ...tkFilter, elevId: ledElev }),
+      fm: fragematris(s, { ...tkFilter, ...(fmVarld !== 'socrative' ? { kallor: [fmVarld] as ResultatKalla[] } : {}), ...(ledElev !== null ? { elevId: ledElev } : {}) }),
     };
-  }, [s, filterNyckel, ledElev]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [s, filterNyckel, ledElev, fmVarld]); // eslint-disable-line react-hooks/exhaustive-deps
   const { led, delFarger, fm } = elevData;
   // Frågematrisens rader: typfilter (tomt = alla) och vald datumordning — billigt, kan köras varje gång
   const fmRader = [...fm.rader]
-    .filter((r) => fmTyper.length === 0 || fmTyper.includes(r.kalla))
+    .filter((r) => fmVarld !== 'socrative' || fmTyper.length === 0 || fmTyper.includes(r.kalla))
     .sort((a, b) => (fmNyastForst ? -jamforTillfalle(a, b) : jamforTillfalle(a, b)));
   // Tillfällen som filtret släpper igenom men som saknar svar per fråga — visas som förklarande rader
-  const fmUtanSvar = fm.utanSvar.filter((t) => fmTyper.length === 0 || fmTyper.includes(t.kalla));
+  const fmUtanSvar = fm.utanSvar.filter((t) => fmVarld !== 'socrative' || fmTyper.length === 0 || fmTyper.includes(t.kalla));
   const traffar = useMemo(
     () => filtreraFragor({ ...fm, rader: fmRader }, { min: fMin, max: fMax, ...(valdaTest.length > 0 ? { tillfallen: valdaTest } : {}) }),
     [fm, fmTyper, fmNyastForst, fMin, fMax, valdaTest], // eslint-disable-line react-hooks/exhaustive-deps
@@ -3879,7 +3881,14 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
           <button className={`chipbtn ${ledElev === null ? 'act' : ''}`} onClick={() => setLedElev(null)}>Klassen</button>
           {ledElev !== null && <span className="chipbtn act">{s.elever.find((e) => e.id === ledElev)?.namn} <button className="icon-btn" aria-label="Visa klassen" title="Tillbaka till klassen" onClick={() => setLedElev(null)}>✕</button></span>}
         </div>
+        <div className="rad st-fmvarld" role="tablist" aria-label="Frågematrisens källa">
+          {([['socrative', '✅ Socrative-quiz'], ['digiexam', '📝 DigiExam-prov'], ['magma', '🧠 Magma-test']] as const).map(([v, namn]) => (
+            <button key={v} role="tab" aria-selected={fmVarld === v} className={`chipbtn ${fmVarld === v ? 'act' : ''}`} onClick={() => setFmVarld(v)}>{namn}</button>
+          ))}
+          <small className="muted">{fmVarld === 'socrative' ? 'läxförhör, exit tickets och övningar' : fmVarld === 'digiexam' ? 'frågorna grupperade per prov — ordinarie och omprov i samma kolumner' : 'uppgifterna ur testens PDF, grupperade per delkapitel — samma uppgift i flera test = en kolumn'}</small>
+        </div>
         <div className="rad st-fmverktyg">
+          {fmVarld === 'socrative' && (<>
           <small className="muted">Typ:</small>
           <button className={`chipbtn ${fmTyper.length === 0 ? 'act' : ''}`} title="Visa alla typer" aria-pressed={fmTyper.length === 0}
             onClick={() => setFmTyper([])}>Alla</button>
@@ -3894,6 +3903,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
               <button key={k} className={`chipbtn ${tand ? 'act' : ''}`} aria-pressed={tand} onClick={klick}>{TYPNAMN[k]}</button>
             );
           })}
+          </>)}
           <span className="spacer" />
           <small className="muted">Ordning:</small>
           <button className="chipbtn act" title="Byt sorteringsordning" onClick={() => setFmNyastForst(!fmNyastForst)}>
@@ -3901,18 +3911,18 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
           </button>
         </div>
         {fm.fragor.length === 0 ? (
-          <p className="muted small">Kräver förhör med frågedata (filimport).{fmUtanSvar.length > 0 && <> ⚠ {fmUtanSvar.length} tillfälle{fmUtanSvar.length === 1 ? '' : 'n'} i urvalet saknar svar per fråga ({fmUtanSvar.map((t) => `${kortDatum(t.datum)} ${TYPNAMN[t.kalla]}`).join(', ')}) — importera Excel-filerna igen under 📥 Importera med "importera om" ibockat.</>}</p>
+          <p className="muted small">{fmVarld === 'digiexam' ? 'Inga DigiExam-prov med poäng per fråga i urvalet (📥 Importera → DigiExam). ' : fmVarld === 'magma' ? 'Inga Magma-test med rätt/fel per uppgift i urvalet (📥 Importera → Magma; ladda upp testets PDF för uppgifterna och delkapitlen). ' : ''}Kräver förhör med frågedata (filimport).{fmUtanSvar.length > 0 && <> ⚠ {fmUtanSvar.length} tillfälle{fmUtanSvar.length === 1 ? '' : 'n'} i urvalet saknar svar per fråga ({fmUtanSvar.map((t) => `${kortDatum(t.datum)} ${TYPNAMN[t.kalla]}`).join(', ')}) — importera Excel-filerna igen under 📥 Importera med "importera om" ibockat.</>}</p>
         ) : (<>
           <div className="st-scroll">
             <table className="tbl st-fmtabell">
               <thead>
                 <tr><th colSpan={4} className="st-fmhorn" /> {fm.grupper.map((g) => (
                   <th key={g.kod} colSpan={g.till - g.fran + 1} className="st-fmgrupp" title={`${g.ursprung} · ${g.etikett} · frågorna ${g.fran}–${g.till}`}>
-                    <span className="st-fmgruppnamn">{g.ursprung}</span>
-                    <small>{g.kod !== '—' ? `${g.kod} · ` : ''}{g.till - g.fran + 1} frågor</small>
+                    <span className="st-fmgruppnamn">{fmVarld === 'socrative' ? g.ursprung : fmVarld === 'magma' && /^\d+\.\d+$/.test(g.kod) ? `Delkapitel ${g.kod}` : g.kod}</span>
+                    <small>{fmVarld === 'socrative' && g.kod !== '—' ? `${g.kod} · ` : ''}{g.till - g.fran + 1} {fmVarld === 'magma' ? 'uppgifter' : 'frågor'}</small>
                   </th>
                 ))}</tr>
-                <tr><th>Vecka</th><th>Datum</th><th>Typ</th><th>Quiz</th>{fm.fragor.map((fr) => (
+                <tr><th>Vecka</th><th>Datum</th><th>Typ</th><th>{fmVarld === 'socrative' ? 'Quiz' : 'Prov'}</th>{fm.fragor.map((fr) => (
                   <th key={fr.nr} className={`st-fmnr${fm.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}`} title={`${fr.kod} · ${fr.fraga}`}>{fr.nr}</th>
                 ))}</tr>
               </thead>

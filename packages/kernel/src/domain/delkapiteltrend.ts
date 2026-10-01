@@ -15,11 +15,33 @@ import { begreppUrFacit, type Resultat, type ResultatKalla } from './resultat.js
 import { fragenyckel, svarText } from './trendkoll.js';
 import { koderForProv } from './elevrapport.js';
 import { amneMatchar, kapitelMatchar } from './dashboard.js';
+import { magmaKlassFor, magmaTestForProv } from './magmauppgifter.js';
+import { digiexamProvInfo } from './digiexam.js';
 
 export interface DelkapitelFilter { klassId: string; amneId?: string; amneIds?: string[]; kapitel?: number; kallor?: ResultatKalla[]; fran?: string; till?: string; elevId?: string; }
 
 /** Ett tillfälle med frågor grupperade per delkapitel. */
-export interface Tillfalle { nyckel: string; prov: string; datum: string; tid?: string; kalla: ResultatKalla; rum?: string; resultat: Resultat[] }
+export interface Tillfalle {
+  nyckel: string; prov: string; datum: string; tid?: string; kalla: ResultatKalla; rum?: string; resultat: Resultat[];
+  /** Del 156: DigiExam/Magma — frågans grupp (provet resp. delkapitlet) per frågenyckel. */
+  fragaKod?: Map<string, string>;
+}
+
+/** Del 156 · Frågematrisens tre världar: Socrative-quiz, DigiExam-prov och Magma-test blandas aldrig. */
+export type MatrisKalla = 'socrative' | 'digiexam' | 'magma';
+export function matrisKalla(k: ResultatKalla): MatrisKalla {
+  return k === 'digiexam' ? 'digiexam' : k === 'magma' ? 'magma' : 'socrative';
+}
+
+/** Filtrets källor begränsade till en värld: Socrative om filtret saknar källor eller har någon Socrative-källa. */
+export function matrisKallor(kallor: ResultatKalla[] | undefined): ResultatKalla[] {
+  const socr: ResultatKalla[] = ['socrative-laxforhor', 'socrative-exit', 'socrative-ovning'];
+  if (kallor === undefined || kallor.length === 0) return socr;
+  const s = kallor.filter((k) => matrisKalla(k) === 'socrative');
+  if (s.length > 0) return s;
+  const forsta = matrisKalla(kallor[0]);
+  return kallor.filter((k) => matrisKalla(k) === forsta);
+}
 
 /** Läxförhöret inleder lektionen, exit ticket avslutar den; övningar hamnar sist. */
 const TYP_ORDNING: Record<ResultatKalla, number> = {
@@ -59,7 +81,7 @@ function resultatIFilter(s: Struktur, f: DelkapitelFilter): Resultat[] {
   return (s.resultat ?? []).filter((r) => elevIds.has(r.elevId)
     && amneMatchar(f, r.amneId)
     && kapitelMatchar(f.kapitel, r.prov, r.rum)
-    && (f.kallor === undefined || f.kallor.includes(r.kalla))
+    && matrisKallor(f.kallor).includes(r.kalla)
     && (f.fran === undefined || r.datum >= f.fran) && (f.till === undefined || r.datum <= f.till));
 }
 
@@ -87,8 +109,35 @@ export function tillfallenUtanSvar(s: Struktur, f: DelkapitelFilter): TillfalleU
     .sort(jamforTillfalle);
 }
 
+/**
+ * Del 156 · DigiExam- och Magma-frågor heter 'Fråga 1'/'Uppgift 1' i alla prov — de får en
+ * egen identitet: DigiExam = provet (ordinarie och omprov delar kolumner) + frågan;
+ * Magma = uppgiften ur testets PDF (samma uppgift i olika test = samma kolumn).
+ * Gruppen (kolumnrubriken) blir provet resp. uppgiftens delkapitel.
+ */
+function ommarkera(s: Struktur, r: Resultat, kod: Map<string, string>): Resultat {
+  if (matrisKalla(r.kalla) === 'socrative' || r.svar === undefined) return r;
+  if (r.kalla === 'digiexam') {
+    const prov = digiexamProvInfo(r.prov).namn;
+    return { ...r, svar: r.svar.map((sv) => { const fraga = `${prov} · ${sv.fraga}`; kod.set(fragenyckel(fraga), prov); return { ...sv, fraga }; }) };
+  }
+  const def = magmaTestForProv(s, r.prov);
+  return {
+    ...r,
+    svar: r.svar.map((sv) => {
+      const nr = sv.fraga.replace(/^Uppgift\s*/i, '');
+      const u = def?.uppgifter.find((x) => x.nr === nr);
+      if (u === undefined) { const fraga = `${r.prov} · ${sv.fraga}`; kod.set(fragenyckel(fraga), r.prov); return { ...sv, fraga }; }
+      const fraga = `${u.text.replace(/\n/g, ' ')} [${u.nyckel}]`;
+      kod.set(fragenyckel(fraga), magmaKlassFor(s, u).delkapitel ?? r.prov);
+      return { ...sv, fraga };
+    }),
+  };
+}
+
 function tillfallenForRaknad(s: Struktur, f: DelkapitelFilter): Tillfalle[] {
-  const rs = resultatIFilter(s, f).filter((r) => (r.svar ?? []).length > 0);
+  const fragaKod = new Map<string, string>();
+  const rs = resultatIFilter(s, f).filter((r) => (r.svar ?? []).length > 0).map((r) => ommarkera(s, r, fragaKod));
   const grupper = new Map<string, Resultat[]>();
   for (const r of rs) {
     const n = `${r.datum}|${r.kalla}|${r.prov}`;
@@ -101,6 +150,7 @@ function tillfallenForRaknad(s: Struktur, f: DelkapitelFilter): Tillfalle[] {
       nyckel: `${resultat[0].datum}|${resultat[0].kalla}|${resultat[0].prov}`,
       prov: resultat[0].prov, datum: resultat[0].datum, ...(tid !== undefined ? { tid } : {}),
       kalla: resultat[0].kalla, ...(resultat[0].rum !== undefined ? { rum: resultat[0].rum } : {}), resultat,
+      ...(fragaKod.size > 0 && matrisKalla(resultat[0].kalla) !== 'socrative' ? { fragaKod } : {}),
     };
   }).sort(jamforTillfalle);
 }
@@ -137,7 +187,7 @@ function fragansDelkapitelRaknad(tillfallen: Tillfalle[]): Map<string, string> {
     for (const r of t.resultat) {
       for (const sv of r.svar ?? []) {
         const n = fragenyckel(sv.fraga);
-        if (!karta.has(n)) karta.set(n, hemvist);
+        if (!karta.has(n)) karta.set(n, t.fragaKod?.get(n) ?? hemvist);
       }
     }
   }
@@ -358,7 +408,7 @@ export function fragematris(s: Struktur, f: DelkapitelFilter): Fragematris {
   });
   const fragor: MatrisFraga[] = nycklar.map((n, i) => {
     const post = forstaGangen.get(n)!;
-    return { nr: i + 1, fraga: post.fraga, kod: hemvist.get(n) ?? '—', ursprung: post.ursprung, ...(post.rum !== undefined ? { ursprungRum: post.rum } : {}), ...(post.begrepp !== undefined ? { begrepp: post.begrepp } : {}) };
+    return { nr: i + 1, fraga: post.fraga.replace(/ \[[0-9a-f]{8}\]$/, ''), kod: hemvist.get(n) ?? '—', ursprung: post.ursprung, ...(post.rum !== undefined ? { ursprungRum: post.rum } : {}), ...(post.begrepp !== undefined ? { begrepp: post.begrepp } : {}) };
   });
   const index = new Map(nycklar.map((n, i) => [n, i]));
   const rader: FragaRad[] = tillfallen.map((t) => {
@@ -388,7 +438,7 @@ export function fragematris(s: Struktur, f: DelkapitelFilter): Fragematris {
   for (const fr of fragor) {
     const sista = grupper[grupper.length - 1];
     if (sista !== undefined && sista.kod === fr.kod) sista.till = fr.nr;
-    else grupper.push({ kod: fr.kod, etikett: testEtikett([fr.kod], 'Test'), ursprung: fr.ursprung, fran: fr.nr, till: fr.nr });
+    else grupper.push({ kod: fr.kod, etikett: /^\d+\.\d+$/.test(fr.kod) ? testEtikett([fr.kod], 'Test') : fr.kod, ursprung: fr.ursprung, fran: fr.nr, till: fr.nr });
   }
   return { fragor, rader, grupper, utanSvar: tillfallenUtanSvar(s, f) };
 }
