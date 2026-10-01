@@ -1222,3 +1222,12 @@ input.fel { border-color: #B71C1C; }
 .pt-falt { display: flex; flex-direction: column; font-size: 12px; gap: 2px; }
 .pt-falt input, .pt-falt textarea, .pt-falt select { font: inherit; font-size: 13px; }
 @media (max-width: 800px) { .pt-yta { flex-direction: column; } .pt-palett { flex-basis: auto; width: 100%; max-height: 40vh; } }
+
+/* ── Del 159 · dolda områden på lektionskortet ── */
+.ls-dolj { float: right; color: inherit; opacity: .55; font-size: 13px; line-height: 1; padding: 0 4px; background: transparent; border: 0; cursor: pointer; }
+.ls-dolj:hover { opacity: 1; }
+.ls-dolj-rad { display: flex; justify-content: flex-end; margin-bottom: -6px; }
+.ls-dolda { margin: 8px 0; font-size: 13px; }
+.ls-dolda summary { cursor: pointer; color: var(--muted-varm, #66738a); }
+.ls-dolda[open] { border: 1px dashed var(--ram); border-radius: 6px; padding: 6px 8px; }
+.np-rubrik { grid-column: 1 / -1; }

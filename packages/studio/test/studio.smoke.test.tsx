@@ -1134,7 +1134,7 @@ describe('Detaljerad NO-planering i lektionskortet', () => {
     expect(panel.textContent).toContain('Biologi412');
     expect(panel.textContent).toContain('Biologi42');
     // Läxan är förifylld med delkapitlets begrepp
-    expect((panel.querySelector('textarea[aria-label="Läxa (begrepp)"]') as HTMLTextAreaElement).value).toContain('fotosyntes');
+    expect((panel.querySelector('textarea[aria-label="Läxa (begrepp)"]') as HTMLTextAreaElement).placeholder).toContain('fotosyntes');
     // Fyll NO-fält + laboration + flippat
     skriv(input(host, 'Presentation'), 'Fotosyntes.pptx');
     skrivArea(panel.querySelector('textarea[aria-label="Frågeställning (systematisk undersökning)"]')!, 'Hur påverkar ljusmängden fotosyntesens hastighet?');
@@ -1155,6 +1155,54 @@ describe('Detaljerad NO-planering i lektionskortet', () => {
     expect(host.textContent).toContain('ifylld');
   });
 })
+
+describe('Del 159 · lektionskortet sparas och områden kan döljas', () => {
+  it('💾 Spara planering skriver inte över det som ändrats i kortet; ✕ döljer ett område och 🙈-menyn slår på det igen', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host, BIOJSON);
+    skriv(input(host, 'Tjänstens namn'), 'NO');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 NO').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    valj(select(host, 'Ämne'), 'Biologi');
+    valj(select(host, 'Bok för ämnet'), 'gleerups-biologi-8');
+    valj(select(host, 'Veckodag pass 1'), '2');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '🧭 Detaljplanering').click(); });
+    valj(select(host, 'Välj lektion'), '1');
+    const sektion = () => host.querySelector('.detaljflik')!;
+    // Ändra genomgången i lektionskortet och presentationen i den detaljerade planeringen
+    skrivArea(sektion().querySelector('section.ls-genomgang textarea[aria-label="Genomgång"]')!, 'Fotosyntesen steg för steg');
+    skriv(sektion().querySelector('input[aria-label="Presentation"]') as HTMLInputElement, 'Fotosyntes.pptx');
+    act(() => { knapp(host, '💾 Spara planering').click(); });
+    const lp = () => lasStruktur().lektionsplaner.find((p) => p.lektionsIndex === 1)!;
+    expect(lp()).toMatchObject({ genomgang: 'Fotosyntesen steg för steg', presentation: 'Fotosyntes.pptx' });
+    expect((sektion().querySelector('section.ls-genomgang textarea') as HTMLTextAreaElement).value).toBe('Fotosyntesen steg för steg');
+
+    // Dölj Läxa och Filmer — de syns inte, menyn listar dem
+    expect(host.textContent).toContain('🙈 Dolda områden (0)');
+    act(() => { (host.querySelector('button[aria-label="Dölj Läxa"]') as HTMLButtonElement).click(); });
+    act(() => { (host.querySelector('button[aria-label="Dölj Filmer"]') as HTMLButtonElement).click(); });
+    expect(host.querySelector('section.ls-laxa')).toBeNull();
+    expect(host.querySelector('section.ls-filmer')).toBeNull();
+    expect(host.textContent).toContain('🙈 Dolda områden (2)');
+    // Gäller ämnets alla lektioner
+    valj(select(host, 'Välj lektion'), '0');
+    expect(host.querySelector('section.ls-laxa')).toBeNull();
+    act(() => { (host.querySelector('button[aria-label="Visa Läxa"]') as HTMLButtonElement).click(); });
+    expect(host.querySelector('section.ls-laxa')).not.toBeNull();
+    act(() => { (host.querySelector('button[aria-label="Dölj Läxa"]') as HTMLButtonElement).click(); });
+    act(() => { knapp(host, 'Visa alla').click(); });
+    expect(host.querySelector('section.ls-laxa')).not.toBeNull();
+    expect(host.querySelector('section.ls-filmer')).not.toBeNull();
+    expect(lasStruktur().amnen.find((a) => a.namn === 'Biologi')?.doldaOmraden).toBeUndefined();
+  });
+});
 
 describe('Planeringsflikar (portade från v1)', () => {
   async function amneMedPlan(host: HTMLElement) {

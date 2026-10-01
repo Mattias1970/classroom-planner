@@ -67,6 +67,9 @@ export interface Pass { dag: number; start: string; slut: string; }
  * klassens schema är unionen av dess ämnens pass (olika ämnen har olika
  * tider). Planering kan skapas utan lärare.
  */
+/** Del 159 · Ett område på lektionskortet i detaljplaneringen. */
+export type LektionsOmrade = 'tavlan' | 'laxforhor' | 'genomgang' | 'begrepp' | 'arbete' | 'magma' | 'filmer' | 'laxa' | 'exit' | 'provlapp' | 'detaljerad';
+
 export interface Amne {
   id: string;
   klassId: string;
@@ -130,6 +133,8 @@ export interface Amne {
    * utkastets ordning. En kopia — senare ändringar i utkastet påverkar inte förrän det läggs in igen.
    */
   planFranUtkast?: PlanFranUtkast;
+  /** Del 159 · Områden på lektionskorten som läraren dolt för ämnet (visas inte, kan slås på igen). */
+  doldaOmraden?: LektionsOmrade[];
 }
 
 /** Del 158 · Ett eget kort i ett planeringsutkast: prov, repetition, diagnos, egen lektion eller egen laboration. */
