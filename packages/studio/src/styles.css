@@ -1135,3 +1135,12 @@ input.fel { border-color: #B71C1C; }
 .st-de-del { color: #EF6C00; font-weight: 600; }
 .st-de-noll { color: #C62828; }
 .st-de-import .st-magma-tabell td:first-child { white-space: nowrap; }
+
+/* ── Del 151 · Provlapp på provlektionens kort ── */
+.ls-provlapp { background: #fffdf7; }
+.provlapp-vy { background: #fff; border: 1px solid var(--ram); border-radius: 8px; padding: 12px 16px; margin-top: 10px; }
+.provlapp-huvud { border-bottom: 3px solid; padding-bottom: 6px; margin-bottom: 8px; }
+.provlapp-vy h4 { margin: 12px 0 4px; }
+.provlapp-vy ul { margin: 2px 0 6px; }
+.provlapp-avsnitt { margin: 4px 0 8px; }
+.provlapp-ovningar td:first-child { white-space: nowrap; }

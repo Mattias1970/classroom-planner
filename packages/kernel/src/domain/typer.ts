@@ -353,6 +353,8 @@ export interface LektionsPlan {
   begreppText?: string;
   /** Överstyr lektionens namn (avsnitt) — för att rätta stavfel utan att röra boken. */
   avsnittText?: string;
+  /** Del 151: lärarens egen text på provlappen (hjälpmedel, tid, extra råd) — bara på provlektioner. */
+  provlappNotis?: string;
 }
 
 export interface Struktur {

@@ -41,11 +41,13 @@ import {
   pedagogiskPlanering, gruppNyckel, grundRader, planeringsRader, antalIBoken, lektionerPerDelkapitel, sattLektionerPerDelkapitel, sattAntalLektioner, sattLektionsVal, laggTillEgenRad, taBortEgenRad, bokLektioner, type LektionsVal,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
+  vagTyp,
 } from '@planner/kernel';
 import { exportJson, importJson, lasInstallning, lasStruktur, sparaInstallning, sparaStruktur } from './store.js';
 import { RapportdesignVy, MallRendering, Trendsteg } from './rapportdesign.js';
 import { MagmaImport } from './MagmaImport.js';
 import { DigiExamImport } from './DigiExamImport.js';
+import { ProvlappPanel } from './Provlapp.js';
 import { Skal, Kort, type Filter, type V3Vy } from './v3/Skal.js';
 import { Oversikt } from './v3/Oversikt.js';
 import { Amnessida } from './v3/Amnessida.js';
@@ -1469,7 +1471,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
       </div>
       {flik === 'arsoversikt' && bok && <Arsoversikt s={s} bok={bok} plan={plan} kor={kor} />}
       {flik === 'arsoversikt' && !bok && <p className="muted">Koppla en bok för att se årsöversikten.</p>}
-      {flik === 'detalj' && bok && <DetaljFlik s={s} amneId={a.id} plan={plan} bok={bok} amnesNamn={a.namn} kor={kor} idx={detaljIdx} setIdx={setDetaljIdx} />}
+      {flik === 'detalj' && bok && <DetaljFlik s={s} amneId={a.id} plan={plan} bok={bok} amnesNamn={a.namn} kor={kor} idx={detaljIdx} setIdx={setDetaljIdx} meddela={(m) => kor(() => lasStruktur(), m)} />}
       {flik === 'detalj' && !bok && <p className="muted">Koppla en bok till ämnet för att använda detaljplaneringen.</p>}
       {bok && flik === 'oversikt' && <OversiktFlik plan={plan} bok={bok} oppnaLektion={oppnaLektion} />}
       {bok && flik === 'uppgifter' && <UppgifterFlik plan={plan} bok={bok} s={s} amneId={a.id} oppnaLektion={oppnaLektion} />}
@@ -1745,9 +1747,9 @@ function BamRedigering({ bam, standard, onSpara }: { bam: BamDel[] | undefined; 
   );
 }
 
-function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
+function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx, meddela }: {
   s: Struktur; amneId: string; plan: PlaneradLektion[]; bok: Bok; amnesNamn: string;
-  kor: (fn: () => Struktur, m: string) => void; idx: number; setIdx: (i: number) => void;
+  kor: (fn: () => Struktur, m: string) => void; idx: number; setIdx: (i: number) => void; meddela?: (m: string) => void;
 }) {
   const [nyFilm, setNyFilm] = useState('');
   if (plan.length === 0) return <p className="muted">Skapa en planering först.</p>;
@@ -1823,6 +1825,11 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
           {rad.datum !== null ? ` · ${dagN} ${rad.datum} · v.${rad.vecka}` : ' · ryms ej i skolåret'}</p>
         {begrepp.length > 0 && <span className="ls-begrepp-badge">💡 {begrepp.length} begrepp introduceras</span>}
       </div>
+
+      {/* ── PROVLAPP (Del 151) — bara på provlektioner: genereras ur planeringen, läses här, laddas ner som Word ── */}
+      {vagTyp(rad.lektion) === 'prov' && (
+        <ProvlappPanel key={`${amneId}-${i}`} s={s} amneId={amneId} lektionsIndex={i} farg={kapFarg} notis={lp?.provlappNotis ?? ''} sattNotis={(v) => satt('provlappNotis', v)} meddela={meddela} />
+      )}
 
       {/* ── TAVLAN ── */}
       <section className="ls-sektion ls-tavlan">
@@ -1980,7 +1987,8 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx }: {
         if (rubrik === null || rubrik.trim() === '') return;
         const amne = lasStruktur().amnen.find((x) => x.id === amneId);
         const position = amne === undefined ? i + 1 : grundPositionEfter(grundRader(bok, amne), plan, i);
-        kor(() => laggTillEgenRad(lasStruktur(), amneId, { id: nyttId('er'), position, rubrik: rubrik.trim(), typ: 'ovning' as const }, new Date().toISOString().slice(0, 10)),
+        const typ = /\bprov\b|kapiteltest|slutprov/i.test(rubrik) ? 'prov' as const : /diagnos/i.test(rubrik) ? 'diagnos' as const : 'ovning' as const; // Del 151: provrader får provlapp
+        kor(() => laggTillEgenRad(lasStruktur(), amneId, { id: nyttId('er'), position, rubrik: rubrik.trim(), typ }, new Date().toISOString().slice(0, 10)),
           `\"${rubrik.trim()}\" infogad efter lektion ${i + 1} — bokens lektioner skjuts framåt.`);
       }}>➕ Lägg till lektion efter denna</button>
       {rad.nyckel !== undefined && (
