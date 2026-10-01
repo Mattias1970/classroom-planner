@@ -107,3 +107,23 @@ describe('Del 154 · Elevkortet', () => {
     expect(kort.find((x) => x.kalla === 'digiexam')!.snittProcent).toBe(14);
   });
 });
+
+import { laggTillSaknadeElever, matchaElev } from '../src/index.js';
+
+describe('Del 155 · klassen kompletteras ur Socrative-rapportens roster', () => {
+  it('lägger till saknade elever (även de som inte deltog), aldrig dubbletter eller elever som slutat', () => {
+    let s = bygg();                                                   // Anna Berg, Omar Ali, Pia Provlund
+    s = sattElevStatus(s, 'e3', { aktiv: false });                   // Pia har slutat
+    let n = 0;
+    const u = laggTillSaknadeElever(s, 'k', [
+      { namn: 'Berg, Anna', sidId: 'anna' }, { namn: 'Provlund, Pia' }, { namn: 'Testsson, Kalle', sidId: 'kalle' },
+      { namn: 'Övnegård, Sara' }, { namn: 'Kalle Testsson' },
+    ], 'A', () => `ny${++n}`, matchaElev);
+    expect(u.tillagda).toEqual(['Kalle Testsson', 'Sara Övnegård']);
+    expect(u.struktur.elever.filter((e) => e.klassId === 'k').map((e) => [e.namn, e.socrativeId ?? ''])).toEqual([
+      ['Anna Berg', ''], ['Omar Ali', ''], ['Pia Provlund', ''], ['Kalle Testsson', 'kalle'], ['Sara Övnegård', ''],
+    ]);
+    expect(u.struktur.elever.find((e) => e.namn === 'Pia Provlund')!.aktiv).toBe(false);   // slutat förblir slutat
+    expect(() => laggTillSaknadeElever(s, 'finns-inte', [], 'A', () => 'x', matchaElev)).toThrow('Okänd klass');
+  });
+});

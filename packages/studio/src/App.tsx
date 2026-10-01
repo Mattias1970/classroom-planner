@@ -28,12 +28,12 @@ import {
   arFilImporterad, arRatt, andraKalla, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
   delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, enkelRapport, studieguide, rapportOversikt, forklaring, niva, type ForklaringId,
   omfangFilter, OMFANG_NAMN, type Omfang, type OmfangResultat, begreppForFraga, harmoniseraOvningar, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
-  importeraRoster, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
+  importeraRoster, laggTillSaknadeElever, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
   elevrapport, elevrapportText, tillfalleEtiketter, normeradSpridning, klusterKurvor, normeraBand, taBortFil, rensaResultat,
   NORM_BAND, NORM_MAX, amnesKallor, lektionstester, elevLektionstest, tillfalleKortEtikett, KLUSTER_NAMN, TID_PASS, type Kluster,
-  begransaTillElever, elevUrval, klassensElever, type ElevUrvalVal, arSocrative, elevIKlassen,
+  begransaTillElever, elevUrval, klassensElever, type ElevUrvalVal, arSocrative, elevIKlassen, sattElevStatus,
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
@@ -1152,18 +1152,32 @@ function Elevlista({ s, klassId, klassNamn, kor }: {
   const [bulkGrupp, setBulkGrupp] = useState<Grupp>('A');
   const [grupp, setGrupp] = useState<Grupp>('A');
   const [visaSchema, setVisaSchema] = useState<string | null>(null);
-  const elever = s.elever.filter((e) => e.klassId === klassId)
-    .sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
+  const [visaSlutade, setVisaSlutade] = useState(false);
+  // Del 155: listan visar elever som går i klassen; de som slutat listas för sig
+  const alla = s.elever.filter((e) => e.klassId === klassId).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
+  const elever = alla.filter((e) => elevIKlassen(e));
+  const slutade = alla.filter((e) => !elevIKlassen(e));
   const antal = (g: Grupp) => elever.filter((e) => e.grupp === g).length;
   return (
     <div className="elevlista">
-      <h3>Elever <small className="muted">Grupp A: {antal('A')} · Grupp B: {antal('B')}</small></h3>
+      <h3>Elever <small className="muted">{elever.length} i klassen · Grupp A: {antal('A')} · Grupp B: {antal('B')}</small>{' '}
+        <button className="btn sec sm" aria-expanded={visaSlutade} disabled={slutade.length === 0} onClick={() => setVisaSlutade(!visaSlutade)}>👋 Elever som slutat ({slutade.length})</button></h3>
+      {visaSlutade && slutade.length > 0 && (
+        <table className="tbl small st-slutade" aria-label={`Elever som slutat i ${klassNamn}`}>
+          <tbody>{slutade.map((e, nr) => (
+            <tr key={e.id}><td className="muted st-elevnr">{nr + 1}</td><td>{e.namn}</td>
+              <td className="muted">{e.slutDatum !== undefined ? `slutade ${e.slutDatum}` : e.aktiv === false ? 'slutat' : `börjar ${e.startDatum ?? ''}`}</td>
+              <td><button className="btn sm" aria-label={`Tillbaka i klassen ${e.namn}`} onClick={() => kor(() => sattElevStatus(lasStruktur(), e.id, { aktiv: true, slutDatum: null, startDatum: null }), `${e.namn} går i ${klassNamn} igen.`)}>↩ Tillbaka</button></td></tr>
+          ))}</tbody>
+        </table>
+      )}
       <p className="note">Gruppen styr vilka halvklasspass som gäller för eleven — klicka 🗓 för att se elevens lektioner.</p>
       {elever.length > 0 && (
         <table className="tbl">
-          <thead><tr><th>Namn</th><th>Grupp</th><th></th><th></th></tr></thead>
-          <tbody>{elever.map((e) => (<Fragment key={e.id}>
+          <thead><tr><th>#</th><th>Namn</th><th>Grupp</th><th></th><th></th><th></th></tr></thead>
+          <tbody>{elever.map((e, nr) => (<Fragment key={e.id}>
             <tr>
+              <td className="muted st-elevnr">{nr + 1}</td>
               <td>{e.namn}</td>
               <td>
                 <select aria-label={`Grupp för ${e.namn}`} value={e.grupp}
@@ -1174,12 +1188,14 @@ function Elevlista({ s, klassId, klassNamn, kor }: {
               </td>
               <td><button className="icon-btn" title="Visa elevens lektioner"
                 onClick={() => setVisaSchema(visaSchema === e.id ? null : e.id)}>🗓</button></td>
-              <td><button className="icon-btn" title="Ta bort elev"
-                onClick={() => kor(() => taBortElev(lasStruktur(), e.id), `${e.namn} borttagen.`)}>🗑</button></td>
+              <td><button className="btn sec sm" aria-label={`Slutat ${e.namn}`} title="Eleven går inte längre i klassen — döljs och räknas inte i rapporteringen (resultaten finns kvar)"
+                onClick={() => kor(() => sattElevStatus(lasStruktur(), e.id, { aktiv: false, slutDatum: new Date().toISOString().slice(0, 10) }), `${e.namn} har slutat i ${klassNamn}.`)}>👋 Slutat</button></td>
+              <td><button className="icon-btn" title="Radera eleven helt ur klassen — använd 👋 Slutat om eleven bytt klass eller skola"
+                onClick={() => { if (window.confirm(`Radera ${e.namn} helt ur ${klassNamn}? Elevens resultat syns inte längre någonstans. Har eleven bara slutat — använd 👋 Slutat i stället, då finns allt kvar.`)) kor(() => taBortElev(lasStruktur(), e.id), `${e.namn} raderad.`); }}>🗑</button></td>
             </tr>
             {visaSchema === e.id && (
               <tr key={`${e.id}-schema`} className="elev-schema">
-                <td colSpan={4}>
+                <td colSpan={6}>
                   {elevSchema(s, e.id).length === 0 ? <span className="muted">Inga pass ännu.</span>
                     : elevSchema(s, e.id).map((r, i) => (
                       <span key={i} className="chip">{DAGNAMN[r.dag]} {r.start}–{r.slut} {r.amnesNamn}{r.grupp !== undefined ? ` (Grupp ${r.grupp}, rum ${socrativeRum(r.amnesNamn, klassNamn)})` : ''}</span>
@@ -4903,6 +4919,7 @@ function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur,
   const [lage, setLage] = useState<'enkel' | 'full' | 'studie'>('enkel');
   // Del 154: elevkortet — eget läge, öppnas från listan (även för elever som inte ingår i klassen)
   const [kortElev, setKortElev] = useState('');
+  const [visaSlutade, setVisaSlutade] = useState(false);
   const [sok, setSok] = useState('');
   const [skriver, setSkriver] = useState('');
   const [forlopp, setForlopp] = useState('');
@@ -5034,9 +5051,10 @@ function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur,
           <b>Välj elev</b> <small className="muted">klicka på en rad för att öppna rapporten</small>
           <div className="st-scroll" style={{ maxHeight: 560 }}>
             <table className="tbl st-tabell">
-              <thead><tr><th>Elev</th><th>Grupp</th><th>Läxförhör</th><th>Exit</th><th>Närvaro</th><th>Svåra begrepp</th><th>Läget</th><th></th><th></th></tr></thead>
-              <tbody>{rader.map((r) => (
+              <thead><tr><th>#</th><th>Elev</th><th>Grupp</th><th>Läxförhör</th><th>Exit</th><th>Närvaro</th><th>Svåra begrepp</th><th>Läget</th><th></th><th></th><th></th></tr></thead>
+              <tbody>{rader.map((r, nr) => (
                 <tr key={r.elev.id} className="st-rapportrad" onClick={() => setElevId(r.elev.id)}>
+                  <td className="muted st-elevnr">{nr + 1}</td>
                   <td><button className="linkbtn">{r.elev.namn}</button></td>
                   <td onClick={(ev) => ev.stopPropagation()}><GruppVaxlare elev={r.elev} kor={kor} /></td>
                   <td>{r.laxforhorProcent ?? '—'} %</td>
@@ -5050,19 +5068,41 @@ function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur,
                     onClick={(ev) => { ev.stopPropagation(); setElevId(r.elev.id); }}>🖨 Skriv ut…</button></td>
                   <td><button className="btn sec sm" aria-label={`Elevkort ${r.elev.namn}`} title="Resultat per källa, vårdnadshavare och status i klassen"
                     onClick={(ev) => { ev.stopPropagation(); setKortElev(r.elev.id); }}>🪪 Elevkort</button></td>
+                  <td><button className="btn sec sm" aria-label={`Slutat ${r.elev.namn}`} title="Eleven går inte längre i klassen — tas bort ur listan och rapporteringen (resultaten finns kvar)"
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      if (!window.confirm(`${r.elev.namn} har slutat i ${klass.namn}? Eleven försvinner ur listan och rapporteringen. Resultaten finns kvar och eleven kan läggas tillbaka under "Elever som slutat".`)) return;
+                      kor(() => sattElevStatus(lasStruktur(), r.elev.id, { aktiv: false, slutDatum: new Date().toISOString().slice(0, 10) }), `${r.elev.namn} har slutat i ${klass.namn}.`);
+                    }}>👋 Slutat</button></td>
                 </tr>
               ))}</tbody>
             </table>
           </div>
           {(() => {
             const utanfor = s.elever.filter((e) => e.klassId === klass.id && !elevIKlassen(e)).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
-            if (utanfor.length === 0) return null;
-            return (
-              <p className="small muted" style={{ marginTop: 6 }}>Ingår inte i klassen nu (ingen rapportering): {utanfor.map((e) => (
-                <button key={e.id} className="linkbtn small" onClick={() => setKortElev(e.id)} title="Öppna elevkortet för att slå på eleven eller ändra datum">
-                  🪪 {e.namn} <small>({e.aktiv === false ? 'av' : e.slutDatum !== undefined && e.slutDatum < new Date().toISOString().slice(0, 10) ? `slutade ${e.slutDatum}` : `börjar ${e.startDatum ?? ''}`})</small>
-                </button>))}</p>
-            );
+            const idagIso = new Date().toISOString().slice(0, 10);
+            const orsak = (e: Elev) => e.aktiv === false ? `slutat${e.slutDatum !== undefined ? ` ${e.slutDatum}` : ''}` : e.slutDatum !== undefined && e.slutDatum < idagIso ? `slutade ${e.slutDatum}` : `börjar ${e.startDatum ?? ''}`;
+            return (<>
+              <div className="rad" style={{ marginTop: 6, gap: 8 }}>
+                <small className="muted">{rader.length} elever i {klass.namn}</small>
+                <span className="spacer" />
+                <button className="btn sec sm" aria-expanded={visaSlutade} disabled={utanfor.length === 0} onClick={() => setVisaSlutade(!visaSlutade)}>
+                  👋 Elever som slutat ({utanfor.length})</button>
+              </div>
+              {visaSlutade && utanfor.length > 0 && (
+                <table className="tbl small st-slutade" aria-label="Elever som slutat">
+                  <thead><tr><th>#</th><th>Elev</th><th>Status</th><th></th><th></th></tr></thead>
+                  <tbody>{utanfor.map((e, nr) => (
+                    <tr key={e.id}>
+                      <td className="muted">{nr + 1}</td><td>{e.namn}</td><td className="muted">{orsak(e)}</td>
+                      <td><button className="btn sec sm" onClick={() => setKortElev(e.id)}>🪪 Elevkort</button></td>
+                      <td><button className="btn sm" aria-label={`Tillbaka i klassen ${e.namn}`}
+                        onClick={() => kor(() => sattElevStatus(lasStruktur(), e.id, { aktiv: true, slutDatum: null, startDatum: null }), `${e.namn} går i ${klass.namn} igen.`)}>↩ Tillbaka i klassen</button></td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              )}
+            </>);
           })()}
         </div>
       ) : lage === 'studie' && valtAmne !== '' ? (
@@ -5403,6 +5443,8 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn }: {
     amneId: string | null; amnesNamn: string;
     kalla: ResultatKalla | null; datum: string; tid: string | null; beskrivning: string;
     matchade: number; omatchadeNamn: string[]; deltog: number;
+    /** Del 155: rapportens hela roster (även de som inte deltog) — kompletterar klassen. */
+    roster: Array<{ namn: string; sidId: string }>;
     rader: Array<{ namn: string; poang: number; maxPoang: number; sidId: string; svar?: FragaSvar[] }>;
     redanInne: boolean;
     /** Läraren har ändrat typen i rullgardinen före import. */
@@ -5410,6 +5452,8 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn }: {
   }
   const [filRader, setFilRader] = useState<FilRad[]>([]);
   const [importeraOm, setImporteraOm] = useState(false);
+  // Del 155: elever i rapportens roster som saknas i klassen läggs till vid import (som standard)
+  const [kompletteraKlass, setKompletteraKlass] = useState(true);
   const [importApp, setImportApp] = useState<ImportApp>('socrative');
   const lasFiler = async (filer: FileList | null) => {
     if (filer === null) return;
@@ -5440,6 +5484,7 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn }: {
           matchade: deltagare.filter((r) => matchaElev(s, klass.id, r.namn, r.sidId) !== null).length,
           omatchadeNamn: deltagare.filter((r) => matchaElev(s, klass.id, r.namn, r.sidId) === null).map((r) => r.namn),
           deltog: deltagare.length,
+          roster: rapport.rader.map((r) => ({ namn: r.namn, sidId: r.sidId })),
           rader: deltagare.map((r) => ({
             namn: r.namn, poang: r.poang, maxPoang: r.maxPoang, sidId: r.sidId,
             // Frågesvar + härlett facit gör trendkollen möjlig (samma fråga i två förhör)
@@ -5452,24 +5497,34 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn }: {
       } catch (fel) {
         ut.push({ filnamn: fil.name, quiz: '—', rum: '—', amneId: null, amnesNamn: '—', kalla: null, tid: null,
           datum: '', beskrivning: fel instanceof Error ? fel.message : 'kunde inte läsas',
-          matchade: 0, omatchadeNamn: [], deltog: 0, rader: [], redanInne: false });
+          matchade: 0, omatchadeNamn: [], deltog: 0, roster: [], rader: [], redanInne: false });
       }
     }
     setFilRader(ut);
   };
   const importerbara = filRader.filter((f) => f.amneId !== null && f.kalla !== null && (importeraOm || !f.redanInne) && f.rader.length > 0);
+  // Namn i rapporternas roster som inte finns i klassen (även avstängda elever räknas som befintliga)
+  const saknasIKlassen = [...new Map(filRader.flatMap((f) => f.roster)
+    .filter((r) => matchaElev(s, klass.id, r.namn, r.sidId) === null)
+    .map((r) => [r.namn.toLowerCase().replace(/,/g, ' ').split(/\s+/).filter(Boolean).sort().join(' '), r])).values()];
   const importeraFiler = () => {
-    kor(() => {
-      let st = lasStruktur();
-      for (const f of importerbara) {
-        st = importeraResultat(st, {
-          klassId: klass.id, amneId: f.amneId!, kalla: f.kalla!, prov: f.quiz, datum: f.datum, rum: f.rum, ...(f.tid !== null ? { tid: f.tid } : {}),
-          ...(f.typAndrad !== true ? { autoTyp: true } : {}), rader: f.rader,
-        }).s;
-        st = registreraFil(st, { amneId: f.amneId!, filnamn: f.filnamn, importerad: new Date().toISOString(), kalla: f.kalla!, prov: f.quiz, datum: f.datum, traffar: f.matchade, rum: f.rum });
-      }
-      return st;
-    }, `${importerbara.length} filer importerade (${importerbara.reduce((n, f) => n + f.matchade, 0)} resultat).`);
+    let st = lasStruktur();
+    let nyaElever: string[] = [];
+    if (kompletteraKlass) {
+      const u = laggTillSaknadeElever(st, klass.id, filRader.flatMap((f) => f.roster), 'A', () => nyttId('e'), matchaElev);
+      st = u.struktur; nyaElever = u.tillagda;
+    }
+    let resultat = 0;
+    for (const f of importerbara) {
+      const u = importeraResultat(st, {
+        klassId: klass.id, amneId: f.amneId!, kalla: f.kalla!, prov: f.quiz, datum: f.datum, rum: f.rum, ...(f.tid !== null ? { tid: f.tid } : {}),
+        ...(f.typAndrad !== true ? { autoTyp: true } : {}), rader: f.rader,
+      });
+      resultat += u.traffar;
+      st = registreraFil(u.s, { amneId: f.amneId!, filnamn: f.filnamn, importerad: new Date().toISOString(), kalla: f.kalla!, prov: f.quiz, datum: f.datum, traffar: u.traffar, rum: f.rum });
+    }
+    const klar = st;
+    kor(() => klar, `${importerbara.length} filer importerade (${resultat} resultat)${nyaElever.length > 0 ? ` · ${nyaElever.length} elever tillagda i ${klass.namn} ur Socrative-rostern: ${nyaElever.join(', ')}` : ''}.`);
     setFilRader([]);
   };
 
@@ -5628,8 +5683,15 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn }: {
               </tr>
             ))}</tbody>
           </table>
-          {filRader.some((f) => f.omatchadeNamn.length > 0) && (
-            <p className="small muted">⚠ Omatchade namn: {[...new Set(filRader.flatMap((f) => f.omatchadeNamn))].join(' · ')} — lägg till eleverna i klassen (👥) så matchar nästa import.</p>
+          {saknasIKlassen.length > 0 && (
+            <p className="small">
+              <label><input type="checkbox" aria-label="Lägg till saknade elever ur Socrative-rostern" checked={kompletteraKlass} onChange={(e) => setKompletteraKlass(e.target.checked)} />{' '}
+                <b>Lägg till {saknasIKlassen.length} elev{saknasIKlassen.length === 1 ? '' : 'er'} i {klass.namn}</b> som finns i Socratives roster men saknas i klassen (även de som inte deltog):</label>{' '}
+              <span className="muted">{saknasIKlassen.map((r) => r.namn).join(' · ')}</span>
+            </p>
+          )}
+          {!kompletteraKlass && filRader.some((f) => f.omatchadeNamn.length > 0) && (
+            <p className="small muted">⚠ Omatchade namn: {[...new Set(filRader.flatMap((f) => f.omatchadeNamn))].join(' · ')} — deras resultat sparas inte.</p>
           )}
           <div className="rad"><span className="spacer" />
             <button className="btn" disabled={importerbara.length === 0} onClick={importeraFiler}>💾 Importera {importerbara.length} filer</button>

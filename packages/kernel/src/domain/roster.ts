@@ -213,3 +213,37 @@ export function tilldelaGrupper(s: Struktur, klassId: string, rader: GruppRad[])
   const ejListade = elever.filter((e) => !namnda.has(e.id));
   return { struktur, tilldelade, tvetydiga, okanda, ejListade };
 }
+
+// ── Del 155: klassen kompletteras ur rostern i Socrative-rapporterna ─────────
+
+export interface SaknadeEleverResultat {
+  struktur: Struktur;
+  /** Namn på elever som lades till i klassen. */
+  tillagda: string[];
+}
+
+/**
+ * Lägger till de namn ur en roster (t.ex. en Socrative-rapports alla elevrader,
+ * även de som inte deltog) som inte finns i klassen. Matchning sker som vid
+ * resultatimport (Student ID, namn i valfri ordning) och mot ALLA klassens
+ * elever — även dem som slutat — så att en avstängd elev inte kommer tillbaka.
+ */
+export function laggTillSaknadeElever(
+  s: Struktur, klassId: string, rader: Array<{ namn: string; sidId?: string }>, grupp: Elev['grupp'], nyttId: () => string,
+  matcha: (s: Struktur, klassId: string, namn: string, sidId?: string) => Elev | null,
+): SaknadeEleverResultat {
+  if (!s.klasser.some((k) => k.id === klassId)) throw new Error('Okänd klass.');
+  let st = s;
+  const tillagda: string[] = [];
+  for (const r of rader) {
+    const namn = r.namn.includes(',') ? rosterNamn(delaNamnTillRad(r.namn)) : r.namn.replace(/\s+/g, ' ').trim();
+    if (namn === '') continue;
+    if (matcha(st, klassId, namn, r.sidId) !== null) continue;
+    const sidId = (r.sidId ?? '').trim();
+    st = { ...st, elever: [...st.elever, { id: nyttId(), klassId, namn, grupp, ...(sidId !== '' ? { socrativeId: sidId } : {}) }] };
+    tillagda.push(namn);
+  }
+  return { struktur: st, tillagda };
+}
+
+function delaNamnTillRad(namn: string): RosterRad { const d = delaNamn(namn); return { ...d, sidId: '' }; }

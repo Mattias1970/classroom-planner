@@ -3191,3 +3191,39 @@ describe('Del 149: kurser (delkapitel) flyttas fram och tillbaka', () => {
     vi.useRealTimers();
   });
 });
+
+describe('Del 155 · numrerad elevlista, slutat och elever som slutat', () => {
+  it('klasspanelen och Rapporter numrerar eleverna; 👋 Slutat döljer eleven, listan över slutade kan visas och eleven läggas tillbaka', () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    skriv(input(host, 'Tjänstens namn'), 'NO');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 NO').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    for (const n of ['Omar Ali', 'Anna Berg', 'Pia Provlund']) { skriv(input(host, 'Elevens namn'), n); act(() => { knapp(host, '➕ Lägg till elev').click(); }); }
+    const lista = () => host.querySelector('.elevlista')!;
+    const rader = () => [...lista().querySelectorAll('table.tbl:not(.st-slutade) tbody tr')].map((r) => [...r.querySelectorAll('td')].slice(0, 2).map((c) => c.textContent).join(' '));
+    expect(rader()).toEqual(['1 Anna Berg', '2 Omar Ali', '3 Pia Provlund']);
+    expect(lista().textContent).toContain('3 i klassen');
+    act(() => { (lista().querySelector('button[aria-label="Slutat Omar Ali"]') as HTMLButtonElement).click(); });
+    expect(rader()).toEqual(['1 Anna Berg', '2 Pia Provlund']);
+    expect(lasStruktur().elever.find((e) => e.namn === 'Omar Ali')).toMatchObject({ aktiv: false });
+    const slutadeKnapp = () => [...lista().querySelectorAll('button')].find((b) => b.textContent?.includes('Elever som slutat'))!;
+    expect(slutadeKnapp().textContent).toContain('(1)');
+    act(() => { slutadeKnapp().click(); });
+    expect(lista().querySelector('.st-slutade')!.textContent).toContain('Omar Ali');
+
+    // Rapporter: samma — numrerad, Omar syns inte, men finns under 'Elever som slutat'
+    act(() => { knapp(host, '📄 Rapporter').click(); });
+    expect([...host.querySelectorAll('.st-rapportrad')].map((r) => r.querySelector('.st-elevnr')!.textContent + ' ' + r.querySelectorAll('td')[1].textContent)).toEqual(['1 Anna Berg', '2 Pia Provlund']);
+    expect(host.textContent).toContain('2 elever i 8B');
+    act(() => { knapp(host, 'Elever som slutat (1)').click(); });
+    const slutade = host.querySelector('table[aria-label="Elever som slutat"]')!;
+    expect(slutade.textContent).toContain('Omar Ali');
+    act(() => { (slutade.querySelector('button[aria-label="Tillbaka i klassen Omar Ali"]') as HTMLButtonElement).click(); });
+    expect([...host.querySelectorAll('.st-rapportrad')].map((r) => r.querySelectorAll('td')[1].textContent)).toEqual(['Anna Berg', 'Omar Ali', 'Pia Provlund']);
+    expect(lasStruktur().elever.find((e) => e.namn === 'Omar Ali')!.aktiv).toBeUndefined();
+  });
+});

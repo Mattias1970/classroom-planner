@@ -1182,3 +1182,7 @@ input.fel { border-color: #B71C1C; }
 .ek-tom { margin: 24px 0; text-align: center; }
 .ek-vh { border-top: 1px dashed var(--ram); margin-top: 10px; padding-top: 8px; }
 .ek-vh-lista { margin: 4px 0 6px; padding-left: 18px; }
+
+/* ── Del 155 · Numrerad elevlista, slutade elever ── */
+.st-elevnr { width: 2.2em; text-align: right; font-variant-numeric: tabular-nums; }
+.st-slutade { margin-top: 6px; background: #fafafa; }
