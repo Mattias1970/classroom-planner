@@ -16,6 +16,7 @@ import {
   slaIhopPlaneringsmall, tolkaPlaneringsmall,
   handelserPerDatum, kalenderHandelser, klassFarg, noBudget, noOverBudget, sattLektionsplan,
   doldaOmraden, sattOmradeDolt, visaAllaOmraden, LEKTIONSOMRADEN, type LektionsOmrade,
+  foljbaraAmnen, foljPlanering,
   kapitelKort, manadsRutor, skolarManader, veckaRutor, viktigaDatum, bamTidslinje, begreppForLektion, bokBegrepp,
   tavelTidslinje, standardBamDelar, bamAvvikelse, exitStartFor, type BamDel,
   bokFromValfriImport, bokSidregister, bokSidregisterCsv, elevSchema, exitStart, giltigtPass,
@@ -1569,6 +1570,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
         {harPlanering ? '➕ Spara ny planeringsversion' : '▶ Skapa planering'}
       </button>
       {bok && harPlanering && <EgnaRaderRedigerare amne={a} bok={bok} kor={kor} idag={idag} />}
+      {bok && harPlanering && <FoljPlanering s={s} amneId={a.id} klassNamn={klass.namn} kor={kor} idag={idag} />}
       {(s.planeringsarkiv ?? []).some((x) => x.amneId === a.id) && (
         <div className="uppg-kort no-print">
           <b>🗂 Tidigare planeringsversioner</b> <small className="muted">Sparade planeringar skrivs aldrig över — återställ vid behov.</small>
@@ -1588,6 +1590,35 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
           rum={rum} rubrik={`${klass.namn} · rum ${rum} — en klass, gemensam planering`} s={s} amneId={a.id} kor={kor} amne={harPlanering ? a : undefined} idag={idag} />
       )}
       </>)}
+    </div>
+  );
+}
+
+/** Del 161 · Låt ämnet följa en annan klass planering (samma ämne och bok) från ett datum. */
+function FoljPlanering({ s, amneId, klassNamn, kor, idag }: { s: Struktur; amneId: string; klassNamn: string; kor: (fn: () => Struktur, m: string) => void; idag: string }) {
+  const [kalla, setKalla] = useState('');
+  const [fran, setFran] = useState(idag);
+  const val = foljbaraAmnen(s, amneId);
+  if (val.length === 0) return null;
+  const namn = (x: Amne) => `${s.klasser.find((k) => k.id === x.klassId)?.namn ?? ''} · ${x.namn}`;
+  return (
+    <div className="uppg-kort no-print rad" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+      <b>🔁 Följ en annan klass planering</b>
+      <select aria-label="Planering att följa" value={kalla} onChange={(e) => setKalla(e.target.value)}>
+        <option value="">— välj klass —</option>
+        {val.map((x) => <option key={x.id} value={x.id}>{namn(x)}</option>)}
+      </select>
+      <label className="small">från <input type="date" aria-label="Följ från datum" value={fran} min={idag} onChange={(e) => { if (e.target.value !== '') setFran(e.target.value); }} /></label>
+      <button className="btn sm" disabled={kalla === ''} onClick={() => {
+        const k = val.find((x) => x.id === kalla); if (k === undefined) return;
+        if (!window.confirm(`Låta ${klassNamn} följa ${namn(k)} från ${fran}?\n\nLektionerna före ${fran} ändras inte. Från ${fran} får ${klassNamn} samma lektioner, laborationer och lektionskort (filmer, genomgång, uppgifter) i samma ordning. Socrative-rummen följer ${klassNamn}.`)) return;
+        try {
+          const r = foljPlanering(lasStruktur(), amneId, kalla, fran, idag);
+          const extra = r.varningar.length > 0 ? ` ⚠ ${r.varningar.join(' ')}` : '';
+          kor(() => r.s, `${klassNamn} följer ${namn(k)} från ${fran}: ${r.teori} lektioner${r.labbar > 0 ? `, ${r.labbar} laborationer` : ''}${r.egnaKort > 0 ? `, ${r.egnaKort} egna kort` : ''}, ${r.kort} lektionskort.${extra}`);
+        } catch (e) { kor(() => { throw e; }, ''); }
+      }}>🔁 Följ planeringen</button>
+      <small className="muted">Samma ämne och bok. Det som redan genomförts ändras inte.</small>
     </div>
   );
 }

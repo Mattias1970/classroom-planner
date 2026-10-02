@@ -13,7 +13,7 @@ import {
   amnesOffset, amnesPlanFor, andraPlanering, gruppNyckel, hamtaLektionsplan, harLaborationsstandard,
   kopplaOmLektionsplaner, noBudget, nyttId, planeringsRader, registreraPlanering, samlaSlots, sattLektionsplan, type PlanRad,
 } from './struktur.js';
-import type { Amne, LektionsDetaljer, LektionsPlan, LektionsTyp, PlanFranUtkast, PlanUtkast, Struktur, UtkastKort } from './typer.js';
+import type { Amne, LektionsDetaljer, LektionsPlan, LektionsTyp, PlaneradLektion, PlanFranUtkast, PlanUtkast, Struktur, UtkastKort } from './typer.js';
 
 export type UtkastKo = 'teori' | 'labbar';
 
@@ -457,4 +457,114 @@ export function tabortInlagtUtkast(s: Struktur, amneId: string, idag?: string): 
   const fore = amnesPlanFor(s, amneId, idag, false)?.a ?? [];
   const ren = utanUtkast(s, amneId);
   return kopplaOmLektionsplaner(ren, amneId, fore, amnesPlanFor(ren, amneId, idag, false)?.a ?? []);
+}
+
+// ── Del 161 · Följ en annan klass planering ─────────────────────────────────
+
+export interface FoljPlanering {
+  s: Struktur;
+  /** Antal teorilektioner och laborationer som lades in från startdatum. */
+  teori: number;
+  labbar: number;
+  /** Lektioner som inte fanns i målämnets bokföljd (extra lektioner, egna rader) och blev egna kort. */
+  egnaKort: number;
+  /** Lektionskort (filmer, genomgång, BAM …) som fördes över. */
+  kort: number;
+  varningar: string[];
+}
+
+/** Ämnen som kan följas: samma ämnesnamn, samma bok, annan klass, med planering. */
+export function foljbaraAmnen(s: Struktur, amneId: string): Amne[] {
+  const a = s.amnen.find((x) => x.id === amneId);
+  if (a === undefined) return [];
+  return s.amnen.filter((x) => x.id !== a.id && x.klassId !== a.klassId && x.namn === a.namn && x.bokId !== undefined && x.bokId === a.bokId
+    && s.planeringar.some((p) => p.amneId === x.id));
+}
+
+/**
+ * Låter målämnet följa källämnets planering från `fran` (standard idag): samma lektioner
+ * och laborationer i samma ordning som källans kommande lektioner, med källans lektionskort
+ * (filmer, genomgång, uppgifter, BAM …). Målets genomförda lektioner ändras aldrig —
+ * det är utkastsmekanismen (Del 158) som lägger in följden. Lektioner som inte finns i
+ * målets bokföljd (källans extra lektioner och egna rader) blir egna kort med källans
+ * innehåll. Socrative-rummen följer målets klass.
+ */
+export function foljPlanering(s: Struktur, malAmneId: string, kallAmneId: string, fran: string, idag?: string): FoljPlanering {
+  const mal = hittaAmne(s, malAmneId);
+  const kalla = hittaAmne(s, kallAmneId);
+  if (mal.id === kalla.id) throw new Error('Välj ett annat ämne att följa.');
+  if (mal.bokId === undefined || mal.bokId !== kalla.bokId) throw new Error('Ämnena måste använda samma bok.');
+  if (!DATUM.test(fran)) throw new Error('Ange ett startdatum (ÅÅÅÅ-MM-DD).');
+  const kallPlan = amnesPlanFor(s, kallAmneId, idag, false);
+  if (kallPlan === null) throw new Error('Källämnet saknar planering.');
+  const klassNamn = (a: Amne) => s.klasser.find((k) => k.id === a.klassId)?.namn ?? '';
+  const varningar: string[] = [];
+
+  // Källans laborationer som saknas hos målet läggs till, så 'lab:<id>' finns
+  let ut = s;
+  const malLabbar = mal.laborationer ?? [];
+  const saknade = (kalla.laborationer ?? []).filter((l) => !malLabbar.some((x) => x.id === l.id));
+  if (saknade.length > 0) ut = { ...ut, amnen: ut.amnen.map((a) => (a.id === malAmneId ? { ...a, laborationer: [...malLabbar, ...saknade] } : a)) };
+
+  const malRader = new Map(bokensRader(ut, malAmneId).map((r) => [r.nyckel, r]));
+  const kallRader = amnesPlanFor(s, kallAmneId, idag, false)!.a;
+  const kallIndex = new Map<string, number>();
+  kallRader.forEach((r, i) => { if (r.nyckel !== undefined && !kallIndex.has(r.nyckel)) kallIndex.set(r.nyckel, i); });
+  const malHalvklass = harLaborationsstandard(mal);
+
+  const u: PlanFranUtkast = { namn: `Följer ${klassNamn(kalla)} · ${kalla.namn}`, fran, teori: [], labbar: [], egna: [], detaljer: {} };
+  let egnaKort = 0; let kort = 0; let tappadeLabbar = 0;
+  const detaljerFor = (r: PlaneradLektion, radNyckel: string): LektionsDetaljer => {
+    const i = kallIndex.get(radNyckel);
+    const lp = i === undefined ? null : hamtaLektionsplan(s, kallAmneId, i);
+    if (lp === null) return {};
+    const { id: _i, amneId: _a, lektionsIndex: _l, klar: _k, ...rest } = lp; void _i; void _a; void _l; void _k; void r;
+    return rest;
+  };
+  for (const r of kallRader) {
+    if ((r.datum !== null && r.datum < fran) || r.nyckel === undefined || arPass(r.nyckel)) continue;
+    if (arLab(r.nyckel)) {
+      const k = koNyckel(r.nyckel);
+      if (k === null) continue;
+      if (!malHalvklass) { tappadeLabbar += 1; continue; }
+      if (k.startsWith('u:')) {
+        const eget = kalla.planFranUtkast?.egna.find((x) => `u:${x.id}` === k);
+        if (eget === undefined) continue;
+        u.egna.push({ ...eget }); egnaKort += 1;
+      }
+      u.labbar.push(k);
+      const d = detaljerFor(r, r.nyckel); if (Object.keys(d).length > 0) { u.detaljer![r.nyckel] = d; kort += 1; }
+      continue;
+    }
+    let nyckel = r.nyckel;
+    if (!malRader.has(nyckel)) {
+      // Extra lektion ('4:1#2'), egen rad ('er:…') eller eget kort hos källan → eget kort med källans innehåll
+      const eget = kalla.planFranUtkast?.egna.find((x) => `u:${x.id}` === nyckel);
+      const id = `f-${nyckel.replace(/[^a-z0-9]/gi, '-')}`;
+      const typ: UtkastKort['typ'] = eget?.typ ?? (r.lektion.typ === 'exam' ? 'prov' : r.lektion.typ === 'test' ? 'diagnos' : r.lektion.typ === 'repetition' ? 'ovning' : 'lektion');
+      u.egna.push({ id, rubrik: r.lektion.avsnitt, typ, ...(r.lektion.genomgang !== '—' ? { beskrivning: r.lektion.genomgang } : {}) });
+      egnaKort += 1;
+      const bas: LektionsDetaljer = {
+        ...(r.lektion.begrepp !== '—' ? { begreppText: r.lektion.begrepp } : {}),
+        ...(r.lektion.sidorTeori !== '—' ? { sidorTeori: r.lektion.sidorTeori } : {}),
+        ...(r.lektion.niva1 !== '—' ? { uppgNiva1: r.lektion.niva1 } : {}),
+        ...(r.lektion.niva2 !== '—' ? { uppgNiva2: r.lektion.niva2 } : {}),
+        ...(r.lektion.niva3 !== '—' ? { uppgNiva3: r.lektion.niva3 } : {}),
+        ...(r.lektion.ex !== '—' ? { exempelRakna: r.lektion.ex } : {}),
+      };
+      const d = { ...bas, ...detaljerFor(r, nyckel) };
+      nyckel = `u:${id}`;
+      if (Object.keys(d).length > 0) { u.detaljer![nyckel] = d; kort += 1; }
+    } else {
+      const d = detaljerFor(r, nyckel); if (Object.keys(d).length > 0) { u.detaljer![nyckel] = d; kort += 1; }
+    }
+    u.teori.push(nyckel);
+  }
+  if (Object.keys(u.detaljer!).length === 0) delete u.detaljer;
+  if (tappadeLabbar > 0) varningar.push(`${tappadeLabbar} laborationer hoppades över — ${klassNamn(mal)} har inte laborationer på halvklasspassen.`);
+  if (u.provDatum === undefined && kalla.planFranUtkast?.provDatum !== undefined && kalla.planFranUtkast.provDatum >= fran) u.provDatum = kalla.planFranUtkast.provDatum;
+  ut = tillampaUtkast(ut, malAmneId, u, idag);
+  const efter = planeringstavla(ut, malAmneId, u, idag);
+  if (efter.rymsEj.length > 0) varningar.push(`${efter.rymsEj.length} lektioner ryms inte före läsårets slut i ${klassNamn(mal)}.`);
+  return { s: ut, teori: u.teori.length, labbar: u.labbar.length, egnaKort, kort, varningar };
 }

@@ -11,7 +11,7 @@
  */
 import React, { useMemo, useState } from 'react';
 import {
-  amnesKallor, frageKort, kalenderHandelser, kortDatum, narvaroKort, rapportOversikt, tolkaVeckor, trendKluster,
+  amnesForkortning, amnesKallor, frageKort, kalenderHandelser, kortDatum, narvaroKort, rapportOversikt, tolkaVeckor, trendKluster,
   type Struktur,
 } from '@planner/kernel';
 import { Ikon, amnesIkon } from './ikoner.js';
@@ -91,7 +91,7 @@ export function Oversikt({ s, filter, setVy, struktur }: {
                     <i className="lax" style={{ height: `${lax ?? 0}%` }} title={`Läxförhör ${lax ?? '—'} %`} />
                     <i className="exit" style={{ height: `${exit ?? 0}%` }} title={`Exit tickets ${exit ?? '—'} %`} />
                   </span>
-                  <I storlek={16} /><small>{a.namn.slice(0, 4)}</small>
+                  <I storlek={16} /><small>{amnesForkortning(a.namn)}{klasser.length > 1 && klass !== '' ? ` ${klass}` : ''}</small>
                   <b>{helhet === null ? '—' : `${helhet} %`}</b>
                   {helhet === null && <span className="v3-mini-saknas">data saknas</span>}
                 </button>

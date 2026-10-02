@@ -109,3 +109,4 @@ describe('Del 158 · Planeringstavlan', () => {
     expect(div.textContent).toContain('Inlagd planering: Kapitel 1 kort från 2026-08-24');
   });
 });
+

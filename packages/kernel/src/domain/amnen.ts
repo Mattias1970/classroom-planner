@@ -40,6 +40,18 @@ export function socrativeRum(amnesNamn: string, klassNamn: string): string {
  * NO+Tk är en blockkurs där Biologi, Fysik, Kemi och Teknik läses i följd,
  * var för sig, med lika många lektioner (fjärdedel av läsåret var).
  */
+/** Del 161 · Ämnets förkortning i trånga lägen: Ma, Bi, Fk, Ke, Tk — stödämnen får sitt ämnes förkortning plus tillägg. */
+export function amnesForkortning(amnesNamn: string): string {
+  const n = amnesNamn.trim();
+  const bas: Record<string, string> = { Matematik: 'Ma', Biologi: 'Bi', Fysik: 'Fk', Kemi: 'Ke', Teknik: 'Tk' };
+  if (bas[n] !== undefined) return bas[n];
+  for (const [namn, kort] of Object.entries(bas)) {
+    if (n.startsWith(`${namn} `)) return `${kort} ${n.slice(namn.length + 1)}`;
+  }
+  if (n === 'Ma/NO-stöd') return 'Ma/NO';
+  return n.slice(0, 4);
+}
+
 export const NO_TK = 'NO+Tk';
 export const NO_TK_AMNEN = ['Biologi', 'Fysik', 'Kemi', 'Teknik'] as const;
 

@@ -1204,6 +1204,56 @@ describe('Del 159 · lektionskortet sparas och områden kan döljas', () => {
   });
 });
 
+describe('Del 161 · 🔁 Följ en annan klass planering', () => {
+  it('8A följer 8B från idag: samma lektionsföljd och lektionskort', async () => {
+    const host = render();
+    // Läsåret börjar om ett år så att alla lektioner ligger framåt i tiden (det genomförda följs aldrig)
+    const start = new Date(); start.setFullYear(start.getFullYear() + 1); const st = start.toISOString().slice(0, 10); const sl = `${start.getFullYear() + 1}-06-11`;
+    skapaSkolar(host, '2027/2028', st, sl);
+    await importeraBok(host, BIOJSON);
+    skriv(input(host, 'Tjänstens namn'), 'NO');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    for (const kl of ['8B', '8A']) {
+      act(() => { treeKnapp(host, '💼 NO').click(); });
+      skriv(input(host, 'Klassens namn'), kl);
+      act(() => { knapp(host, '➕ Lägg till klass').click(); });
+      act(() => { treeKnapp(host, `👥 ${kl}`).click(); });
+      valj(select(host, 'Ämne'), 'Biologi');
+      valj(select(host, 'Bok för ämnet'), 'gleerups-biologi-8');
+      valj(select(host, 'Veckodag pass 1'), kl === '8B' ? '2' : '1');
+      skriv(input(host, 'Start pass 1'), '09:00');
+      skriv(input(host, 'Slut pass 1'), '10:00');
+      valj(select(host, 'Veckodag pass 2'), kl === '8B' ? '2' : '1');   // samma pass för grupp B → helklass → teori
+      skriv(input(host, 'Start pass 2'), '09:00');
+      skriv(input(host, 'Slut pass 2'), '10:00');
+      act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+      act(() => { treeKnapp(host, '📖 Biologi').click(); });
+      act(() => { knapp(host, '▶ Skapa planering').click(); });
+    }
+    // 8B: film på lektion 2 via detaljplaneringen
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    act(() => { treeKnapp(host, '📖 Biologi').click(); });
+    act(() => { knapp(host, '🧭 Detaljplanering').click(); });
+    valj(select(host, 'Välj lektion'), '1');
+    skriv(input(host, 'Ny film'), 'Fotosyntes|https://exempel.se/f');
+    act(() => { knapp(host, '+ Lägg till film').click(); });
+    const bId = lasStruktur().amnen.find((a) => a.klassId === lasStruktur().klasser.find((k) => k.namn === '8B')!.id)!.id;
+    expect(lasStruktur().lektionsplaner.find((p) => p.amneId === bId && p.lektionsIndex === 1)?.filmer).toEqual(['Fotosyntes|https://exempel.se/f']);
+    // 8A: följ 8B
+    act(() => { treeKnapp(host, '👥 8A').click(); });
+    act(() => { treeKnapp(host, '📖 Biologi').click(); });
+    act(() => { knapp(host, '📝 Lektionsplan').click(); });
+    valj(select(host, 'Planering att följa'), bId);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    act(() => { knapp(host, '🔁 Följ planeringen').click(); });
+    const aId = lasStruktur().amnen.find((a) => a.klassId === lasStruktur().klasser.find((k) => k.namn === '8A')!.id)!.id;
+    expect(lasStruktur().amnen.find((a) => a.id === aId)?.planFranUtkast?.namn).toBe('Följer 8B · Biologi');
+    expect(host.textContent).toContain('8A följer 8B · Biologi');
+    const planA = lasStruktur().lektionsplaner.filter((p) => p.amneId === aId);
+    expect(planA.some((p) => p.filmer?.[0] === 'Fotosyntes|https://exempel.se/f')).toBe(true);
+  });
+});
+
 describe('Planeringsflikar (portade från v1)', () => {
   async function amneMedPlan(host: HTMLElement) {
     skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');

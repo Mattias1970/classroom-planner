@@ -6,10 +6,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { bokFromImport } from '../src/domain/bok.js';
 import {
   amnesPlanFor, hamtaLektionsplan, laggTillAmne, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering,
-  resetIdRaknare, sattLektionsplan, sparaBok, sparaLaborationer,
+  resetIdRaknare, sattLektionerPerDelkapitel, sattLektionsplan, sparaBok, sparaLaborationer,
 } from '../src/domain/struktur.js';
 import {
-  amnetsUtkast, infogaIUtkast, kortDetaljer, laggProvPaDatum, nyttKortIUtkast, planeringstavla, sattKortDetaljer,
+  amnetsUtkast, foljbaraAmnen, foljPlanering, infogaIUtkast, kortDetaljer, laggProvPaDatum, nyttKortIUtkast, planeringstavla, sattKortDetaljer,
   sparaUtkast, taBortUrUtkast, taBortUtkast, tabortInlagtUtkast, tillampaUtkast, utkastFranPlan,
 } from '../src/domain/planutkast.js';
 import { tomStruktur, type Struktur } from '../src/domain/typer.js';
@@ -150,5 +150,29 @@ describe('Del 158 · planeringstavlan (halvklass med laborationer)', () => {
     const plan = amnesPlanFor(s, 'bi', IDAG)!;
     expect(plan.a.filter((r) => r.datum !== null && r.datum >= IDAG).slice(0, 4).map((r) => `${r.datum}:${r.nyckel}`)).toEqual([`2026-08-24:${lek.nyckel}`, `2026-08-25:lab:${lab.nyckel}`, '2026-08-31:4:3', '2026-09-01:lab:l1']);
     expect(plan.b.find((r) => r.datum === '2026-08-26')).toMatchObject({ datum: '2026-08-26', nyckel: `lab:${lab.nyckel}` });
+  });
+});
+
+describe('Del 161 · följ en annan klass planering', () => {
+  it('8A följer 8B från startdatum: samma ordning, lektionskorten med, extra lektioner blir egna kort, det genomförda rörs inte', () => {
+    let s = grund();
+    s = laggTillKlass(s, { id: 'k2', tjanstId: 'tj', namn: '8A' });
+    s = laggTillAmne(s, { id: 'maB', klassId: 'k', namn: 'Matematik', bokId: 'ma', schema: [{ dag: 2, start: '10:00', slut: '11:00' }, { dag: 4, start: '10:00', slut: '11:00' }] });
+    s = laggTillAmne(s, { id: 'maA', klassId: 'k2', namn: 'Matematik', bokId: 'ma', schema: [{ dag: 1, start: '08:10', slut: '09:10' }, { dag: 3, start: '08:10', slut: '09:10' }] });
+    s = registreraPlanering(s, { id: 'plB', amneId: 'maB', bokId: 'ma', skapad: '2026-08-10' });
+    s = registreraPlanering(s, { id: 'plA', amneId: 'maA', bokId: 'ma', skapad: '2026-08-10' });
+    // 8B: två lektioner på 1.2, provet sist, en film på 1.2
+    s = sattLektionerPerDelkapitel(s, 'maB', 2);
+    s = sattLektionsplan(s, { id: 'lpB', amneId: 'maB', lektionsIndex: 2, filmer: ['Procent|https://exempel.se/p'], genomgang: 'Procent som bråk' });
+    expect(foljbaraAmnen(s, 'maA').map((a) => a.id)).toEqual(['maB']);
+    expect(() => foljPlanering(s, 'maA', 'maA', IDAG, IDAG)).toThrow(/annat ämne/);
+    const r = foljPlanering(s, 'maA', 'maB', IDAG, IDAG);
+    // 8B från idag: 1:3, 1:3#2, 1:4 → hos 8A finns inte 1:3#2 i bokföljden → eget kort
+    expect(r).toMatchObject({ teori: 3, labbar: 0, egnaKort: 1, kort: 1 });
+    const plan = amnesPlanFor(r.s, 'maA', IDAG)!.a;
+    expect(plan.map((x) => `${x.datum}:${x.nyckel}`)).toEqual(['2026-08-17:1:1', '2026-08-19:1:2', '2026-08-24:1:3', '2026-08-26:u:f-1-3-2', '2026-08-31:1:4']);
+    expect(hamtaLektionsplan(r.s, 'maA', 2)).toMatchObject({ filmer: ['Procent|https://exempel.se/p'], genomgang: 'Procent som bråk' });
+    expect(plan[3].lektion.avsnitt).toBe('1.2 Procent');
+    expect(r.s.amnen.find((a) => a.id === 'maA')?.planFranUtkast?.namn).toBe('Följer 8B · Matematik');
   });
 });

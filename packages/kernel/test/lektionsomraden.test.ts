@@ -22,3 +22,10 @@ describe('Del 159 · dolda områden på lektionskorten', () => {
     expect(() => sattOmradeDolt(s, 'x', 'magma', true)).toThrow(/Okänt ämne/);
   });
 });
+
+import { amnesForkortning } from '../src/index.js';
+describe('Del 161 · ämnesförkortningar', () => {
+  it('Ma, Bi, Fk, Ke, Tk — stödämnen behåller tillägget', () => {
+    expect(['Matematik', 'Biologi', 'Fysik', 'Kemi', 'Teknik', 'Matematik spec', 'Ma/NO-stöd'].map(amnesForkortning)).toEqual(['Ma', 'Bi', 'Fk', 'Ke', 'Tk', 'Ma spec', 'Ma/NO']);
+  });
+});
