@@ -1252,3 +1252,15 @@ input.fel { border-color: #B71C1C; }
 .st-inl-chip.sen { background: #FFF3E0; border-color: #EF6C00; }
 .st-inl-chip.ej { background: #f3f3f3; color: #888; }
 .st-inl-chip .icon-btn { font-size: 11px; padding: 0 2px; }
+
+/* ── Del 164 · Utvecklingssamtal ── */
+.st-samtal-tabell td { vertical-align: middle; }
+.st-samtal-text { width: 100%; font: inherit; font-size: 13px; line-height: 1.4; padding: 6px; border: 1px solid var(--ram); border-radius: 6px; }
+.st-samtal-status { font: inherit; font-size: 12px; border-radius: 10px; padding: 2px 6px; }
+.st-samtal-status.svart, .st-samtal-chip.svart { background: #FFEBEE; color: #B71C1C; }
+.st-samtal-status.nar, .st-samtal-chip.nar { background: #FFF8E1; color: #7A5A00; }
+.st-samtal-status.bra, .st-samtal-chip.bra { background: #E8F5E9; color: #2E7D32; }
+.st-samtal-status.mycketBra, .st-samtal-chip.mycketBra { background: #E3F2FD; color: #1565C0; }
+.st-samtal-status.utmarkt, .st-samtal-chip.utmarkt { background: #EDE7F6; color: #4527A0; }
+.st-samtal-glomda.gorsEj { color: #B71C1C; font-weight: 700; }
+.st-samtal-glomda.kontinuerligt { color: #EF6C00; }

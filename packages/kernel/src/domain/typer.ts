@@ -429,6 +429,8 @@ export interface Struktur {
   filregister?: import('./resultat.js').FilPost[];
   /** Del 158: namngivna planeringsutkast (planeringstavlan). */
   planUtkast?: PlanUtkast[];
+  /** Del 164: lärarens egen status/text i utvärderingen inför utvecklingssamtal, per 'elevId|amneId'. */
+  samtalsUtvarderingar?: Record<string, { status?: import('./utvecklingssamtal.js').SamtalsStatus; text?: string }>;
   /** Del 163: inlämningar ur Teams tilldelningsdata (elev × uppgift). */
   inlamningar?: import('./inlamningar.js').Inlamning[];
   /** Del 153: Magma-testens uppgifter ur testens PDF (en post per test). */

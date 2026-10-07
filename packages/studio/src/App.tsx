@@ -50,6 +50,7 @@ import { RapportdesignVy, MallRendering, Trendsteg } from './rapportdesign.js';
 import { MagmaImport } from './MagmaImport.js';
 import { DigiExamImport } from './DigiExamImport.js';
 import { TeamsImport } from './TeamsImport.js';
+import { Utvecklingssamtal } from './Utvecklingssamtal.js';
 import { DigiExamLarmPanel } from './ProvLarm.js';
 import { Elevkort } from './Elevkort.js';
 import { ProvlappPanel } from './Provlapp.js';
@@ -4954,6 +4955,7 @@ function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur,
   const [lage, setLage] = useState<'enkel' | 'full' | 'studie'>('enkel');
   // Del 154: elevkortet — eget läge, öppnas från listan (även för elever som inte ingår i klassen)
   const [kortElev, setKortElev] = useState('');
+  const [samtal, setSamtal] = useState(false);   // Del 164
   const [visaSlutade, setVisaSlutade] = useState(false);
   const [sok, setSok] = useState('');
   const [skriver, setSkriver] = useState('');
@@ -5065,6 +5067,7 @@ function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur,
         <label>🔎 <input aria-label="Sök elev för rapport" placeholder="Sök elev…" value={sok} onChange={(e) => setSok(e.target.value)} /></label>
         <span className="spacer" />
         <small className="muted">{rader.length} elever</small>
+        <button className="btn sec" disabled={valtAmne === ''} onClick={() => { setSamtal(true); setKortElev(''); setElevId(''); }} title="Kort utvärdering per elev inför utvecklingssamtal — status, utveckling, läxläsning, inlämningar och prov">🗣 Utvecklingssamtal</button>
         <button className="btn sec" onClick={() => setDesign(true)} title="Bygg och redigera rapportmallar">🎨 Rapportdesign{(s.rapportmallar ?? []).length > 0 ? ` (${(s.rapportmallar ?? []).length})` : ''}</button>
         <button className="btn" disabled={skriver !== ''} onClick={() => setValAlla(true)} title="Välj mall eller Word-format för alla elever i urvalet">
           {skriver !== '' ? `… skapar ${forlopp}` : '🖨 Skriv ut alla…'}
@@ -5079,7 +5082,9 @@ function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur,
           onValj={(id) => { if (id.startsWith('mall:')) setMallAlla(id.slice(5)); else if (id === 'word:enkel') allaEnklaTillWord(); else allaTillWord(); }} />
       )}
 
-      {kortElev !== '' ? (
+      {samtal && valtAmne !== '' ? (
+        <Utvecklingssamtal s={s} klass={klass} amneId={valtAmne} kor={kor} idag={new Date().toISOString().slice(0, 10)} onTillbaka={() => setSamtal(false)} />
+      ) : kortElev !== '' ? (
         <Elevkort s={s} elevId={kortElev} {...(valtAmne !== '' ? { amneId: valtAmne } : {})} kor={kor} onTillbaka={() => setKortElev('')} />
       ) : analys === null || valdElev === null ? (
         <div className="uppg-kort st-widget">
