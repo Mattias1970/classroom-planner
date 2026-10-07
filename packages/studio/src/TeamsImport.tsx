@@ -27,15 +27,16 @@ export function InlamningsStaplar({ uppgifter }: { uppgifter: UppgiftsRad[] }) {
         return (
           <g key={u.uppgift}>
             <title>{`${u.uppgift} (${kort(u.forfallo)}): ${u.procent} % inlämnat — ${u.inlamnade} i tid, ${u.sena} sena, ${u.ej} saknas${u.underkanda > 0 ? `, ${u.underkanda} underkända` : ''}`}</title>
-            <rect x={x} y={bas - hIn} width={28} height={hIn} fill="#2E7D32" rx={2} />
-            <rect x={x} y={bas - hIn - hSen} width={28} height={hSen} fill="#EF6C00" />
+            {!u.forfallen && <rect x={x} y={topp} width={28} height={bas - topp} fill="#f3f3f3" rx={2} />}
+            <rect x={x} y={bas - hIn} width={28} height={hIn} fill="#2E7D32" rx={2} opacity={u.forfallen ? 1 : 0.45} />
+            <rect x={x} y={bas - hIn - hSen} width={28} height={hSen} fill="#EF6C00" opacity={u.forfallen ? 1 : 0.45} />
             <text x={x + 14} y={bas - hIn - hSen - 3} fontSize={9} textAnchor="middle" fill="#333">{u.procent}</text>
             <text x={x + 14} y={bas + 11} fontSize={9} textAnchor="middle" fill="#333" fontWeight={u.procent < 50 ? 800 : 400}>{kortUppgift(u)}</text>
-            <text x={x + 14} y={bas + 21} fontSize={8} textAnchor="middle" fill="#888">{kort(u.forfallo)}</text>
+            <text x={x + 14} y={bas + 21} fontSize={8} textAnchor="middle" fill={u.forfallen ? '#888' : '#1565C0'}>{u.forfallen ? kort(u.forfallo) : `→ ${kort(u.forfallo)}`}</text>
           </g>
         );
       })}
-      <text x={w / 2} y={h - 2} fontSize={9} textAnchor="middle" fill="#666">B = begrepp · T = testa dig själv · % av klassen som lämnat in (grönt i tid, orange sent)</text>
+      <text x={w / 2} y={h - 2} fontSize={9} textAnchor="middle" fill="#666">B = begrepp · T = testa dig själv · % av klassen som lämnat in (grönt i tid, orange sent) · ljusa staplar = kommande</text>
     </svg>
   );
 }
@@ -86,9 +87,13 @@ export function TeamsImport({ s, klass, amne, kor, idag }: {
       <p className="small muted" style={{ margin: '6px 0' }}>⚠ Teams-exporten visar inte om en fil eller bild är bifogad. Kontrollera det i Teams och <b>underkänn</b> inlämningar utan bild här (✕ vid eleven) — de räknas då som ej inlämnade, även efter nya importer.</p>
 
       {alla.uppgifter.length === 0 ? <p className="muted small">Inga inlämningar importerade för {klass.namn} än.</p> : (<>
+        <div className="st-inl-tal">
+          <div className="st-inl-talruta"><b>{o.procent === null ? '—' : `${o.procent} %`}</b><small>inlämnat av det som ska vara inne</small><small className="muted">{o.forfallna.length} förfallna uppgifter · {o.saknasTotalt} inlämningar saknas</small></div>
+          <div className="st-inl-talruta kommande"><b>{o.kommande.length}</b><small>kommande uppgifter</small><small className="muted">{o.kommande.length === 0 ? 'inga med senare förfallodatum' : `nästa ${kort(o.kommande[0].forfallo)} · ${o.kommande.reduce((n, u) => n + u.inlamnade + u.sena, 0)} redan inlämnade`}</small></div>
+        </div>
         <div className="rad" style={{ gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
           <b>{amne !== undefined ? amne.namn : 'Alla ämnen'} · {o.uppgifter.length} uppgifter</b>
-          <small className="muted">{o.procent === null ? '—' : `${o.procent} % av alla inlämningar gjorda`}{amne !== undefined && alla.uppgifter.length > o.uppgifter.length ? ` · ${alla.uppgifter.length - o.uppgifter.length} uppgifter i andra ämnen/utan ämne` : ''}</small>
+          <small className="muted">{amne !== undefined && alla.uppgifter.length > o.uppgifter.length ? `${alla.uppgifter.length - o.uppgifter.length} uppgifter i andra ämnen/utan ämne` : ''}</small>
           <span className="spacer" />
           <button className={`btn sec sm${vy === 'uppgifter' ? ' act' : ''}`} onClick={() => setVy('uppgifter')}>Per uppgift</button>
           <button className={`btn sec sm${vy === 'elever' ? ' act' : ''}`} onClick={() => setVy('elever')}>Per elev</button>
@@ -97,18 +102,27 @@ export function TeamsImport({ s, klass, amne, kor, idag }: {
         {vy === 'uppgifter' && (
           <table className="tbl small st-inl-tabell">
             <thead><tr><th>Uppgift</th><th>Förfallo</th><th>Inlämnat</th><th>Sent</th><th>Saknas</th><th>%</th><th></th></tr></thead>
-            <tbody>{o.uppgifter.map((u) => (
-              <UppgiftsRadVy key={u.uppgift} u={u} s={s} klassId={klass.id} oppen={oppenUppgift === u.uppgift} onOppna={() => setOppenUppgift(oppenUppgift === u.uppgift ? null : u.uppgift)} kor={kor} amnesNamn={amnesNamn(u.amneId)} visaAmne={amne === undefined} />
-            ))}</tbody>
+            <tbody>
+              <tr className="st-inl-sektion"><td colSpan={7}>📌 Ska vara inlämnade ({o.forfallna.length})</td></tr>
+              {o.forfallna.length === 0 && <tr><td colSpan={7} className="muted">Inga uppgifter har förfallit än.</td></tr>}
+              {o.forfallna.map((u) => (
+                <UppgiftsRadVy key={u.uppgift} u={u} s={s} klassId={klass.id} oppen={oppenUppgift === u.uppgift} onOppna={() => setOppenUppgift(oppenUppgift === u.uppgift ? null : u.uppgift)} kor={kor} amnesNamn={amnesNamn(u.amneId)} visaAmne={amne === undefined} />
+              ))}
+              {o.kommande.length > 0 && <tr className="st-inl-sektion kommande"><td colSpan={7}>⏳ Kommande ({o.kommande.length}) — räknas inte i procenten än</td></tr>}
+              {o.kommande.map((u) => (
+                <UppgiftsRadVy key={u.uppgift} u={u} s={s} klassId={klass.id} oppen={oppenUppgift === u.uppgift} onOppna={() => setOppenUppgift(oppenUppgift === u.uppgift ? null : u.uppgift)} kor={kor} amnesNamn={amnesNamn(u.amneId)} visaAmne={amne === undefined} />
+              ))}
+            </tbody>
           </table>
         )}
         {vy === 'elever' && (
           <table className="tbl small st-inl-tabell">
-            <thead><tr><th>#</th><th>Elev</th><th>Inlämnat</th><th>Sent</th><th>%</th><th>Saknas</th></tr></thead>
+            <thead><tr><th>#</th><th>Elev</th><th>Inlämnat</th><th>Sent</th><th>% av {o.forfallna.length} förfallna</th><th>Saknas</th><th>Kommande</th></tr></thead>
             <tbody>{o.elever.map((e, i) => (
-              <tr key={e.elevId} className={e.procent < 50 ? 'st-inl-lag' : ''}>
-                <td>{i + 1}</td><td>{e.namn}</td><td>{e.inlamnade}</td><td>{e.sena}</td><td><b>{e.procent} %</b></td>
+              <tr key={e.elevId} className={e.antal > 0 && e.procent < 50 ? 'st-inl-lag' : ''}>
+                <td>{i + 1}</td><td>{e.namn}</td><td>{e.inlamnade}</td><td>{e.sena}</td><td><b>{e.antal === 0 ? '—' : `${e.procent} %`}</b></td>
                 <td className="muted">{e.saknas.length === 0 ? '—' : e.saknas.map((x) => x.replace(/^\S+\s+/, '')).join(' · ')}</td>
+                <td className="muted">{o.kommande.length === 0 ? '—' : `${e.kommandeInlamnade} av ${o.kommande.length} inlämnade`}</td>
               </tr>
             ))}</tbody>
           </table>
@@ -126,10 +140,10 @@ function UppgiftsRadVy({ u, s, klassId, oppen, onOppna, kor, amnesNamn, visaAmne
   const vaxla = (x: Inlamning) => kor(() => sattInlamningUnderkand(lasStruktur(), x.id, x.underkand !== true),
     x.underkand === true ? `${elevNamn(x.elevId)}: inlämningen räknas igen.` : `${elevNamn(x.elevId)}: inlämningen underkänd (räknas som ej inlämnad).`);
   return (<>
-    <tr className={u.procent < 50 ? 'st-inl-lag' : ''}>
+    <tr className={u.forfallen ? (u.procent < 50 ? 'st-inl-lag' : '') : 'st-inl-kommande'}>
       <td><button className="linkbtn" onClick={onOppna} aria-expanded={oppen}>{oppen ? '▾' : '▸'} {u.uppgift}</button>{visaAmne && <small className="muted"> · {amnesNamn}</small>}{u.teamsNamn.length > 1 && <small className="muted" title={u.teamsNamn.join(' | ')}> · {u.teamsNamn.length} tilldelningar</small>}</td>
       <td>{kort(u.forfallo)}</td><td>{u.inlamnade}</td><td>{u.sena}</td><td>{u.ej}{u.underkanda > 0 ? <small className="muted"> ({u.underkanda} underkända)</small> : null}</td><td><b>{u.procent} %</b></td>
-      <td className="muted small">{u.saknas.length === 0 ? 'alla har lämnat in' : `saknas: ${u.saknas.map((x) => x.namn).join(', ')}`}</td>
+      <td className="muted small">{u.saknas.length === 0 ? 'alla har lämnat in' : u.forfallen ? `saknas: ${u.saknas.map((x) => x.namn).join(', ')}` : `${u.inlamnade + u.sena} har lämnat in i förväg`}</td>
     </tr>
     {oppen && (
       <tr><td colSpan={7}>

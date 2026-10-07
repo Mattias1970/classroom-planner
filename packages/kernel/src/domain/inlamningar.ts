@@ -226,6 +226,8 @@ export interface UppgiftsRad {
   delkapitel?: string;
   typ: InlamningsTyp;
   forfallo: string;
+  /** Förfallodatum har passerat (eller är idag) — uppgiften ska vara inlämnad. Annars kommande. */
+  forfallen: boolean;
   antal: number;
   inlamnade: number;
   sena: number;
@@ -239,22 +241,39 @@ export interface UppgiftsRad {
 export interface ElevInlamningsRad {
   elevId: string;
   namn: string;
+  /** Antal förfallna uppgifter (de som ska vara inlämnade). */
   antal: number;
   inlamnade: number;
   sena: number;
+  /** Andel av de förfallna uppgifterna som är inlämnade. */
   procent: number;
+  /** Förfallna uppgifter som saknas. */
   saknas: string[];
+  /** Kommande uppgifter som eleven redan lämnat in. */
+  kommandeInlamnade: number;
 }
 
 export interface InlamningsOversikt {
+  /** Alla uppgifter i datumordning (förfallna och kommande). */
   uppgifter: UppgiftsRad[];
+  /** Uppgifter som ska vara inlämnade (förfallodatum t.o.m. idag). */
+  forfallna: UppgiftsRad[];
+  /** Uppgifter med förfallodatum efter idag. */
+  kommande: UppgiftsRad[];
   elever: ElevInlamningsRad[];
-  /** Andel inlämnade av alla elev × uppgift. */
+  /** Andel inlämnade av de förfallna uppgifterna (elev × uppgift); null utan förfallna uppgifter. */
   procent: number | null;
+  /** Antal elev × uppgift som saknas bland de förfallna. */
+  saknasTotalt: number;
 }
 
-/** Inlämningarna för klassen (och ämnet), per uppgift och per elev. Elever utanför klassen räknas inte. */
+/**
+ * Inlämningarna för klassen (och ämnet), per uppgift och per elev. Elever utanför klassen
+ * räknas inte. Procenten räknas bara på förfallna uppgifter (förfallodatum t.o.m. `idag`);
+ * uppgifter med senare förfallodatum redovisas som kommande.
+ */
 export function inlamningsOversikt(s: Struktur, klassId: string, amneId?: string, idag?: string): InlamningsOversikt {
+  const dagen = idag ?? '9999-12-31';
   const elever = s.elever.filter((e) => e.klassId === klassId && elevIKlassen(e, idag));
   const elevIds = new Set(elever.map((e) => e.id));
   const namn = new Map(elever.map((e) => [e.id, e.namn]));
@@ -267,20 +286,25 @@ export function inlamningsOversikt(s: Struktur, klassId: string, amneId?: string
     const underkanda = lista.filter((x) => x.underkand === true).length;
     const saknas = elever.filter((e) => { const x = lista.find((y) => y.elevId === e.id); return x === undefined || !arInlamnad(x); }).map((e) => ({ elevId: e.id, namn: e.namn }));
     const forsta = lista[0];
+    const forfallo = lista.map((x) => x.forfallo).sort().pop() ?? '';
     return {
-      uppgift, teamsNamn: [...new Set(lista.flatMap((x) => x.teamsNamn))], ...(forsta.amneId !== undefined ? { amneId: forsta.amneId } : {}), ...(forsta.delkapitel !== undefined ? { delkapitel: forsta.delkapitel } : {}),
-      typ: forsta.typ, forfallo: lista.map((x) => x.forfallo).sort().pop() ?? '', antal: elever.length, inlamnade, sena, ej: elever.length - inlamnade - sena, underkanda,
+      uppgift, forfallen: forfallo === '' || forfallo <= dagen, teamsNamn: [...new Set(lista.flatMap((x) => x.teamsNamn))], ...(forsta.amneId !== undefined ? { amneId: forsta.amneId } : {}), ...(forsta.delkapitel !== undefined ? { delkapitel: forsta.delkapitel } : {}),
+      typ: forsta.typ, forfallo, antal: elever.length, inlamnade, sena, ej: elever.length - inlamnade - sena, underkanda,
       procent: elever.length === 0 ? 0 : Math.round(((inlamnade + sena) / elever.length) * 100), saknas,
     };
   }).sort((a, b) => a.forfallo.localeCompare(b.forfallo) || a.uppgift.localeCompare(b.uppgift, 'sv'));
+  const forfallna = uppgifter.filter((u) => u.forfallen);
+  const kommande = uppgifter.filter((u) => !u.forfallen);
   const elevRader: ElevInlamningsRad[] = elever.map((e) => {
-    const mina = uppgifter.map((u) => alla.find((x) => x.uppgift === u.uppgift && x.elevId === e.id));
+    const post = (u: UppgiftsRad) => alla.find((x) => x.uppgift === u.uppgift && x.elevId === e.id);
+    const mina = forfallna.map(post);
     const inlamnade = mina.filter((x) => x !== undefined && arInlamnad(x) && x.status === 'inlamnad').length;
     const sena = mina.filter((x) => x !== undefined && arInlamnad(x) && x.status === 'sen').length;
-    const saknas = uppgifter.filter((u, i) => mina[i] === undefined || !arInlamnad(mina[i]!)).map((u) => u.uppgift);
-    return { elevId: e.id, namn: namn.get(e.id) ?? '', antal: uppgifter.length, inlamnade, sena, procent: uppgifter.length === 0 ? 0 : Math.round(((inlamnade + sena) / uppgifter.length) * 100), saknas };
+    const saknas = forfallna.filter((u, i) => mina[i] === undefined || !arInlamnad(mina[i]!)).map((u) => u.uppgift);
+    const kommandeInlamnade = kommande.map(post).filter((x) => x !== undefined && arInlamnad(x)).length;
+    return { elevId: e.id, namn: namn.get(e.id) ?? '', antal: forfallna.length, inlamnade, sena, procent: forfallna.length === 0 ? 0 : Math.round(((inlamnade + sena) / forfallna.length) * 100), saknas, kommandeInlamnade };
   }).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
-  const total = uppgifter.length * elever.length;
-  const gjorda = uppgifter.reduce((n, u) => n + u.inlamnade + u.sena, 0);
-  return { uppgifter, elever: elevRader, procent: total === 0 ? null : Math.round((gjorda / total) * 100) };
+  const total = forfallna.length * elever.length;
+  const gjorda = forfallna.reduce((n, u) => n + u.inlamnade + u.sena, 0);
+  return { uppgifter, forfallna, kommande, elever: elevRader, procent: total === 0 ? null : Math.round((gjorda / total) * 100), saknasTotalt: total - gjorda };
 }

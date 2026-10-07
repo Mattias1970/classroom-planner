@@ -1238,6 +1238,14 @@ input.fel { border-color: #B71C1C; }
 .st-inl-diagram { display: block; max-width: none; }
 .st-inl-tabell td, .st-inl-tabell th { vertical-align: top; }
 .st-inl-lag td:nth-child(-n+6) { background: #fff4f4; }
+.st-inl-kommande td { color: #555; background: #f7f9fc; }
+.st-inl-sektion td { font-weight: 700; background: #f0ebe3; padding-top: 6px; }
+.st-inl-sektion.kommande td { background: #E3F2FD; color: #1565C0; }
+.st-inl-tal { display: flex; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
+.st-inl-talruta { border: 1px solid var(--ram); border-left: 5px solid #2E7D32; border-radius: 8px; padding: 6px 12px; display: flex; flex-direction: column; min-width: 200px; }
+.st-inl-talruta b { font-size: 22px; }
+.st-inl-talruta small { font-size: 12px; }
+.st-inl-talruta.kommande { border-left-color: #1565C0; }
 .st-inl-elever { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 0; }
 .st-inl-chip { font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
 .st-inl-chip.ok { background: #E8F5E9; border-color: #2E7D32; }

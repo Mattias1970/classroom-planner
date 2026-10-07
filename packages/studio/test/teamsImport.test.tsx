@@ -18,8 +18,8 @@ function bygg(): Struktur {
     [null, null, null, 'Fullständigt namn', 'Förnamn', 'Efternamn', 'E-postadress', 'Tilldelningar', 'Förfallodatum', 'Märke', 'Status', 'Feedback'],
     [null, null, null, 'Anna Berg', 'Anna', 'Berg', '', 'Biologi 6.5 Begrepp', '2026-10-09 00:00:00', null, 'Inlämnat', null],
     [null, null, null, 'Omar Ali', 'Omar', 'Ali', '', 'Biologi 6.5 Begrepp', '2026-10-09 00:00:00', null, 'Visade', null],
-    [null, null, null, 'Anna Berg', 'Anna', 'Berg', '', 'Biologi 6.5 Testa dig själv 1 - 6', '2026-10-09 00:00:00', null, 'Inlämnad sent', null],
-    [null, null, null, 'Omar Ali', 'Omar', 'Ali', '', 'Biologi 6.5 Testa dig själv 1 - 6', '2026-10-09 00:00:00', null, 'Inlämnat', null],
+    [null, null, null, 'Anna Berg', 'Anna', 'Berg', '', 'Biologi 6.4 Testa dig själv 1 - 6', '2026-10-01 00:00:00', null, 'Inlämnad sent', null],
+    [null, null, null, 'Omar Ali', 'Omar', 'Ali', '', 'Biologi 6.4 Testa dig själv 1 - 6', '2026-10-01 00:00:00', null, 'Inte inlämnat', null],
   ]);
   return importeraInlamningar(s, 'k', rader).s;
 }
@@ -36,18 +36,25 @@ describe('Del 163 · Teams-inlämningar', () => {
     rendera();
     expect(div.querySelector('svg[aria-label="Inlämningar per uppgift"]')).not.toBeNull();
     expect(div.textContent).toContain('Biologi · 2 uppgifter');
-    expect(div.textContent).toContain('75 % av alla inlämningar gjorda');
+    // Procenten gäller bara det som ska vara inne (6.4, förfallen 1/10): Anna sen, Omar saknas → 50 %
+    expect(div.querySelector('.st-inl-talruta b')!.textContent).toBe('50 %');
+    expect(div.textContent).toContain('1 förfallna uppgifter · 1 inlämningar saknas');
+    expect(div.querySelector('.st-inl-talruta.kommande b')!.textContent).toBe('1');
+    expect(div.textContent).toContain('Kommande (1)');
     const rad = [...div.querySelectorAll('tbody tr')].find((r) => r.textContent?.includes('Biologi 6.5 Begrepp'))!;
-    expect(rad.textContent).toContain('saknas: Omar Ali');
-    // Öppna uppgiften och underkänn Anna (t.ex. utan bild)
-    await act(async () => { (rad.querySelector('button.linkbtn') as HTMLButtonElement).click(); });
+    expect(rad.classList.contains('st-inl-kommande')).toBe(true);
+    expect(rad.textContent).toContain('1 har lämnat in i förväg');
+    // Öppna den förfallna uppgiften och underkänn Anna (t.ex. utan bild) → 0 %
+    const rad64 = [...div.querySelectorAll('tbody tr')].find((r) => r.textContent?.includes('Biologi 6.4 Testa dig själv'))!;
+    await act(async () => { (rad64.querySelector('button.linkbtn') as HTMLButtonElement).click(); });
     await act(async () => { (div.querySelector('button[aria-label="Underkänn Anna Berg"]') as HTMLButtonElement).click(); });
-    expect(s.inlamningar!.find((x) => x.elevId === 'e1' && x.uppgift === 'Biologi 6.5 Begrepp')?.underkand).toBe(true);
-    expect(div.textContent).toContain('50 % av alla inlämningar gjorda');
+    expect(s.inlamningar!.find((x) => x.elevId === 'e1' && x.uppgift === 'Biologi 6.4 Testa dig själv')?.underkand).toBe(true);
+    expect(div.querySelector('.st-inl-talruta b')!.textContent).toBe('0 %');
     // Per elev
     await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent === 'Per elev')!.click(); });
     const annaRad = [...div.querySelectorAll('tbody tr')].find((r) => r.textContent?.includes('Anna Berg'))!;
-    expect(annaRad.textContent).toContain('50 %');
-    expect(annaRad.textContent).toContain('6.5 Begrepp');
+    expect(annaRad.textContent).toContain('0 %');
+    expect(annaRad.textContent).toContain('6.4 Testa dig själv');
+    expect(annaRad.textContent).toContain('1 av 1 inlämnade');
   });
 });

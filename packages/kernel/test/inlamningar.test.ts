@@ -59,13 +59,19 @@ describe('Del 163 · inlämningar ur Teams', () => {
     expect(r.s.inlamningar!.find((x) => x.uppgift === 'Spela in din deckare')?.amneId).toBeUndefined();
 
     const o = inlamningsOversikt(r.s, 'k', 'bi', '2026-10-07');
+    // Förfallna (t.o.m. idag) räknas i procenten; 6.5 Begrepp förfaller 9/10 → kommande
+    expect(o.forfallna.map((u) => u.uppgift)).toEqual(['Biologi 4.3 Begrepp', 'Biologi 4.4 Testa dig själv', 'Biologi Laboration - Enzym i saliv']);
+    expect(o.kommande.map((u) => [u.uppgift, u.forfallen])).toEqual([['Biologi 6.5 Begrepp', false]]);
     // Pia är av → räknas inte; 2 elever i klassen
     expect(o.uppgifter.map((u) => [u.uppgift, u.inlamnade, u.sena, u.ej, u.procent])).toEqual([
       ['Biologi 4.3 Begrepp', 1, 1, 0, 100], ['Biologi 4.4 Testa dig själv', 1, 0, 1, 50], ['Biologi Laboration - Enzym i saliv', 1, 0, 1, 50], ['Biologi 6.5 Begrepp', 1, 0, 1, 50],
     ]);
     expect(o.uppgifter[3].saknas).toEqual([{ elevId: 'e2', namn: 'Omar Ali' }]);   // Visade = ej inlämnad
-    expect(o.elever.map((e) => [e.namn, e.inlamnade, e.sena, e.procent])).toEqual([['Anna Berg', 2, 1, 75], ['Omar Ali', 2, 0, 50]]);
-    expect(o.procent).toBe(63);
+    expect(o.elever.map((e) => [e.namn, e.antal, e.inlamnade, e.sena, e.procent, e.kommandeInlamnade])).toEqual([['Anna Berg', 3, 1, 1, 67, 1], ['Omar Ali', 3, 2, 0, 67, 0]]);
+    expect(o.procent).toBe(67);
+    expect(o.saknasTotalt).toBe(2);
+    // Utan idag räknas alla uppgifter som förfallna
+    expect(inlamningsOversikt(r.s, 'k', 'bi').kommande).toEqual([]);
 
     // Underkänd (t.ex. utan bild) räknas som ej inlämnad och överlever en ny import
     const s2 = sattInlamningUnderkand(r.s, anna43.id, true);
