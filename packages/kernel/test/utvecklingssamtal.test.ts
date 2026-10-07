@@ -117,3 +117,35 @@ describe('Del 164 · utvärdering inför utvecklingssamtal', () => {
     expect(s3.samtalsUtvarderingar).toBeUndefined();
   });
 });
+
+describe('Del 171 · matematikmallen — Magma-diagnoser styr', () => {
+  it('alla diagnoser sammanfattas med nivå (70–80 når, 81–90 bra, 91–95 mycket bra, >95 utmärkt); snittet ger status', () => {
+    resetIdRaknare();
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '26/27', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8A' });
+    s = laggTillAmne(s, { id: 'ma', klassId: 'k', namn: 'Matematik', schema: [{ dag: 2, start: '12:50', slut: '13:40' }] });
+    s = laggTillElev(s, { id: 'e1', klassId: 'k', namn: 'Anna Berg', grupp: 'A' });
+    s = laggTillElev(s, { id: 'e2', klassId: 'k', namn: 'Omar Ali', grupp: 'B' });
+    const imp = (prov: string, datum: string, a: number, o: number, max = 20) => {
+      s = importeraResultat(s, { klassId: 'k', amneId: 'ma', kalla: 'magma', prov, datum, rader: [{ namn: 'Anna Berg', poang: a, maxPoang: max }, { namn: 'Omar Ali', poang: o, maxPoang: max }] }).s;
+    };
+    imp('1.1 - 1.2 diagnos', '2026-09-05', 19, 13);
+    imp('1.3 - 1.4 diagnos', '2026-09-19', 18, 15);
+    imp('1.5 - 1.6 diagnos', '2026-09-26', 20, 16);
+    imp('Stockholm stads screening', '2026-09-30', 46, 30, 50);
+    const alla = klassensUtvarderingar(s, 'k', 'ma', IDAG);
+    const anna = alla[0]; const omar = alla[1];
+    expect(anna.mall).toBe('ma');
+    expect(anna.diagnoser.lista.map((d) => [d.procent, d.niva])).toEqual([[95, 'mycketBra'], [90, 'bra'], [100, 'utmarkt'], [92, 'mycketBra']]);
+    expect(anna.diagnoser.snitt).toBe(94);
+    expect(anna.status).toBe('mycketBra');
+    expect(omar.diagnoser.lista.map((d) => d.procent)).toEqual([65, 75, 80, 60]);
+    expect(omar.status).toBe('nar');   // snitt 70
+    expect(anna.text).toContain('Diagnoser: 1.1 - 1.2 Diagnos 95 % (mycket bra), 1.3 - 1.4 Diagnos 90 % (går bra), 1.5 - 1.6 Diagnos 100 % (utmärkt), Stockholm Stads Screening 92 % (mycket bra) — snitt 94 %, mycket bra');
+    expect(omar.text).toContain('2 diagnoser under 70 % — träna på de uppgifterna igen i Magma');
+    expect(samtalsStycken(anna.text)[1].etikett).toBe('Diagnoser');
+    expect(anna.text).not.toContain('Laborationer');
+    for (const u of alla) expect(u.text.split('\n').length).toBeLessThanOrEqual(7);
+  });
+});

@@ -58,6 +58,8 @@ export function Utvecklingssamtal({ s, klass, amneId, kor, idag, onTillbaka }: {
     void navigator.clipboard?.writeText(text).then(() => { setKopierad(u.elevId); window.setTimeout(() => setKopierad(null), 1500); });
   };
   const antalPer = STATUS_ORDNING.map((st) => [st, lista.filter((u) => (u.egenStatus ?? u.status) === st).length] as const);
+  // Del 171 · Matematik: Magma-diagnoserna styr statusen (70–80 når målen, 81–90 går bra, 91–95 mycket bra, över 95 utmärkt)
+  const ma = lista.some((u) => u.mall === 'ma');
   return (
     <div className="uppg-kort st-widget st-samtal" aria-label="Utvecklingssamtal">
       <div className="rad" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -67,14 +69,19 @@ export function Utvecklingssamtal({ s, klass, amneId, kor, idag, onTillbaka }: {
         <button className="btn sec sm" onClick={() => { void tillWord(klass.namn, amne.namn, lista); }}>📄 Alla till Word</button>
       </div>
       <p className="small muted" style={{ margin: '4px 0 8px' }}>
-        Texten bygger på läxförhör (gräns 90 %), exit tickets (70 %), inlämningar ur Teams och DigiExam-prov. Utveckling = de första förhören jämfört med de senaste.
-        Statusen är beräknad — ändra den så skrivs texten om; du kan också skriva om texten själv. Ett prov som inte är godkänt ger ”har svårt att nå målen” tills omprovet är klarat.
+        {ma ? (
+          <>Matematikmallen: statusen sätts av snittet på alla Magma-diagnoser (kapiteldiagnoser och Stockholms stads screening) — 70–80 % når målen, 81–90 % går bra, 91–95 % mycket bra, över 95 % utmärkt.
+            Alla diagnoser sammanfattas i texten. Läxförhör, exit tickets och inlämningar beskrivs som vanligt. Provresultat med förmågorna (begrepp, metod, problemlösning, resonemang) och omdöme i kommunikation kommer senare. </>
+        ) : (
+          <>Texten bygger på läxförhör (gräns 90 %), exit tickets (70 %), inlämningar ur Teams och DigiExam-prov. Utveckling = de första förhören jämfört med de senaste. </>
+        )}
+        Statusen är beräknad — ändra den så skrivs texten om; du kan också skriva om texten själv.{!ma && ' Ett prov som inte är godkänt ger ”har svårt att nå målen” tills omprovet är klarat.'}
       </p>
       <div className="rad" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
         {antalPer.map(([st, n]) => <span key={st} className={`chip st-samtal-chip ${st}`}>{STATUS_TEXT[st]}: <b>{n}</b></span>)}
       </div>
       <table className="tbl small st-samtal-tabell">
-        <thead><tr><th>#</th><th>Elev</th><th>Status</th><th>Exit</th><th>Läxförhör</th><th>Inlämningar</th><th>Prov</th><th></th></tr></thead>
+        <thead><tr><th>#</th><th>Elev</th><th>Status</th>{ma && <th>Diagnoser</th>}<th>Exit</th><th>Läxförhör</th><th>Inlämningar</th><th>Prov</th><th></th></tr></thead>
         <tbody>{lista.map((u, i) => {
           const status = u.egenStatus ?? u.status;
           const ar = oppen === u.elevId;
@@ -89,6 +96,16 @@ export function Utvecklingssamtal({ s, klass, amneId, kor, idag, onTillbaka }: {
                   {STATUS_ORDNING.map((st) => <option key={st} value={st}>{STATUS_TEXT[st]}{st === u.status ? ' (beräknad)' : ''}</option>)}
                 </select>
               </td>
+              {ma && (
+                <td title={u.diagnoser.lista.map((d) => `${d.prov}: ${d.procent} % (${STATUS_TEXT[d.niva]})`).join('\n')}>
+                  {u.diagnoser.lista.length === 0 ? '—' : (
+                    <>
+                      {u.diagnoser.lista.map((d) => <span key={`${d.prov}-${d.datum}`} className={`st-krav st-samtal-diag ${d.niva}`}>{d.procent}</span>)}
+                      <small> snitt {pct(u.diagnoser.snitt)} {pil(u.diagnoser.trend)}</small>
+                    </>
+                  )}
+                </td>
+              )}
               <td title={`${u.lektioner.antal} exit tickets`}>{u.lektioner.antal === 0 ? '—' : `${pct(u.lektioner.borjan)} → ${pct(u.lektioner.nu)} ${pil(u.lektioner.trend)}`}</td>
               <td title={u.laxlasning.glomdaBegrepp.length > 0 ? `Glömda begrepp: ${u.laxlasning.glomdaBegrepp.join(', ')}` : `${u.laxlasning.antal} läxförhör`}>
                 {u.laxlasning.antal === 0 ? '—' : `${pct(u.laxlasning.borjan)} → ${pct(u.laxlasning.nu)} ${pil(u.laxlasning.trend)}`}
@@ -99,7 +116,7 @@ export function Utvecklingssamtal({ s, klass, amneId, kor, idag, onTillbaka }: {
               <td><button className="btn sec sm" aria-label={`Kopiera ${u.namn}`} onClick={() => kopiera(u)}>{kopierad === u.elevId ? '✓ Kopierad' : '📋 Kopiera'}</button></td>
             </tr>,
             ar && (
-              <tr key={`${u.elevId}-text`}><td colSpan={8}>
+              <tr key={`${u.elevId}-text`}><td colSpan={ma ? 9 : 8}>
                 {redigerar === u.elevId ? (
                   <textarea aria-label={`Text ${u.namn}`} rows={10} className="st-samtal-text" value={text}
                     onChange={(e) => setUtkast({ ...utkast, [u.elevId]: e.target.value })} />

@@ -1267,10 +1267,11 @@ input.fel { border-color: #B71C1C; }
 .st-samtal-exit { color: #1565C0; }
 .st-samtal-text { width: 100%; font: inherit; font-size: 13px; line-height: 1.4; padding: 6px; border: 1px solid var(--ram); border-radius: 6px; }
 .st-samtal-status { font: inherit; font-size: 12px; border-radius: 10px; padding: 2px 6px; }
-.st-samtal-status.svart, .st-samtal-chip.svart { background: #FFEBEE; color: #B71C1C; }
-.st-samtal-status.nar, .st-samtal-chip.nar { background: #FFF8E1; color: #7A5A00; }
-.st-samtal-status.bra, .st-samtal-chip.bra { background: #E8F5E9; color: #2E7D32; }
-.st-samtal-status.mycketBra, .st-samtal-chip.mycketBra { background: #E3F2FD; color: #1565C0; }
-.st-samtal-status.utmarkt, .st-samtal-chip.utmarkt { background: #EDE7F6; color: #4527A0; }
+.st-samtal-diag { display: inline-block; margin: 0 2px 2px 0; font-size: 11px; border-radius: 8px; padding: 1px 5px; }
+.st-samtal-status.svart, .st-samtal-chip.svart, .st-samtal-diag.svart { background: #FFEBEE; color: #B71C1C; }
+.st-samtal-status.nar, .st-samtal-chip.nar, .st-samtal-diag.nar { background: #FFF8E1; color: #7A5A00; }
+.st-samtal-status.bra, .st-samtal-chip.bra, .st-samtal-diag.bra { background: #E8F5E9; color: #2E7D32; }
+.st-samtal-status.mycketBra, .st-samtal-chip.mycketBra, .st-samtal-diag.mycketBra { background: #E3F2FD; color: #1565C0; }
+.st-samtal-status.utmarkt, .st-samtal-chip.utmarkt, .st-samtal-diag.utmarkt { background: #EDE7F6; color: #4527A0; }
 .st-samtal-glomda.gorsEj { color: #B71C1C; font-weight: 700; }
 .st-samtal-glomda.kontinuerligt { color: #EF6C00; }

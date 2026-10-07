@@ -40,10 +40,23 @@ export interface SerieUtveckling {
 
 export interface InlamningsDel { inlamnade: number; antal: number; }
 
+export type SamtalsMall = 'no' | 'ma';
+
+/** Magma-diagnosens nivå: under 70 % svårt, 70–80 når målen, 81–90 bra, 91–95 mycket bra, över 95 utmärkt. */
+export function magmaNiva(procent: number): SamtalsStatus {
+  return procent > 95 ? 'utmarkt' : procent >= 91 ? 'mycketBra' : procent >= 81 ? 'bra' : procent >= 70 ? 'nar' : 'svart';
+}
+
+export interface Diagnos { prov: string; datum: string; procent: number; niva: SamtalsStatus; poang: number; maxPoang: number }
+
 export interface Utvardering {
   elevId: string;
   namn: string;
   amne: string;
+  /** Mallen: 'ma' för matematik (Magma-diagnoser styr), annars 'no'. */
+  mall: SamtalsMall;
+  /** Matematik: alla Magma-diagnoser i datumordning (kapiteldiagnoser och screening), snitt och nivå. */
+  diagnoser: { lista: Diagnos[]; snitt: number | null; senaste: number | null; trend: SamtalsTrend | null };
   /** Beräknad status. */
   status: SamtalsStatus;
   /** Lärarens egen status, om satt. */
@@ -91,6 +104,8 @@ function niva(v: number | null, g: [number, number, number, number]): number | n
 /** Status ur nivåerna: läxförhör väger dubbelt; ett ej godkänt DigiExam-prov ger "har svårt". */
 export function beraknaStatus(u: Omit<Utvardering, 'status' | 'text' | 'elevId' | 'namn' | 'amne'>): SamtalsStatus {
   if (u.digiexam.some((p) => p.skrivit && p.godkand === false)) return 'svart';
+  // Matematik: Magma-diagnoserna styr — snittet av alla diagnoser (70–80 når målen, 81–90 bra, 91–95 mycket bra, över 95 utmärkt)
+  if (u.mall === 'ma' && u.diagnoser.snitt !== null) return magmaNiva(u.diagnoser.snitt);
   const delar: Array<[number | null, number]> = [
     [niva(u.laxlasning.nu, [75, 90, 94, 97]), 2],
     [niva(u.lektioner.nu, [55, 70, 81, 91]), 1],
@@ -105,7 +120,7 @@ export function beraknaStatus(u: Omit<Utvardering, 'status' | 'text' | 'elevId' 
 const pct = (v: number | null) => (v === null ? '–' : `${v} %`);
 
 /** Rubrikerna som inleder styckena (fet stil i visning och Word). */
-export const SAMTALS_RUBRIKER = ['Lektionerna', 'Närvaro', 'Läxläsning', 'Inlämningar', 'Prov'] as const;
+export const SAMTALS_RUBRIKER = ['Diagnoser', 'Lektionerna', 'Närvaro', 'Läxläsning', 'Inlämningar', 'Prov'] as const;
 
 /**
  * Texten: högst sju stycken (status, Lektionerna, Läxläsning, Inlämningar, Prov, avslut),
@@ -124,6 +139,21 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
     utmarkt: `${fornamn} visar utmärkta resultat i ${amne} — riktigt starkt och målmedvetet arbete!`,
   };
   rader.push(inled[status]);
+
+  // Matematik: Diagnoser (Magma) — alla diagnoser sammanfattade
+  if (u.mall === 'ma') {
+    const d = u.diagnoser;
+    if (d.lista.length === 0) rader.push('Diagnoser: inga Magma-diagnoser ännu.');
+    else {
+      const per = d.lista.map((x) => `${provnamnMedStorBokstav(x.prov)} ${x.procent} % (${STATUS_TEXT[x.niva]})`).join(', ');
+      let s = `Diagnoser: ${per}`;
+      s += d.lista.length > 1 ? ` — snitt ${pct(d.snitt)}, ${STATUS_TEXT[magmaNiva(d.snitt ?? 0)]}` : '';
+      s += d.trend === 'upp' ? '. Diagnoserna går uppåt — ett lärande som syns!' : d.trend === 'ner' ? '. De senaste diagnoserna ligger lägre än de första — gå igenom uppgifterna som blev fel, där finns nästa steg.' : '.';
+      const svaga = d.lista.filter((x) => x.niva === 'svart');
+      if (svaga.length > 0) s += ` ${svaga.length === 1 ? 'En diagnos' : `${svaga.length} diagnoser`} under 70 % — träna på de uppgifterna igen i Magma så sitter metoderna.`;
+      rader.push(s);
+    }
+  }
 
   // Lektionerna: Exit tickets — att ta till sig genomgångarna i kombination med fokus och arbete på lektionen
   const l = u.lektioner;
@@ -169,9 +199,10 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
   else {
     let s = `Inlämningar: ${delar.join(', ')} (${pct(i.procent)} av det som ska vara inne)`;
     s += i.trend === 'upp' ? ' — inlämningarna har blivit fler på senare tid, bra!' : i.trend === 'ner' ? ' — inlämningarna har blivit färre på senare tid; lämna in direkt efter lektionen så hålls det ihop.' : i.procent !== null && i.procent >= 90 ? ' — mycket bra ordning.' : i.procent !== null && i.procent < 50 ? ' — här finns mest att vinna: varje inlämning är ett tillfälle att arbeta med begreppen och frågorna, och att visa vad du lärt dig.' : '.';
-    // Frågorna (Testa dig själv) är vägen till högre nivå
+    // Frågorna (Testa dig själv) är vägen till högre nivå (NO)
     const fr = i.fragor;
-    if (fr.antal > 0 && fr.inlamnade < fr.antal) s += ` Frågorna är hemligheten till nästa nivå — den som inte gör dem får svårt att nå en högre nivå, så ${fr.inlamnade === 0 ? 'börja med dem' : 'gör alla frågorna'} till varje avsnitt.`;
+    if (u.mall === 'ma') { /* matematik: uppgifterna lämnas in som foto — ingen fråge-/labbtext */ }
+    else if (fr.antal > 0 && fr.inlamnade < fr.antal) s += ` Frågorna är hemligheten till nästa nivå — den som inte gör dem får svårt att nå en högre nivå, så ${fr.inlamnade === 0 ? 'börja med dem' : 'gör alla frågorna'} till varje avsnitt.`;
     else if (fr.antal > 0) s += ' Alla frågorna är gjorda — där finns hemligheten till nästa nivå, fortsätt så.';
     rader.push(s);
   }
@@ -193,12 +224,12 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
   // Slutsatsen tar hänsyn till inlämningarna: laborationerna är ett eget kunskapskrav (undersökning),
   // frågorna är vägen till högre nivå
   const lab = u.inlamningar.laborationer; const fragor = u.inlamningar.fragor;
-  const labSaknas = lab.antal > 0 && lab.inlamnade < lab.antal;
-  const fragorSaknas = fragor.antal > 0 && fragor.inlamnade < fragor.antal;
+  const labSaknas = u.mall !== 'ma' && lab.antal > 0 && lab.inlamnade < lab.antal;
+  const fragorSaknas = u.mall !== 'ma' && fragor.antal > 0 && fragor.inlamnade < fragor.antal;
   let slut = avslut[status];
   if (labSaknas) slut += ` Laborationerna är ett eget kunskapskrav — ${lab.antal - lab.inlamnade === 1 ? 'en laboration' : `${lab.antal - lab.inlamnade} laborationer`} saknas, och de behöver lämnas in för att det kravet ska kunna bedömas.`;
   if (fragorSaknas) slut += ` ${labSaknas ? 'Och gör frågorna' : 'Gör frågorna'} till varje avsnitt — det är inlämningarna som öppnar vägen till högre nivå.`;
-  else if (lab.antal > 0 && !labSaknas && fragor.antal > 0) slut += ' Laborationer och frågor är inlämnade — det ger underlag för hela bedömningen och för högre nivå.';
+  else if (u.mall !== 'ma' && lab.antal > 0 && !labSaknas && fragor.antal > 0) slut += ' Laborationer och frågor är inlämnade — det ger underlag för hela bedömningen och för högre nivå.';
   rader.push(slut);
   // Läxförhör, Exit ticket och Inlämning skrivs med stor bokstav (visas i blå stil)
   return rader.slice(0, 7).map(medStorBokstav).join('\n');
@@ -282,12 +313,17 @@ export function utvardering(s: Struktur, elevId: string, amneId: string, idag?: 
     };
   });
 
+  const mall: SamtalsMall = /^matematik/i.test(amne.namn) ? 'ma' : 'no';
+  const magma = serie('magma');
+  const lista: Diagnos[] = magma.punkter.filter((x) => x.procent !== null).map((x) => ({ prov: x.prov, datum: x.datum, procent: x.procent!, niva: magmaNiva(x.procent!), poang: x.poang, maxPoang: x.maxPoang }));
+  const mu = utveckling(magma);
+  const diagnoser = { lista, snitt: snitt(lista.map((x) => x.procent)), senaste: lista.length > 0 ? lista[lista.length - 1].procent : null, trend: mu.trend };
   const nv = elevNarvaro(s, { klassId: elev.klassId, amneId }).find((x) => x.elev.id === elevId);
   const narvaro = { procent: nv?.narvaroProcent ?? null, lektioner: nv?.lektioner ?? 0, narvarande: nv?.narvarande ?? 0 };
 
   const egen = s.samtalsUtvarderingar?.[`${elevId}|${amneId}`];
   const bas = {
-    elevId, namn: elev.namn, amne: amne.namn, lektioner, laxlasning: { ...lax, glomdaBegrepp: glomda, tendens }, inlamningar, digiexam, narvaro,
+    elevId, namn: elev.namn, amne: amne.namn, mall, diagnoser, lektioner, laxlasning: { ...lax, glomdaBegrepp: glomda, tendens }, inlamningar, digiexam, narvaro,
     ...(egen?.status !== undefined ? { egenStatus: egen.status } : {}), ...(egen?.text !== undefined ? { egenText: egen.text } : {}),
   };
   const status = beraknaStatus(bas);
