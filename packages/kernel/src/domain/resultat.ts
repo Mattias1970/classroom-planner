@@ -541,3 +541,30 @@ export function andraKalla(s: Struktur, val: { amneId: string; prov: string; dat
 export function godkantText(klarat: boolean | null): string {
   return klarat === null ? '—' : klarat ? 'Godkänt' : 'Ej godkänt';
 }
+
+/**
+ * Del 165 · Inklistrade resultatrader: 'Anna Berg⇥8⇥10', 'Berg, Anna;8', 'Anna Berg 8 10',
+ * 'Thea Almli Gilljam 10 14' — tabb, semikolon eller bara mellanslag. Utan tabb/semikolon
+ * tas de avslutande talen (poäng och ev. max) och resten är namnet. Decimalkomma stöds;
+ * '%' tas bort. Max utan värde i raden → `standardMax`.
+ */
+export function tolkaResultatRader(text: string, standardMax: number): Array<{ namn: string; poang: number; maxPoang: number }> {
+  const ut: Array<{ namn: string; poang: number; maxPoang: number }> = [];
+  const tal = (v: string): number | null => { const n = Number(v.replace(',', '.').replace('%', '').replace(/\s*p$/i, '')); return Number.isNaN(n) ? null : n; };
+  for (const rad of text.split('\n')) {
+    let namn = ''; let poang: number | null = null; let max: number | null = null;
+    if (/\t|;/.test(rad)) {
+      const delar = rad.split(/\t|;/).map((x) => x.trim()).filter((x) => x !== '');
+      if (delar.length < 2) continue;
+      namn = delar[0]; poang = tal(delar[1]); max = delar.length >= 3 ? tal(delar[2]) : null;
+    } else {
+      // 'Namn Namn 10 14' eller 'Namn 10/14' eller 'Namn 10'
+      const m = rad.trim().match(/^(.*?)\s+(\d+(?:[.,]\d+)?)\s*(?:[/]\s*(\d+(?:[.,]\d+)?)|\s+(\d+(?:[.,]\d+)?))?\s*%?\s*$/);
+      if (m === null || m[1].trim() === '') continue;
+      namn = m[1].trim(); poang = tal(m[2]); max = m[3] !== undefined ? tal(m[3]) : m[4] !== undefined ? tal(m[4]) : null;
+    }
+    if (poang === null) continue;
+    ut.push({ namn, poang, maxPoang: max === null || max <= 0 ? standardMax : max });
+  }
+  return ut;
+}

@@ -1254,6 +1254,45 @@ describe('Del 161 · 🔁 Följ en annan klass planering', () => {
   });
 });
 
+describe('Del 165 · inklistrade DigiExam-resultat', () => {
+  it('rader med mellanslag tolkas; omprov utan provtyp paras med det ordinarie provet och får dess gräns', async () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host, BIOJSON);
+    skriv(input(host, 'Tjänstens namn'), 'NO');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 NO').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    for (const n of ['Anna Berg', 'Omar Ali']) { skriv(input(host, 'Elevens namn'), n); act(() => { knapp(host, '➕ Lägg till elev').click(); }); }
+    valj(select(host, 'Ämne'), 'Biologi');
+    valj(select(host, 'Bok för ämnet'), 'gleerups-biologi-8');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '📊 SuperTeach').click(); });
+    valj(select(host, 'SuperTeach ämne'), lasStruktur().amnen[0].id);
+    const spara = (prov: string, datum: string, rader: string) => {
+      skriv(input(host, 'Provnamn'), prov);
+      skriv(input(host, 'Provdatum'), datum);
+      skrivArea(host.querySelector('textarea[aria-label="Resultatrader"]') as HTMLTextAreaElement, rader);
+      act(() => { knapp(host, '💾 Spara resultat').click(); });
+    };
+    valj(select(host, 'Källa'), 'digiexam');
+    skriv(input(host, 'Maxpoäng'), '14');
+    skrivArea(host.querySelector('textarea[aria-label="Resultatrader"]') as HTMLTextAreaElement, 'Anna Berg 11 14\nOmar Ali 5 14');
+    expect(host.textContent).toContain('2 rader · 2 matchade');
+    spara('8b ekologi eprov', '2026-09-30', 'Anna Berg 11 14\nOmar Ali 5 14');
+    spara('8b omprov ekologi', '2026-10-01', 'Omar Ali 8 14');
+    const dx = lasStruktur().resultat!.filter((r) => r.kalla === 'digiexam');
+    expect(dx.map((r) => [r.prov, r.poang, r.maxPoang, r.godkantGrans, r.omprov ?? false, r.provNyckel])).toEqual([
+      ['8b ekologi eprov', 11, 14, 8, false, 'ekologi eprov'], ['8b ekologi eprov', 5, 14, 8, false, 'ekologi eprov'], ['8b omprov ekologi', 8, 14, 8, true, 'ekologi eprov'],
+    ]);
+  });
+});
+
 describe('Planeringsflikar (portade från v1)', () => {
   async function amneMedPlan(host: HTMLElement) {
     skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');

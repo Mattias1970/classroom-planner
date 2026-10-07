@@ -39,7 +39,7 @@ import {
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
-  resultatProcent, saknadeResultat, planForAmne, harLaborationsstandard, kursLista, flyttaKurs, amnesPlanFor, type Kurs, amnesPlan, amnesOffset, sattLaborationsstandard, sattPlanFrystTill, sparaLaborationer, sattPassVal, type HalvklassSession, type Laboration, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type Elev, type KalenderDagRuta, type KalenderHandelse,
+  resultatProcent, saknadeResultat, tolkaResultatRader, digiexamProvInfo, digiexamProvTyp, eProvGrans, ordinarieProvFor, planForAmne, harLaborationsstandard, kursLista, flyttaKurs, amnesPlanFor, type Kurs, amnesPlan, amnesOffset, sattLaborationsstandard, sattPlanFrystTill, sparaLaborationer, sattPassVal, type HalvklassSession, type Laboration, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type Elev, type KalenderDagRuta, type KalenderHandelse,
   pedagogiskPlanering, gruppNyckel, grundRader, planeringsRader, antalIBoken, lektionerPerDelkapitel, sattLektionerPerDelkapitel, sattAntalLektioner, sattLektionsVal, laggTillEgenRad, taBortEgenRad, bokLektioner, type LektionsVal,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
@@ -5444,27 +5444,22 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn }: {
 
   if (klass === undefined) return <div className="card"><h2>📊 SuperTeach</h2><p className="muted">Skapa klasser och elever under 🗂 Struktur först.</p></div>;
 
-  /** 'Anna Berg  8  10' / 'Berg, Anna;8' → rader; poäng med decimalkomma stöds. */
-  const parse = (text: string) => {
-    const ut: Array<{ namn: string; poang: number; maxPoang: number }> = [];
-    for (const rad of text.split('\n')) {
-      const delar = rad.split(/\t|;/).map((x) => x.trim()).filter((x) => x !== '');
-      if (delar.length < 2) continue;
-      const poang = Number(delar[1].replace(',', '.').replace('%', ''));
-      if (Number.isNaN(poang)) continue;
-      const max = delar.length >= 3 ? Number(delar[2].replace(',', '.')) : Number(maxP);
-      ut.push({ namn: delar[0], poang, maxPoang: Number.isNaN(max) || max <= 0 ? Number(maxP) : max });
-    }
-    return ut;
-  };
-  const rader = parse(radText);
+  const rader = tolkaResultatRader(radText, Number(maxP));
   const omatchade = rader.filter((r) => matchaElev(s, klass.id, r.namn) === null).map((r) => r.namn);
 
   const kanSpara = amne !== undefined && prov.trim() !== '' && rader.length > 0;
   const spara = () => {
     if (amne === undefined) return;
+    // Del 165: inklistrade DigiExam-resultat får provnyckel, omprov-flagga och E-provsgräns som filimporten (Del 152)
+    const dx = kalla === 'digiexam' ? digiexamProvInfo(prov.trim()) : null;
+    const maxRad = Math.max(0, ...rader.map((r) => r.maxPoang));
+    // Ett omprov utan provtyp i namnet paras med klassens ordinarie prov (nyckel och gräns)
+    const ordinarie = dx !== null && dx.omprov ? ordinarieProvFor(lasStruktur(), klass.id, amne.id, dx) : null;
+    const dxNyckel = ordinarie?.provNyckel ?? dx?.nyckel;
+    const dxGrans = ordinarie?.godkantGrans ?? (dx === null ? null : digiexamProvTyp(dx.namn) === 'E' && maxRad > 0 ? eProvGrans(maxRad) : null);
     kor(() => importeraResultat(lasStruktur(), {
       klassId: klass.id, amneId: amne.id, kalla, prov: prov.trim(), datum, rader,
+      ...(dx !== null ? { provNyckel: dxNyckel, ...(dx.omprov ? { omprov: true } : {}), ...(dxGrans !== null ? { godkantGrans: dxGrans } : {}) } : {}),
     }).s, `${rader.length - omatchade.length} resultat sparade på ${amne.namn} · ${prov.trim()}${omatchade.length > 0 ? ` — ⚠ omatchade: ${omatchade.join(', ')}` : ''}`);
     setRadText(''); setProv('');
   };
@@ -5766,7 +5761,7 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn }: {
           <label>Max:{' '}<input aria-label="Maxpoäng" value={maxP} onChange={(e) => setMaxP(e.target.value)} style={{ width: 50 }} /></label>
         </div>
         <textarea aria-label="Resultatrader" rows={4} value={radText} onChange={(e) => setRadText(e.target.value)}
-          placeholder={'Anna Berg\t8\nOmar Ali\t6\t10'} style={{ width: '100%', marginTop: 6, fontFamily: 'ui-monospace, monospace' }} />
+          placeholder={'Anna Berg\t8\nOmar Ali 6 10\nPia Provlund 7/10'} style={{ width: '100%', marginTop: 6, fontFamily: 'ui-monospace, monospace' }} />
         <div className="rad" style={{ gap: 8 }}>
           <span className="small muted">{rader.length} rader · {rader.length - omatchade.length} matchade{omatchade.length > 0 ? ` · ⚠ omatchade: ${omatchade.join(', ')}` : ''}</span>
           <span className="spacer" />

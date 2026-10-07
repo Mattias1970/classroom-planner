@@ -404,3 +404,21 @@ export function digiexamProvForFil(lista: DigiExamProvPost[], filnamn: string): 
   const slug = digiexamSlug(filnamn);
   return lista.filter((p) => digiexamSlug(p.titel) === slug).sort((a, b) => `${a.datum} ${a.tid}`.localeCompare(`${b.datum} ${b.tid}`));
 }
+
+/**
+ * Del 165 · Ett omprov vars namn saknar provtypen ('8b omprov ekologi' mot 'Ekologi E-prov')
+ * paras med det ordinarie provet i klassen (ämnet) vars nyckel innehåller alla ord i
+ * omprovets nyckel. Ger det ordinarie provets nyckel och gräns, annars null.
+ */
+export function ordinarieProvFor(
+  s: { elever: MinimalElev[]; resultat?: LarmResultat[] }, klassId: string, amneId: string | undefined, info: DigiExamProvInfo,
+): { provNyckel: string; godkantGrans: number | null } | null {
+  const ids = new Set(s.elever.filter((e) => e.klassId === klassId).map((e) => e.id));
+  const ordinarie = (s.resultat ?? []).filter((r) => r.kalla === 'digiexam' && r.omprov !== true && ids.has(r.elevId) && (amneId === undefined || r.amneId === amneId) && r.provNyckel !== undefined);
+  const ord = info.nyckel.split(' ').filter((w) => w !== '');
+  const kandidater = [...new Map(ordinarie.map((r) => [r.provNyckel!, r])).values()]
+    .filter((r) => { const k = r.provNyckel!.split(' '); return ord.every((w) => k.includes(w)); })
+    .sort((a, b) => a.provNyckel!.length - b.provNyckel!.length);
+  const traff = kandidater[0];
+  return traff === undefined ? null : { provNyckel: traff.provNyckel!, godkantGrans: traff.godkantGrans ?? null };
+}

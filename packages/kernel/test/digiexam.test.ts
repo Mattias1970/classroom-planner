@@ -240,3 +240,13 @@ describe('Del 156 · omprovets namn med tankstreck', () => {
     expect(digiexamProvInfo('Ekologi E-prov – omprov')).toEqual({ nyckel: 'ekologi eprov', namn: 'Ekologi E-prov', omprov: true, typ: 'E' });
   });
 });
+
+import { tolkaResultatRader } from '../src/index.js';
+describe('Del 165 · inklistrade resultatrader', () => {
+  it('tabb, semikolon, mellanslag och snedstreck; max ur raden eller standard', () => {
+    expect(tolkaResultatRader('Anna Berg\t8\nBerg, Omar;6;10\nThea Almli Gilljam 10 14\nEbba Schweizer 7 14\nPia Provlund 7/10\nKalle Testsson 9\nSara Övnegård 8,5 10\n\nbara text', 12)).toEqual([
+      { namn: 'Anna Berg', poang: 8, maxPoang: 12 }, { namn: 'Berg, Omar', poang: 6, maxPoang: 10 }, { namn: 'Thea Almli Gilljam', poang: 10, maxPoang: 14 },
+      { namn: 'Ebba Schweizer', poang: 7, maxPoang: 14 }, { namn: 'Pia Provlund', poang: 7, maxPoang: 10 }, { namn: 'Kalle Testsson', poang: 9, maxPoang: 12 }, { namn: 'Sara Övnegård', poang: 8.5, maxPoang: 10 },
+    ]);
+  });
+});
