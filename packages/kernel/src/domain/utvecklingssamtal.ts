@@ -169,6 +169,10 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
   else {
     let s = `Inlämningar: ${delar.join(', ')} (${pct(i.procent)} av det som ska vara inne)`;
     s += i.trend === 'upp' ? ' — inlämningarna har blivit fler på senare tid, bra!' : i.trend === 'ner' ? ' — inlämningarna har blivit färre på senare tid; lämna in direkt efter lektionen så hålls det ihop.' : i.procent !== null && i.procent >= 90 ? ' — mycket bra ordning.' : i.procent !== null && i.procent < 50 ? ' — här finns mest att vinna: varje inlämning är ett tillfälle att arbeta med begreppen och frågorna, och att visa vad du lärt dig.' : '.';
+    // Frågorna (Testa dig själv) är vägen till högre nivå
+    const fr = i.fragor;
+    if (fr.antal > 0 && fr.inlamnade < fr.antal) s += ` Frågorna är hemligheten till nästa nivå — den som inte gör dem får svårt att nå en högre nivå, så ${fr.inlamnade === 0 ? 'börja med dem' : 'gör alla frågorna'} till varje avsnitt.`;
+    else if (fr.antal > 0) s += ' Alla frågorna är gjorda — där finns hemligheten till nästa nivå, fortsätt så.';
     rader.push(s);
   }
 
@@ -186,7 +190,16 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
     mycketBra: `Mycket bra jobbat, ${fornamn} — håll i rutinerna så fortsätter lärandet uppåt.`,
     utmarkt: `Fantastiskt arbete, ${fornamn} — fortsätt utmana dig själv med de svårare frågorna, där finns nästa steg i utvecklingen.`,
   };
-  rader.push(avslut[status]);
+  // Slutsatsen tar hänsyn till inlämningarna: laborationerna är ett eget kunskapskrav (undersökning),
+  // frågorna är vägen till högre nivå
+  const lab = u.inlamningar.laborationer; const fragor = u.inlamningar.fragor;
+  const labSaknas = lab.antal > 0 && lab.inlamnade < lab.antal;
+  const fragorSaknas = fragor.antal > 0 && fragor.inlamnade < fragor.antal;
+  let slut = avslut[status];
+  if (labSaknas) slut += ` Laborationerna är ett eget kunskapskrav — ${lab.antal - lab.inlamnade === 1 ? 'en laboration' : `${lab.antal - lab.inlamnade} laborationer`} saknas, och de behöver lämnas in för att det kravet ska kunna bedömas.`;
+  if (fragorSaknas) slut += ` ${labSaknas ? 'Och gör frågorna' : 'Gör frågorna'} till varje avsnitt — det är inlämningarna som öppnar vägen till högre nivå.`;
+  else if (lab.antal > 0 && !labSaknas && fragor.antal > 0) slut += ' Laborationer och frågor är inlämnade — det ger underlag för hela bedömningen och för högre nivå.';
+  rader.push(slut);
   // Läxförhör, Exit ticket och Inlämning skrivs med stor bokstav (visas i blå stil)
   return rader.slice(0, 7).map(medStorBokstav).join('\n');
 }

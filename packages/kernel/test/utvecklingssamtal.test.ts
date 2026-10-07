@@ -70,6 +70,16 @@ describe('Del 164 · utvärdering inför utvecklingssamtal', () => {
     expect(omar.text).toContain('har just nu svårt att nå målen');
     expect(omar.text).toContain('4 begrepp har glömts mer än en gång');
     expect(omar.text).toContain('inte godkänd ännu (5 av 14 p)');
+    expect(omar.text).toContain('Frågorna är hemligheten till nästa nivå');   // Omar saknar frågor
+    expect(anna.text).toContain('Alla frågorna är gjorda — där finns hemligheten till nästa nivå');
+    // Slutsatsen tar hänsyn till inlämningarna: Omar saknar både laborationen (eget kunskapskrav) och frågorna; Anna har allt
+    const omarSlut = omar.text.split('\n').pop()!;
+    expect(omarSlut).toContain('Laborationerna är ett eget kunskapskrav — en laboration saknas');
+    expect(omarSlut).toContain('Och gör frågorna till varje avsnitt — det är Inlämningarna som öppnar vägen till högre nivå.');
+    expect(anna.text.split('\n').pop()).toContain('Laborationer och frågor är inlämnade');
+    const medLab = samtalsText({ ...omar, inlamningar: { ...omar.inlamningar, laborationer: { inlamnade: 1, antal: 1 } } }, 'Omar');
+    expect(medLab.split('\n').pop()).toContain('Gör frågorna till varje avsnitt');
+    expect(medLab).not.toContain('eget kunskapskrav');
     expect(pia.text).toContain('utmärkta resultat');
     expect(omar.text).toContain('Låga Exit tickets kan bero på sämre fokus på genomgångarna');
     expect(anna.text).toContain('Alla Läxförhör går att öva hemma på Socrative.com');
