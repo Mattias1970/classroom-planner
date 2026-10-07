@@ -13,6 +13,7 @@
  *  orsakspåståenden.
  */
 import { aterkommandeFel } from './delkapiteltrend.js';
+import { elevNarvaro } from './dashboard.js';
 import { digiexamLarm } from './digiexam.js';
 import { elevkort, type ElevkortSerie } from './elevkort.js';
 import { inlamningsOversikt, type InlamningsTyp } from './inlamningar.js';
@@ -61,6 +62,8 @@ export interface Utvardering {
     trend: SamtalsTrend | null;
   };
   digiexam: Array<{ prov: string; godkand: boolean | null; skrivit: boolean; poang: number | null; maxPoang: number | null }>;
+  /** Närvaro ur quizsvaren: andel lektioner med läxförhör/exit ticket där eleven svarat; null utan lektioner. */
+  narvaro: { procent: number | null; lektioner: number; narvarande: number };
   /** Genererad text, högst sju rader. */
   text: string;
   /** Lärarens redigerade text, om någon. */
@@ -102,7 +105,7 @@ export function beraknaStatus(u: Omit<Utvardering, 'status' | 'text' | 'elevId' 
 const pct = (v: number | null) => (v === null ? '–' : `${v} %`);
 
 /** Rubrikerna som inleder styckena (fet stil i visning och Word). */
-export const SAMTALS_RUBRIKER = ['Lektionerna', 'Läxläsning', 'Inlämningar', 'Prov'] as const;
+export const SAMTALS_RUBRIKER = ['Lektionerna', 'Närvaro', 'Läxläsning', 'Inlämningar', 'Prov'] as const;
 
 /**
  * Texten: högst sju stycken (status, Lektionerna, Läxläsning, Inlämningar, Prov, avslut),
@@ -131,6 +134,15 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
   else if (l.trend === 'ner') rader.push(`Lektionerna: Exit tickets låg på ${pct(l.borjan)} i början och ${pct(l.nu)} på de senaste — ${fornamn} tar till sig genomgångarna; med samma fokus och arbete på lektionerna som i början kommer det tillbaka.`);
   else if (l.antal === 1) rader.push(`Lektionerna: ett Exit ticket hittills, ${pct(l.nu)} — en bra start att bygga vidare på.`);
   else rader.push(`Lektionerna: Exit tickets ligger stabilt kring ${pct(l.nu)} (${l.klarade} av ${l.bedomda} över gränsen 70 %) — ${fornamn} tar till sig genomgångarna och arbetar med bra fokus på lektionerna.`);
+
+  // Närvaro (ur quizsvaren): låg närvaro → delta mer på lektionerna
+  const n = u.narvaro;
+  if (n.procent !== null && n.lektioner > 0) {
+    if (n.procent < 50) rader.push(`Närvaro: ${fornamn} har varit med på ${n.narvarande} av ${n.lektioner} lektioner (${n.procent} %). Utan att komma till skolan går det inte att nå målen eller se resultat på Läxförhören — det första steget är att delta på lektionerna, och därifrån bygger vi vidare tillsammans.`);
+    else if (n.procent < 80) rader.push(`Närvaro: ${fornamn} har varit med på ${n.narvarande} av ${n.lektioner} lektioner (${n.procent} %). Lärandet sker på lektionerna — genom att delta mer kommer genomgångar, Exit tickets och arbetet med begreppen på plats, och resultaten följer med.`);
+    else if (n.procent < 95) rader.push(`Närvaro: ${n.narvarande} av ${n.lektioner} lektioner (${n.procent} %) — bra, och varje lektion räknas.`);
+    else rader.push(`Närvaro: ${n.narvarande} av ${n.lektioner} lektioner (${n.procent} %) — ${fornamn} är med på lektionerna, en stark grund för lärandet.`);
+  }
 
   // Läxläsning: läxförhörens utveckling, glömda begrepp, Socrative hemma
   const x = u.laxlasning;
@@ -257,9 +269,12 @@ export function utvardering(s: Struktur, elevId: string, amneId: string, idag?: 
     };
   });
 
+  const nv = elevNarvaro(s, { klassId: elev.klassId, amneId }).find((x) => x.elev.id === elevId);
+  const narvaro = { procent: nv?.narvaroProcent ?? null, lektioner: nv?.lektioner ?? 0, narvarande: nv?.narvarande ?? 0 };
+
   const egen = s.samtalsUtvarderingar?.[`${elevId}|${amneId}`];
   const bas = {
-    elevId, namn: elev.namn, amne: amne.namn, lektioner, laxlasning: { ...lax, glomdaBegrepp: glomda, tendens }, inlamningar, digiexam,
+    elevId, namn: elev.namn, amne: amne.namn, lektioner, laxlasning: { ...lax, glomdaBegrepp: glomda, tendens }, inlamningar, digiexam, narvaro,
     ...(egen?.status !== undefined ? { egenStatus: egen.status } : {}), ...(egen?.text !== undefined ? { egenText: egen.text } : {}),
   };
   const status = beraknaStatus(bas);

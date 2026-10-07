@@ -74,10 +74,12 @@ describe('Del 164 · utvärdering inför utvecklingssamtal', () => {
     expect(omar.text).toContain('Låga Exit tickets kan bero på sämre fokus på genomgångarna');
     expect(anna.text).toContain('Alla Läxförhör går att öva hemma på Socrative.com');
     const st = samtalsStycken(anna.text);
-    expect(st.map((x) => x.etikett)).toEqual([null, 'Lektionerna', 'Läxläsning', 'Inlämningar', 'Prov', null]);
+    expect(st.map((x) => x.etikett)).toEqual([null, 'Lektionerna', 'Närvaro', 'Läxläsning', 'Inlämningar', 'Prov', null]);
+    expect(anna.narvaro).toMatchObject({ lektioner: 5, narvarande: 5, procent: 100 });
+    expect(anna.text).toContain('Närvaro: 5 av 5 lektioner (100 %)');
     expect(st[1].delar[0]).toEqual({ text: 'Exit tickets', exit: true });
     // Läxförhör och Inlämning med stor bokstav och blå stil, provnamn med stor bokstav
-    expect(st[2].delar.filter((d) => d.exit).map((d) => d.text)[0]).toMatch(/^Läxförhör/);
+    expect(st[3].delar.filter((d) => d.exit).map((d) => d.text)[0]).toMatch(/^Läxförhör/);
     expect(st[3].delar.some((d) => d.exit && d.text.startsWith('Inlämning')) || !anna.text.includes('inlämning')).toBe(true);
     expect(anna.text).not.toMatch(/\bläxförhör/);
     expect(provnamnMedStorBokstav('8b ekologi eprov')).toBe('8b Ekologi Eprov');
@@ -85,6 +87,13 @@ describe('Del 164 · utvärdering inför utvecklingssamtal', () => {
     const sv = samtalsText({ ...omar, laxlasning: { ...omar.laxlasning, glomdaBegrepp: ['a', 'b', 'c', 'd', 'e'], tendens: 'gorsEj' } }, 'Omar');
     expect(sv).toContain('kunskaperna inte beständiga');
     expect(sv).toContain('nationella prov kan bli en svår utmaning');
+    const lag = samtalsText({ ...omar, narvaro: { procent: 60, lektioner: 10, narvarande: 6 } }, 'Omar');
+    expect(lag).toContain('Närvaro: Omar har varit med på 6 av 10 lektioner (60 %)');
+    expect(lag).toContain('genom att delta mer');
+    expect(lag.split('\n').length).toBeLessThanOrEqual(7);
+    const mycketLag = samtalsText({ ...omar, narvaro: { procent: 30, lektioner: 10, narvarande: 3 } }, 'Omar');
+    expect(mycketLag).toContain('Utan att komma till skolan går det inte att nå målen eller se resultat på Läxförhören');
+    expect(mycketLag).toContain('det första steget är att delta på lektionerna');
     expect(sv.split('\n').length).toBeLessThanOrEqual(7);
     expect(medStorBokstav('ett läxförhör och en inlämning, exit ticket')).toBe('ett Läxförhör och en Inlämning, Exit ticket');
     expect(STATUS_TEXT.svart).toBe('har svårt att nå målen');
