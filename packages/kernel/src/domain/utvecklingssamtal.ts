@@ -138,10 +138,10 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
   // Närvaro (ur quizsvaren): låg närvaro → delta mer på lektionerna
   const n = u.narvaro;
   if (n.procent !== null && n.lektioner > 0) {
-    if (n.procent < 50) rader.push(`Närvaro: ${fornamn} har varit med på ${n.narvarande} av ${n.lektioner} lektioner (${n.procent} %). Utan att komma till skolan går det inte att nå målen eller se resultat på Läxförhören — det första steget är att delta på lektionerna, och därifrån bygger vi vidare tillsammans.`);
-    else if (n.procent < 80) rader.push(`Närvaro: ${fornamn} har varit med på ${n.narvarande} av ${n.lektioner} lektioner (${n.procent} %). Lärandet sker på lektionerna — genom att delta mer kommer genomgångar, Exit tickets och arbetet med begreppen på plats, och resultaten följer med.`);
-    else if (n.procent < 95) rader.push(`Närvaro: ${n.narvarande} av ${n.lektioner} lektioner (${n.procent} %) — bra, och varje lektion räknas.`);
-    else rader.push(`Närvaro: ${n.narvarande} av ${n.lektioner} lektioner (${n.procent} %) — ${fornamn} är med på lektionerna, en stark grund för lärandet.`);
+    if (n.procent < 50) rader.push(`Närvaro: ${fornamn} har varit med på ${n.narvarande} av ${n.lektioner} lektioner (${n.procent} %, räknat på lektioner med genomförda quizzar). Utan att komma till skolan går det inte att nå målen eller se resultat på Läxförhören — det första steget är att delta på lektionerna, och därifrån bygger vi vidare tillsammans.`);
+    else if (n.procent < 80) rader.push(`Närvaro: ${fornamn} har varit med på ${n.narvarande} av ${n.lektioner} lektioner (${n.procent} %, räknat på lektioner med genomförda quizzar). Lärandet sker på lektionerna — genom att delta mer kommer genomgångar, Exit tickets och arbetet med begreppen på plats, och resultaten följer med.`);
+    else if (n.procent < 95) rader.push(`Närvaro: ${n.narvarande} av ${n.lektioner} lektioner (${n.procent} %, räknat på lektioner med genomförda quizzar) — bra, och varje lektion räknas.`);
+    else rader.push(`Närvaro: ${n.narvarande} av ${n.lektioner} lektioner (${n.procent} %, räknat på lektioner med genomförda quizzar) — ${fornamn} är med på lektionerna, en stark grund för lärandet.`);
   }
 
   // Läxläsning: läxförhörens utveckling, glömda begrepp, Socrative hemma

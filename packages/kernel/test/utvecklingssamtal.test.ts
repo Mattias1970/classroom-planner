@@ -86,7 +86,7 @@ describe('Del 164 · utvärdering inför utvecklingssamtal', () => {
     const st = samtalsStycken(anna.text);
     expect(st.map((x) => x.etikett)).toEqual([null, 'Lektionerna', 'Närvaro', 'Läxläsning', 'Inlämningar', 'Prov', null]);
     expect(anna.narvaro).toMatchObject({ lektioner: 5, narvarande: 5, procent: 100 });
-    expect(anna.text).toContain('Närvaro: 5 av 5 lektioner (100 %)');
+    expect(anna.text).toContain('Närvaro: 5 av 5 lektioner (100 %, räknat på lektioner med genomförda quizzar)');
     expect(st[1].delar[0]).toEqual({ text: 'Exit tickets', exit: true });
     // Läxförhör och Inlämning med stor bokstav och blå stil, provnamn med stor bokstav
     expect(st[3].delar.filter((d) => d.exit).map((d) => d.text)[0]).toMatch(/^Läxförhör/);
@@ -98,7 +98,7 @@ describe('Del 164 · utvärdering inför utvecklingssamtal', () => {
     expect(sv).toContain('kunskaperna inte beständiga');
     expect(sv).toContain('nationella prov kan bli en svår utmaning');
     const lag = samtalsText({ ...omar, narvaro: { procent: 60, lektioner: 10, narvarande: 6 } }, 'Omar');
-    expect(lag).toContain('Närvaro: Omar har varit med på 6 av 10 lektioner (60 %)');
+    expect(lag).toContain('Närvaro: Omar har varit med på 6 av 10 lektioner (60 %, räknat på lektioner med genomförda quizzar)');
     expect(lag).toContain('genom att delta mer');
     expect(lag.split('\n').length).toBeLessThanOrEqual(7);
     const mycketLag = samtalsText({ ...omar, narvaro: { procent: 30, lektioner: 10, narvarande: 3 } }, 'Omar');
