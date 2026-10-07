@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   importeraInlamningar, importeraResultat, klassensUtvarderingar, laggTillAmne, laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst,
-  resetIdRaknare, samtalsStycken, sattSamtalsUtvardering, STATUS_TEXT, tolkaTeamsTilldelningar, tomStruktur, utvardering, type Struktur,
+  medStorBokstav, provnamnMedStorBokstav, resetIdRaknare, samtalsStycken, samtalsText, sattSamtalsUtvardering, STATUS_TEXT, tolkaTeamsTilldelningar, tomStruktur, utvardering, type Struktur,
 } from '../src/index.js';
 
 const IDAG = '2026-10-07';
@@ -72,10 +72,21 @@ describe('Del 164 · utvärdering inför utvecklingssamtal', () => {
     expect(omar.text).toContain('inte godkänd ännu (5 av 14 p)');
     expect(pia.text).toContain('utmärkta resultat');
     expect(omar.text).toContain('Låga Exit tickets kan bero på sämre fokus på genomgångarna');
-    expect(anna.text).toContain('Alla läxförhör går att öva hemma på Socrative.com');
+    expect(anna.text).toContain('Alla Läxförhör går att öva hemma på Socrative.com');
     const st = samtalsStycken(anna.text);
     expect(st.map((x) => x.etikett)).toEqual([null, 'Lektionerna', 'Läxläsning', 'Inlämningar', 'Prov', null]);
     expect(st[1].delar[0]).toEqual({ text: 'Exit tickets', exit: true });
+    // Läxförhör och Inlämning med stor bokstav och blå stil, provnamn med stor bokstav
+    expect(st[2].delar.filter((d) => d.exit).map((d) => d.text)[0]).toMatch(/^Läxförhör/);
+    expect(st[3].delar.some((d) => d.exit && d.text.startsWith('Inlämning')) || !anna.text.includes('inlämning')).toBe(true);
+    expect(anna.text).not.toMatch(/\bläxförhör/);
+    expect(provnamnMedStorBokstav('8b ekologi eprov')).toBe('8b Ekologi Eprov');
+    // Många glömda begrepp utan utveckling → läxorna görs ej: beständiga kunskaper och nationella prov nämns
+    const sv = samtalsText({ ...omar, laxlasning: { ...omar.laxlasning, glomdaBegrepp: ['a', 'b', 'c', 'd', 'e'], tendens: 'gorsEj' } }, 'Omar');
+    expect(sv).toContain('kunskaperna inte beständiga');
+    expect(sv).toContain('nationella prov kan bli en svår utmaning');
+    expect(sv.split('\n').length).toBeLessThanOrEqual(7);
+    expect(medStorBokstav('ett läxförhör och en inlämning, exit ticket')).toBe('ett Läxförhör och en Inlämning, Exit ticket');
     expect(STATUS_TEXT.svart).toBe('har svårt att nå målen');
 
     // Läraren sätter egen status och text

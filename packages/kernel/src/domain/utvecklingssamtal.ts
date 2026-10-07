@@ -141,7 +141,7 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
       : x.trend === 'ner' ? `Läxläsning: läxförhören har gått från ${pct(x.borjan)} till ${pct(x.nu)}.`
       : x.antal === 1 ? `Läxläsning: ett läxförhör hittills, ${pct(x.nu)}.`
       : `Läxläsning: läxförhören ligger kring ${pct(x.nu)} (${x.klarade} av ${x.bedomda} över gränsen 90 %).`;
-    if (x.tendens === 'gorsEj') s += ` ${x.glomdaBegrepp.length} begrepp har glömts mer än en gång, vilket tyder på att läxorna ofta inte blir gjorda — en fokuserad läxläsning, en kort stund varje dag, vänder det snabbt. ${socrative}`;
+    if (x.tendens === 'gorsEj') s += ` ${x.glomdaBegrepp.length} begrepp har glömts mer än en gång, vilket tyder på att läxorna ofta inte blir gjorda. Glöms begrepp ofta blir kunskaperna inte beständiga — då blir det svårt att nå målen över tid, och nationella prov kan bli en svår utmaning. En fokuserad läxläsning, en kort stund varje dag, vänder det snabbt. ${socrative}`;
     else if (x.tendens === 'kontinuerligt') s += ` ${x.glomdaBegrepp.length === 1 ? 'Ett begrepp' : `${x.glomdaBegrepp.length} begrepp`} har glömts mer än en gång — läs läxan lite varje dag i stället för allt på en gång, så fastnar de. ${socrative}`;
     else if (x.trend === 'ner' || (x.trend === 'stabil' && x.nu !== null && x.nu < 90)) s += ` En mer fokuserad läxläsning inför varje förhör lyfter resultaten. ${socrative}`;
     else if (x.nu !== null && x.nu >= 90) s += ` Begreppen sitter — fortsätt så. ${socrative}`;
@@ -162,7 +162,7 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
 
   // Prov
   if (u.digiexam.length > 0) {
-    const d = u.digiexam.map((p) => !p.skrivit ? `${p.prov}: inte skrivit ännu` : p.godkand === true ? `${p.prov}: godkänd${p.poang !== null && p.maxPoang !== null ? ` (${p.poang} av ${p.maxPoang} p)` : ''}` : p.godkand === false ? `${p.prov}: inte godkänd ännu${p.poang !== null && p.maxPoang !== null ? ` (${p.poang} av ${p.maxPoang} p)` : ''} — omprovet är chansen att visa det` : `${p.prov}: skrivet${p.poang !== null && p.maxPoang !== null ? ` (${p.poang} av ${p.maxPoang} p)` : ''}`);
+    const d = u.digiexam.map((q) => ({ ...q, prov: provnamnMedStorBokstav(q.prov) })).map((p) => !p.skrivit ? `${p.prov}: inte skrivit ännu` : p.godkand === true ? `${p.prov}: godkänd${p.poang !== null && p.maxPoang !== null ? ` (${p.poang} av ${p.maxPoang} p)` : ''}` : p.godkand === false ? `${p.prov}: inte godkänd ännu${p.poang !== null && p.maxPoang !== null ? ` (${p.poang} av ${p.maxPoang} p)` : ''} — omprovet är chansen att visa det` : `${p.prov}: skrivet${p.poang !== null && p.maxPoang !== null ? ` (${p.poang} av ${p.maxPoang} p)` : ''}`);
     rader.push(`Prov: ${d.join('; ')}.`);
   }
 
@@ -175,10 +175,24 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
     utmarkt: `Fantastiskt arbete, ${fornamn} — fortsätt utmana dig själv med de svårare frågorna, där finns nästa steg i utvecklingen.`,
   };
   rader.push(avslut[status]);
-  return rader.slice(0, 7).join('\n');
+  // Läxförhör, Exit ticket och Inlämning skrivs med stor bokstav (visas i blå stil)
+  return rader.slice(0, 7).map(medStorBokstav).join('\n');
 }
 
-export interface SamtalsDel { text: string; /** "Exit tickets" — visas i fet blå stil. */ exit: boolean }
+/** 'läxförhör', 'exit ticket', 'inlämning' → med stor bokstav, även inne i meningar (rubriken 'Inlämningar:' berörs inte). */
+export function medStorBokstav(rad: string): string {
+  return rad.replace(/\bläxförhör/g, 'Läxförhör').replace(/\bexit ticket/g, 'Exit ticket').replace(/\binlämning/g, 'Inlämning');
+}
+
+/** '8b ekologi eprov' → '8b Ekologi Eprov'; 'Ekologi E-prov' behålls. */
+export function provnamnMedStorBokstav(namn: string): string {
+  return namn.replace(/(^|\s)([a-zåäö])/g, (_m, f: string, b: string) => `${f}${b.toUpperCase()}`);
+}
+
+/** Orden som visas i fet blå stil: Exit ticket(s), Läxförhör(en), Inlämning(ar). */
+export const SAMTALS_BLA = /Exit tickets?|Läxförhör\w*|Inlämning\w*/g;
+
+export interface SamtalsDel { text: string; /** Exit ticket / Läxförhör / Inlämning — visas i fet blå stil. */ exit: boolean }
 export interface SamtalsStycke { /** Rubriken (Lektionerna, Läxläsning, Inlämningar, Prov) — fet stil; null för inledning och avslut. */ etikett: string | null; delar: SamtalsDel[] }
 
 /** Delar upp texten i stycken för visning: rubrik + delar där "Exit tickets" är markerat. */
@@ -188,7 +202,7 @@ export function samtalsStycken(text: string): SamtalsStycke[] {
     const rubrik = m !== null && (SAMTALS_RUBRIKER as readonly string[]).includes(m[1].trim()) ? m[1].trim() : null;
     const rest = rubrik === null ? rad : m![2];
     const delar: SamtalsDel[] = [];
-    const re = /Exit tickets?/g;
+    const re = new RegExp(SAMTALS_BLA.source, 'g');
     let i = 0; let tr: RegExpExecArray | null;
     while ((tr = re.exec(rest)) !== null) {
       if (tr.index > i) delar.push({ text: rest.slice(i, tr.index), exit: false });
