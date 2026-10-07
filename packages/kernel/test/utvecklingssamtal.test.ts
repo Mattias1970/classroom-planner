@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   importeraInlamningar, importeraResultat, klassensUtvarderingar, laggTillAmne, laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst,
-  resetIdRaknare, sattSamtalsUtvardering, STATUS_TEXT, tolkaTeamsTilldelningar, tomStruktur, utvardering, type Struktur,
+  resetIdRaknare, samtalsStycken, sattSamtalsUtvardering, STATUS_TEXT, tolkaTeamsTilldelningar, tomStruktur, utvardering, type Struktur,
 } from '../src/index.js';
 
 const IDAG = '2026-10-07';
@@ -60,7 +60,8 @@ describe('Del 164 · utvärdering inför utvecklingssamtal', () => {
     expect(omar.digiexam[0]).toMatchObject({ godkand: false, poang: 5 });
     expect(pia.digiexam[0].godkand).toBe(true);
     for (const u of alla) {
-      expect(u.text.split('\n').length).toBeLessThanOrEqual(7);
+      expect(u.text.split('\n\n').length).toBeLessThanOrEqual(7);
+      expect(u.text).not.toMatch(/exit tickets/);   // alltid stor bokstav
       expect(u.text).toContain(u.namn.split(' ')[0]);
     }
     console.log(alla.map((u) => `--- ${u.namn} (${u.status})\n${u.text}`).join('\n'));
@@ -70,6 +71,11 @@ describe('Del 164 · utvärdering inför utvecklingssamtal', () => {
     expect(omar.text).toContain('4 begrepp har glömts mer än en gång');
     expect(omar.text).toContain('inte godkänd ännu (5 av 14 p)');
     expect(pia.text).toContain('utmärkta resultat');
+    expect(omar.text).toContain('Låga Exit tickets kan bero på sämre fokus på genomgångarna');
+    expect(anna.text).toContain('Alla läxförhör går att öva hemma på Socrative.com');
+    const st = samtalsStycken(anna.text);
+    expect(st.map((x) => x.etikett)).toEqual([null, 'Lektionerna', 'Läxläsning', 'Inlämningar', 'Prov', null]);
+    expect(st[1].delar[0]).toEqual({ text: 'Exit tickets', exit: true });
     expect(STATUS_TEXT.svart).toBe('har svårt att nå målen');
 
     // Läraren sätter egen status och text

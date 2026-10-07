@@ -37,6 +37,12 @@ describe('Del 164 · Utvecklingssamtal', () => {
     expect(status('Omar Ali').value).toBe('svart');
     // Öppna Omar: texten har högst sju rader och börjar positivt
     await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Omar Ali'))!.click(); });
+    // Formaterad visning: rubrikerna i fet stil, Exit tickets i fet blå, ett stycke per rad
+    const visning = div.querySelector('div[aria-label="Text Omar Ali"]')!;
+    expect([...visning.querySelectorAll('b.st-samtal-rubrik')].map((b) => b.textContent)).toEqual(['Lektionerna: ', 'Läxläsning: ', 'Inlämningar: ']);
+    expect(visning.querySelector('b.st-samtal-exit')!.textContent).toBe('Exit tickets');
+    expect(visning.querySelectorAll('p').length).toBeLessThanOrEqual(7);
+    await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Redigera'))!.click(); });
     const ta = div.querySelector('textarea[aria-label="Text Omar Ali"]') as HTMLTextAreaElement;
     expect(ta.value.split('\n').length).toBeLessThanOrEqual(7);
     expect(ta.value).toContain('Omar har just nu svårt att nå målen');

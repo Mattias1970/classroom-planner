@@ -7,7 +7,7 @@
 import { useMemo, useState } from 'react';
 import { Document, HeadingLevel, Packer, Paragraph, TextRun } from 'docx';
 import {
-  klassensUtvarderingar, sattSamtalsUtvardering, STATUS_ORDNING, STATUS_TEXT,
+  klassensUtvarderingar, samtalsStycken, sattSamtalsUtvardering, STATUS_ORDNING, STATUS_TEXT,
   type Klass, type SamtalsStatus, type Struktur, type Utvardering,
 } from '@planner/kernel';
 import { lasStruktur } from './store.js';
@@ -22,8 +22,15 @@ async function tillWord(klassNamn: string, amne: string, lista: Utvardering[]): 
       children: [
         new Paragraph({ text: `Utvecklingssamtal · ${klassNamn} · ${amne}`, heading: HeadingLevel.HEADING_1 }),
         ...lista.flatMap((u) => [
-          new Paragraph({ text: `${u.namn} — ${STATUS_TEXT[u.egenStatus ?? u.status]}`, heading: HeadingLevel.HEADING_2 }),
-          ...(u.egenText ?? u.text).split('\n').map((r) => new Paragraph({ children: [new TextRun(r)] })),
+          new Paragraph({ text: `${u.namn} — ${STATUS_TEXT[u.egenStatus ?? u.status]}`, heading: HeadingLevel.HEADING_2, spacing: { before: 360, after: 160 } }),
+          // Rubrikerna i fet svart stil, "Exit tickets" i fet blå, dubbel radbrytning mellan styckena
+          ...samtalsStycken(u.egenText ?? u.text).map((st) => new Paragraph({
+            spacing: { after: 240, line: 300 },
+            children: [
+              ...(st.etikett !== null ? [new TextRun({ text: `${st.etikett}: `, bold: true, color: '000000' })] : []),
+              ...st.delar.map((d) => new TextRun(d.exit ? { text: d.text, bold: true, color: '1565C0' } : { text: d.text })),
+            ],
+          })),
         ]),
       ],
     }],
@@ -44,6 +51,7 @@ export function Utvecklingssamtal({ s, klass, amneId, kor, idag, onTillbaka }: {
   const [oppen, setOppen] = useState<string | null>(null);
   const [kopierad, setKopierad] = useState<string | null>(null);
   const [utkast, setUtkast] = useState<Record<string, string>>({});
+  const [redigerar, setRedigerar] = useState<string | null>(null);
   if (amne === undefined) return null;
   const kopiera = (u: Utvardering) => {
     const text = u.egenText ?? u.text;
@@ -92,10 +100,22 @@ export function Utvecklingssamtal({ s, klass, amneId, kor, idag, onTillbaka }: {
             </tr>,
             ar && (
               <tr key={`${u.elevId}-text`}><td colSpan={8}>
-                <textarea aria-label={`Text ${u.namn}`} rows={8} className="st-samtal-text" value={text}
-                  onChange={(e) => setUtkast({ ...utkast, [u.elevId]: e.target.value })} />
+                {redigerar === u.elevId ? (
+                  <textarea aria-label={`Text ${u.namn}`} rows={10} className="st-samtal-text" value={text}
+                    onChange={(e) => setUtkast({ ...utkast, [u.elevId]: e.target.value })} />
+                ) : (
+                  <div className="st-samtal-visning" aria-label={`Text ${u.namn}`}>
+                    {samtalsStycken(text).map((st, si) => (
+                      <p key={si}>
+                        {st.etikett !== null && <b className="st-samtal-rubrik">{st.etikett}: </b>}
+                        {st.delar.map((d, di) => (d.exit ? <b key={di} className="st-samtal-exit">{d.text}</b> : <span key={di}>{d.text}</span>))}
+                      </p>
+                    ))}
+                  </div>
+                )}
                 <div className="rad" style={{ gap: 6, flexWrap: 'wrap' }}>
-                  <small className="muted">{text.split('\n').length} rader{u.egenText !== undefined ? ' · egen text' : ' · beräknad text'}</small>
+                  <small className="muted">{text.split('\n').length} stycken{u.egenText !== undefined ? ' · egen text' : ' · beräknad text'}</small>
+                  <button className="btn sec sm" onClick={() => setRedigerar(redigerar === u.elevId ? null : u.elevId)}>{redigerar === u.elevId ? '👁 Visa' : '✏ Redigera'}</button>
                   <span className="spacer" />
                   {(u.egenText !== undefined || utkast[u.elevId] !== undefined) && <button className="btn sec sm" onClick={() => { const { [u.elevId]: _b, ...rest } = utkast; void _b; setUtkast(rest); kor(() => sattSamtalsUtvardering(lasStruktur(), u.elevId, amneId, { text: null }), `${u.namn}: beräknad text igen.`); }}>↺ Beräknad text</button>}
                   <button className="btn sm" disabled={utkast[u.elevId] === undefined || utkast[u.elevId] === (u.egenText ?? u.text)} onClick={() => { const t = utkast[u.elevId]; const { [u.elevId]: _b, ...rest } = utkast; void _b; setUtkast(rest); kor(() => sattSamtalsUtvardering(lasStruktur(), u.elevId, amneId, { text: t }), `${u.namn}: texten sparad.`); }}>💾 Spara text</button>

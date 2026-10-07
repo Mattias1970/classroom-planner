@@ -1254,7 +1254,17 @@ input.fel { border-color: #B71C1C; }
 .st-inl-chip .icon-btn { font-size: 11px; padding: 0 2px; }
 
 /* ── Del 164 · Utvecklingssamtal ── */
-.st-samtal-tabell td { vertical-align: middle; }
+.st-samtal-tabell { table-layout: fixed; width: 100%; }
+.st-samtal-tabell td { vertical-align: middle; overflow-wrap: anywhere; white-space: normal; }
+.st-samtal-visning, .st-samtal-visning p { white-space: normal; }
+.st-samtal-tabell th:nth-child(1) { width: 3%; } .st-samtal-tabell th:nth-child(2) { width: 18%; } .st-samtal-tabell th:nth-child(3) { width: 17%; }
+.st-samtal-tabell th:nth-child(4) { width: 13%; } .st-samtal-tabell th:nth-child(5) { width: 17%; } .st-samtal-tabell th:nth-child(6) { width: 9%; }
+.st-samtal-tabell th:nth-child(7) { width: 11%; } .st-samtal-tabell th:nth-child(8) { width: 12%; }
+.st-samtal-visning { padding: 6px 10px; border: 1px solid var(--ram); border-radius: 6px; background: #fff; font-size: 13.5px; line-height: 1.45; }
+.st-samtal-visning p { margin: 0 0 1.2em; }
+.st-samtal-visning p:last-child { margin-bottom: 0; }
+.st-samtal-rubrik { color: #000; }
+.st-samtal-exit { color: #1565C0; }
 .st-samtal-text { width: 100%; font: inherit; font-size: 13px; line-height: 1.4; padding: 6px; border: 1px solid var(--ram); border-radius: 6px; }
 .st-samtal-status { font: inherit; font-size: 12px; border-radius: 10px; padding: 2px 6px; }
 .st-samtal-status.svart, .st-samtal-chip.svart { background: #FFEBEE; color: #B71C1C; }
