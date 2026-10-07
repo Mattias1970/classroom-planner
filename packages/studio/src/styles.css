@@ -1088,6 +1088,7 @@ input.fel { border-color: #B71C1C; }
 .app-ikon.socrative { background: #F26522; }
 .app-ikon.magma { background: #1E9E5A; }
 .app-ikon.digiexam { background: #1F4E9A; }
+.app-ikon.teams { background: #5B5FC7; }
 .app-ikon.pptx { background: #C43E1C; }
 .app-ikon.elever { background: #5D6D7E; font-size: 16px; }
 
@@ -1231,3 +1232,15 @@ input.fel { border-color: #B71C1C; }
 .ls-dolda summary { cursor: pointer; color: var(--muted-varm, #66738a); }
 .ls-dolda[open] { border: 1px dashed var(--ram); border-radius: 6px; padding: 6px 8px; }
 .np-rubrik { grid-column: 1 / -1; }
+
+/* ── Del 163 · Teams-inlämningar ── */
+.st-inl-ram { width: 100%; overflow-x: auto; margin: 6px 0; }
+.st-inl-diagram { display: block; max-width: none; }
+.st-inl-tabell td, .st-inl-tabell th { vertical-align: top; }
+.st-inl-lag td:nth-child(-n+6) { background: #fff4f4; }
+.st-inl-elever { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 0; }
+.st-inl-chip { font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+.st-inl-chip.ok { background: #E8F5E9; border-color: #2E7D32; }
+.st-inl-chip.sen { background: #FFF3E0; border-color: #EF6C00; }
+.st-inl-chip.ej { background: #f3f3f3; color: #888; }
+.st-inl-chip .icon-btn { font-size: 11px; padding: 0 2px; }

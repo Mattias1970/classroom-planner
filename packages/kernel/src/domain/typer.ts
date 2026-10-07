@@ -429,6 +429,8 @@ export interface Struktur {
   filregister?: import('./resultat.js').FilPost[];
   /** Del 158: namngivna planeringsutkast (planeringstavlan). */
   planUtkast?: PlanUtkast[];
+  /** Del 163: inlämningar ur Teams tilldelningsdata (elev × uppgift). */
+  inlamningar?: import('./inlamningar.js').Inlamning[];
   /** Del 153: Magma-testens uppgifter ur testens PDF (en post per test). */
   magmaTester?: import('./magmauppgifter.js').MagmaTestDef[];
   /** Del 153: lärarens klassning av Magma-uppgifter (uppgiftsnyckel → delkapitel och förmågor) — gäller i alla test där uppgiften finns. */

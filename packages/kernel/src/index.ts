@@ -36,3 +36,4 @@ export * from './domain/vagtillprovet.js';
 export * from './domain/elevkort.js';
 export * from './domain/planutkast.js';
 export * from './domain/lektionsomraden.js';
+export * from './domain/inlamningar.js';

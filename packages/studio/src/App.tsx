@@ -49,6 +49,7 @@ import { exportJson, importJson, lasInstallning, lasStruktur, sparaInstallning, 
 import { RapportdesignVy, MallRendering, Trendsteg } from './rapportdesign.js';
 import { MagmaImport } from './MagmaImport.js';
 import { DigiExamImport } from './DigiExamImport.js';
+import { TeamsImport } from './TeamsImport.js';
 import { DigiExamLarmPanel } from './ProvLarm.js';
 import { Elevkort } from './Elevkort.js';
 import { ProvlappPanel } from './Provlapp.js';
@@ -5401,11 +5402,12 @@ function SocrativeLankPanel({ s, klass, amnen, planFor, kor }: {
 }
 
 /** Del 142 · Importnavet: en rad per app, med ikon (bokstav i appens färg) och text. */
-type ImportApp = 'socrative' | 'magma' | 'digiexam' | 'pptx' | 'elever';
+type ImportApp = 'socrative' | 'magma' | 'digiexam' | 'teams' | 'pptx' | 'elever';
 const IMPORT_APPAR: Array<{ id: ImportApp; bokstav: string; namn: string; under: string; kalla?: ResultatKalla }> = [
   { id: 'socrative', bokstav: 'S', namn: 'Socrative', under: 'quiz-rapporter (.xlsx) · rum & QR', kalla: 'socrative-exit' },
   { id: 'magma', bokstav: 'M', namn: 'Magma', under: 'provresultat (.xlsx) · rätt/fel per uppgift', kalla: 'magma' },
   { id: 'digiexam', bokstav: 'D', namn: 'DigiExam', under: 'provresultat (.xlsx) · poäng per fråga', kalla: 'digiexam' },
+  { id: 'teams', bokstav: 'T', namn: 'Teams', under: 'inlämningar · tilldelningsdata (.xlsx)' },
   { id: 'pptx', bokstav: 'P', namn: 'PowerPoint', under: 'placeringar (.pptx)' },
   { id: 'elever', bokstav: '👥', namn: 'Elever', under: 'Socrative-lista · grupper A/B' },
 ];
@@ -5614,7 +5616,7 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn }: {
 
       {/* ── Del 142: Importnav — alla källor högst upp, en rad per app ── */}
       <details className="st-fall st-import" open={s.elever.filter((e) => e.klassId === klass.id).length === 0 || (s.resultat ?? []).length === 0}>
-        <summary><b>📥 Importera</b> <small className="muted">Socrative · Magma · DigiExam · PowerPoint-placeringar · elevlista och grupper</small></summary>
+        <summary><b>📥 Importera</b> <small className="muted">Socrative · Magma · DigiExam · Teams-inlämningar · PowerPoint-placeringar · elevlista och grupper</small></summary>
       <div className="st-importnav" role="tablist" aria-label="Importera från">
         {IMPORT_APPAR.map((a) => (
           <button key={a.id} role="tab" aria-selected={importApp === a.id} className={`st-importapp${importApp === a.id ? ' act' : ''}`}
@@ -5739,6 +5741,7 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn }: {
 
       {/* ── Import: DigiExam-prov ur xlsx (Del 150) — egen tolkare, egen källa ── */}
       {importApp === 'digiexam' && <DigiExamImport s={s} klass={klass} amne={amne} kor={kor} />}
+      {importApp === 'teams' && <TeamsImport s={s} klass={klass} amne={amne} kor={kor} idag={new Date().toISOString().slice(0, 10)} />}
 
       {/* ── Import: klistra in (Magma, DigiExam och fri text) ── */}
       {(importApp === 'magma' || importApp === 'digiexam' || importApp === 'socrative') && (
