@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   importeraInlamningar, importeraResultat, klassensUtvarderingar, laggTillAmne, laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst,
-  medStorBokstav, provnamnMedStorBokstav, resetIdRaknare, samtalsStycken, samtalsText, sattSamtalsUtvardering, STATUS_TEXT, tolkaTeamsTilldelningar, tomStruktur, utvardering, type Struktur,
+  antalStycken, bokFromImport, gemensamText, kodEtikett, medStorBokstav, provnamnMedStorBokstav, registreraPlanering, resetIdRaknare, samtalsStycken, samtalsText, sattSamtalsKapitel, sattSamtalsUtvardering, sparaBok, STATUS_TEXT, tolkaTeamsTilldelningar, tomStruktur, utvardering, type Struktur,
 } from '../src/index.js';
 
 const IDAG = '2026-10-07';
@@ -142,10 +142,109 @@ describe('Del 171 · matematikmallen — Magma-diagnoser styr', () => {
     expect(anna.status).toBe('mycketBra');
     expect(omar.diagnoser.lista.map((d) => d.procent)).toEqual([65, 75, 80, 60]);
     expect(omar.status).toBe('nar');   // snitt 70
-    expect(anna.text).toContain('Diagnoser: 1.1 - 1.2 Diagnos 95 % (mycket bra), 1.3 - 1.4 Diagnos 90 % (går bra), 1.5 - 1.6 Diagnos 100 % (utmärkt), Stockholm Stads Screening 92 % (mycket bra) — snitt 94 %, mycket bra');
-    expect(omar.text).toContain('2 diagnoser under 70 % — träna på de uppgifterna igen i Magma');
-    expect(samtalsStycken(anna.text)[1].etikett).toBe('Diagnoser');
+    // Del 172: diagnoserna över varandra — en rad per diagnos (namn, tab, procent och nivå), sist snittet
+    expect(anna.text).toContain('Diagnoser:\n  1.1 - 1.2 Diagnos\t95 % (mycket bra)\n  1.3 - 1.4 Diagnos\t90 % (går bra)\n  1.5 - 1.6 Diagnos\t100 % (utmärkt)\n  Stockholm Stads Screening\t92 % (mycket bra)\n  Snitt av 4 diagnoser\t94 % (mycket bra)\n');
+    expect(omar.text).toContain('\n  2 diagnoser under 70 % — träna på de uppgifterna igen i Magma');
+    const st = samtalsStycken(anna.text);
+    expect(st[1].etikett).toBe('Diagnoser');
+    expect(st[1].underrader.map((r) => [r.text, r.varde])).toEqual([
+      ['1.1 - 1.2 Diagnos', '95 % (mycket bra)'], ['1.3 - 1.4 Diagnos', '90 % (går bra)'], ['1.5 - 1.6 Diagnos', '100 % (utmärkt)'],
+      ['Stockholm Stads Screening', '92 % (mycket bra)'], ['Snitt av 4 diagnoser', '94 % (mycket bra)']]);
+    expect(st[2].etikett).toBe('Inlämningar');   // Del 172: Lektionerna/Läxläsning ersätts av Förhören per kapitel (inga förhör här)
+    expect(samtalsStycken(omar.text)[1].underrader.at(-1)).toEqual({ text: '2 diagnoser under 70 % — träna på de uppgifterna igen i Magma så sitter metoderna.', varde: null });
     expect(anna.text).not.toContain('Laborationer');
-    for (const u of alla) expect(u.text.split('\n').length).toBeLessThanOrEqual(7);
+    for (const u of alla) expect(antalStycken(u.text)).toBeLessThanOrEqual(7);
+  });
+});
+
+describe('Del 172 · matematik — gemensam kapiteltext och förhör per kapitel', () => {
+  const MA = bokFromImport(JSON.stringify({
+    schema: 'classroom-planner-bok', version: 1,
+    bok: { id: 'ma', titel: 'Matematik Y', förlag: 'Liber', ämne: 'Matematik', årskurs: 8, kapitelMeta: {
+      '1': { name: 'Tal', col: '#2f5aa8', mal: ['räkna med negativa tal', 'använda potenser'] },
+      '2': { name: 'Geometri', col: '#2f8a58' },
+    } },
+    lektioner: {
+      '1': [
+        { id: 1, type: 'regular', avsnitt: '1.1 Negativa tal', del: 1 },
+        { id: 2, type: 'regular', avsnitt: '1.2 Potenser', del: 1 },
+        { id: 3, type: 'regular', avsnitt: '1.3 Tal i bråkform', del: 1 },
+      ],
+      '2': [
+        { id: 1, type: 'regular', avsnitt: '2.1 Vinklar', del: 1 },
+        { id: 2, type: 'regular', avsnitt: '2.2 Omkrets', del: 1 },
+      ],
+    },
+  }));
+  function bygg(): Struktur {
+    resetIdRaknare();
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '26/27', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = sparaBok(s, MA);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8A' });
+    // En lektion i veckan (tisdag) från 18/8: 1.1, 1.2, 1.3, 2.1 är genomförda 7/10; 2.2 ligger den 15/9? nej — 13/10 (framtid)
+    s = laggTillAmne(s, { id: 'ma', klassId: 'k', namn: 'Matematik', bokId: 'ma', schema: [{ dag: 2, start: '12:50', slut: '13:40' }] });
+    s = registreraPlanering(s, { id: 'pl', amneId: 'ma', bokId: 'ma', skapad: '2026-08-10' });
+    s = laggTillElev(s, { id: 'e1', klassId: 'k', namn: 'Anna Berg', grupp: 'A' });
+    const imp = (kalla: 'socrative-laxforhor' | 'socrative-exit' | 'magma', prov: string, datum: string, p: number, max = 10) => {
+      s = importeraResultat(s, { klassId: 'k', amneId: 'ma', kalla, prov, datum, ...(kalla === 'magma' ? {} : { rum: 'Matte8AA' }), rader: [{ namn: 'Anna Berg', poang: p, maxPoang: max }] }).s;
+    };
+    imp('socrative-exit', '1.1 Exit', '2026-08-18', 8); imp('socrative-exit', '1.2 Exit', '2026-08-25', 7);
+    imp('socrative-laxforhor', '1.1 - 1.2 Läxförhör', '2026-09-01', 9); imp('socrative-laxforhor', '1.1 - 1.3 Läxförhör', '2026-09-08', 10);
+    imp('socrative-exit', '2.1 Exit', '2026-09-15', 6);
+    imp('magma', '1.1 - 1.3 diagnos', '2026-09-10', 18, 20); imp('magma', 'Stockholm stads screening', '2026-09-30', 46, 50); imp('magma', '2.1 diagnos', '2026-09-22', 10, 20);
+    return s;
+  }
+  const IDAG2 = '2026-10-07';
+
+  it('genomförda kapitel ur planeringen; flera kapitel kräver ett val; gemensam text ur bokens mål och delkapitel', () => {
+    const s = bygg();
+    const g = gemensamText(s, 'ma', IDAG2);
+    expect(g.kapitel.map((k) => [k.nr, k.namn, k.delkapitel.map((d) => d.kod)])).toEqual([[1, 'Tal', ['1.1', '1.2', '1.3']], [2, 'Geometri', ['2.1', '2.2']]]);
+    expect(g.behoverVal).toBe(true);
+    expect(g.egen).toBe(false);
+    expect(g.text).toBe(
+      'Klassen har arbetat med kapitel 1 Tal — delkapitlen 1.1 Negativa tal, 1.2 Potenser och 1.3 Tal i bråkform. Kapitlet handlar om: räkna med negativa tal; använda potenser.\n'
+      + 'Klassen har arbetat med kapitel 2 Geometri — delkapitlen 2.1 Vinklar och 2.2 Omkrets.');
+    // Urval: bara kapitel 1
+    const s2 = sattSamtalsKapitel(s, 'ma', { koder: ['1.1', '1.2', '1.3'] });
+    const g2 = gemensamText(s2, 'ma', IDAG2);
+    expect(g2.behoverVal).toBe(false);
+    expect(g2.valda.map((k) => k.nr)).toEqual([1]);
+    expect(g2.text).not.toContain('Geometri');
+    // Egen text vinner; null tar bort
+    const s3 = sattSamtalsKapitel(s2, 'ma', { text: 'Vi har jobbat med tal.' });
+    expect(gemensamText(s3, 'ma', IDAG2)).toMatchObject({ text: 'Vi har jobbat med tal.', egen: true });
+    expect(sattSamtalsKapitel(s3, 'ma', { text: null, koder: null }).samtalsKapitel).toBeUndefined();
+    expect(kodEtikett(['1.1', '1.2', '1.3'])).toBe('1.1–1.3');
+    expect(kodEtikett(['1.1', '1.3'])).toBe('1.1, 1.3');
+  });
+
+  it('per elev: diagnoser och förhör bara för valda kapitel; kapitel utan förhör nämns inte', () => {
+    const s = sattSamtalsKapitel(bygg(), 'ma', { koder: ['1.1', '1.2', '1.3'] });
+    const anna = utvardering(s, 'e1', 'ma', IDAG2)!;
+    // Diagnosen för 2.1 ligger utanför urvalet; screeningen (utan koder) är alltid med
+    expect(anna.diagnoser.lista.map((d) => d.prov)).toEqual(['1.1 - 1.3 diagnos', 'Stockholm stads screening']);
+    expect(anna.kapitel).toEqual([{ nr: 1, namn: 'Tal',
+      exit: [{ etikett: '1.1', prov: '1.1 Exit', datum: '2026-08-18', procent: 80 }, { etikett: '1.2', prov: '1.2 Exit', datum: '2026-08-25', procent: 70 }],
+      laxforhor: [{ etikett: '1.1–1.2', prov: '1.1 - 1.2 Läxförhör', datum: '2026-09-01', procent: 90 }, { etikett: '1.1–1.3', prov: '1.1 - 1.3 Läxförhör', datum: '2026-09-08', procent: 100 }] }]);
+    const st = samtalsStycken(anna.text);
+    expect(st.map((x) => x.etikett)).toEqual([null, 'Diagnoser', 'Förhören', 'Närvaro', 'Inlämningar', null]);
+    expect(st[2].underrader).toEqual([
+      { text: 'Kapitel 1 Tal · Exit tickets', varde: '1.1 80 %, 1.2 70 %' },
+      { text: 'Kapitel 1 Tal · Läxförhör', varde: '1.1–1.2 90 %, 1.1–1.3 100 %' },
+      { text: 'Alla Läxförhör går att öva hemma på Socrative.com — både inför kommande förhör och på de olika delkapitlen.', varde: null },
+    ]);
+    expect(anna.text).not.toContain('Lektionerna');
+    expect(anna.text).not.toContain('Läxläsning');
+    // Alla kapitel: kapitel 2 har bara ett Exit ticket — Läxförhör nämns inte för det
+    const alla = utvardering(sattSamtalsKapitel(s, 'ma', { koder: null }), 'e1', 'ma', IDAG2)!;
+    expect(alla.diagnoser.lista.map((d) => d.prov)).toEqual(['1.1 - 1.3 diagnos', '2.1 diagnos', 'Stockholm stads screening']);
+    const u2 = samtalsStycken(alla.text)[2].underrader.map((r) => r.text);
+    expect(u2).toContain('Kapitel 2 Geometri · Exit tickets');
+    expect(u2).not.toContain('Kapitel 2 Geometri · Läxförhör');
+    // Utan förhör alls: stycket Förhören utelämnas
+    const tom = utvardering(sattSamtalsKapitel(s, 'ma', { koder: ['2.2'] }), 'e1', 'ma', IDAG2)!;
+    expect(samtalsStycken(tom.text).map((x) => x.etikett)).not.toContain('Förhören');
   });
 });

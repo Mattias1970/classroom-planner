@@ -5,32 +5,43 @@
  * per elev eller exportera hela klassen som Word.
  */
 import { useMemo, useState } from 'react';
-import { Document, HeadingLevel, Packer, Paragraph, TextRun } from 'docx';
+import { Document, HeadingLevel, Packer, Paragraph, TabStopType, TextRun } from 'docx';
 import {
-  klassensUtvarderingar, samtalsStycken, sattSamtalsUtvardering, STATUS_ORDNING, STATUS_TEXT,
-  type Klass, type SamtalsStatus, type Struktur, type Utvardering,
+  antalStycken, gemensamText, kapitelNamn, klassensUtvarderingar, samtalsStycken, sattSamtalsKapitel, sattSamtalsUtvardering, STATUS_ORDNING, STATUS_TEXT,
+  type GemensamText, type Klass, type SamtalsStatus, type Struktur, type Utvardering,
 } from '@planner/kernel';
 import { lasStruktur } from './store.js';
 
 const pct = (v: number | null) => (v === null ? '—' : `${v} %`);
 const pil = (t: 'upp' | 'stabil' | 'ner' | null) => (t === 'upp' ? '↗' : t === 'ner' ? '↘' : t === 'stabil' ? '→' : '');
 
-async function tillWord(klassNamn: string, amne: string, lista: Utvardering[]): Promise<void> {
+async function tillWord(klassNamn: string, amne: string, lista: Utvardering[], gemensam: string | null): Promise<void> {
   const doc = new Document({
     styles: { default: { document: { run: { font: 'Calibri', size: 22 } } } },
     sections: [{
       children: [
         new Paragraph({ text: `Utvecklingssamtal · ${klassNamn} · ${amne}`, heading: HeadingLevel.HEADING_1 }),
+        // Del 172 · Gemensam text för alla elever: kapitlen klassen arbetat med och vad de handlar om
+        ...(gemensam === null ? [] : gemensam.split('\n').filter((r) => r.trim() !== '').map((r) => new Paragraph({ spacing: { after: 240, line: 300 }, children: [new TextRun({ text: r })] }))),
         ...lista.flatMap((u) => [
           new Paragraph({ text: `${u.namn} — ${STATUS_TEXT[u.egenStatus ?? u.status]}`, heading: HeadingLevel.HEADING_2, spacing: { before: 360, after: 160 } }),
           // Rubrikerna i fet svart stil, "Exit tickets" i fet blå, dubbel radbrytning mellan styckena
-          ...samtalsStycken(u.egenText ?? u.text).map((st) => new Paragraph({
-            spacing: { after: 240, line: 300 },
-            children: [
-              ...(st.etikett !== null ? [new TextRun({ text: `${st.etikett}: `, bold: true, color: '000000' })] : []),
-              ...st.delar.map((d) => new TextRun(d.exit ? { text: d.text, bold: true, color: '1565C0' } : { text: d.text })),
-            ],
-          })),
+          // Underrader (diagnoserna över varandra) blir egna indragna rader med procenten vid en tabbposition
+          ...samtalsStycken(u.egenText ?? u.text).flatMap((st) => [
+            new Paragraph({
+              spacing: { after: st.underrader.length > 0 ? 60 : 240, line: 300 },
+              children: [
+                ...(st.etikett !== null ? [new TextRun({ text: `${st.etikett}: `, bold: true, color: '000000' })] : []),
+                ...st.delar.map((d) => new TextRun(d.exit ? { text: d.text, bold: true, color: '1565C0' } : { text: d.text })),
+              ],
+            }),
+            ...st.underrader.map((r, ri) => new Paragraph({
+              spacing: { after: ri === st.underrader.length - 1 ? 240 : 40, line: 280 },
+              indent: { left: 400 },
+              tabStops: [{ type: TabStopType.LEFT, position: 4400 }],
+              children: r.varde === null ? [new TextRun({ text: r.text })] : [new TextRun({ text: r.text }), new TextRun({ text: `\t${r.varde}`, bold: true })],
+            })),
+          ]),
         ]),
       ],
     }],
@@ -52,6 +63,9 @@ export function Utvecklingssamtal({ s, klass, amneId, kor, idag, onTillbaka }: {
   const [kopierad, setKopierad] = useState<string | null>(null);
   const [utkast, setUtkast] = useState<Record<string, string>>({});
   const [redigerar, setRedigerar] = useState<string | null>(null);
+  const [gemUtkast, setGemUtkast] = useState<string | null>(null);
+  // Del 172 · Matematik: kapitlen i rapporten (checklista när flera kapitel är genomförda) och den gemensamma texten
+  const gem: GemensamText | null = useMemo(() => (lista.some((u) => u.mall === 'ma') ? gemensamText(s, amneId, idag) : null), [s, amneId, idag, lista]);
   if (amne === undefined) return null;
   const kopiera = (u: Utvardering) => {
     const text = u.egenText ?? u.text;
@@ -66,17 +80,20 @@ export function Utvecklingssamtal({ s, klass, amneId, kor, idag, onTillbaka }: {
         <button className="btn sm" onClick={onTillbaka}>← Alla elever</button>
         <h3 style={{ margin: 0 }}>🗣 Utvecklingssamtal · {klass.namn} · {amne.namn}</h3>
         <span className="spacer" />
-        <button className="btn sec sm" onClick={() => { void tillWord(klass.namn, amne.namn, lista); }}>📄 Alla till Word</button>
+        <button className="btn sec sm" onClick={() => { void tillWord(klass.namn, amne.namn, lista, gem?.text ?? null); }}>📄 Alla till Word</button>
       </div>
       <p className="small muted" style={{ margin: '4px 0 8px' }}>
         {ma ? (
           <>Matematikmallen: statusen sätts av snittet på alla Magma-diagnoser (kapiteldiagnoser och Stockholms stads screening) — 70–80 % når målen, 81–90 % går bra, 91–95 % mycket bra, över 95 % utmärkt.
-            Alla diagnoser sammanfattas i texten. Läxförhör, exit tickets och inlämningar beskrivs som vanligt. Provresultat med förmågorna (begrepp, metod, problemlösning, resonemang) och omdöme i kommunikation kommer senare. </>
+            Alla diagnoser sammanfattas i texten, och Exit tickets och Läxförhör redovisas per kapitel i rapportens urval (bara när de finns). Provresultat med förmågorna (begrepp, metod, problemlösning, resonemang) och omdöme i kommunikation kommer senare. </>
         ) : (
           <>Texten bygger på läxförhör (gräns 90 %), exit tickets (70 %), inlämningar ur Teams och DigiExam-prov. Utveckling = de första förhören jämfört med de senaste. </>
         )}
         Statusen är beräknad — ändra den så skrivs texten om; du kan också skriva om texten själv.{!ma && ' Ett prov som inte är godkänt ger ”har svårt att nå målen” tills omprovet är klarat.'}
       </p>
+      {gem !== null && (
+        <KapitelOchGemensamText gem={gem} amneId={amneId} kor={kor} utkast={gemUtkast} setUtkast={setGemUtkast} />
+      )}
       <div className="rad" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
         {antalPer.map(([st, n]) => <span key={st} className={`chip st-samtal-chip ${st}`}>{STATUS_TEXT[st]}: <b>{n}</b></span>)}
       </div>
@@ -123,15 +140,24 @@ export function Utvecklingssamtal({ s, klass, amneId, kor, idag, onTillbaka }: {
                 ) : (
                   <div className="st-samtal-visning" aria-label={`Text ${u.namn}`}>
                     {samtalsStycken(text).map((st, si) => (
-                      <p key={si}>
-                        {st.etikett !== null && <b className="st-samtal-rubrik">{st.etikett}: </b>}
-                        {st.delar.map((d, di) => (d.exit ? <b key={di} className="st-samtal-exit">{d.text}</b> : <span key={di}>{d.text}</span>))}
-                      </p>
+                      <div key={si} className="st-samtal-stycke">
+                        <p>
+                          {st.etikett !== null && <b className="st-samtal-rubrik">{st.etikett}: </b>}
+                          {st.delar.map((d, di) => (d.exit ? <b key={di} className="st-samtal-exit">{d.text}</b> : <span key={di}>{d.text}</span>))}
+                        </p>
+                        {st.underrader.length > 0 && (
+                          <div className="st-samtal-underrader">
+                            {st.underrader.map((r, ri) => (r.varde === null
+                              ? <div key={ri} className="st-samtal-underrad text">{r.text}</div>
+                              : <div key={ri} className="st-samtal-underrad"><span>{r.text}</span><b>{r.varde}</b></div>))}
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 )}
                 <div className="rad" style={{ gap: 6, flexWrap: 'wrap' }}>
-                  <small className="muted">{text.split('\n').length} stycken{u.egenText !== undefined ? ' · egen text' : ' · beräknad text'}</small>
+                  <small className="muted">{antalStycken(text)} stycken{u.egenText !== undefined ? ' · egen text' : ' · beräknad text'}</small>
                   <button className="btn sec sm" onClick={() => setRedigerar(redigerar === u.elevId ? null : u.elevId)}>{redigerar === u.elevId ? '👁 Visa' : '✏ Redigera'}</button>
                   <span className="spacer" />
                   {(u.egenText !== undefined || utkast[u.elevId] !== undefined) && <button className="btn sec sm" onClick={() => { const { [u.elevId]: _b, ...rest } = utkast; void _b; setUtkast(rest); kor(() => sattSamtalsUtvardering(lasStruktur(), u.elevId, amneId, { text: null }), `${u.namn}: beräknad text igen.`); }}>↺ Beräknad text</button>}
@@ -142,6 +168,68 @@ export function Utvecklingssamtal({ s, klass, amneId, kor, idag, onTillbaka }: {
           ];
         })}</tbody>
       </table>
+    </div>
+  );
+}
+
+/**
+ * Del 172 · Kapitlen i rapporten: checklista över genomförda kapitel och delkapitel (öppen när flera
+ * kapitel är genomförda och inget val gjorts) samt den gemensamma texten för alla elever, redigerbar.
+ */
+function KapitelOchGemensamText({ gem, amneId, kor, utkast, setUtkast }: {
+  gem: GemensamText; amneId: string; kor: (fn: () => Struktur, m: string) => void; utkast: string | null; setUtkast: (v: string | null) => void;
+}) {
+  const valda = new Set(gem.koder);
+  const satt = (koder: string[], m: string) => kor(() => sattSamtalsKapitel(lasStruktur(), amneId, { koder }), m);
+  const vaxlaDel = (kod: string) => {
+    const n = new Set(valda); if (n.has(kod)) n.delete(kod); else n.add(kod);
+    satt([...n], `Rapporten: delkapitel ${kod} ${n.has(kod) ? 'med' : 'utan'}.`);
+  };
+  const vaxlaKap = (nr: number) => {
+    const k = gem.kapitel.find((x) => x.nr === nr)!;
+    const koder = k.delkapitel.map((d) => d.kod);
+    const allaMed = koder.every((c) => valda.has(c));
+    const n = new Set(valda); for (const c of koder) { if (allaMed) n.delete(c); else n.add(c); }
+    satt([...n], `Rapporten: kapitel ${nr} ${allaMed ? 'utan' : 'med'}.`);
+  };
+  const text = utkast ?? gem.text;
+  return (
+    <div className="st-samtal-kapitel" aria-label="Kapitlen i rapporten">
+      <details open={gem.behoverVal || gem.kapitel.length > 1}>
+        <summary>📚 Kapitel i rapporten: {gem.valda.length === 0 ? 'inget valt' : gem.valda.map(kapitelNamn).join(', ')}{gem.behoverVal ? ' — välj vilka kapitel och delkapitel som ska ingå' : ''}</summary>
+        {gem.kapitel.length === 0 ? <p className="small muted">Ingen genomförd lektion i planeringen ännu.</p> : (
+          <div className="rad" style={{ gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            {gem.kapitel.map((k) => {
+              const koder = k.delkapitel.map((d) => d.kod);
+              const antalMed = koder.filter((c) => valda.has(c)).length;
+              return (
+                <div key={k.nr} className="st-samtal-kapval">
+                  <label><input type="checkbox" aria-label={kapitelNamn(k)} checked={antalMed === koder.length}
+                    ref={(el) => { if (el !== null) el.indeterminate = antalMed > 0 && antalMed < koder.length; }} onChange={() => vaxlaKap(k.nr)} /> <b>{kapitelNamn(k)}</b>{k.sidor !== '' && k.sidor !== '—' ? <span className="muted"> {k.sidor}</span> : null}</label>
+                  {k.delkapitel.map((d) => (
+                    <label key={d.kod} className="st-samtal-delval"><input type="checkbox" aria-label={`Delkapitel ${d.kod}`} checked={valda.has(d.kod)} onChange={() => vaxlaDel(d.kod)} /> {d.kod} {d.namn}{d.lektioner > 0 ? <span className="muted"> · {d.lektioner} {d.lektioner === 1 ? 'lektion' : 'lektioner'}</span> : null}</label>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </details>
+      <div className="st-samtal-gemensam">
+        <b className="st-samtal-rubrik">Gemensam text för alla elever</b>
+        {utkast !== null ? (
+          <textarea aria-label="Gemensam text" rows={4} className="st-samtal-text" value={text} onChange={(e) => setUtkast(e.target.value)} />
+        ) : (
+          <div aria-label="Gemensam text">{gem.text.split('\n').map((r, i) => <p key={i}>{r}</p>)}</div>
+        )}
+        <div className="rad" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <small className="muted">{gem.egen ? 'egen text' : 'beräknad ur bokens kapitel och mål'}</small>
+          <button className="btn sec sm" onClick={() => setUtkast(utkast === null ? gem.text : null)}>{utkast === null ? '✏ Redigera' : '👁 Visa'}</button>
+          <span className="spacer" />
+          {gem.egen && <button className="btn sec sm" onClick={() => { setUtkast(null); kor(() => sattSamtalsKapitel(lasStruktur(), amneId, { text: null }), 'Gemensam text: beräknad igen.'); }}>↺ Beräknad text</button>}
+          <button className="btn sm" disabled={utkast === null || utkast === gem.text} onClick={() => { const v = utkast!; setUtkast(null); kor(() => sattSamtalsKapitel(lasStruktur(), amneId, { text: v }), 'Gemensam text sparad.'); }}>💾 Spara text</button>
+        </div>
+      </div>
     </div>
   );
 }

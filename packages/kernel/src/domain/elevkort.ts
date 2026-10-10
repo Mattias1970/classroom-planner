@@ -8,6 +8,7 @@
  * 70 %, Magma 70 % (Godkänt), DigiExam provets poänggräns (E-prov: mer än hälften).
  */
 import type { Elev, Struktur, Vardnadshavare } from './typer.js';
+import { koderForProv } from './delkapitelkoder.js';
 import { godkantGransFor, klaratKrav, kravFor, nivaText, resultatProcent, TYPNAMN, type Resultat, type ResultatKalla } from './resultat.js';
 
 export const ELEVKORT_KALLOR: ResultatKalla[] = ['socrative-laxforhor', 'socrative-exit', 'socrative-ovning', 'digiexam', 'magma'];
@@ -27,6 +28,8 @@ export interface ElevkortPunkt {
   /** 'Bra', 'Godkänt', 'Under godkänd nivå', '8 av 14 p (godkänt från 8)' … */
   omdome: string;
   omprov?: boolean;
+  /** Del 172 · Delkapitelkoder provet täcker (ur rum/quiznamn), tom när inget går att läsa ut (t.ex. screening). */
+  koder: string[];
 }
 
 export interface ElevkortSerie {
@@ -62,13 +65,13 @@ function punkt(r: Resultat): ElevkortPunkt {
   if (r.kalla === 'digiexam') {
     const g = godkantGransFor(r);
     return {
-      datum: r.datum, prov: r.prov, procent, poang: r.poang, maxPoang: r.maxPoang,
+      datum: r.datum, prov: r.prov, procent, poang: r.poang, maxPoang: r.maxPoang, koder: koderForProv(r.prov, r.rum),
       klarat: g === null ? null : r.poang >= g,
       omdome: `${p(r.poang)} av ${p(r.maxPoang)} p${g !== null ? (r.poang >= g ? ' · godkänt' : ` · ej godkänt (gräns ${g})`) : ' · gräns saknas'}`,
       ...(r.omprov === true || /omprov/i.test(r.prov) ? { omprov: true } : {}),
     };
   }
-  return { datum: r.datum, prov: r.prov, procent, poang: r.poang, maxPoang: r.maxPoang, klarat: klaratKrav(r), omdome: nivaText(r.kalla, procent) };
+  return { datum: r.datum, prov: r.prov, procent, poang: r.poang, maxPoang: r.maxPoang, koder: koderForProv(r.prov, r.rum), klarat: klaratKrav(r), omdome: nivaText(r.kalla, procent) };
 }
 
 /** Elevkortet för en elev, valfritt avgränsat till ett ämne. */
