@@ -48,6 +48,7 @@ import {
 import { exportJson, importJson, lasInstallning, lasStruktur, sparaInstallning, sparaStruktur } from './store.js';
 import { RapportdesignVy, MallRendering, Trendsteg } from './rapportdesign.js';
 import { MagmaImport } from './MagmaImport.js';
+import { ImportFragor, type VantandeImport } from './ImportFragor.js';
 import { DigiExamImport } from './DigiExamImport.js';
 import { TeamsImport } from './TeamsImport.js';
 import { Utvecklingssamtal } from './Utvecklingssamtal.js';
@@ -5716,10 +5717,13 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn }: {
     const ordinarie = dx !== null && dx.omprov ? ordinarieProvFor(lasStruktur(), klass.id, amne.id, dx) : null;
     const dxNyckel = ordinarie?.provNyckel ?? dx?.nyckel;
     const dxGrans = ordinarie?.godkantGrans ?? (dx === null ? null : digiexamProvTyp(dx.namn) === 'E' && maxRad > 0 ? eProvGrans(maxRad) : null);
-    kor(() => importeraResultat(lasStruktur(), {
+    const underlag = {
       klassId: klass.id, amneId: amne.id, kalla, prov: prov.trim(), datum, rader,
       ...(dx !== null ? { provNyckel: dxNyckel, ...(dx.omprov ? { omprov: true } : {}), ...(dxGrans !== null ? { godkantGrans: dxGrans } : {}) } : {}),
-    }).s, `${rader.length - omatchade.length} resultat sparade på ${amne.namn} · ${prov.trim()}${omatchade.length > 0 ? ` — ⚠ omatchade: ${omatchade.join(', ')}` : ''}`);
+    };
+    const u = importeraResultat(lasStruktur(), underlag);
+    kor(() => u.s, `${u.traffar} resultat sparade på ${amne.namn} · ${prov.trim()}${u.omatchade.length > 0 ? ` — ⚠ omatchade: ${u.omatchade.join(', ')}` : ''}${u.fragor.length > 0 ? ` · ${u.fragor.length} namn behöver ett svar nedan` : ''}`);
+    if (u.fragor.length > 0) setVantande([{ etikett: `${klass.namn} · ${amne.namn} · ${prov.trim()}`, underlag, fragor: u.fragor }]);
     setRadText(''); setProv('');
   };
 
@@ -5746,6 +5750,8 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn }: {
     typAndrad?: boolean;
   }
   const [filRader, setFilRader] = useState<FilRad[]>([]);
+  // Del 181: namn som passar flera elever → frågor efter importen (filer och inklistrade rader)
+  const [vantande, setVantande] = useState<VantandeImport[]>([]);
   const [importeraOm, setImporteraOm] = useState(false);
   // Del 155: elever i rapportens roster som saknas i klassen läggs till vid import (som standard)
   const [kompletteraKlass, setKompletteraKlass] = useState(true);
@@ -5810,17 +5816,22 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn }: {
       st = u.struktur; nyaElever = u.tillagda;
     }
     let resultat = 0;
+    const nyaVantande: VantandeImport[] = [];
     for (const f of importerbara) {
-      const u = importeraResultat(st, {
+      const underlag = {
         klassId: klass.id, amneId: f.amneId!, kalla: f.kalla!, prov: f.quiz, datum: f.datum, rum: f.rum, ...(f.tid !== null ? { tid: f.tid } : {}),
         ...(f.typAndrad !== true ? { autoTyp: true } : {}), rader: f.rader,
-      });
+      };
+      const u = importeraResultat(st, underlag);
       resultat += u.traffar;
-      st = registreraFil(u.s, { amneId: f.amneId!, filnamn: f.filnamn, importerad: new Date().toISOString(), kalla: f.kalla!, prov: f.quiz, datum: f.datum, traffar: u.traffar, rum: f.rum });
+      const fil = { amneId: f.amneId!, filnamn: f.filnamn, importerad: new Date().toISOString(), kalla: f.kalla!, prov: f.quiz, datum: f.datum, rum: f.rum };
+      st = registreraFil(u.s, { ...fil, traffar: u.traffar });
+      if (u.fragor.length > 0) nyaVantande.push({ etikett: `${klass.namn} · ${f.amnesNamn} · ${f.quiz}`, underlag, fragor: u.fragor, fil });
     }
     const klar = st;
-    kor(() => klar, `${importerbara.length} filer importerade (${resultat} resultat)${nyaElever.length > 0 ? ` · ${nyaElever.length} elever tillagda i ${klass.namn} ur Socrative-rostern: ${nyaElever.join(', ')}` : ''}.`);
+    kor(() => klar, `${importerbara.length} filer importerade (${resultat} resultat)${nyaElever.length > 0 ? ` · ${nyaElever.length} elever tillagda i ${klass.namn} ur Socrative-rostern: ${nyaElever.join(', ')}` : ''}${nyaVantande.length > 0 ? ` · ${nyaVantande.reduce((a, v) => a + v.fragor.length, 0)} namn behöver ett svar` : ''}.`);
     setFilRader([]);
+    setVantande(nyaVantande);
   };
 
   const idag = new Date().toISOString().slice(0, 10);
@@ -5838,6 +5849,7 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn }: {
       <h2>📊 SuperTeach — resultat <small className="muted" style={{ fontWeight: 400 }}>· {omf.etikett}</small></h2>
       {/* Del 152: provlarm — alla ska vara godkända på DigiExam-proven */}
       <DigiExamLarmPanel s={s} klassId={klass.id} {...(amne !== undefined ? { amneId: amne.id } : {})} tyst />
+      {vantande.length > 0 && <ImportFragor vantande={vantande} kor={kor} onKlar={() => setVantande([])} />}
       <div className="rad" style={{ flexWrap: 'wrap', gap: 8 }}>
         <label>Klass:{' '}
           <select aria-label="SuperTeach klass" value={klass.id} onChange={(e) => { setKlassId(e.target.value); setAmneId(''); }}>

@@ -129,6 +129,7 @@ export function DigiExamImport({ s, klass, amne, kor }: {
   const importera = () => {
     if (amne === undefined) return;
     let sparade = 0; let nyaElever = 0; let eposter = 0;
+    const tveksamma: string[] = [];
     kor(() => {
       let st = lasStruktur();
       for (const f of importerbara) {
@@ -157,13 +158,15 @@ export function DigiExamImport({ s, klass, amne, kor }: {
             klassId: klass.id, amneId: amne.id, kalla: 'digiexam', prov: omprovNamn(f.info.namn), datum: f.datum,
             godkantGrans: grans, provNyckel: f.info.nyckel, omprov: true, rader: somOmprov.map(rad),
           });
-          u = { s: v.s, traffar: u.traffar + v.traffar, omatchade: [...u.omatchade, ...v.omatchade] };
+          u = { s: v.s, traffar: u.traffar + v.traffar, omatchade: [...u.omatchade, ...v.omatchade], fragor: [...u.fragor, ...v.fragor] };
         }
         st = registreraFil(u.s, { amneId: amne.id, filnamn: f.filnamn, importerad: new Date().toISOString(), kalla: 'digiexam', prov: f.prov.trim(), datum: f.datum, traffar: u.traffar });
         sparade += u.traffar;
+        // Del 181: namn som passar flera elever hoppas över här — DigiExam kopplar via e-post, så lägg in e-posten på eleven och importera om
+        tveksamma.push(...u.fragor.map((q) => `${q.namn} (${q.kandidater.map((k) => k.elev.namn).join(' / ')})`));
       }
       return st;
-    }, `${importerbara.length} DigiExam-prov importerade — ${sparade} elevresultat sparade på ${amne.namn}${nyaElever > 0 ? ` · ${nyaElever} nya elever tillagda i ${klass.namn}` : ''}${eposter > 0 ? ` · e-post sparad på ${eposter} elever` : ''}.`);
+    }, `${importerbara.length} DigiExam-prov importerade — ${sparade} elevresultat sparade på ${amne.namn}${nyaElever > 0 ? ` · ${nyaElever} nya elever tillagda i ${klass.namn}` : ''}${eposter > 0 ? ` · e-post sparad på ${eposter} elever` : ''}${tveksamma.length > 0 ? ` · ⚠ namn som passar flera elever hoppades över — lägg in e-posten på rätt elev och importera om: ${tveksamma.join(', ')}` : ''}.`);
     setFiler([]);
   };
 

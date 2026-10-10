@@ -89,6 +89,8 @@ export interface ImportUnderlag {
   /** Del 152 (DigiExam): gräns för godkänt, omprov och provnyckel sätts på varje resultat. */
   godkantGrans?: number;
   omprov?: boolean;
+  /** Del 181: lärarens svar på frågorna från en tidigare import av samma rader. */
+  beslut?: ImportBeslut;
   provNyckel?: string;
   rader: ImportRad[];
 }
@@ -99,7 +101,33 @@ export interface ImportUtfall {
   traffar: number;
   /** Namn som inte kunde matchas — visas för läraren för manuell hantering. */
   omatchade: string[];
+  /**
+   * Del 181 · Rader som appen måste fråga om innan de sparas: namnet passar flera elever lika bra
+   * ('tveksam'), och de kan redan ha olika resultat på provet — är det samma person (vilken?), eller
+   * ett annat tillfälle med annat datum (behåll båda)? Besvaras med `beslut` i en ny import.
+   */
+  fragor: ImportFraga[];
 }
+
+/** Del 181 · En elev som kan vara den i filen, med elevens befintliga resultat på samma prov. */
+export interface ImportKandidat { elev: Elev; befintligt: Resultat | null }
+export interface ImportFraga {
+  /** Namnet som det står i filen. */
+  namn: string;
+  rad: ImportRad;
+  slag: 'tveksam';
+  /** Eleverna som passar, med sitt befintliga resultat på samma prov (null = inget). */
+  kandidater: ImportKandidat[];
+}
+/**
+ * Lärarens svar per namn (normaliserat med `namnNyckelFor`): vilken elev raden hör till och, vid
+ * konflikt, vad som ska hända — 'ersatt' (samma person, det nya gäller), 'behall-bada' (olika
+ * datum/tillfällen) eller 'behall-gammalt'. 'hoppa' = importera inte raden.
+ */
+export type ImportBeslut = Record<string, { elevId: string; atgard?: 'ersatt' | 'behall-bada' | 'behall-gammalt' } | 'hoppa'>;
+
+/** Nyckeln ett beslut lagras under. */
+export function namnNyckelFor(namn: string): string { return namn.toLowerCase().replace(/,/g, ' ').replace(/\s+/g, ' ').trim(); }
 
 /** BAM-kravet för en källa i procent, eller null när inget fast krav finns (DigiExam). */
 export function kravFor(kalla: ResultatKalla): number | null {
@@ -219,30 +247,39 @@ export function sammaPersonUtanMellannamn(a: string, b: string): boolean {
  * annars entydig förnamnsträff (Socrative låter elever skriva bara förnamn).
  */
 export function matchaElev(s: Struktur, klassId: string, namn: string, sidId?: string): Elev | null {
+  return matchaElevKandidater(s, klassId, namn, sidId).elev;
+}
+
+/**
+ * Del 181 · Som matchaElev, men när flera elever passar lika bra ('Alice Hultman' kan vara två
+ * elever) returneras kandidaterna så att appen kan fråga i stället för att gissa.
+ */
+export function matchaElevKandidater(s: Struktur, klassId: string, namn: string, sidId?: string): { elev: Elev | null; kandidater: Elev[] } {
   const elever = s.elever.filter((e) => e.klassId === klassId);
+  const en = (lista: Elev[]) => (lista.length === 1 ? { elev: lista[0], kandidater: lista } : null);
   if (sidId !== undefined && sidId.trim() !== '') {
     const viaId = elever.filter((e) => (e.socrativeId ?? '').toLowerCase().trim() === sidId.toLowerCase().trim());
-    if (viaId.length === 1) return viaId[0];
+    if (viaId.length === 1) return { elev: viaId[0], kandidater: viaId };
   }
   const mal = normalisera(namn);
   if (mal.includes('@')) {
     const viaEpost = elever.find((e) => (e.epost ?? '').toLowerCase().trim() === mal);
-    if (viaEpost) return viaEpost;
+    if (viaEpost) return { elev: viaEpost, kandidater: [viaEpost] };
   }
-  const exakt = elever.find((e) => normalisera(e.namn) === mal);
-  if (exakt) return exakt;
+  const exakt = elever.filter((e) => normalisera(e.namn) === mal);
+  if (exakt.length >= 1) return en(exakt) ?? { elev: null, kandidater: exakt };
   const nyckel = namnNyckel(namn);
   const flippad = elever.filter((e) => namnNyckel(e.namn) === nyckel);
-  if (flippad.length === 1) return flippad[0];
+  if (flippad.length >= 1) return en(flippad) ?? { elev: null, kandidater: flippad };
   // Del 157: elever som bytt namn matchas också på sina tidigare namn
   const tidigare = elever.filter((e) => (e.tidigareNamn ?? []).some((n) => normalisera(n) === mal || namnNyckel(n) === nyckel));
-  if (tidigare.length === 1) return tidigare[0];
+  if (tidigare.length >= 1) return en(tidigare) ?? { elev: null, kandidater: tidigare };
   // Del 180: med eller utan mellannamn ('Alice Hultman' ↔ 'Alice Alexandrou Hultman'), även mot tidigare namn
   const mellannamn = elever.filter((e) => sammaPersonUtanMellannamn(e.namn, namn) || (e.tidigareNamn ?? []).some((n) => sammaPersonUtanMellannamn(n, namn)));
-  if (mellannamn.length === 1) return mellannamn[0];
+  if (mellannamn.length >= 1) return en(mellannamn) ?? { elev: null, kandidater: mellannamn };
   const fornamn = elever.filter((e) => normalisera(e.namn).split(' ')[0] === mal);
-  if (fornamn.length === 1) return fornamn[0];
-  return null;
+  if (fornamn.length >= 1) return en(fornamn) ?? { elev: null, kandidater: fornamn };
+  return { elev: null, kandidater: [] };
 }
 
 /**
@@ -258,10 +295,31 @@ export function importeraResultat(s: Struktur, u: ImportUnderlag): ImportUtfall 
   }
   if (u.prov.trim() === '') throw new Error('Provet måste ha ett namn.');
   const omatchade: string[] = [];
+  const fragor: ImportFraga[] = [];
   const nya: Resultat[] = [];
+  const provNamn = u.prov.trim();
+  const befintligtFor = (elevId: string): Resultat | null => (s.resultat ?? []).find((r) => r.elevId === elevId && r.kalla === u.kalla && r.prov === provNamn) ?? null;
+  // Del 181: rader som inte ska ersätta elevens befintliga resultat (olika datum — behåll båda)
+  const behallBada = new Set<string>();
   for (const rad of u.rader) {
-    const elev = (rad.epost !== undefined && rad.epost.trim() !== '' ? matchaElev(s, u.klassId, rad.epost) : null) ?? matchaElev(s, u.klassId, rad.namn, rad.sidId);
-    if (elev === null) { omatchade.push(rad.namn); continue; }
+    const beslut = u.beslut?.[namnNyckelFor(rad.namn)];
+    if (beslut === 'hoppa') continue;
+    let elev: Elev | null = null;
+    if (beslut !== undefined) {
+      elev = s.elever.find((e) => e.id === beslut.elevId) ?? null;
+      if (elev === null) { omatchade.push(rad.namn); continue; }
+      if (beslut.atgard === 'behall-gammalt') continue;
+      if (beslut.atgard === 'behall-bada') behallBada.add(elev.id);
+    } else {
+      const m = (rad.epost !== undefined && rad.epost.trim() !== '' ? matchaElevKandidater(s, u.klassId, rad.epost) : null);
+      const mm = m !== null && m.elev !== null ? m : matchaElevKandidater(s, u.klassId, rad.namn, rad.sidId);
+      elev = mm.elev;
+      if (elev === null) {
+        // Flera elever passar → fråga i stället för att gissa
+        if (mm.kandidater.length >= 2) { fragor.push({ namn: rad.namn, rad, slag: 'tveksam', kandidater: mm.kandidater.map((e) => ({ elev: e, befintligt: befintligtFor(e.id) })) }); continue; }
+        omatchade.push(rad.namn); continue;
+      }
+    }
     nya.push({
       id: nyttId('res'), elevId: elev.id, kalla: u.kalla, prov: u.prov.trim(),
       datum: u.datum, poang: rad.poang, maxPoang: rad.maxPoang,
@@ -276,17 +334,17 @@ export function importeraResultat(s: Struktur, u: ImportUnderlag): ImportUtfall 
     });
   }
   const nyckel = (r: Resultat) => `${r.elevId}|${r.kalla}|${r.prov}`;
-  const ersatta = new Set(nya.map(nyckel));
+  const ersatta = new Set(nya.filter((r) => !behallBada.has(r.elevId)).map(nyckel));
   if (u.kalla === 'magma') {
     // Del 176: två Magma-diagnoser med samma namn kombineras — per elev räknas det senaste försöket,
     // om det inte har mycket färre gjorda uppgifter än det tidigare (då behålls det tidigare)
     const tidigare = new Map((s.resultat ?? []).filter((r) => ersatta.has(nyckel(r))).map((r) => [nyckel(r), r]));
     const valda = nya.map((r) => { const f = tidigare.get(nyckel(r)); return f === undefined ? r : valjMagmaResultat(f, r); });
     const kvar = (s.resultat ?? []).filter((r) => !ersatta.has(nyckel(r)));
-    return { s: { ...s, resultat: [...kvar, ...valda] }, traffar: nya.length, omatchade };
+    return { s: { ...s, resultat: [...kvar, ...valda] }, traffar: nya.length, omatchade, fragor };
   }
   const kvar = (s.resultat ?? []).filter((r) => !ersatta.has(nyckel(r)));
-  return { s: { ...s, resultat: [...kvar, ...nya] }, traffar: nya.length, omatchade };
+  return { s: { ...s, resultat: [...kvar, ...nya] }, traffar: nya.length, omatchade, fragor };
 }
 
 /** Alla resultat för en elev, senaste datum först. */

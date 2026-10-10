@@ -13,6 +13,7 @@ import {
 } from '@planner/kernel';
 import { lasStruktur } from './store.js';
 import { MagmaUppgifter } from './MagmaUppgifter.js';
+import { ImportFragor, type VantandeImport } from './ImportFragor.js';
 
 const OMDOME_KLASS: Record<MagmaOmdome, string> = { 'Under godkänt': 'ej', 'Godkänt': 'ok', 'Bra': 'bra', 'Utmärkt': 'utmarkt' };
 
@@ -46,6 +47,8 @@ export function MagmaImport({ s, klass, amne, kor }: {
   const antalElever = s.elever.filter((e) => e.klassId === klass.id).length;
   // Klass utan elever: Magma-filen är den bästa klasslistan som finns — skapa eleverna direkt
   const [skapaElever, setSkapaElever] = useState(antalElever === 0);
+  // Del 181: namn som passar flera elever → frågor efter importen
+  const [vantande, setVantande] = useState<VantandeImport[]>([]);
   const idag = new Date().toISOString().slice(0, 10);
 
   const lasFiler = async (lista: FileList | null) => {
@@ -77,6 +80,7 @@ export function MagmaImport({ s, klass, amne, kor }: {
   const importera = () => {
     if (amne === undefined) return;
     let sparade = 0; let nyaElever = 0;
+    const nyaVantande: VantandeImport[] = [];
     kor(() => {
       let st = lasStruktur();
       for (const f of importerbara) {
@@ -87,16 +91,20 @@ export function MagmaImport({ s, klass, amne, kor }: {
             if (matchaElev(st, klass.id, r.namn) === null) { st = laggTillElev(st, { id: nyttId('elev'), klassId: klass.id, namn: r.namn, grupp: 'A' }); nyaElever += 1; }
           }
         }
-        const u = importeraResultat(st, {
-          klassId: klass.id, amneId: amne.id, kalla: 'magma', prov: f.prov.trim(), datum: f.datum,
+        const underlag = {
+          klassId: klass.id, amneId: amne.id, kalla: 'magma' as const, prov: f.prov.trim(), datum: f.datum,
           rader: deltagare.map((r) => ({ namn: r.namn, poang: r.poang, maxPoang: r.maxPoang, svar: r.svar })),
-        });
-        st = registreraFil(u.s, { amneId: amne.id, filnamn: f.filnamn, importerad: new Date().toISOString(), kalla: 'magma', prov: f.prov.trim(), datum: f.datum, traffar: u.traffar });
+        };
+        const u = importeraResultat(st, underlag);
+        const fil = { amneId: amne.id, filnamn: f.filnamn, importerad: new Date().toISOString(), kalla: 'magma' as const, prov: f.prov.trim(), datum: f.datum };
+        st = registreraFil(u.s, { ...fil, traffar: u.traffar });
         sparade += u.traffar;
+        if (u.fragor.length > 0) nyaVantande.push({ etikett: `${klass.namn} · ${amne.namn} · ${f.prov.trim()}`, underlag, fragor: u.fragor, fil });
       }
       return st;
-    }, `${importerbara.length} Magma-prov importerade — ${sparade} elevresultat sparade på ${amne.namn}${nyaElever > 0 ? ` · ${nyaElever} nya elever tillagda i ${klass.namn}` : ''}.`);
+    }, `${importerbara.length} Magma-prov importerade — ${sparade} elevresultat sparade på ${amne.namn}${nyaElever > 0 ? ` · ${nyaElever} nya elever tillagda i ${klass.namn}` : ''}${nyaVantande.length > 0 ? ` · ${nyaVantande.reduce((a, v) => a + v.fragor.length, 0)} namn behöver ett svar nedan` : ''}.`);
     setFiler([]);
+    setVantande(nyaVantande);
   };
 
   return (
@@ -161,6 +169,7 @@ export function MagmaImport({ s, klass, amne, kor }: {
         </div>
       )}
 
+      {vantande.length > 0 && <ImportFragor vantande={vantande} kor={kor} onKlar={() => setVantande([])} />}
       <MagmaUppgifter s={s} klass={klass} amne={amne} kor={kor} />
       <MagmaAnalysVy s={s} klass={klass} amne={amne} />
       <MagmaSparade s={s} klass={klass} amne={amne} kor={kor} />

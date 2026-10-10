@@ -210,3 +210,55 @@ describe('Del 180 · samma elev med och utan mellannamn', () => {
     expect(hittaDubbletter(r.s, 'k')).toEqual([]);
   });
 });
+
+import { importeraResultat as importera, matchaElevKandidater } from '../src/index.js';
+
+describe('Del 181 · namn som passar flera elever: appen frågar i stället för att gissa', () => {
+  function bas() {
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '26/27', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'ma', klassId: 'k', namn: 'Matematik', schema: [{ dag: 2, start: '10:00', slut: '11:00' }] });
+    // Två elever som båda kan vara "Anna Testsson" i en fil
+    s = laggTillElev(s, { id: 'e1', klassId: 'k', namn: 'Anna Berg Testsson', grupp: 'A' });
+    s = laggTillElev(s, { id: 'e2', klassId: 'k', namn: 'Anna Lind Testsson', grupp: 'A' });
+    s = laggTillElev(s, { id: 'e3', klassId: 'k', namn: 'Omar Ali', grupp: 'B' });
+    return s;
+  }
+  it('entydiga namn matchas automatiskt; tveksamma rader sparas inte utan blir frågor med kandidater och befintliga resultat', () => {
+    let s = bas();
+    s = { ...s, resultat: [{ id: 'r1', elevId: 'e1', amneId: 'ma', kalla: 'magma', prov: 'Ma 8B Kap 1 Diagnos', datum: '2026-10-01', poang: 9, maxPoang: 10 }] };
+    expect(matchaElevKandidater(s, 'k', 'Anna Testsson').elev).toBeNull();
+    expect(matchaElevKandidater(s, 'k', 'Anna Testsson').kandidater.map((e) => e.id)).toEqual(['e1', 'e2']);
+    const u = importera(s, { klassId: 'k', amneId: 'ma', kalla: 'magma', prov: 'Ma 8B Kap 1 Diagnos', datum: '2026-10-08', rader: [
+      { namn: 'Anna Testsson', poang: 6, maxPoang: 10 }, { namn: 'Omar Ali', poang: 8, maxPoang: 10 }] });
+    expect(u.traffar).toBe(1);
+    expect(u.omatchade).toEqual([]);
+    expect(u.fragor).toHaveLength(1);
+    expect(u.fragor[0]).toMatchObject({ namn: 'Anna Testsson', slag: 'tveksam' });
+    expect(u.fragor[0].kandidater.map((k) => [k.elev.id, k.befintligt?.poang ?? null])).toEqual([['e1', 9], ['e2', null]]);
+    // Inget sparades för Anna
+    expect(resultatForElev(u.s, 'e1')).toHaveLength(1);
+    expect(resultatForElev(u.s, 'e2')).toHaveLength(0);
+  });
+  it('svaren styr: samma person ersätter, annat datum behåller båda, hoppa över importerar inte', () => {
+    let s = bas();
+    s = { ...s, resultat: [{ id: 'r1', elevId: 'e1', amneId: 'ma', kalla: 'socrative-exit', prov: '1.1 Exit', datum: '2026-10-01', poang: 9, maxPoang: 10 }] };
+    const underlag = { klassId: 'k', amneId: 'ma', kalla: 'socrative-exit' as const, prov: '1.1 Exit', datum: '2026-10-08', rader: [{ namn: 'Anna Testsson', poang: 6, maxPoang: 10 }] };
+    // Samma person (e1) — det nya ersätter
+    const a = importera(s, { ...underlag, beslut: { 'anna testsson': { elevId: 'e1', atgard: 'ersatt' } } });
+    expect(a.fragor).toEqual([]);
+    expect(resultatForElev(a.s, 'e1').map((r) => [r.datum, r.poang])).toEqual([['2026-10-08', 6]]);
+    // Samma person, annat tillfälle — båda behålls
+    const b = importera(s, { ...underlag, beslut: { 'anna testsson': { elevId: 'e1', atgard: 'behall-bada' } } });
+    expect(resultatForElev(b.s, 'e1').map((r) => [r.datum, r.poang])).toEqual([['2026-10-08', 6], ['2026-10-01', 9]]);
+    // Den andra eleven
+    const c = importera(s, { ...underlag, beslut: { 'anna testsson': { elevId: 'e2' } } });
+    expect(resultatForElev(c.s, 'e2')).toHaveLength(1);
+    expect(resultatForElev(c.s, 'e1')).toHaveLength(1);
+    // Hoppa över
+    const d = importera(s, { ...underlag, beslut: { 'anna testsson': 'hoppa' } });
+    expect(d.traffar).toBe(0);
+    expect(d.s.resultat).toHaveLength(1);
+  });
+});
