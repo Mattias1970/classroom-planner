@@ -198,6 +198,21 @@ function namnNyckel(namn: string): string {
 }
 
 /**
+ * Del 180 · Samma person med eller utan mellannamn: 'Alice Hultman' = 'Alice Alexandrou Hultman'.
+ * Första och sista namnet lika, och alla namn i det kortare finns i det längre (i ordning).
+ */
+export function sammaPersonUtanMellannamn(a: string, b: string): boolean {
+  const na = normalisera(a).split(' ').filter((x) => x !== '');
+  const nb = normalisera(b).split(' ').filter((x) => x !== '');
+  if (na.length < 2 || nb.length < 2 || na.length === nb.length) return na.join(' ') === nb.join(' ') && na.length >= 2;
+  const [kort, lang] = na.length < nb.length ? [na, nb] : [nb, na];
+  if (kort[0] !== lang[0] || kort[kort.length - 1] !== lang[lang.length - 1]) return false;
+  let i = 0;
+  for (const ord of lang) if (i < kort.length && ord === kort[i]) i += 1;
+  return i === kort.length;
+}
+
+/**
  * Matchar ett namn ur en resultatfil mot klassens elever. Ett Student ID
  * som finns i rostern (`socrativeId`) vinner alltid.
  * Exakt (normaliserad) träff vinner; annars ordningsoberoende ('Efternamn, Förnamn');
@@ -222,6 +237,9 @@ export function matchaElev(s: Struktur, klassId: string, namn: string, sidId?: s
   // Del 157: elever som bytt namn matchas också på sina tidigare namn
   const tidigare = elever.filter((e) => (e.tidigareNamn ?? []).some((n) => normalisera(n) === mal || namnNyckel(n) === nyckel));
   if (tidigare.length === 1) return tidigare[0];
+  // Del 180: med eller utan mellannamn ('Alice Hultman' ↔ 'Alice Alexandrou Hultman'), även mot tidigare namn
+  const mellannamn = elever.filter((e) => sammaPersonUtanMellannamn(e.namn, namn) || (e.tidigareNamn ?? []).some((n) => sammaPersonUtanMellannamn(n, namn)));
+  if (mellannamn.length === 1) return mellannamn[0];
   const fornamn = elever.filter((e) => normalisera(e.namn).split(' ')[0] === mal);
   if (fornamn.length === 1) return fornamn[0];
   return null;

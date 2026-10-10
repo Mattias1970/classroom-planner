@@ -35,7 +35,7 @@ import {
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
   elevrapport, elevrapportText, tillfalleEtiketter, normeradSpridning, klusterKurvor, normeraBand, taBortFil, rensaResultat,
   NORM_BAND, NORM_MAX, amnesKallor, lektionstester, elevLektionstest, tillfalleKortEtikett, KLUSTER_NAMN, TID_PASS, type Kluster,
-  begransaTillElever, elevUrval, klassensElever, type ElevUrvalVal, arSocrative, elevIKlassen, sattElevStatus, rattaNamnordning,
+  begransaTillElever, elevUrval, klassensElever, type ElevUrvalVal, arSocrative, elevIKlassen, sattElevStatus, rattaNamnordning, hittaDubbletter, slaIhopDubbletter,
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
@@ -1168,6 +1168,15 @@ function Elevlista({ s, klassId, klassNamn, kor }: {
     <div className="elevlista">
       <h3>Elever <small className="muted">{elever.length} i klassen · Grupp A: {antal('A')} · Grupp B: {antal('B')}</small>{' '}
         <button className="btn sec sm" aria-expanded={visaSlutade} disabled={slutade.length === 0} onClick={() => setVisaSlutade(!visaSlutade)}>👋 Elever som slutat ({slutade.length})</button>{' '}
+        {hittaDubbletter(s, klassId).length > 0 && (
+          <button className="btn sec sm" title="Samma elev med och utan mellannamn ('Alice Hultman' och 'Alice Alexandrou Hultman') slås ihop — resultaten flyttas till namnet med mellannamn"
+            onClick={() => {
+              const d = hittaDubbletter(lasStruktur(), klassId);
+              if (!window.confirm(`Slå ihop ${d.length} dubbletter i ${klassNamn}?\n\n${d.map((x) => `${x.fran.namn} → ${x.till.namn}`).join('\n')}\n\nAlla resultat flyttas till namnet med mellannamn; det kortare namnet sparas som tidigare namn så att nya filer matchar.`)) return;
+              const r = slaIhopDubbletter(lasStruktur(), klassId);
+              kor(() => r.s, `${r.ihop.length} dubbletter ihopslagna: ${r.ihop.map((x) => `${x.fran} → ${x.till} (${x.flyttade} resultat)`).join(' · ')}.`);
+            }}>🔗 Slå ihop dubbletter ({hittaDubbletter(s, klassId).length})</button>
+        )}{' '}
         {alla.some((e) => e.namn.includes(',')) && (
           <button className="btn sec sm" title="Namn som står 'Efternamn, Förnamn' skrivs om till 'Förnamn Efternamn'"
             onClick={() => { const r = rattaNamnordning(lasStruktur(), klassId); kor(() => r.s, `${r.rattade.length} namn rättade: ${r.rattade.map((x) => `${x.fore} → ${x.efter}`).join(' · ')}.`); }}>

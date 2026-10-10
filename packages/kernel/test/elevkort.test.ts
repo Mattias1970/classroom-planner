@@ -170,3 +170,43 @@ describe('Del 157 · namnordning', () => {
     expect(r.s.elever.find((e) => e.id === 'n2')!.tidigareNamn).toBeUndefined();   // samma namn i annan ordning matchar ändå
   });
 });
+
+import { hittaDubbletter, resultatForElev, sammaPersonUtanMellannamn, slaIhopDubbletter } from '../src/index.js';
+
+describe('Del 180 · samma elev med och utan mellannamn', () => {
+  it('matchar namn ur resultatfiler med eller utan mellannamn', () => {
+    expect(sammaPersonUtanMellannamn('Alice Hultman', 'Alice Alexandrou Hultman')).toBe(true);
+    expect(sammaPersonUtanMellannamn('Alice Alexandrou Hultman', 'alice hultman')).toBe(true);
+    expect(sammaPersonUtanMellannamn('Alice Hultman', 'Alice Hultman Berg')).toBe(false);   // olika efternamn
+    expect(sammaPersonUtanMellannamn('Alice Hultman', 'Alicia Hultman')).toBe(false);
+    expect(sammaPersonUtanMellannamn('Anna', 'Anna Berg')).toBe(false);                    // bara förnamn räcker inte
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '26/27', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'ma', klassId: 'k', namn: 'Matematik', schema: [{ dag: 2, start: '10:00', slut: '11:00' }] });
+    s = laggTillElev(s, { id: 'e1', klassId: 'k', namn: 'Anna Berg Testsson', grupp: 'A' });
+    s = laggTillElev(s, { id: 'e2', klassId: 'k', namn: 'Omar Ali', grupp: 'B' });
+    // Magma-filen har namnet utan mellannamn → resultatet hamnar på Anna Berg Testsson
+    const u = importeraResultat(s, { klassId: 'k', amneId: 'ma', kalla: 'magma', prov: 'Ma 8B Kap 1 Diagnos 1.1 - 1.2', datum: '2026-09-05', rader: [{ namn: 'Anna Testsson', poang: 8, maxPoang: 10 }] });
+    expect(u.omatchade).toEqual([]);
+    expect(resultatForElev(u.s, 'e1')).toHaveLength(1);
+  });
+  it('dubbletter i klassen hittas och slås ihop till namnet med mellannamn; resultaten följer med', () => {
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '26/27', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'ma', klassId: 'k', namn: 'Matematik', schema: [{ dag: 2, start: '10:00', slut: '11:00' }] });
+    s = laggTillElev(s, { id: 'e1', klassId: 'k', namn: 'Anna Berg Testsson', grupp: 'A' });
+    s = laggTillElev(s, { id: 'e2', klassId: 'k', namn: 'Anna Testsson', grupp: 'A' });   // skapad av en tidigare import
+    s = laggTillElev(s, { id: 'e3', klassId: 'k', namn: 'Omar Ali', grupp: 'B' });
+    s = { ...s, resultat: [{ id: 'r1', elevId: 'e2', amneId: 'ma', kalla: 'magma', prov: 'Ma 8B Kap 1 Diagnos', datum: '2026-10-01', poang: 9, maxPoang: 10 }] };
+    const d = hittaDubbletter(s, 'k');
+    expect(d.map((x) => [x.fran.namn, x.till.namn])).toEqual([['Anna Testsson', 'Anna Berg Testsson']]);
+    const r = slaIhopDubbletter(s, 'k');
+    expect(r.ihop).toEqual([{ fran: 'Anna Testsson', till: 'Anna Berg Testsson', flyttade: 1 }]);
+    expect(r.s.elever.map((e) => e.namn)).toEqual(['Anna Berg Testsson', 'Omar Ali']);
+    expect(resultatForElev(r.s, 'e1')).toHaveLength(1);
+    expect(r.s.elever[0].tidigareNamn).toEqual(['Anna Testsson']);
+    expect(hittaDubbletter(r.s, 'k')).toEqual([]);
+  });
+});

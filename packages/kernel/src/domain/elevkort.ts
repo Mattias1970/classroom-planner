@@ -9,7 +9,7 @@
  */
 import type { Elev, Struktur, Vardnadshavare } from './typer.js';
 import { koderForProv } from './delkapitelkoder.js';
-import { godkantGransFor, klaratKrav, kravFor, nivaText, resultatProcent, TYPNAMN, type Resultat, type ResultatKalla } from './resultat.js';
+import { godkantGransFor, klaratKrav, kravFor, nivaText, resultatProcent, sammaPersonUtanMellannamn, TYPNAMN, type Resultat, type ResultatKalla } from './resultat.js';
 
 export const ELEVKORT_KALLOR: ResultatKalla[] = ['socrative-laxforhor', 'socrative-exit', 'socrative-ovning', 'digiexam', 'magma'];
 const RUBRIK: Record<ResultatKalla, string> = {
@@ -211,4 +211,38 @@ export function slaIhopElever(s: Struktur, franId: string, tillId: string): Samm
     } : {}),
   };
   return { s: ut, flyttade, dubbletter };
+}
+
+// ── Del 180 · Dubbletter på grund av mellannamn ─────────────────────────────
+
+export interface Dubblett { /** Posten som slås ihop (det kortare namnet). */ fran: Elev; /** Posten som behålls (namnet med mellannamn). */ till: Elev }
+
+/** Elever i klassen som är samma person med och utan mellannamn ('Alice Hultman' och 'Alice Alexandrou Hultman'). */
+export function hittaDubbletter(s: Struktur, klassId: string): Dubblett[] {
+  const elever = s.elever.filter((e) => e.klassId === klassId);
+  const par: Dubblett[] = [];
+  const tagna = new Set<string>();
+  for (const a of elever) {
+    if (tagna.has(a.id)) continue;
+    for (const b of elever) {
+      if (a.id === b.id || tagna.has(b.id) || a.namn.trim().toLowerCase() === b.namn.trim().toLowerCase()) continue;
+      if (!sammaPersonUtanMellannamn(a.namn, b.namn)) continue;
+      // Behåll det längre namnet (med mellannamn)
+      const [fran, till] = a.namn.split(' ').length <= b.namn.split(' ').length ? [a, b] : [b, a];
+      par.push({ fran, till }); tagna.add(a.id); tagna.add(b.id);
+      break;
+    }
+  }
+  return par.sort((x, y) => x.till.namn.localeCompare(y.till.namn, 'sv'));
+}
+
+/** Slår ihop alla dubbletter i klassen; resultaten flyttas till namnet med mellannamn. */
+export function slaIhopDubbletter(s: Struktur, klassId: string): { s: Struktur; ihop: Array<{ fran: string; till: string; flyttade: number }> } {
+  let ut = s;
+  const ihop: Array<{ fran: string; till: string; flyttade: number }> = [];
+  for (const d of hittaDubbletter(s, klassId)) {
+    const r = slaIhopElever(ut, d.fran.id, d.till.id);
+    ut = r.s; ihop.push({ fran: d.fran.namn, till: d.till.namn, flyttade: r.flyttade });
+  }
+  return { s: ut, ihop };
 }
