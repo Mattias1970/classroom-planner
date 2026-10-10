@@ -16,7 +16,7 @@ import {
   slaIhopPlaneringsmall, tolkaPlaneringsmall,
   handelserPerDatum, kalenderHandelser, klassFarg, noBudget, noOverBudget, sattLektionsplan,
   doldaOmraden, sattOmradeDolt, visaAllaOmraden, LEKTIONSOMRADEN, type LektionsOmrade,
-  foljbaraAmnen, foljPlanering,
+  foljbaraAmnen, foljPlanering, kapitelBorjar,
   kapitelKort, manadsRutor, skolarManader, veckaRutor, viktigaDatum, bamTidslinje, begreppForLektion, bokBegrepp,
   tavelTidslinje, standardBamDelar, bamAvvikelse, exitStartFor, type BamDel,
   bokFromValfriImport, bokSidregister, bokSidregisterCsv, elevSchema, exitStart, giltigtPass,
@@ -2521,6 +2521,36 @@ function KapitelDetalj({ s, bok, kap, kor }: { s: Struktur; bok: Bok; kap: Kapit
 }
 
 /**
+ * Del 183 · Kapitlet börjar ett visst datum: när planen felaktigt lagt ett kapitel tidigare (och märkt det
+ * genomfört) flyttas kapitlets lektioner fram till datumet; passen före blir övningar och egna prov/
+ * diagnoser ligger kvar. Skriver om genomförda pass — därför bekräftelse.
+ */
+function KapitelBorjar({ plan, amneId, kor, idag }: { plan: PlaneradLektion[]; amneId: string; kor: (fn: () => Struktur, m: string) => void; idag: string }) {
+  const kapitel = [...new Set(plan.map((r) => r.kapitel))].filter((k) => k > 0).sort((a, b) => a - b);
+  const [kap, setKap] = useState<number>(kapitel[kapitel.length - 1] ?? 1);
+  const [datum, setDatum] = useState(idag);
+  if (kapitel.length === 0) return null;
+  const fore = plan.filter((r) => r.datum !== null && r.datum < datum && r.kapitel === kap).length;
+  return (
+    <div className="uppg-kort no-print rad" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+      <b>⏩ Kapitlet börjar</b>
+      <select aria-label="Kapitel som ska börja" value={kap} onChange={(e) => setKap(Number(e.target.value))}>
+        {kapitel.map((k) => <option key={k} value={k}>Kapitel {k}</option>)}
+      </select>
+      <label className="small">på <input type="date" aria-label="Kapitlet börjar datum" value={datum} onChange={(e) => { if (e.target.value !== '') setDatum(e.target.value); }} /></label>
+      <button className="btn sm" disabled={fore === 0} onClick={() => {
+        if (!window.confirm(`Låta kapitel ${kap} börja ${datum}?\n\n${fore} lektioner ur kapitel ${kap} (och allt som följer) som ligger före ${datum} flyttas fram i samma ordning — även sådana som är märkta genomförda. Passen som blir tomma före ${datum} blir övningar (byt till det ni faktiskt gjorde). Egna prov, diagnoser, laborationer och egna rader ligger kvar på sina datum.`)) return;
+        try {
+          const r = kapitelBorjar(lasStruktur(), amneId, kap, datum);
+          kor(() => r.s, `Kapitel ${kap} börjar ${datum}: ${r.flyttade} lektioner flyttade fram, ${r.ovningar} pass före blev övningar${r.fasta > 0 ? `, ${r.fasta} egna kort ligger kvar` : ''}.`);
+        } catch (e) { kor(() => { throw e; }, ''); }
+      }}>⏩ Flytta fram kapitlet</button>
+      <small className="muted">{fore === 0 ? `Inga lektioner ur kapitel ${kap} ligger före ${datum}.` : `${fore} lektioner ur kapitel ${kap} ligger före ${datum} — de flyttas fram, passen före blir övningar.`}</small>
+    </div>
+  );
+}
+
+/**
  * Del 149 · Kurserna (delkapitlen) i lärarens ordning. ▲ flyttar kursen tidigare, ▼ senare;
  * hela kursens lektioner följer med och kalendern visar den nya följden. Genomförda kurser låses.
  */
@@ -2632,6 +2662,7 @@ function GruppPlanering(props: {
       {rubrik !== undefined && <h3 className="grupp-h">{rubrik}</h3>}
       {kanAndra && <p className="note no-print">Lektioner som ligger framåt i tiden kan tas bort, ersättas eller få fler lektioner på delkapitlet. Genomförda lektioner ändras aldrig. Lektionsplanerna följer sina lektioner när följden ändras.</p>}
       {kanAndra && <KursOrdning plan={plan} amneId={amneId!} kor={kor!} idag={idag!} />}
+      {kanAndra && <KapitelBorjar plan={plan} amneId={amneId!} kor={kor!} idag={idag!} />}
       <table className="tbl plan clickable">
         <thead><tr><th title="Avklarad">✓</th><th>Nr</th><th>Datum</th><th>Dag</th><th>V.</th><th>Tid</th>{halvklassAmne && <th>Klass</th>}<th>Kap</th><th>Avsnitt</th>{bokHarNivaer(bok) && <><th>{bok.nivaer.niva1}</th><th>{bok.nivaer.niva2}</th><th>{bok.nivaer.niva3}</th></>}{kanAndra && <><th title="Antal lektioner på delkapitlet">Lekt.</th><th></th></>}</tr></thead>
         <tbody>{rader.map(({ r, index: i, klassTyp }, radNr) => {

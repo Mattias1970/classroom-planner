@@ -700,3 +700,65 @@ export function foljPlanering(s: Struktur, malAmneId: string, kallAmneId: string
   if (efter.rymsEj.length > 0) varningar.push(`${efter.rymsEj.length} lektioner ryms inte före läsårets slut i ${klassNamn(mal)}.`);
   return { s: ut, teori: u.teori.length, labbar: u.labbar.length, egnaKort, kort, varningar, ...(veckovis ? { strukna } : {}) };
 }
+
+// ── Del 183 · Kapitlet börjar ett visst datum ───────────────────────────────
+
+export interface KapitelStart {
+  s: Struktur;
+  /** Lektioner som flyttades fram till startdatumet. */
+  flyttade: number;
+  /** Pass före startdatumet som blev övningar. */
+  ovningar: number;
+  /** Egna kort (prov, diagnoser, laborationer, egna rader) som ligger kvar på sina datum. */
+  fasta: number;
+}
+
+/**
+ * Låter kapitel `kapitel` (och allt som följer i bokens ordning) börja på `datum`, även när planen
+ * redan har lagt kapitlets lektioner tidigare och markerat dem som genomförda (planen var fel, inte
+ * verkligheten). Lektionerna från kapitlet och framåt som ligger före datumet flyttas fram i samma
+ * ordning; de pass som blir tomma före datumet blir övningar ("Övning" — byt till det som gjordes).
+ * Egna kort (prov, diagnoser, laborationer, egna rader) ligger kvar på sina datum, före och efter.
+ * Genomförda pass skrivs alltså om — bara på lärarens uttryckliga val.
+ */
+export function kapitelBorjar(s: Struktur, amneId: string, kapitel: number, datum: string): KapitelStart {
+  if (!DATUM.test(datum)) throw new Error('Ange ett datum (ÅÅÅÅ-MM-DD).');
+  const a = hittaAmne(s, amneId);
+  if (a.bokId === undefined) throw new Error('Ämnet saknar bok.');
+  const plan = amnesPlanFor(s, amneId, undefined, false);
+  if (plan === null) throw new Error('Ämnet saknar bok eller skolår.');
+  const rader = plan.a.filter((r) => r.datum !== null && r.nyckel !== undefined && !arPass(r.nyckel!) && !arLab(r.nyckel!));
+  const egna = a.planFranUtkast?.egna ?? [];
+  const arFast = (n: string): boolean => {
+    if (n.startsWith('er:')) return true;
+    const e = egna.find((x) => `u:${x.id}` === n);
+    return e !== undefined && e.typ !== 'lektion' && e.typ !== 'ovning';
+  };
+  const attFlytta = (r: PlaneradLektion) => r.datum! < datum && r.kapitel >= kapitel && !arFast(r.nyckel!);
+  const forsta = rader.find(attFlytta);
+  if (forsta === undefined) throw new Error(`Inga lektioner ur kapitel ${kapitel} ligger före ${datum}.`);
+  const fran = forsta.datum!;
+  // Kön från startdatumet: det som flyttas (i ordning) följt av allt annat som redan låg efter datumet
+  const flyttas = rader.filter(attFlytta).map((r) => r.nyckel!);
+  const efter = rader.filter((r) => r.datum! >= datum && !arFast(r.nyckel!) && !flyttas.includes(r.nyckel!)).map((r) => r.nyckel!);
+  const ko = [...flyttas, ...efter];
+  const fasta = new Map(rader.filter((r) => r.datum! >= fran && arFast(r.nyckel!)).map((r) => [r.datum!, r.nyckel!]));
+  const u: PlanFranUtkast = { namn: `Kapitel ${kapitel} från ${datum}`, fran, teori: [], labbar: [...(a.planFranUtkast?.labbar ?? [])], egna: [...egna] };
+  const pass = planeringstavla(s, amneId, tomtUtkast(u.namn, fran)).kolumner.filter((k) => k.ko === 'teori' && k.datum !== null);
+  let ovningar = 0; let idx = 0;
+  for (const p of pass) {
+    const fast = fasta.get(p.datum!);
+    if (fast !== undefined) { u.teori.push(fast); continue; }
+    if (p.datum! < datum) {
+      const id = `ov-${p.datum}`;
+      u.egna.push({ id, rubrik: 'Övning', typ: 'ovning' }); u.teori.push(`u:${id}`); ovningar += 1;
+      continue;
+    }
+    if (idx >= ko.length) break;
+    u.teori.push(ko[idx++]);
+  }
+  for (; idx < ko.length; idx += 1) u.teori.push(ko[idx]);
+  if (a.planFranUtkast?.provDatum !== undefined && a.planFranUtkast.provDatum >= fran) u.provDatum = a.planFranUtkast.provDatum;
+  const ut = tillampaUtkast(s, amneId, u);
+  return { s: ut, flyttade: flyttas.length, ovningar, fasta: fasta.size };
+}

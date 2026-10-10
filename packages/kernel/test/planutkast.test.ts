@@ -9,7 +9,7 @@ import {
   resetIdRaknare, sattLektionerPerDelkapitel, sattLektionsplan, sparaBok, sparaLaborationer,
 } from '../src/domain/struktur.js';
 import {
-  amnetsUtkast, foljbaraAmnen, foljPlanering, infogaIUtkast, kortDetaljer, laggProvPaDatum, nyttKortIUtkast, planeringstavla, sattKortDetaljer,
+  amnetsUtkast, foljbaraAmnen, foljPlanering, infogaIUtkast, kapitelBorjar, kortDetaljer, laggProvPaDatum, nyttKortIUtkast, planeringstavla, sattKortDetaljer,
   sparaUtkast, taBortUrUtkast, taBortUtkast, tabortInlagtUtkast, tillampaUtkast, utkastFranPlan,
 } from '../src/domain/planutkast.js';
 import { tomStruktur, type Struktur } from '../src/domain/typer.js';
@@ -246,5 +246,37 @@ describe('Del 174 · följ veckovis — samma saker samma vecka', () => {
       '2026-08-24:1:3', '2026-08-26:1:4', '2026-08-28:u:ov-2026-08-28',
       '2026-08-31:1:5', '2026-09-02:1:6', '2026-09-04:1:7']);
     expect(r.strukna).toEqual([]);
+  });
+});
+
+describe('Del 183 · kapitlet börjar ett visst datum — genomförda kapitel 2-lektioner flyttas fram, prov ligger kvar', () => {
+  const MA3 = bokFromImport(JSON.stringify({
+    schema: 'classroom-planner-bok', version: 1,
+    bok: { id: 'ma3', titel: 'Matematik Y', förlag: 'Liber', ämne: 'Matematik', årskurs: 8, kapitelMeta: { '1': { name: 'Tal', col: '#2f5aa8' }, '2': { name: 'Samband', col: '#2f8a58' } } },
+    lektioner: {
+      '1': [{ id: 1, type: 'regular', avsnitt: '1.1 Bråk', del: 1 }, { id: 2, type: 'regular', avsnitt: '1.2 Potenser', del: 1 }, { id: 3, type: 'test', avsnitt: 'Diagnos 1', del: 1 }],
+      '2': [{ id: 1, type: 'regular', avsnitt: '2.1 Andelen', del: 1 }, { id: 2, type: 'regular', avsnitt: '2.2 Delen', del: 1 }],
+    },
+  }));
+  it('2.1 hamnar på startdatumet, passen före blir övningar och lärarens provkort behåller sitt datum', () => {
+    let s = sparaBok(grund(), MA3);
+    s = laggTillAmne(s, { id: 'ma3', klassId: 'k', namn: 'Matematik', bokId: 'ma3', schema: [{ dag: 1, start: '08:10', slut: '09:10' }, { dag: 3, start: '08:10', slut: '09:10' }, { dag: 5, start: '08:10', slut: '09:10' }] });
+    s = registreraPlanering(s, { id: 'pl3', amneId: 'ma3', bokId: 'ma3', skapad: '2026-08-10' });
+    // Planen (fel): 2.1 redan 24/8, lärarens prov 26/8, 2.2 28/8 — allt "genomfört" idag 7/10
+    s = tillampaUtkast(s, 'ma3', { namn: 'Fel', fran: '2026-08-17', teori: ['1:1', '1:2', '1:3', '2:1', 'u:provA', '2:2'], labbar: [], egna: [{ id: 'provA', rubrik: 'Prov kapitel 1', typ: 'prov' }] }, '2026-08-17');
+    s = sattLektionsplan(s, { id: 'lp21', amneId: 'ma3', lektionsIndex: 3, genomgang: 'Andelar i vardagen' });
+    const fore = amnesPlanFor(s, 'ma3', '2026-10-07')!.a.map((r) => `${r.datum}:${r.nyckel}`);
+    expect(fore.slice(0, 6)).toEqual(['2026-08-17:1:1', '2026-08-19:1:2', '2026-08-21:1:3', '2026-08-24:2:1', '2026-08-26:u:provA', '2026-08-28:2:2']);
+    const r = kapitelBorjar(s, 'ma3', 2, '2026-08-31');
+    expect(r).toMatchObject({ flyttade: 2, ovningar: 2, fasta: 1 });
+    const plan = amnesPlanFor(r.s, 'ma3', '2026-10-07')!.a;
+    expect(plan.slice(0, 8).map((x) => `${x.datum}:${x.nyckel}`)).toEqual([
+      '2026-08-17:1:1', '2026-08-19:1:2', '2026-08-21:1:3',
+      '2026-08-24:u:ov-2026-08-24', '2026-08-26:u:provA', '2026-08-28:u:ov-2026-08-28',
+      '2026-08-31:2:1', '2026-09-02:2:2']);
+    expect(plan[3].lektion.avsnitt).toBe('Övning');
+    // Lektionskortet följer 2.1 till det nya datumet
+    expect(hamtaLektionsplan(r.s, 'ma3', 6)?.genomgang).toBe('Andelar i vardagen');
+    expect(() => kapitelBorjar(r.s, 'ma3', 2, '2026-08-31')).toThrow(/Inga lektioner/);
   });
 });
