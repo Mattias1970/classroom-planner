@@ -179,6 +179,17 @@ export interface MagmaProvNyckel { datum: string; prov: string; }
 export interface MagmaUppgiftUtfall { nr: string; ratt: number; fel: number; andelRatt: number | null; }
 
 export interface MagmaProvAnalys extends MagmaProvNyckel {
+  /** Del 184 · Typ ur namnet (diagnos, exit, läxförhör, screening). */
+  typ: MagmaTyp;
+  /** Del 184 · Etikett i grafen: 'Diagnos 1.3 - 1.4' / 'Diagnos (hela kapitlet)' / provnamnet. */
+  etikett: string;
+  /** Del 184 · Rad två i grafen: 'Kap 1' när kapitlet är känt, annars ''. */
+  kapitelEtikett: string;
+  /**
+   * Del 184 · Ingår i trendanalysen (utveckling, senaste, trend). Screeningen är Stockholms stads
+   * test, inte skolans arbete, och räknas inte in.
+   */
+  iTrend: boolean;
   antal: number;
   /** Klassens medelprocent (avrundad) för provet. */
   medel: number | null;
@@ -293,6 +304,13 @@ export function taBortAllaMagma(s: Struktur, amneId: string): Struktur {
   };
 }
 
+/** Del 184 · Etiketter och trendflagga för ett prov i analysen. */
+function provEtiketter(provnamn: string): Pick<MagmaProvAnalys, 'typ' | 'etikett' | 'kapitelEtikett' | 'iTrend'> {
+  const nm = tolkaMagmaNamn(provnamn);
+  const etikett = nm.typ === 'screening' ? nm.kort : nm.kapitel !== null ? (nm.del !== '' ? nm.kort : `${nm.kort} (hela kapitlet)`) : provnamn;
+  return { typ: nm.typ, etikett, kapitelEtikett: nm.kapitel !== null ? `Kap ${nm.kapitel}` : '', iTrend: nm.typ !== 'screening' };
+}
+
 /** Procent 0–100 utan avrundning ur ett resultat; null vid maxpoäng 0. */
 export function magmaProcent(r: { poang: number; maxPoang: number }): number | null {
   return r.maxPoang > 0 ? (r.poang / r.maxPoang) * 100 : null;
@@ -311,6 +329,7 @@ export function magmaAnalys(
 ): MagmaAnalys {
   const elever = elevernaIKlassen(s, klassId).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
   const elevIds = new Set(elever.map((e) => e.id));
+  // Del 184 · Stockholms stads screening är inte skolans arbete: den visas per prov men ingår inte i trendanalysen (iTrend)
   const rs = (s.resultat ?? []).filter((r) => r.kalla === 'magma' && elevIds.has(r.elevId) && (amneId === undefined || amneId === '' || r.amneId === amneId));
   // Del 153: prov med samma uppgifter (samma test, olika kopior/namn) räknas som ett test
   const norm = (x: string) => x.toLowerCase().replace(/\.(pdf|xlsx|xls)$/i, '').replace(/[_–—-]+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -341,7 +360,7 @@ export function magmaAnalys(
     }
     const uppgifter = [...perUppgift.entries()].map(([nr, u]) => ({ nr, ...u, andelRatt: u.ratt + u.fel > 0 ? Math.round((u.ratt / (u.ratt + u.fel)) * 100) : null }));
     return {
-      datum: n.datum, prov: n.prov, antal: egna.length,
+      datum: n.datum, prov: n.prov, antal: egna.length, ...provEtiketter(n.prov),
       medel: procenten.length > 0 ? Math.round(procenten.reduce((a, b) => a + b, 0) / procenten.length) : null,
       fordelning, uppgifter,
       svaga: uppgifter.filter((u) => u.andelRatt !== null && u.andelRatt < 50).map((u) => u.nr),
@@ -349,7 +368,8 @@ export function magmaAnalys(
   });
   const serier: MagmaElevSerie[] = elever.map((e) => {
     const procent = nycklar.map((n) => { const r = n.egna.find((x) => x.elevId === e.id); return r === undefined ? null : magmaProcent(r); });
-    const gjorda = procent.filter((p): p is number => p !== null);
+    // Trenden räknas bara på proven som ingår (inte screeningen)
+    const gjorda = procent.filter((p, i): p is number => p !== null && prov[i].iTrend);
     const senaste = gjorda.length > 0 ? gjorda[gjorda.length - 1] : null;
     return {
       elevId: e.id, namn: e.namn, procent, senaste,

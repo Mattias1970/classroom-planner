@@ -223,3 +223,23 @@ describe('Del 178 · namnkonvention "Ämne Klass Kapitel Typ Del" och borttagnin
     expect(resultatForElev(s3, 'e1').map((r) => r.prov)).toEqual(['1.1 Exit']);
   });
 });
+
+describe('Del 184 · screeningen ingår inte i trenden; etiketter med diagnosnummer', () => {
+  it('senaste och trend räknas utan screeningen; etiketterna visar typ och delkapitel', () => {
+    let s = tomStruktur();
+    s = laggTillSkolar(s, { id: 'la', namn: '26/27', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'ma', klassId: 'k', namn: 'Matematik', schema: [{ dag: 2, start: '10:00', slut: '11:00' }] });
+    s = laggTillElev(s, { id: 'e1', klassId: 'k', namn: 'Anna Berg', grupp: 'A' });
+    const imp = (prov: string, datum: string, p: number) => { s = importeraResultat(s, { klassId: 'k', amneId: 'ma', kalla: 'magma', prov, datum, rader: [{ namn: 'Anna Berg', poang: p, maxPoang: 10 }] }).s; };
+    imp('Ma 8B Kap 1 Diagnos 1.1 - 1.2', '2026-09-05', 6); imp('Ma 8B Kap 1 Diagnos 1.3 - 1.4', '2026-09-19', 8); imp('Stockholm stads screening', '2026-09-30', 10); imp('Ma 8B Kap 1 Diagnos', '2026-10-07', 9);
+    const a = magmaAnalys(s, 'k', 'ma');
+    expect(a.prov.map((p) => [p.etikett, p.kapitelEtikett, p.iTrend])).toEqual([
+      ['Diagnos 1.1 - 1.2', 'Kap 1', true], ['Diagnos 1.3 - 1.4', 'Kap 1', true], ['Stockholm stads screening', '', false], ['Diagnos (hela kapitlet)', 'Kap 1', true]]);
+    const anna = a.elever[0];
+    expect(anna.procent).toEqual([60, 80, 100, 90]);
+    expect(anna.senaste).toBe(90);          // inte screeningens 100
+    expect(anna.trend).toBe(10);            // 80 → 90, screeningen hoppas över
+  });
+});

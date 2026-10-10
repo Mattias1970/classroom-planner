@@ -154,7 +154,8 @@ describe('Del 171 · matematikmallen — Magma-diagnoser styr', () => {
       ['Snitt av tre diagnoser', '95 % (mycket bra)'], ['Diagnoserna ligger på en jämn nivå.', null]]);
     expect(st[2].etikett).toBe('Screening');
     expect(st[3].etikett).toBe('Inlämningar');   // Del 172: Lektionerna/Läxläsning ersätts av Förhören per kapitel (inga förhör här)
-    expect(samtalsStycken(omar.text)[1].underrader.at(-1)).toEqual({ text: 'Diagnoserna ligger på en jämn nivå. En diagnos ligger under 70 % — träna på de uppgifterna igen i Magma så att metoderna befästs.', varde: null });
+    // Del 184: screeningen (60 %) ingår inte i trenden — 65 → 75, 80 är uppåt
+    expect(samtalsStycken(omar.text)[1].underrader.at(-1)).toEqual({ text: 'Diagnoserna går uppåt — ett lärande som syns! En diagnos ligger under 70 % — träna på de uppgifterna igen i Magma så att metoderna befästs.', varde: null });
     expect(anna.text).not.toContain('Laborationer');
     for (const u of alla) expect(antalStycken(u.text)).toBeLessThanOrEqual(8);
   });

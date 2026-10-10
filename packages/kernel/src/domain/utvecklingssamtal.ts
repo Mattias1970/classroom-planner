@@ -512,7 +512,8 @@ export function utvardering(s: Struktur, elevId: string, amneId: string, idag?: 
     if (ka !== undefined && kb !== undefined) return jmfKod(ka, kb);
     return a.prov.localeCompare(b.prov, 'sv', { numeric: true });
   });
-  const mu = utveckling(magma);
+  // Del 184 · Screeningen ingår inte i trenden (Stockholms stads test, inte skolans arbete)
+  const mu = utveckling({ ...magma, punkter: magma.punkter.filter((x) => magmaTypAv(x) !== 'screening') });
   const kapDiag = lista.filter((x) => x.typ === 'kapitel');
   const delDiag = lista.filter((x) => x.typ === 'delkapitel');
   const kapitel: KapitelResultat[] = urval.map((k: SamtalsKapitel) => {
@@ -532,7 +533,7 @@ export function utvardering(s: Struktur, elevId: string, amneId: string, idag?: 
     lista, snitt: snitt(grund.map((x) => x.procent)),
     slut: kapDiag.length > 0 ? snitt(kapDiag.map((x) => x.procent)) : snitt(grund.map((x) => x.procent)),
     delkapitelSnitt: snitt(delDiag.map((x) => x.procent)),
-    senaste: lista.length > 0 ? lista[lista.length - 1].procent : null, trend: mu.trend,
+    senaste: grund.length > 0 ? grund[grund.length - 1].procent : null, trend: mu.trend,
   };
   const nv = elevNarvaro(s, { klassId: elev.klassId, amneId }).find((x) => x.elev.id === elevId);
   const narvaro = { procent: nv?.narvaroProcent ?? null, lektioner: nv?.lektioner ?? 0, narvarande: nv?.narvarande ?? 0 };

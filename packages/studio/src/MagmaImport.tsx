@@ -288,9 +288,23 @@ function OmdomesRemsa({ fordelning, antal }: { fordelning: Record<MagmaOmdome, n
 }
 
 /** Linjediagram: klassens medel (tjock) och varje elev (tunn) över proven. */
+/** Delar en etikett i högst två rader om ~16 tecken vid ordgräns (så att diagnosnumret alltid syns). */
+function delaEtikett(e: string): string[] {
+  if (e.length <= 16) return [e];
+  const ord = e.split(' ');
+  const rader: string[] = ['']; 
+  for (const o of ord) {
+    const sista = rader[rader.length - 1];
+    if (sista === '') rader[rader.length - 1] = o;
+    else if ((`${sista} ${o}`).length <= 16 || rader.length === 2) rader[rader.length - 1] = `${sista} ${o}`;
+    else rader.push(o);
+  }
+  return rader.map((r) => (r.length > 18 ? `${r.slice(0, 17)}…` : r));
+}
+
 function UtvecklingsLinjer({ analys, markeradElev }: { analys: MagmaAnalys; markeradElev: string | null }) {
   const n = analys.prov.length;
-  const w = 640; const h = 220; const v = 36; const hg = 12; const topp = 14; const bas = 180;
+  const w = 640; const h = 236; const v = 36; const hg = 12; const topp = 14; const bas = 180;
   const x = (i: number) => (n === 1 ? (w + v - hg) / 2 : v + ((w - v - hg) * i) / (n - 1));
   const y = (p: number) => bas - ((bas - topp) * p) / 100;
   const linje = (serie: Array<number | null>) => {
@@ -301,16 +315,19 @@ function UtvecklingsLinjer({ analys, markeradElev }: { analys: MagmaAnalys; mark
     <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="st-diagram st-magma-diagram" role="img" aria-label="Utveckling över Magma-proven">
       {[0, 70, 85, 95, 100].map((p) => <g key={p}><line x1={v} x2={w - hg} y1={y(p)} y2={y(p)} stroke={p === 70 ? '#2E7D32' : p === 85 ? '#1565C0' : p === 95 ? '#6A1B9A' : '#e0e0e0'} strokeDasharray={p === 70 || p === 85 || p === 95 ? '3 3' : undefined} /><text x={v - 4} y={y(p) + 3} fontSize={9} textAnchor="end" fill="#666">{p}</text></g>)}
       {analys.elever.map((e) => {
-        const pts = linje(e.procent); if (pts === '') return null;
+        // Del 184: screeningen ritas inte i utvecklingen
+        const pts = linje(e.procent.map((p, i) => (analys.prov[i].iTrend ? p : null))); if (pts === '') return null;
         const mark = e.elevId === markeradElev;
         return <polyline key={e.elevId} points={pts} fill="none" stroke={mark ? '#C62828' : '#9e9e9e'} strokeWidth={mark ? 2.5 : 1} opacity={mark ? 1 : 0.45}><title>{e.namn}</title></polyline>;
       })}
-      <polyline points={linje(analys.prov.map((p) => p.medel))} fill="none" stroke="#1A2A6B" strokeWidth={3}><title>Klassens medel</title></polyline>
+      <polyline points={linje(analys.prov.map((p) => (p.iTrend ? p.medel : null)))} fill="none" stroke="#1A2A6B" strokeWidth={3}><title>Klassens medel</title></polyline>
       {analys.prov.map((p, i) => (
         <g key={`${p.datum}|${p.prov}`}>
-          {p.medel !== null && <circle cx={x(i)} cy={y(p.medel)} r={4} fill="#1A2A6B"><title>{`${p.prov} (${p.datum}): medel ${p.medel} %`}</title></circle>}
-          <text x={x(i)} y={h - 22} fontSize={9} textAnchor="middle" fill="#333">{p.prov.length > 14 ? `${p.prov.slice(0, 13)}…` : p.prov}</text>
-          <text x={x(i)} y={h - 11} fontSize={8} textAnchor="middle" fill="#666">{p.datum}</text>
+          {p.medel !== null && p.iTrend && <circle cx={x(i)} cy={y(p.medel)} r={4} fill="#1A2A6B"><title>{`${p.prov} (${p.datum}): medel ${p.medel} %`}</title></circle>}
+          {p.medel !== null && !p.iTrend && <circle cx={x(i)} cy={y(p.medel)} r={4} fill="none" stroke="#7A5A00" strokeDasharray="2 2"><title>{`${p.prov} (${p.datum}): medel ${p.medel} % — screening, ingår inte i trenden`}</title></circle>}
+          {/* Del 184: diagnosnumret syns alltid — namnet delas i två rader i stället för att klippas */}
+          {delaEtikett(p.etikett).map((rad, ri) => <text key={ri} x={x(i)} y={h - 30 + ri * 10} fontSize={9.5} fontWeight={700} textAnchor="middle" fill={p.iTrend ? '#1A2A6B' : '#7A5A00'}>{rad}</text>)}
+          <text x={x(i)} y={h - 2} fontSize={8} textAnchor="middle" fill="#666">{p.kapitelEtikett !== '' ? `${p.kapitelEtikett} · ` : ''}{p.datum}{!p.iTrend ? ' · ej i trend' : ''}</text>
         </g>
       ))}
     </svg>
@@ -345,10 +362,10 @@ function MagmaAnalysVy({ s, klass, amne }: { s: Struktur; klass: Klass; amne: Am
       </p>
       <UppgiftsStaplar uppgifter={prov.uppgifter} />
 
-      <h4 style={{ margin: '10px 0 4px' }}>Utveckling över proven <small className="muted">— tjock linje = klassens medel, tunna = elever (klicka på en elev i tabellen för att lyfta fram hen)</small></h4>
+      <h4 style={{ margin: '10px 0 4px' }}>Utveckling över diagnoserna <small className="muted">— tjock linje = klassens medel, tunna = elever (klicka på en elev i tabellen för att lyfta fram hen){analys.prov.some((p) => !p.iTrend) ? ' · screeningen (Stockholms stads test) visas som en streckad ring och ingår inte i trenden' : ''}</small></h4>
       <UtvecklingsLinjer analys={analys} markeradElev={markerad} />
       <table className="tbl small st-magma-tabell">
-        <thead><tr><th>Elev</th>{analys.prov.map((p) => <th key={`${p.datum}|${p.prov}`} title={`${p.prov} (${p.datum})`}>{p.prov.length > 10 ? `${p.prov.slice(0, 9)}…` : p.prov}</th>)}<th>Senaste</th><th>Trend</th><th>Omdöme</th></tr></thead>
+        <thead><tr><th>Elev</th>{analys.prov.map((p) => <th key={`${p.datum}|${p.prov}`} title={`${p.prov} (${p.datum})${!p.iTrend ? ' — screening, ingår inte i trenden' : ''}`}>{p.kapitelEtikett !== '' ? `${p.kapitelEtikett} ` : ''}{p.etikett}{!p.iTrend ? ' ⓘ' : ''}</th>)}<th>Senaste</th><th>Trend</th><th>Omdöme</th></tr></thead>
         <tbody>{medElev.map((e) => (
           <tr key={e.elevId} className={e.elevId === markerad ? 'st-magma-markerad' : ''} onClick={() => setMarkerad(e.elevId === markerad ? null : e.elevId)} style={{ cursor: 'pointer' }}>
             <td>{e.namn}</td>
