@@ -21,11 +21,13 @@ import { gemensamText, kapitelKoder, kapitelNamn, kodEtikett, type SamtalsKapite
 import { elevIKlassen } from './struktur.js';
 import type { Struktur } from './typer.js';
 
-export type SamtalsStatus = 'svart' | 'nar' | 'bra' | 'mycketBra' | 'utmarkt';
+/** Del 173 · 'saknas' = underlag saknas: utan resultat går det inte att säga att eleven når målen. */
+export type SamtalsStatus = 'svart' | 'nar' | 'bra' | 'mycketBra' | 'utmarkt' | 'saknas';
 export const STATUS_TEXT: Record<SamtalsStatus, string> = {
-  svart: 'har svårt att nå målen', nar: 'når målen', bra: 'går bra', mycketBra: 'mycket bra', utmarkt: 'utmärkt',
+  svart: 'har svårt att nå målen', nar: 'når målen', bra: 'går bra', mycketBra: 'mycket bra', utmarkt: 'utmärkt', saknas: 'underlag saknas',
 };
-export const STATUS_ORDNING: SamtalsStatus[] = ['svart', 'nar', 'bra', 'mycketBra', 'utmarkt'];
+/** Nivåerna i ordning (index 0–4 = nivå); 'underlag saknas' sist. */
+export const STATUS_ORDNING: SamtalsStatus[] = ['svart', 'nar', 'bra', 'mycketBra', 'utmarkt', 'saknas'];
 
 export type SamtalsTrend = 'upp' | 'stabil' | 'ner';
 
@@ -48,7 +50,13 @@ export function magmaNiva(procent: number): SamtalsStatus {
   return procent > 95 ? 'utmarkt' : procent >= 91 ? 'mycketBra' : procent >= 81 ? 'bra' : procent >= 70 ? 'nar' : 'svart';
 }
 
-export interface Diagnos { prov: string; datum: string; procent: number; niva: SamtalsStatus; poang: number; maxPoang: number }
+/**
+ * Del 173 · Diagnosens slag: 'kapitel' = diagnos på hela kapitlet (täcker kapitlets alla genomförda delkapitel eller
+ * heter "kap 1"/"kapitel 1") — den väger tyngst i slutresultatet; 'delkapitel' = diagnos på en del av kapitlet (visar
+ * utvecklingen fram till kapiteldiagnosen); 'screening' = Stockholms stads screening (ingen delkapitelkod).
+ */
+export type DiagnosTyp = 'kapitel' | 'delkapitel' | 'screening';
+export interface Diagnos { prov: string; datum: string; procent: number; niva: SamtalsStatus; poang: number; maxPoang: number; typ: DiagnosTyp; koder: string[] }
 
 /** Del 172 · Ett förhör (Exit ticket/Läxförhör) i ett kapitel: '1.1' eller '1.1–1.3', procent och datum. */
 export interface KapitelForhor { etikett: string; prov: string; datum: string; procent: number }
@@ -62,7 +70,17 @@ export interface Utvardering {
   /** Mallen: 'ma' för matematik (Magma-diagnoser styr), annars 'no'. */
   mall: SamtalsMall;
   /** Matematik: alla Magma-diagnoser i datumordning (kapiteldiagnoser och screening), snitt och nivå. */
-  diagnoser: { lista: Diagnos[]; snitt: number | null; senaste: number | null; trend: SamtalsTrend | null };
+  diagnoser: {
+    lista: Diagnos[];
+    /** Snitt av alla diagnoser. */
+    snitt: number | null;
+    /** Slutresultatet som statusen bygger på: snittet av kapiteldiagnoserna när sådana finns, annars snittet av alla. */
+    slut: number | null;
+    /** Snitt av delkapiteldiagnoserna (utvecklingen fram till kapiteldiagnosen); null utan sådana. */
+    delkapitelSnitt: number | null;
+    senaste: number | null;
+    trend: SamtalsTrend | null;
+  };
   /** Del 172 · Matematik: Exit tickets och Läxförhör per kapitel i rapportens urval (ur quiznamnens delkapitelkoder). */
   kapitel: KapitelResultat[];
   /** Beräknad status. */
@@ -112,20 +130,28 @@ function niva(v: number | null, g: [number, number, number, number]): number | n
 /** Status ur nivåerna: läxförhör väger dubbelt; ett ej godkänt DigiExam-prov ger "har svårt". */
 export function beraknaStatus(u: Omit<Utvardering, 'status' | 'text' | 'elevId' | 'namn' | 'amne'>): SamtalsStatus {
   if (u.digiexam.some((p) => p.skrivit && p.godkand === false)) return 'svart';
-  // Matematik: Magma-diagnoserna styr — snittet av alla diagnoser (70–80 når målen, 81–90 bra, 91–95 mycket bra, över 95 utmärkt)
-  if (u.mall === 'ma' && u.diagnoser.snitt !== null) return magmaNiva(u.diagnoser.snitt);
+  // Matematik: Magma-diagnoserna styr — snittet av alla diagnoser (70–80 når målen, 81–90 bra, 91–95 mycket bra, över 95 utmärkt).
+  // Utan diagnoser saknas underlag — då går det inte att säga att eleven når målen (Del 173).
+  if (u.mall === 'ma') return u.diagnoser.slut === null ? 'saknas' : magmaNiva(u.diagnoser.slut);
   const delar: Array<[number | null, number]> = [
     [niva(u.laxlasning.nu, [75, 90, 94, 97]), 2],
     [niva(u.lektioner.nu, [55, 70, 81, 91]), 1],
     [niva(u.inlamningar.procent, [50, 75, 90, 100]), 1],
   ];
   const med = delar.filter((d): d is [number, number] => d[0] !== null);
-  if (med.length === 0) return 'nar';
+  if (med.length === 0) return 'saknas';
   const v = med.reduce((a, [n, w]) => a + n * w, 0) / med.reduce((a, [, w]) => a + w, 0);
   return STATUS_ORDNING[Math.max(0, Math.min(4, Math.round(v)))];
 }
 
 const pct = (v: number | null) => (v === null ? '–' : `${v} %`);
+
+/** Del 173 · Små tal skrivs med bokstäver i löpande text (svensk skrivregel): 0–12. */
+const ORDTAL = ['noll', 'ett', 'två', 'tre', 'fyra', 'fem', 'sex', 'sju', 'åtta', 'nio', 'tio', 'elva', 'tolv'];
+export function antalOrd(n: number, stor = false): string {
+  const o = n >= 0 && n < ORDTAL.length ? ORDTAL[n] : String(n);
+  return stor ? o.charAt(0).toUpperCase() + o.slice(1) : o;
+}
 
 /** Del 172 · Indrag som markerar att en textrad hör till föregående stycke (diagnosraderna). */
 export const UNDERRAD = '  ';
@@ -148,6 +174,9 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
     bra: `Det går bra för ${fornamn} i ${amne}, och utvecklingen pekar åt rätt håll.`,
     mycketBra: `Det går mycket bra för ${fornamn} i ${amne} — ett lärande som syns i resultaten.`,
     utmarkt: `${fornamn} visar utmärkta resultat i ${amne} — riktigt starkt och målmedvetet arbete!`,
+    saknas: u.mall === 'ma'
+      ? `Det finns inga diagnosresultat för ${fornamn} i ${amne} ännu, så det går inte att säga hur ${fornamn} ligger till i förhållande till målen — nästa diagnos blir det första underlaget.`
+      : `Det finns inga resultat för ${fornamn} i ${amne} ännu, så det går inte att säga hur ${fornamn} ligger till i förhållande till målen — nästa förhör blir det första underlaget.`,
   };
   rader.push(inled[status]);
 
@@ -158,12 +187,24 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
     if (d.lista.length === 0) rader.push('Diagnoser: inga Magma-diagnoser ännu.');
     else {
       rader.push('Diagnoser:');
-      for (const x of d.lista) rader.push(`${UNDERRAD}${provnamnMedStorBokstav(x.prov)}\t${x.procent} % (${STATUS_TEXT[x.niva]})`);
-      if (d.lista.length > 1) rader.push(`${UNDERRAD}Snitt av ${d.lista.length} diagnoser\t${pct(d.snitt)} (${STATUS_TEXT[magmaNiva(d.snitt ?? 0)]})`);
+      for (const x of d.lista) rader.push(`${UNDERRAD}${provnamnMedStorBokstav(x.prov)}${x.typ === 'kapitel' ? ' (hela kapitlet)' : ''}\t${x.procent} % (${STATUS_TEXT[x.niva]})`);
+      const kap = d.lista.filter((x) => x.typ === 'kapitel');
+      // Slutresultatet: kapiteldiagnosen väger tyngst; delkapiteldiagnoserna visar utvecklingen fram till den
+      if (kap.length > 0 && d.lista.length > 1) rader.push(`${UNDERRAD}Slutresultat (${kap.length === 1 ? 'diagnosen på hela kapitlet' : 'diagnoserna på hela kapitlen'})\t${pct(d.slut)} (${STATUS_TEXT[magmaNiva(d.slut ?? 0)]})`);
+      else if (d.lista.length > 1) rader.push(`${UNDERRAD}Snitt av ${antalOrd(d.lista.length)} diagnoser\t${pct(d.snitt)} (${STATUS_TEXT[magmaNiva(d.snitt ?? 0)]})`);
+      // Utveckling: delkapiteldiagnoserna jämfört med kapiteldiagnosen, annars de första diagnoserna mot de senaste
+      let utv = '';
+      if (kap.length > 0 && d.delkapitelSnitt !== null && d.slut !== null) {
+        const diff = d.slut - d.delkapitelSnitt;
+        utv = diff >= 5 ? `Utvecklingen är tydlig: från ${pct(d.delkapitelSnitt)} på delkapiteldiagnoserna till ${pct(d.slut)} på diagnosen för hela kapitlet — det som övats under kapitlet har befästs.`
+          : diff <= -5 ? `På delkapiteldiagnoserna låg resultatet på ${pct(d.delkapitelSnitt)}, men på diagnosen för hela kapitlet på ${pct(d.slut)} — repetera delkapitlen igen i Magma, så att det som gick bra tidigare håller i längden.`
+          : `Resultatet håller i sig: ${pct(d.delkapitelSnitt)} på delkapiteldiagnoserna och ${pct(d.slut)} på diagnosen för hela kapitlet — kunskaperna är beständiga.`;
+      } else if (d.trend === 'upp') utv = 'Diagnoserna går uppåt — ett lärande som syns!';
+      else if (d.trend === 'ner') utv = 'De senaste diagnoserna ligger lägre än de första — gå igenom uppgifterna som blev fel, där finns nästa steg.';
+      else if (d.lista.length > 1) utv = 'Diagnoserna ligger på en jämn nivå.';
       const svaga = d.lista.filter((x) => x.niva === 'svart');
-      const kommentar = [
-        d.trend === 'upp' ? 'Diagnoserna går uppåt — ett lärande som syns!' : d.trend === 'ner' ? 'De senaste diagnoserna ligger lägre än de första — gå igenom uppgifterna som blev fel, där finns nästa steg.' : '',
-        svaga.length > 0 ? `${svaga.length === 1 ? 'En diagnos' : `${svaga.length} diagnoser`} under 70 % — träna på de uppgifterna igen i Magma så sitter metoderna.` : '',
+      const kommentar = [utv,
+        svaga.length > 0 ? `${svaga.length === 1 ? 'En diagnos ligger' : `${antalOrd(svaga.length, true)} diagnoser ligger`} under 70 % — träna på de uppgifterna igen i Magma så att metoderna befästs.` : '',
       ].filter((x) => x !== '').join(' ');
       if (kommentar !== '') rader.push(`${UNDERRAD}${kommentar}`);
     }
@@ -182,39 +223,39 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
         if (k.exit.length > 0) rader.push(`${UNDERRAD}${kapitelNamn(k)} · Exit tickets\t${rad(k.exit)}`);
         if (k.laxforhor.length > 0) rader.push(`${UNDERRAD}${kapitelNamn(k)} · Läxförhör\t${rad(k.laxforhor)}`);
       }
-      if (med.some((k) => k.laxforhor.length > 0)) rader.push(`${UNDERRAD}Alla Läxförhör går att öva hemma på Socrative.com — både inför kommande förhör och på de olika delkapitlen.`);
+      if (med.some((k) => k.laxforhor.length > 0)) rader.push(`${UNDERRAD}Alla Läxförhör går att öva hemma på Socrative.com — både inför kommande förhör och som repetition av de olika delkapitlen.`);
     }
   }
   else if (l.antal === 0) rader.push('Lektionerna: inga Exit tickets ännu — de visar vad som fastnar under lektionen.');
-  else if (l.trend === 'upp') rader.push(`Lektionerna: Exit tickets har gått från ${pct(l.borjan)} i början till ${pct(l.nu)} nu — en fin utveckling som visar att ${fornamn} tar till sig genomgångarna och håller bra fokus och arbete på lektionerna.`);
-  else if (lagt) rader.push(`Lektionerna: Exit tickets ligger på ${pct(l.nu)}${l.trend === 'ner' ? ` (från ${pct(l.borjan)} i början)` : ''}. Låga Exit tickets kan bero på sämre fokus på genomgångarna och på att frågorna och begreppen inte blir arbetade med när de inte lämnas in — att ta till sig genomgången, hålla fokus och arbeta på lektionen är det som lyfter det.`);
-  else if (l.trend === 'ner') rader.push(`Lektionerna: Exit tickets låg på ${pct(l.borjan)} i början och ${pct(l.nu)} på de senaste — ${fornamn} tar till sig genomgångarna; med samma fokus och arbete på lektionerna som i början kommer det tillbaka.`);
-  else if (l.antal === 1) rader.push(`Lektionerna: ett Exit ticket hittills, ${pct(l.nu)} — en bra start att bygga vidare på.`);
-  else rader.push(`Lektionerna: Exit tickets ligger stabilt kring ${pct(l.nu)} (${l.klarade} av ${l.bedomda} över gränsen 70 %) — ${fornamn} tar till sig genomgångarna och arbetar med bra fokus på lektionerna.`);
+  else if (l.trend === 'upp') rader.push(`Lektionerna: resultaten på Exit tickets har gått från ${pct(l.borjan)} i början till ${pct(l.nu)} nu — en fin utveckling som visar att ${fornamn} tar till sig genomgångarna, håller fokus och arbetar bra på lektionerna.`);
+  else if (lagt) rader.push(`Lektionerna: resultaten på Exit tickets ligger på ${pct(l.nu)}${l.trend === 'ner' ? ` (från ${pct(l.borjan)} i början)` : ''}. Låga resultat på Exit tickets kan bero på att fokus på genomgångarna brister och på att frågorna och begreppen inte blir bearbetade när de inte lämnas in. Att ta till sig genomgången, hålla fokus och arbeta på lektionen är det som lyfter resultaten.`);
+  else if (l.trend === 'ner') rader.push(`Lektionerna: resultaten på Exit tickets låg på ${pct(l.borjan)} i början och på ${pct(l.nu)} de senaste gångerna. ${fornamn} tar till sig genomgångarna, och med samma fokus och arbete på lektionerna som i början kommer resultaten tillbaka.`);
+  else if (l.antal === 1) rader.push(`Lektionerna: en Exit ticket hittills (${pct(l.nu)}) — en bra start att bygga vidare på.`);
+  else rader.push(`Lektionerna: resultaten på Exit tickets ligger stabilt kring ${pct(l.nu)} (${l.klarade} av ${l.bedomda} över gränsen 70 %) — ${fornamn} tar till sig genomgångarna och arbetar med bra fokus på lektionerna.`);
 
   // Närvaro (ur quizsvaren): låg närvaro → delta mer på lektionerna
   const n = u.narvaro;
   if (n.procent !== null && n.lektioner > 0) {
-    if (n.procent < 50) rader.push(`Närvaro: ${fornamn} har varit med på ${n.narvarande} av ${n.lektioner} lektioner (${n.procent} %, räknat på lektioner med genomförda quizzar). Utan att komma till skolan går det inte att nå målen eller se resultat på Läxförhören — det första steget är att delta på lektionerna, och därifrån bygger vi vidare tillsammans.`);
-    else if (n.procent < 80) rader.push(`Närvaro: ${fornamn} har varit med på ${n.narvarande} av ${n.lektioner} lektioner (${n.procent} %, räknat på lektioner med genomförda quizzar). Lärandet sker på lektionerna — genom att delta mer kommer genomgångar, Exit tickets och arbetet med begreppen på plats, och resultaten följer med.`);
+    if (n.procent < 50) rader.push(`Närvaro: ${fornamn} har varit med på ${n.narvarande} av ${n.lektioner} lektioner (${n.procent} %, räknat på lektioner med genomförda quizzar). Utan att komma till skolan går det inte att nå målen eller se resultat på Läxförhören — det första steget är att vara med på lektionerna, och därifrån bygger vi vidare tillsammans.`);
+    else if (n.procent < 80) rader.push(`Närvaro: ${fornamn} har varit med på ${n.narvarande} av ${n.lektioner} lektioner (${n.procent} %, räknat på lektioner med genomförda quizzar). Lärandet sker på lektionerna — genom att vara med oftare får ${fornamn} med sig genomgångarna, Exit tickets och arbetet med begreppen, och resultaten följer med.`);
     else if (n.procent < 95) rader.push(`Närvaro: ${n.narvarande} av ${n.lektioner} lektioner (${n.procent} %, räknat på lektioner med genomförda quizzar) — bra, och varje lektion räknas.`);
     else rader.push(`Närvaro: ${n.narvarande} av ${n.lektioner} lektioner (${n.procent} %, räknat på lektioner med genomförda quizzar) — ${fornamn} är med på lektionerna, en stark grund för lärandet.`);
   }
 
   // Läxläsning: läxförhörens utveckling, glömda begrepp, Socrative hemma (NO-mallen)
   const x = u.laxlasning;
-  const socrative = 'Alla läxförhör går att öva hemma på Socrative.com — både inför kommande förhör och på de olika delkapitlen.';
+  const socrative = 'Alla läxförhör går att öva hemma på Socrative.com — både inför kommande förhör och som repetition av de olika delkapitlen.';
   if (u.mall === 'ma') { /* matematik: förhören står per kapitel ovan */ }
   else if (x.antal === 0) rader.push(`Läxläsning: inga läxförhör ännu. ${socrative}`);
   else {
     let s = x.trend === 'upp' ? `Läxläsning: läxförhören har gått från ${pct(x.borjan)} till ${pct(x.nu)} — läxläsningen ger resultat och lärandet syns!`
       : x.trend === 'ner' ? `Läxläsning: läxförhören har gått från ${pct(x.borjan)} till ${pct(x.nu)}.`
-      : x.antal === 1 ? `Läxläsning: ett läxförhör hittills, ${pct(x.nu)}.`
+      : x.antal === 1 ? `Läxläsning: ett läxförhör hittills (${pct(x.nu)}).`
       : `Läxläsning: läxförhören ligger kring ${pct(x.nu)} (${x.klarade} av ${x.bedomda} över gränsen 90 %).`;
-    if (x.tendens === 'gorsEj') s += ` ${x.glomdaBegrepp.length} begrepp har glömts mer än en gång, vilket tyder på att läxorna ofta inte blir gjorda. Glöms begrepp ofta blir kunskaperna inte beständiga — då blir det svårt att nå målen över tid, och nationella prov kan bli en svår utmaning. En fokuserad läxläsning, en kort stund varje dag, vänder det snabbt. ${socrative}`;
-    else if (x.tendens === 'kontinuerligt') s += ` ${x.glomdaBegrepp.length === 1 ? 'Ett begrepp' : `${x.glomdaBegrepp.length} begrepp`} har glömts mer än en gång — läs läxan lite varje dag i stället för allt på en gång, så fastnar de. ${socrative}`;
+    if (x.tendens === 'gorsEj') s += ` ${antalOrd(x.glomdaBegrepp.length, true)} begrepp har glömts mer än en gång, vilket tyder på att läxorna ofta inte blir gjorda. När begrepp glöms ofta blir kunskaperna inte beständiga — då blir det svårt att nå målen över tid, och nationella prov kan bli en svår utmaning. En fokuserad läxläsning, en kort stund varje dag, vänder det snabbt. ${socrative}`;
+    else if (x.tendens === 'kontinuerligt') s += ` ${antalOrd(x.glomdaBegrepp.length, true)} begrepp har glömts mer än en gång — läs läxan lite varje dag i stället för allt på en gång, så fastnar ${x.glomdaBegrepp.length === 1 ? 'det' : 'de'}. ${socrative}`;
     else if (x.trend === 'ner' || (x.trend === 'stabil' && x.nu !== null && x.nu < 90)) s += ` En mer fokuserad läxläsning inför varje förhör lyfter resultaten. ${socrative}`;
-    else if (x.nu !== null && x.nu >= 90) s += ` Begreppen sitter — fortsätt så. ${socrative}`;
+    else if (x.nu !== null && x.nu >= 90) s += ` Begreppen blir rätt i de senaste förhören — fortsätt så. ${socrative}`;
     else s += ` ${socrative}`;
     rader.push(s);
   }
@@ -226,7 +267,7 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
   if (delar.length === 0) rader.push('Inlämningar: inga uppgifter att följa upp ännu.');
   else {
     let s = `Inlämningar: ${delar.join(', ')} (${pct(i.procent)} av det som ska vara inne)`;
-    s += i.trend === 'upp' ? ' — inlämningarna har blivit fler på senare tid, bra!' : i.trend === 'ner' ? ' — inlämningarna har blivit färre på senare tid; lämna in direkt efter lektionen så hålls det ihop.' : i.procent !== null && i.procent >= 90 ? ' — mycket bra ordning.' : i.procent !== null && i.procent < 50 ? ' — här finns mest att vinna: varje inlämning är ett tillfälle att arbeta med begreppen och frågorna, och att visa vad du lärt dig.' : '.';
+    s += i.trend === 'upp' ? ' — inlämningarna har blivit fler på senare tid, bra!' : i.trend === 'ner' ? ' — inlämningarna har blivit färre på senare tid; lämna in direkt efter lektionen så hålls det ihop.' : i.procent !== null && i.procent >= 90 ? ' — mycket bra ordning.' : i.procent !== null && i.procent < 50 ? ' — här finns mest att vinna: varje inlämning är ett tillfälle att arbeta med begreppen och frågorna och att visa vad man har lärt sig.' : '.';
     // Frågorna (Testa dig själv) är vägen till högre nivå (NO)
     const fr = i.fragor;
     if (u.mall === 'ma') { /* matematik: uppgifterna lämnas in som foto — ingen fråge-/labbtext */ }
@@ -237,7 +278,7 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
 
   // Prov
   if (u.digiexam.length > 0) {
-    const d = u.digiexam.map((q) => ({ ...q, prov: provnamnMedStorBokstav(q.prov) })).map((p) => !p.skrivit ? `${p.prov}: inte skrivit ännu` : p.godkand === true ? `${p.prov}: godkänd${p.poang !== null && p.maxPoang !== null ? ` (${p.poang} av ${p.maxPoang} p)` : ''}` : p.godkand === false ? `${p.prov}: inte godkänd ännu${p.poang !== null && p.maxPoang !== null ? ` (${p.poang} av ${p.maxPoang} p)` : ''} — omprovet är chansen att visa det` : `${p.prov}: skrivet${p.poang !== null && p.maxPoang !== null ? ` (${p.poang} av ${p.maxPoang} p)` : ''}`);
+    const d = u.digiexam.map((q) => ({ ...q, prov: provnamnMedStorBokstav(q.prov) })).map((p) => !p.skrivit ? `${p.prov}: inte skrivet ännu` : p.godkand === true ? `${p.prov}: godkänt${p.poang !== null && p.maxPoang !== null ? ` (${p.poang} av ${p.maxPoang} p)` : ''}` : p.godkand === false ? `${p.prov}: inte godkänt ännu${p.poang !== null && p.maxPoang !== null ? ` (${p.poang} av ${p.maxPoang} p)` : ''} — omprovet är chansen att visa det` : `${p.prov}: skrivet${p.poang !== null && p.maxPoang !== null ? ` (${p.poang} av ${p.maxPoang} p)` : ''}`);
     rader.push(`Prov: ${d.join('; ')}.`);
   }
 
@@ -248,6 +289,9 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
     bra: `Fortsätt så här, ${fornamn} — med samma rutiner är nästa nivå nära.`,
     mycketBra: `Mycket bra jobbat, ${fornamn} — håll i rutinerna så fortsätter lärandet uppåt.`,
     utmarkt: `Fantastiskt arbete, ${fornamn} — fortsätt utmana dig själv med de svårare frågorna, där finns nästa steg i utvecklingen.`,
+    saknas: u.mall === 'ma'
+      ? `Det viktigaste nu är att ${fornamn} gör diagnoserna i Magma och förhören på lektionerna — först då kan vi se hur ${fornamn} ligger till i förhållande till målen och vad nästa steg är.`
+      : `Det viktigaste nu är att ${fornamn} är med på lektionerna och gör förhören — först då kan vi se hur ${fornamn} ligger till i förhållande till målen och vad nästa steg är.`,
   };
   // Slutsatsen tar hänsyn till inlämningarna: laborationerna är ett eget kunskapskrav (undersökning),
   // frågorna är vägen till högre nivå
@@ -255,8 +299,8 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
   const labSaknas = u.mall !== 'ma' && lab.antal > 0 && lab.inlamnade < lab.antal;
   const fragorSaknas = u.mall !== 'ma' && fragor.antal > 0 && fragor.inlamnade < fragor.antal;
   let slut = avslut[status];
-  if (labSaknas) slut += ` Laborationerna är ett eget kunskapskrav — ${lab.antal - lab.inlamnade === 1 ? 'en laboration' : `${lab.antal - lab.inlamnade} laborationer`} saknas, och de behöver lämnas in för att det kravet ska kunna bedömas.`;
-  if (fragorSaknas) slut += ` ${labSaknas ? 'Och gör frågorna' : 'Gör frågorna'} till varje avsnitt — det är inlämningarna som öppnar vägen till högre nivå.`;
+  if (labSaknas) slut += ` Laborationerna är ett eget kunskapskrav — ${lab.antal - lab.inlamnade === 1 ? 'en laboration saknas, och den' : `${antalOrd(lab.antal - lab.inlamnade)} laborationer saknas, och de`} behöver lämnas in för att det kravet ska kunna bedömas.`;
+  if (fragorSaknas) slut += ` ${labSaknas ? 'Gör också frågorna' : 'Gör frågorna'} till varje avsnitt — det är inlämningarna som öppnar vägen till högre nivå.`;
   else if (u.mall !== 'ma' && lab.antal > 0 && !labSaknas && fragor.antal > 0) slut += ' Laborationer och frågor är inlämnade — det ger underlag för hela bedömningen och för högre nivå.';
   rader.push(slut);
   // Läxförhör, Exit ticket och Inlämning skrivs med stor bokstav (visas i blå stil).
@@ -273,7 +317,8 @@ export function medStorBokstav(rad: string): string {
 
 /** '8b ekologi eprov' → '8b Ekologi Eprov'; 'Ekologi E-prov' behålls. */
 export function provnamnMedStorBokstav(namn: string): string {
-  return namn.replace(/(^|\s)([a-zåäö])/g, (_m, f: string, b: string) => `${f}${b.toUpperCase()}`);
+  // Svensk skrivregel: bara det första ordet (som börjar med bokstav) får stor bokstav — 'stockholm stads screening' → 'Stockholm stads screening'
+  return namn.replace(/(^|\s)([a-zåäöA-ZÅÄÖ])/, (_m, f: string, b: string) => `${f}${b.toUpperCase()}`);
 }
 
 /** Orden som visas i fet blå stil: Exit ticket(s), Läxförhör(en), Inlämning(ar). */
@@ -380,8 +425,22 @@ export function utvardering(s: Struktur, elevId: string, amneId: string, idag?: 
   const iUrval = (koder: string[]) => urval.length === 0 || koder.length === 0 || koder.some((k) => urvalKoder.has(k));
   const magmaAlla = serie('magma');
   const magma = { ...magmaAlla, punkter: magmaAlla.punkter.filter((x) => iUrval(x.koder)) };
-  const lista: Diagnos[] = magma.punkter.filter((x) => x.procent !== null).map((x) => ({ prov: x.prov, datum: x.datum, procent: x.procent!, niva: magmaNiva(x.procent!), poang: x.poang, maxPoang: x.maxPoang }));
+  // Diagnosens slag: screening (inga koder), kapiteldiagnos (heter "kap 1"/"kapitel 1" eller täcker kapitlets alla
+  // genomförda delkapitel), annars delkapiteldiagnos
+  const typFor = (prov: string, koder: string[]): DiagnosTyp => {
+    if (/screening/i.test(prov)) return 'screening';
+    const kapNamn = /\bkap(?:itel)?\.?\s*(\d+)\b/i.exec(prov);
+    if (kapNamn !== null && koder.length === 0) return 'kapitel';
+    if (koder.length === 0) return 'delkapitel';
+    const kapNr = koder[0].split('.')[0];
+    const alla = (urval.find((k) => String(k.nr) === kapNr) ?? gemensamText(s, amneId, idag ?? '9999-12-31').kapitel.find((k) => String(k.nr) === kapNr))?.delkapitel.map((x) => x.kod) ?? [];
+    const tackt = alla.length > 0 && alla.every((c) => koder.includes(c));
+    return tackt || kapNamn !== null ? 'kapitel' : 'delkapitel';
+  };
+  const lista: Diagnos[] = magma.punkter.filter((x) => x.procent !== null).map((x) => ({ prov: x.prov, datum: x.datum, procent: x.procent!, niva: magmaNiva(x.procent!), poang: x.poang, maxPoang: x.maxPoang, typ: typFor(x.prov, x.koder), koder: x.koder }));
   const mu = utveckling(magma);
+  const kapDiag = lista.filter((x) => x.typ === 'kapitel');
+  const delDiag = lista.filter((x) => x.typ === 'delkapitel');
   const kapitel: KapitelResultat[] = urval.map((k: SamtalsKapitel) => {
     const kk = new Set(kapitelKoder(k));
     const forhor = (kalla: string): KapitelForhor[] => serie(kalla).punkter
@@ -389,7 +448,12 @@ export function utvardering(s: Struktur, elevId: string, amneId: string, idag?: 
       .map((x) => ({ etikett: kodEtikett(x.koder.filter((c) => kk.has(c))), prov: x.prov, datum: x.datum, procent: x.procent! }));
     return { nr: k.nr, namn: k.namn, exit: forhor('socrative-exit'), laxforhor: forhor('socrative-laxforhor') };
   });
-  const diagnoser = { lista, snitt: snitt(lista.map((x) => x.procent)), senaste: lista.length > 0 ? lista[lista.length - 1].procent : null, trend: mu.trend };
+  const diagnoser = {
+    lista, snitt: snitt(lista.map((x) => x.procent)),
+    slut: kapDiag.length > 0 ? snitt(kapDiag.map((x) => x.procent)) : snitt(lista.map((x) => x.procent)),
+    delkapitelSnitt: snitt(delDiag.map((x) => x.procent)),
+    senaste: lista.length > 0 ? lista[lista.length - 1].procent : null, trend: mu.trend,
+  };
   const nv = elevNarvaro(s, { klassId: elev.klassId, amneId }).find((x) => x.elev.id === elevId);
   const narvaro = { procent: nv?.narvaroProcent ?? null, lektioner: nv?.lektioner ?? 0, narvarande: nv?.narvarande ?? 0 };
 

@@ -66,44 +66,44 @@ describe('Del 164 · utvärdering inför utvecklingssamtal', () => {
     }
     console.log(alla.map((u) => `--- ${u.namn} (${u.status})\n${u.text}`).join('\n'));
     expect(anna.text).toContain('från 60 % i början till 90 % nu');
-    expect(anna.text).toContain('Ekologi E-prov: godkänd (11 av 14 p)');
+    expect(anna.text).toContain('Ekologi E-prov: godkänt (11 av 14 p)');
     expect(omar.text).toContain('har just nu svårt att nå målen');
-    expect(omar.text).toContain('4 begrepp har glömts mer än en gång');
-    expect(omar.text).toContain('inte godkänd ännu (5 av 14 p)');
+    expect(omar.text).toContain('Fyra begrepp har glömts mer än en gång');
+    expect(omar.text).toContain('inte godkänt ännu (5 av 14 p)');
     expect(omar.text).toContain('Frågorna är hemligheten till nästa nivå');   // Omar saknar frågor
     expect(anna.text).toContain('Alla frågorna är gjorda — där finns hemligheten till nästa nivå');
     // Slutsatsen tar hänsyn till inlämningarna: Omar saknar både laborationen (eget kunskapskrav) och frågorna; Anna har allt
     const omarSlut = omar.text.split('\n').pop()!;
     expect(omarSlut).toContain('Laborationerna är ett eget kunskapskrav — en laboration saknas');
-    expect(omarSlut).toContain('Och gör frågorna till varje avsnitt — det är Inlämningarna som öppnar vägen till högre nivå.');
+    expect(omarSlut).toContain('Gör också frågorna till varje avsnitt — det är Inlämningarna som öppnar vägen till högre nivå.');
     expect(anna.text.split('\n').pop()).toContain('Laborationer och frågor är inlämnade');
     const medLab = samtalsText({ ...omar, inlamningar: { ...omar.inlamningar, laborationer: { inlamnade: 1, antal: 1 } } }, 'Omar');
     expect(medLab.split('\n').pop()).toContain('Gör frågorna till varje avsnitt');
     expect(medLab).not.toContain('eget kunskapskrav');
     expect(pia.text).toContain('utmärkta resultat');
-    expect(omar.text).toContain('Låga Exit tickets kan bero på sämre fokus på genomgångarna');
+    expect(omar.text).toContain('Låga resultat på Exit tickets kan bero på att fokus på genomgångarna brister');
     expect(anna.text).toContain('Alla Läxförhör går att öva hemma på Socrative.com');
     const st = samtalsStycken(anna.text);
     expect(st.map((x) => x.etikett)).toEqual([null, 'Lektionerna', 'Närvaro', 'Läxläsning', 'Inlämningar', 'Prov', null]);
     expect(anna.narvaro).toMatchObject({ lektioner: 5, narvarande: 5, procent: 100 });
     expect(anna.text).toContain('Närvaro: 5 av 5 lektioner (100 %, räknat på lektioner med genomförda quizzar)');
-    expect(st[1].delar[0]).toEqual({ text: 'Exit tickets', exit: true });
+    expect(st[1].delar[1]).toEqual({ text: 'Exit tickets', exit: true });
     // Läxförhör och Inlämning med stor bokstav och blå stil, provnamn med stor bokstav
     expect(st[3].delar.filter((d) => d.exit).map((d) => d.text)[0]).toMatch(/^Läxförhör/);
     expect(st[3].delar.some((d) => d.exit && d.text.startsWith('Inlämning')) || !anna.text.includes('inlämning')).toBe(true);
     expect(anna.text).not.toMatch(/\bläxförhör/);
-    expect(provnamnMedStorBokstav('8b ekologi eprov')).toBe('8b Ekologi Eprov');
+    expect(provnamnMedStorBokstav('8b ekologi eprov')).toBe('8b Ekologi eprov');   // svensk skrivregel: bara första ordet
     // Många glömda begrepp utan utveckling → läxorna görs ej: beständiga kunskaper och nationella prov nämns
     const sv = samtalsText({ ...omar, laxlasning: { ...omar.laxlasning, glomdaBegrepp: ['a', 'b', 'c', 'd', 'e'], tendens: 'gorsEj' } }, 'Omar');
     expect(sv).toContain('kunskaperna inte beständiga');
     expect(sv).toContain('nationella prov kan bli en svår utmaning');
     const lag = samtalsText({ ...omar, narvaro: { procent: 60, lektioner: 10, narvarande: 6 } }, 'Omar');
     expect(lag).toContain('Närvaro: Omar har varit med på 6 av 10 lektioner (60 %, räknat på lektioner med genomförda quizzar)');
-    expect(lag).toContain('genom att delta mer');
+    expect(lag).toContain('genom att vara med oftare');
     expect(lag.split('\n').length).toBeLessThanOrEqual(7);
     const mycketLag = samtalsText({ ...omar, narvaro: { procent: 30, lektioner: 10, narvarande: 3 } }, 'Omar');
     expect(mycketLag).toContain('Utan att komma till skolan går det inte att nå målen eller se resultat på Läxförhören');
-    expect(mycketLag).toContain('det första steget är att delta på lektionerna');
+    expect(mycketLag).toContain('det första steget är att vara med på lektionerna');
     expect(sv.split('\n').length).toBeLessThanOrEqual(7);
     expect(medStorBokstav('ett läxförhör och en inlämning, exit ticket')).toBe('ett Läxförhör och en Inlämning, Exit ticket');
     expect(STATUS_TEXT.svart).toBe('har svårt att nå målen');
@@ -143,15 +143,15 @@ describe('Del 171 · matematikmallen — Magma-diagnoser styr', () => {
     expect(omar.diagnoser.lista.map((d) => d.procent)).toEqual([65, 75, 80, 60]);
     expect(omar.status).toBe('nar');   // snitt 70
     // Del 172: diagnoserna över varandra — en rad per diagnos (namn, tab, procent och nivå), sist snittet
-    expect(anna.text).toContain('Diagnoser:\n  1.1 - 1.2 Diagnos\t95 % (mycket bra)\n  1.3 - 1.4 Diagnos\t90 % (går bra)\n  1.5 - 1.6 Diagnos\t100 % (utmärkt)\n  Stockholm Stads Screening\t92 % (mycket bra)\n  Snitt av 4 diagnoser\t94 % (mycket bra)\n');
-    expect(omar.text).toContain('\n  2 diagnoser under 70 % — träna på de uppgifterna igen i Magma');
+    expect(anna.text).toContain('Diagnoser:\n  1.1 - 1.2 Diagnos\t95 % (mycket bra)\n  1.3 - 1.4 Diagnos\t90 % (går bra)\n  1.5 - 1.6 Diagnos\t100 % (utmärkt)\n  Stockholm stads screening\t92 % (mycket bra)\n  Snitt av fyra diagnoser\t94 % (mycket bra)\n');
+    expect(omar.text).toContain('Två diagnoser ligger under 70 % — träna på de uppgifterna igen i Magma så att metoderna befästs.');
     const st = samtalsStycken(anna.text);
     expect(st[1].etikett).toBe('Diagnoser');
     expect(st[1].underrader.map((r) => [r.text, r.varde])).toEqual([
       ['1.1 - 1.2 Diagnos', '95 % (mycket bra)'], ['1.3 - 1.4 Diagnos', '90 % (går bra)'], ['1.5 - 1.6 Diagnos', '100 % (utmärkt)'],
-      ['Stockholm Stads Screening', '92 % (mycket bra)'], ['Snitt av 4 diagnoser', '94 % (mycket bra)']]);
+      ['Stockholm stads screening', '92 % (mycket bra)'], ['Snitt av fyra diagnoser', '94 % (mycket bra)'], ['Diagnoserna ligger på en jämn nivå.', null]]);
     expect(st[2].etikett).toBe('Inlämningar');   // Del 172: Lektionerna/Läxläsning ersätts av Förhören per kapitel (inga förhör här)
-    expect(samtalsStycken(omar.text)[1].underrader.at(-1)).toEqual({ text: '2 diagnoser under 70 % — träna på de uppgifterna igen i Magma så sitter metoderna.', varde: null });
+    expect(samtalsStycken(omar.text)[1].underrader.at(-1)).toEqual({ text: 'Diagnoserna ligger på en jämn nivå. Två diagnoser ligger under 70 % — träna på de uppgifterna igen i Magma så att metoderna befästs.', varde: null });
     expect(anna.text).not.toContain('Laborationer');
     for (const u of alla) expect(antalStycken(u.text)).toBeLessThanOrEqual(7);
   });
@@ -233,7 +233,7 @@ describe('Del 172 · matematik — gemensam kapiteltext och förhör per kapitel
     expect(st[2].underrader).toEqual([
       { text: 'Kapitel 1 Tal · Exit tickets', varde: '1.1 80 %, 1.2 70 %' },
       { text: 'Kapitel 1 Tal · Läxförhör', varde: '1.1–1.2 90 %, 1.1–1.3 100 %' },
-      { text: 'Alla Läxförhör går att öva hemma på Socrative.com — både inför kommande förhör och på de olika delkapitlen.', varde: null },
+      { text: 'Alla Läxförhör går att öva hemma på Socrative.com — både inför kommande förhör och som repetition av de olika delkapitlen.', varde: null },
     ]);
     expect(anna.text).not.toContain('Lektionerna');
     expect(anna.text).not.toContain('Läxläsning');
@@ -246,5 +246,60 @@ describe('Del 172 · matematik — gemensam kapiteltext och förhör per kapitel
     // Utan förhör alls: stycket Förhören utelämnas
     const tom = utvardering(sattSamtalsKapitel(s, 'ma', { koder: ['2.2'] }), 'e1', 'ma', IDAG2)!;
     expect(samtalsStycken(tom.text).map((x) => x.etikett)).not.toContain('Förhören');
+  });
+});
+
+describe('Del 173 · utan underlag går det inte att säga att eleven når målen', () => {
+  it('matematik utan diagnoser → underlag saknas; NO utan resultat → underlag saknas', () => {
+    resetIdRaknare();
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '26/27', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8A' });
+    s = laggTillAmne(s, { id: 'ma', klassId: 'k', namn: 'Matematik', schema: [{ dag: 2, start: '12:50', slut: '13:40' }] });
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', schema: [{ dag: 1, start: '08:10', slut: '09:10' }] });
+    s = laggTillElev(s, { id: 'e1', klassId: 'k', namn: 'Anna Berg', grupp: 'A' });
+    s = laggTillElev(s, { id: 'e2', klassId: 'k', namn: 'Omar Ali', grupp: 'B' });
+    // Bara Anna har gjort en diagnos — och bara ett Exit ticket i matte, vilket inte räcker som underlag i matematik
+    s = importeraResultat(s, { klassId: 'k', amneId: 'ma', kalla: 'magma', prov: '1.1 - 1.2 diagnos', datum: '2026-09-05', rader: [{ namn: 'Anna Berg', poang: 15, maxPoang: 20 }] }).s;
+    s = importeraResultat(s, { klassId: 'k', amneId: 'ma', kalla: 'socrative-exit', prov: '1.1 Exit', datum: '2026-09-01', rum: 'Matte8AA', rader: [{ namn: 'Omar Ali', poang: 9, maxPoang: 10 }] }).s;
+    const [anna, omar] = klassensUtvarderingar(s, 'k', 'ma', IDAG);
+    expect(anna.status).toBe('nar');
+    expect(omar.status).toBe('saknas');
+    expect(STATUS_TEXT.saknas).toBe('underlag saknas');
+    expect(omar.text).toContain('Det finns inga diagnosresultat för Omar i matematik ännu, så det går inte att säga hur Omar ligger till i förhållande till målen');
+    expect(omar.text).not.toContain('når målen i');
+    expect(omar.text).toContain('gör diagnoserna i Magma');
+    const bio = utvardering(s, 'e1', 'bi', IDAG)!;
+    expect(bio.status).toBe('saknas');
+    expect(bio.text).toContain('Det finns inga resultat för Anna i biologi ännu');
+  });
+});
+
+describe('Del 173 · diagnosen på hela kapitlet väger tyngst; utvecklingen beskrivs', () => {
+  it('status ur kapiteldiagnosen, delkapiteldiagnoserna ger utvecklingstexten', () => {
+    resetIdRaknare();
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '26/27', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8A' });
+    s = laggTillAmne(s, { id: 'ma', klassId: 'k', namn: 'Matematik', schema: [{ dag: 2, start: '12:50', slut: '13:40' }] });
+    s = laggTillElev(s, { id: 'e1', klassId: 'k', namn: 'Anna Berg', grupp: 'A' });
+    s = laggTillElev(s, { id: 'e2', klassId: 'k', namn: 'Omar Ali', grupp: 'B' });
+    const imp = (prov: string, datum: string, a: number, o: number, max = 20) => {
+      s = importeraResultat(s, { klassId: 'k', amneId: 'ma', kalla: 'magma', prov, datum, rader: [{ namn: 'Anna Berg', poang: a, maxPoang: max }, { namn: 'Omar Ali', poang: o, maxPoang: max }] }).s;
+    };
+    imp('1.1 - 1.2 diagnos', '2026-09-05', 12, 19);   // Anna 60 %, Omar 95 %
+    imp('1.3 - 1.4 diagnos', '2026-09-19', 14, 18);   // Anna 70 %, Omar 90 %
+    imp('Diagnos kap 1', '2026-10-01', 17, 15);       // Anna 85 %, Omar 75 % — hela kapitlet
+    const [anna, omar] = klassensUtvarderingar(s, 'k', 'ma', IDAG);
+    expect(anna.diagnoser.lista.map((d) => d.typ)).toEqual(['delkapitel', 'delkapitel', 'kapitel']);
+    expect(anna.diagnoser).toMatchObject({ slut: 85, delkapitelSnitt: 65, snitt: 72 });
+    expect(anna.status).toBe('bra');     // kapiteldiagnosen 85 %, inte snittet 72 %
+    expect(omar.status).toBe('nar');     // kapiteldiagnosen 75 % trots 95/90 på delkapitlen
+    const st = samtalsStycken(anna.text)[1];
+    expect(st.underrader.map((r) => r.text)).toEqual([
+      '1.1 - 1.2 Diagnos', '1.3 - 1.4 Diagnos', 'Diagnos kap 1 (hela kapitlet)', 'Slutresultat (diagnosen på hela kapitlet)',
+      'Utvecklingen är tydlig: från 65 % på delkapiteldiagnoserna till 85 % på diagnosen för hela kapitlet — det som övats under kapitlet har befästs. En diagnos ligger under 70 % — träna på de uppgifterna igen i Magma så att metoderna befästs.']);
+    expect(st.underrader[3].varde).toBe('85 % (går bra)');
+    expect(samtalsStycken(omar.text)[1].underrader.at(-1)!.text).toContain('På delkapiteldiagnoserna låg resultatet på 93 %, men på diagnosen för hela kapitlet på 75 % — repetera delkapitlen igen i Magma');
   });
 });

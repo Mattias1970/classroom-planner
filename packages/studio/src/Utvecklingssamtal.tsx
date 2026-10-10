@@ -84,7 +84,7 @@ export function Utvecklingssamtal({ s, klass, amneId, kor, idag, onTillbaka }: {
       </div>
       <p className="small muted" style={{ margin: '4px 0 8px' }}>
         {ma ? (
-          <>Matematikmallen: statusen sätts av snittet på alla Magma-diagnoser (kapiteldiagnoser och Stockholms stads screening) — 70–80 % når målen, 81–90 % går bra, 91–95 % mycket bra, över 95 % utmärkt.
+          <>Matematikmallen: statusen sätts av Magma-diagnoserna — 70–80 % når målen, 81–90 % går bra, 91–95 % mycket bra, över 95 % utmärkt. En diagnos på hela kapitlet väger tyngst (slutresultatet); tidigare delkapiteldiagnoser visar utvecklingen fram till den. Utan diagnoser saknas underlag.
             Alla diagnoser sammanfattas i texten, och Exit tickets och Läxförhör redovisas per kapitel i rapportens urval (bara när de finns). Provresultat med förmågorna (begrepp, metod, problemlösning, resonemang) och omdöme i kommunikation kommer senare. </>
         ) : (
           <>Texten bygger på läxförhör (gräns 90 %), exit tickets (70 %), inlämningar ur Teams och DigiExam-prov. Utveckling = de första förhören jämfört med de senaste. </>
@@ -117,8 +117,8 @@ export function Utvecklingssamtal({ s, klass, amneId, kor, idag, onTillbaka }: {
                 <td title={u.diagnoser.lista.map((d) => `${d.prov}: ${d.procent} % (${STATUS_TEXT[d.niva]})`).join('\n')}>
                   {u.diagnoser.lista.length === 0 ? '—' : (
                     <>
-                      {u.diagnoser.lista.map((d) => <span key={`${d.prov}-${d.datum}`} className={`st-krav st-samtal-diag ${d.niva}`}>{d.procent}</span>)}
-                      <small> snitt {pct(u.diagnoser.snitt)} {pil(u.diagnoser.trend)}</small>
+                      {u.diagnoser.lista.map((d) => <span key={`${d.prov}-${d.datum}`} className={`st-krav st-samtal-diag ${d.niva}${d.typ === 'kapitel' ? ' kapitel' : ''}`} title={d.typ === 'kapitel' ? 'diagnos på hela kapitlet' : d.typ}>{d.procent}</span>)}
+                      <small> {u.diagnoser.lista.some((d) => d.typ === 'kapitel') ? 'slutresultat' : 'snitt'} {pct(u.diagnoser.slut)} {pil(u.diagnoser.trend)}</small>
                     </>
                   )}
                 </td>
