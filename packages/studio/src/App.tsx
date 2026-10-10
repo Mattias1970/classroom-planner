@@ -16,7 +16,7 @@ import {
   slaIhopPlaneringsmall, tolkaPlaneringsmall,
   handelserPerDatum, kalenderHandelser, klassFarg, noBudget, noOverBudget, sattLektionsplan,
   doldaOmraden, sattOmradeDolt, visaAllaOmraden, LEKTIONSOMRADEN, type LektionsOmrade,
-  foljbaraAmnen, foljPlanering, kapitelBorjar,
+  foljbaraAmnen, foljPlanering, kapitelBorjar, laddaKapitel, taBortLektion,
   kapitelKort, manadsRutor, skolarManader, veckaRutor, viktigaDatum, bamTidslinje, begreppForLektion, bokBegrepp,
   tavelTidslinje, standardBamDelar, bamAvvikelse, exitStartFor, type BamDel,
   bokFromValfriImport, bokSidregister, bokSidregisterCsv, elevSchema, exitStart, giltigtPass,
@@ -2521,6 +2521,57 @@ function KapitelDetalj({ s, bok, kap, kor }: { s: Struktur; bok: Bok; kap: Kapit
 }
 
 /**
+ * Del 185 · Ladda ett kapitel från ett pass: välj kapitel och startdatum; kapitlets lektioner läggs ut
+ * från första passet på eller efter datumet, kommande lektioner flyttas senare, egna prov/diagnoser/
+ * laborationer ligger kvar. Förhandsvisningen räknas på en kopia innan något sparas.
+ */
+function LaddaKapitel({ s, bok, amneId, kor, idag }: { s: Struktur; bok: Bok; amneId: string; kor: (fn: () => Struktur, m: string) => void; idag: string }) {
+  const [kap, setKap] = useState<number>(bok.kapitel[0]?.nr ?? 1);
+  const [fran, setFran] = useState(idag);
+  const [oppen, setOppen] = useState(false);
+  if (bok.kapitel.length === 0) return null;
+  const valt = bok.kapitel.find((k) => k.nr === kap) ?? bok.kapitel[0];
+  const antal = valt.delkapitel.reduce((a, d) => a + d.lektioner.length, 0) + valt.extraLektioner.length;
+  const KORT_DAG = ['sön', 'mån', 'tis', 'ons', 'tor', 'fre', 'lör'];
+  const dag = (d: string | null) => (d === null ? '—' : `${KORT_DAG[new Date(`${d}T12:00:00Z`).getUTCDay()]} ${Number(d.slice(8, 10))}/${Number(d.slice(5, 7))}`);
+  let forhandsvisning: ReturnType<typeof laddaKapitel> | null = null; let fel: string | null = null;
+  if (oppen) { try { forhandsvisning = laddaKapitel(s, amneId, kap, fran, idag); } catch (e) { fel = e instanceof Error ? e.message : String(e); } }
+  return (
+    <div className="uppg-kort no-print ladda-kapitel">
+      <div className="rad" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <b>📥 Ladda kapitel</b>
+        <select aria-label="Kapitel att ladda" value={kap} onChange={(e) => setKap(Number(e.target.value))}>
+          {bok.kapitel.map((k) => <option key={k.nr} value={k.nr}>Kapitel {k.nr} {k.namn}</option>)}
+        </select>
+        <label className="small">från <input type="date" aria-label="Ladda kapitel från" value={fran} min={idag} onChange={(e) => { if (e.target.value !== '') setFran(e.target.value); }} /></label>
+        <button className="btn sec sm" aria-expanded={oppen} onClick={() => setOppen(!oppen)}>{oppen ? '👁 Dölj förhandsvisning' : '👁 Förhandsvisa'}</button>
+        <small className="muted">{antal} lektioner i boken · pass före {fran} rörs inte · egna prov, diagnoser och laborationer ligger kvar</small>
+      </div>
+      {oppen && fel !== null && <p className="status warn small" style={{ marginTop: 6 }}>⚠ {fel}</p>}
+      {oppen && forhandsvisning !== null && (
+        <div className="rad" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
+          <span className="small" aria-label="Förhandsvisning av laddat kapitel">
+            Kapitel {forhandsvisning.kapitel} {forhandsvisning.namn}: <b>{forhandsvisning.inlagda} lektioner</b> läggs {dag(forhandsvisning.forsta)} – {dag(forhandsvisning.sista)}
+            {forhandsvisning.framflyttade > 0 ? ` · ${forhandsvisning.framflyttade} kommande lektioner flyttas senare` : ''}
+            {forhandsvisning.fasta > 0 ? ` · ${forhandsvisning.fasta} egna kort ligger kvar` : ''}
+            {forhandsvisning.kort > 0 ? ` · ${forhandsvisning.kort} lektionskort följer med` : ''}
+            {forhandsvisning.varningar.length > 0 ? ` · ⚠ ${forhandsvisning.varningar.join(' ')}` : ''}
+          </span>
+          <button className="btn sm" disabled={forhandsvisning.inlagda === 0} onClick={() => {
+            if (!window.confirm(`Lägga in kapitel ${kap} ${valt.namn} från ${dag(forhandsvisning!.forsta)}?\n\nPass före ${fran} rörs inte. Kommande lektioner flyttas senare; egna prov, diagnoser och laborationer ligger kvar. Det går att ångra med ↩ Ångra.`)) return;
+            try {
+              const r = laddaKapitel(lasStruktur(), amneId, kap, fran, idag);
+              kor(() => r.s, `Kapitel ${r.kapitel} ${r.namn} inlagt från ${dag(r.forsta)}: ${r.inlagda} lektioner, ${r.framflyttade} kommande flyttade senare${r.fasta > 0 ? `, ${r.fasta} egna kort ligger kvar` : ''}${r.kort > 0 ? `, ${r.kort} lektionskort följde med` : ''}.${r.varningar.length > 0 ? ` ⚠ ${r.varningar.join(' ')}` : ''}`);
+              setOppen(false);
+            } catch (e) { kor(() => { throw e; }, ''); }
+          }}>📥 Lägg in kapitlet</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * Del 183 · Kapitlet börjar ett visst datum: när planen felaktigt lagt ett kapitel tidigare (och märkt det
  * genomfört) flyttas kapitlets lektioner fram till datumet; passen före blir övningar och egna prov/
  * diagnoser ligger kvar. Skriver om genomförda pass — därför bekräftelse.
@@ -2662,6 +2713,7 @@ function GruppPlanering(props: {
       {rubrik !== undefined && <h3 className="grupp-h">{rubrik}</h3>}
       {kanAndra && <p className="note no-print">Lektioner som ligger framåt i tiden kan tas bort, ersättas eller få fler lektioner på delkapitlet. Genomförda lektioner ändras aldrig. Lektionsplanerna följer sina lektioner när följden ändras.</p>}
       {kanAndra && <KursOrdning plan={plan} amneId={amneId!} kor={kor!} idag={idag!} />}
+      {kanAndra && <LaddaKapitel s={s!} bok={bok} amneId={amneId!} kor={kor!} idag={idag!} />}
       {kanAndra && <KapitelBorjar plan={plan} amneId={amneId!} kor={kor!} idag={idag!} />}
       <table className="tbl plan clickable">
         <thead><tr><th title="Avklarad">✓</th><th>Nr</th><th>Datum</th><th>Dag</th><th>V.</th><th>Tid</th>{halvklassAmne && <th>Klass</th>}<th>Kap</th><th>Avsnitt</th>{bokHarNivaer(bok) && <><th>{bok.nivaer.niva1}</th><th>{bok.nivaer.niva2}</th><th>{bok.nivaer.niva3}</th></>}{kanAndra && <><th title="Antal lektioner på delkapitlet">Lekt.</th><th></th></>}</tr></thead>
@@ -2711,6 +2763,17 @@ function GruppPlanering(props: {
                   : !bokRad(r)
                     ? <small className="muted" title="Laborationer och passlektioner ändras under 🧪 Laborationer">🧪</small>
                     : (
+                      <>
+                      <button className="icon-btn" aria-label={`Ta bort lektion ${r.lektion.avsnitt} ${r.datum ?? ''}`} title="Ta bort lektionen — de följande flyttas ett pass tidigare, egna prov och diagnoser ligger kvar (↩ Ångra finns)"
+                        onClick={() => {
+                          const efter = plan.filter((x) => x.datum !== null && r.datum !== null && x.datum > r.datum && bokRad(x)).length;
+                          const harPlan = hamtaLektionsplan(s, amneId, i) !== null;
+                          if (!window.confirm(`Ta bort ${r.lektion.avsnitt} (${r.datum})?\n\n${efter} lektioner efter flyttas ett pass tidigare; egna prov, diagnoser och laborationer ligger kvar på sina datum.${harPlan ? '\nLektionens detaljplanering (filmer, genomgång …) försvinner.' : ''}\n\nDet går att ångra med ↩ Ångra.`)) return;
+                          try {
+                            const b = taBortLektion(lasStruktur(), amneId, r.nyckel!, idag);
+                            kor(() => b.s, `${b.rubrik} (${b.datum}) borttagen — ${b.framflyttade} lektioner flyttade ett pass tidigare${b.fasta > 0 ? `, ${b.fasta} egna kort ligger kvar` : ''}. ↩ Ångra finns.`);
+                          } catch (e) { kor(() => { throw e; }, ''); }
+                        }}>🗑</button>
                       <select aria-label={`Åtgärd lektion ${i + 1}`} value="" onChange={(e) => atgard(r, i, e.target.value)} title="Ta bort eller ersätt lektionen">
                         <option value="">…</option>
                         <option value="bort">🗑 Ta bort lektionen</option>
@@ -2720,6 +2783,7 @@ function GruppPlanering(props: {
                           {bokensLektioner.map((x) => <option key={`${x.kapitel}:${x.lektion.id}`} value={`bok:${x.kapitel}:${x.lektion.id}`}>{x.lektion.avsnitt}{x.lektion.del > 1 ? ` (lektion ${x.lektion.del})` : ''}</option>)}
                         </optgroup>
                       </select>
+                      </>
                     )}
               </td>
             )}

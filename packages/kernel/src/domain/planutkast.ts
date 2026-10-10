@@ -120,7 +120,11 @@ export function tomtUtkast(namn: string, fran: string): PlanFranUtkast {
 
 /** Nycklar som redan används i passen före startdatum (de ändras aldrig). */
 function nycklarFore(s: Struktur, amneId: string, fran: string, idag?: string): { teori: Set<string>; labbar: Set<string> } {
-  const plan = amnesPlanFor(medUtkast(s, amneId, tomtUtkast('', fran)), amneId, idag, false);
+  // Del 185: ett inlagt utkast som börjar före startdatumet gäller fram till det (tillampaUtkast behåller
+  // dess pass) — då är det den planen som avgör vad som ligger före, inte bokens ordning utan utkast
+  const a = hittaAmne(s, amneId);
+  const bas = a.planFranUtkast !== undefined && a.planFranUtkast.fran < fran ? s : medUtkast(s, amneId, tomtUtkast('', fran));
+  const plan = amnesPlanFor(bas, amneId, idag, false);
   const teori = new Set<string>(); const labbar = new Set<string>();
   for (const r of plan?.a ?? []) {
     if (r.datum === null || r.datum >= fran || r.nyckel === undefined) continue;
@@ -761,4 +765,169 @@ export function kapitelBorjar(s: Struktur, amneId: string, kapitel: number, datu
   if (a.planFranUtkast?.provDatum !== undefined && a.planFranUtkast.provDatum >= fran) u.provDatum = a.planFranUtkast.provDatum;
   const ut = tillampaUtkast(s, amneId, u);
   return { s: ut, flyttade: flyttas.length, ovningar, fasta: fasta.size };
+}
+
+// ── Del 185 · Ladda ett kapitel från ett pass · ta bort en lektion ─────────────
+//
+// Båda bygger på utkastsmekanismen: ett utkast från startdatumet (pass före rörs aldrig) där
+// lärarens fasta kort — prov, diagnoser, laborationer och egna rader — ligger kvar på sina
+// datum och allt annat läggs i kö på de lediga passen. Lektionskorten följer sina lektioner.
+
+/** Nyckeln som anger ett pass: datum + starttid (två fasta kort samma dag hålls isär). */
+const passNyckelFor = (datum: string, start: string | null) => `${datum}|${start ?? ''}`;
+
+/** Lärarens fasta kort: egna kort som inte är lektion/övning, samt egna rader ('er:'). */
+function arFastKort(a: Amne, nyckel: string): boolean {
+  if (nyckel.startsWith('er:')) return true;
+  const e = (a.planFranUtkast?.egna ?? []).find((x) => `u:${x.id}` === nyckel);
+  return e !== undefined && e.typ !== 'lektion' && e.typ !== 'ovning';
+}
+
+/** De fasta korten från startdatumet med sina pass (datum|start → nyckel). */
+function fastaKortFran(s: Struktur, amneId: string, fran: string, idag?: string): Map<string, string> {
+  const a = hittaAmne(s, amneId);
+  const ut = new Map<string, string>();
+  for (const r of amnesPlanFor(s, amneId, idag, false)?.a ?? []) {
+    if (r.datum === null || r.datum < fran || r.nyckel === undefined || arLab(r.nyckel) || arPass(r.nyckel)) continue;
+    if (arFastKort(a, r.nyckel)) ut.set(passNyckelFor(r.datum, r.start), r.nyckel);
+  }
+  return ut;
+}
+
+/**
+ * Lägger ut teorikön på passen från startdatumet: ett fast kort på sitt pass, annars nästa ur kön.
+ * När kön är slut stannar utläggningen (inga fyllnadskort); fasta kort vars pass inte finns längre
+ * läggs sist så att de inte tappas.
+ */
+function laggUtTeori(s: Struktur, amneId: string, fran: string, ko: string[], fasta: Map<string, string>, idag?: string): string[] {
+  const pass = planeringstavla(s, amneId, tomtUtkast('—', fran), idag).kolumner.filter((k) => k.ko === 'teori' && k.datum !== null);
+  const teori: string[] = []; const placerade = new Set<string>();
+  let idx = 0;
+  for (const p of pass) {
+    const fast = fasta.get(passNyckelFor(p.datum!, p.start));
+    if (fast !== undefined) { teori.push(fast); placerade.add(fast); continue; }
+    if (idx >= ko.length) break;
+    teori.push(ko[idx++]);
+  }
+  for (; idx < ko.length; idx += 1) teori.push(ko[idx]);
+  for (const n of fasta.values()) if (!placerade.has(n)) teori.push(n);
+  return teori;
+}
+
+export interface LaddatKapitel {
+  s: Struktur;
+  kapitel: number;
+  namn: string;
+  /** Första passet kapitlet lades på (första teoripasset på eller efter startdatumet). */
+  forsta: string | null;
+  /** Kapitlets sista lektion. */
+  sista: string | null;
+  /** Lektioner ur kapitlet som lades in. */
+  inlagda: number;
+  /** Kommande lektioner (andra kapitel) som flyttades senare. */
+  framflyttade: number;
+  /** Egna prov/diagnoser/laborationer/egna rader som ligger kvar på sina datum. */
+  fasta: number;
+  /** Lektioner ur kapitlet som var borttagna och nu lades in igen. */
+  aterinforda: number;
+  /** Lektioner ur kapitlet som redan var genomförda före startdatumet (läggs inte igen). */
+  hoppade: number;
+  /** Lektionskort som följde med sina lektioner. */
+  kort: number;
+  /** Lektioner som inte ryms före läsårets slut. */
+  rymsEj: number;
+  varningar: string[];
+}
+
+/**
+ * Lägger in ett helt kapitel ur boken från ett startdatum (första teoripasset på eller efter det):
+ * kapitlets lektioner i bokens ordning först, därefter de kommande lektioner som redan låg där
+ * (de flyttas senare). Lärarens fasta kort ligger kvar på sina datum. Lektioner ur kapitlet som
+ * redan är genomförda före startdatumet läggs inte igen; borttagna läggs in igen. Pass före
+ * startdatumet rörs aldrig; startdatum före idag avvisas.
+ */
+export function laddaKapitel(s: Struktur, amneId: string, kapitel: number, fran: string, idag?: string): LaddatKapitel {
+  if (!DATUM.test(fran)) throw new Error('Ange ett startdatum (ÅÅÅÅ-MM-DD).');
+  if (idag !== undefined && fran < idag) throw new Error('Startdatum ligger före idag — genomförda lektioner ändras aldrig. Välj idag eller senare.');
+  const a = hittaAmne(s, amneId);
+  const bok = s.bocker.find((b) => b.id === a.bokId);
+  if (bok === undefined) throw new Error('Ämnet saknar bok.');
+  const kap = bok.kapitel.find((k) => k.nr === kapitel);
+  if (kap === undefined) throw new Error(`Kapitel ${kapitel} finns inte i ${bok.titel}.`);
+  // Borttagna lektioner ur kapitlet läggs in igen
+  const bortMarkerade = Object.entries(a.lektionsVal ?? {}).filter(([n, v]) => v.bort === true && n.startsWith(`${kapitel}:`)).map(([n]) => n);
+  let st = s;
+  if (bortMarkerade.length > 0) {
+    const lv = { ...(a.lektionsVal ?? {}) };
+    for (const n of bortMarkerade) { const { bort: _b, ...rest } = lv[n]; void _b; if (Object.keys(rest).length === 0) delete lv[n]; else lv[n] = rest; }
+    st = andraPlanering(st, amneId, { lektionsVal: lv }, idag);
+  }
+  const kapNycklar = bokensRader(st, amneId).filter((r) => r.kapitel === kapitel).map((r) => r.nyckel);
+  if (kapNycklar.length === 0) throw new Error(`Kapitel ${kapitel} har inga lektioner att lägga in.`);
+  const gjorda = nycklarFore(st, amneId, fran, idag).teori;
+  const fasta = fastaKortFran(st, amneId, fran, idag);
+  const fastaNycklar = new Set(fasta.values());
+  const u0 = utkastFranPlan(st, amneId, fran, idag, `Kapitel ${kapitel} från ${fran}`);
+  const kapKo = kapNycklar.filter((n) => !gjorda.has(n) && !fastaNycklar.has(n));
+  const hoppade = kapNycklar.filter((n) => gjorda.has(n)).length;
+  const kapSet = new Set(kapKo);
+  const ovriga = u0.teori.filter((n) => !kapSet.has(n) && !fastaNycklar.has(n));
+  const teori = laggUtTeori(st, amneId, fran, [...kapKo, ...ovriga], fasta, idag);
+  const u: PlanFranUtkast = { ...u0, teori };
+  const fore = amnesPlanFor(st, amneId, idag, false)?.a ?? [];
+  const kortFore = fore.filter((r) => r.datum !== null && r.datum >= fran && r.nyckel !== undefined && kapSet.has(r.nyckel) && hamtaLektionsplan(st, amneId, fore.indexOf(r)) !== null).length;
+  const ut = tillampaUtkast(st, amneId, u, idag);
+  const efter = amnesPlanFor(ut, amneId, idag, false)?.a ?? [];
+  const kapRader = efter.filter((r) => r.nyckel !== undefined && kapSet.has(r.nyckel));
+  const tavla = planeringstavla(ut, amneId, u, idag);
+  const varningar: string[] = [];
+  if (tavla.rymsEj.length > 0) varningar.push(`${tavla.rymsEj.length} lektioner ryms inte före läsårets slut.`);
+  if (hoppade > 0) varningar.push(`${hoppade} lektioner ur kapitlet var redan genomförda före ${fran} och lades inte igen.`);
+  if (bortMarkerade.length > 0) varningar.push(`${bortMarkerade.length} borttagna lektioner ur kapitlet lades in igen.`);
+  const provDatum = a.planFranUtkast?.provDatum;
+  if (provDatum !== undefined && provDatum >= fran && kapRader.some((r) => r.datum !== null && r.datum > provDatum)) varningar.push(`Kapitlets sista lektion hamnar efter provdatumet ${provDatum}.`);
+  return {
+    s: ut, kapitel, namn: kap.namn,
+    forsta: kapRader[0]?.datum ?? null, sista: kapRader[kapRader.length - 1]?.datum ?? null,
+    inlagda: kapKo.length, framflyttade: ovriga.length, fasta: fasta.size, aterinforda: bortMarkerade.length, hoppade,
+    kort: kortFore, rymsEj: tavla.rymsEj.length, varningar,
+  };
+}
+
+export interface BorttagenLektion {
+  s: Struktur;
+  /** Lektionens rubrik och datum. */
+  rubrik: string;
+  datum: string;
+  /** Lektioner efter som flyttades ett pass tidigare. */
+  framflyttade: number;
+  /** Fasta kort som ligger kvar på sina datum. */
+  fasta: number;
+  /** Lektionskortet (filmer, genomgång …) som försvann med lektionen, om det fanns. */
+  hadeKort: boolean;
+}
+
+/**
+ * Tar bort en kommande lektion ur planeringen: de följande flyttas ett pass tidigare, lärarens
+ * fasta kort ligger kvar på sina datum. Egna kort tas bort ur utkastet. Genomförda lektioner
+ * kan inte tas bort. Ångra = den vanliga ångra-funktionen (strukturen före).
+ */
+export function taBortLektion(s: Struktur, amneId: string, nyckel: string, idag?: string): BorttagenLektion {
+  hittaAmne(s, amneId);
+  const plan = amnesPlanFor(s, amneId, idag, false)?.a ?? [];
+  const i = plan.findIndex((r) => r.nyckel === nyckel);
+  const rad = plan[i];
+  if (rad === undefined || rad.datum === null) throw new Error('Lektionen finns inte i planeringen.');
+  if (idag !== undefined && rad.datum < idag) throw new Error('Lektionen är genomförd — genomförda lektioner ändras aldrig.');
+  if (arLab(nyckel) || arPass(nyckel)) throw new Error('Laborationer och passlektioner ändras under 🧪 Laborationer.');
+  const fran = rad.datum;
+  const u0 = utkastFranPlan(s, amneId, fran, idag, `Utan ${rad.lektion.avsnitt} ${fran}`);
+  const fasta = fastaKortFran(s, amneId, fran, idag);
+  for (const [k, n] of fasta) if (n === nyckel) fasta.delete(k);
+  const fastaNycklar = new Set(fasta.values());
+  const ko = u0.teori.filter((n) => n !== nyckel && !fastaNycklar.has(n));
+  const teori = laggUtTeori(s, amneId, fran, ko, fasta, idag);
+  const u: PlanFranUtkast = { ...u0, teori, egna: u0.egna.filter((k) => `u:${k.id}` !== nyckel) };
+  const hadeKort = hamtaLektionsplan(s, amneId, i) !== null;
+  return { s: tillampaUtkast(s, amneId, u, idag), rubrik: rad.lektion.avsnitt, datum: fran, framflyttade: ko.length, fasta: fasta.size, hadeKort };
 }

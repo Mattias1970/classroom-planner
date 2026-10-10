@@ -3401,3 +3401,63 @@ describe('Del 156 · frågematrisen i tre flikar', () => {
     expect(matris().textContent).toContain('uppgifter');
   });
 });
+
+describe('Del 185: ladda ett kapitel från ett pass och ta bort en lektion med 🗑', () => {
+  const BOK185 = JSON.stringify({
+    schema: 'classroom-planner-bok', version: 1,
+    bok: { id: 'bok-185', titel: 'Matematik Y', förlag: 'Liber', ämne: 'Matematik', årskurs: 8, kapitelMeta: { '1': { name: 'Tal', col: '#2f5aa8' }, '2': { name: 'Samband', col: '#2f8a58' } } },
+    lektioner: {
+      '1': [{ id: 1, type: 'regular', avsnitt: '1.1 Tal', del: 1 }, { id: 2, type: 'regular', avsnitt: '1.2 Potenser', del: 1 }, { id: 3, type: 'exam', avsnitt: 'Prov kap 1', del: 1 }],
+      '2': [{ id: 1, type: 'regular', avsnitt: '2.1 Andelen', del: 1 }, { id: 2, type: 'regular', avsnitt: '2.2 Delen', del: 1 }],
+    },
+  });
+  const avsnitten = (host: HTMLElement) => [...host.querySelectorAll('table.plan tbody tr')].map((tr) => tr.querySelector('td.lekt-avsnitt')?.textContent ?? '');
+
+  it('förhandsvisning, inläggning från valt datum och borttag med 🗑 — genomförda rader har ingen 🗑', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-24T10:00:00Z'));   // måndag v. 35 — ons 19/8 är genomförd
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host, BOK185);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8A');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8A').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'bok-185');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '📋 Planering').click(); });
+    // ons 19/8 1.1 (genomförd), 26/8 1.2, 2/9 Prov, 9/9 2.1, 16/9 2.2
+    expect(avsnitten(host)).toEqual(['1.1 Tal', '1.2 Potenser', 'Prov kap 1', '2.1 Andelen', '2.2 Delen']);
+    expect(host.querySelector('button[aria-label^="Ta bort lektion 1.1 Tal"]')).toBeNull();
+
+    // Ladda kapitel 2 från 26/8: förhandsvisning, sedan inläggning
+    valj(select(host, 'Kapitel att ladda'), '2');
+    skriv(input(host, 'Ladda kapitel från'), '2026-08-26');
+    act(() => { knapp(host, '👁 Förhandsvisa').click(); });
+    const fv = host.querySelector('[aria-label="Förhandsvisning av laddat kapitel"]')!;
+    expect(fv.textContent).toContain('Kapitel 2 Samband: 2 lektioner läggs ons 26/8 – ons 2/9');
+    expect(fv.textContent).toContain('2 kommande lektioner flyttas senare');
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    act(() => { knapp(host, '📥 Lägg in kapitlet').click(); });
+    expect(avsnitten(host)).toEqual(['1.1 Tal', '2.1 Andelen', '2.2 Delen', '1.2 Potenser', 'Prov kap 1']);
+    expect(host.textContent).toContain('Kapitel 2 Samband inlagt från ons 26/8');
+
+    // 🗑 på 2.2 Delen: de följande flyttas ett pass tidigare
+    act(() => { (host.querySelector('button[aria-label^="Ta bort lektion 2.2 Delen"]') as HTMLButtonElement).click(); });
+    expect(avsnitten(host)).toEqual(['1.1 Tal', '2.1 Andelen', '1.2 Potenser', 'Prov kap 1']);
+    expect(host.textContent).toContain('2.2 Delen (2026-09-02) borttagen — 2 lektioner flyttade ett pass tidigare');
+    // Avbrutet borttag ändrar inget
+    confirm.mockReturnValueOnce(false);
+    act(() => { (host.querySelector('button[aria-label^="Ta bort lektion 2.1 Andelen"]') as HTMLButtonElement).click(); });
+    expect(avsnitten(host)).toHaveLength(4);
+    confirm.mockRestore();
+    vi.useRealTimers();
+  });
+});

@@ -6,10 +6,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { bokFromImport } from '../src/domain/bok.js';
 import {
   amnesPlanFor, hamtaLektionsplan, laggTillAmne, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering,
-  resetIdRaknare, sattLektionerPerDelkapitel, sattLektionsplan, sparaBok, sparaLaborationer,
+  resetIdRaknare, sattLektionerPerDelkapitel, sattLektionsplan, sattLektionsVal, sparaBok, sparaLaborationer,
 } from '../src/domain/struktur.js';
 import {
-  amnetsUtkast, foljbaraAmnen, foljPlanering, infogaIUtkast, kapitelBorjar, kortDetaljer, laggProvPaDatum, nyttKortIUtkast, planeringstavla, sattKortDetaljer,
+  amnetsUtkast, foljbaraAmnen, foljPlanering, infogaIUtkast, kapitelBorjar, kortDetaljer, laddaKapitel, taBortLektion, laggProvPaDatum, nyttKortIUtkast, planeringstavla, sattKortDetaljer,
   sparaUtkast, taBortUrUtkast, taBortUtkast, tabortInlagtUtkast, tillampaUtkast, utkastFranPlan,
 } from '../src/domain/planutkast.js';
 import { tomStruktur, type Struktur } from '../src/domain/typer.js';
@@ -278,5 +278,81 @@ describe('Del 183 · kapitlet börjar ett visst datum — genomförda kapitel 2-
     // Lektionskortet följer 2.1 till det nya datumet
     expect(hamtaLektionsplan(r.s, 'ma3', 6)?.genomgang).toBe('Andelar i vardagen');
     expect(() => kapitelBorjar(r.s, 'ma3', 2, '2026-08-31')).toThrow(/Inga lektioner/);
+  });
+});
+
+describe('Del 185 · ladda ett kapitel från ett pass · ta bort en lektion', () => {
+  const MA4 = bokFromImport(JSON.stringify({
+    schema: 'classroom-planner-bok', version: 1,
+    bok: { id: 'ma4', titel: 'Matematik Y', förlag: 'Liber', ämne: 'Matematik', årskurs: 8, kapitelMeta: { '1': { name: 'Tal', col: '#2f5aa8' }, '2': { name: 'Samband', col: '#2f8a58' }, '3': { name: 'Geometri', col: '#8a2f5a' } } },
+    lektioner: {
+      '1': [{ id: 1, type: 'regular', avsnitt: '1.1 Bråk', del: 1 }, { id: 2, type: 'regular', avsnitt: '1.2 Potenser', del: 1 }, { id: 3, type: 'test', avsnitt: 'Diagnos 1', del: 1 }],
+      '2': [{ id: 1, type: 'regular', avsnitt: '2.1 Andelen', del: 1 }, { id: 2, type: 'regular', avsnitt: '2.2 Delen', del: 1 }, { id: 3, type: 'repetition', avsnitt: 'Blandade uppgifter', del: 1 }, { id: 4, type: 'exam', avsnitt: 'Prov 2', del: 1 }],
+      '3': [{ id: 1, type: 'regular', avsnitt: '3.1 Omkrets', del: 1 }, { id: 2, type: 'regular', avsnitt: '3.2 Area', del: 1 }],
+    },
+  }));
+  function m4(): Struktur {
+    let s = sparaBok(grund(), MA4);
+    s = laggTillAmne(s, { id: 'm4', klassId: 'k', namn: 'Matematik', bokId: 'ma4', schema: [{ dag: 2, start: '10:00', slut: '11:00' }, { dag: 4, start: '10:00', slut: '11:00' }] });
+    return registreraPlanering(s, { id: 'pl4', amneId: 'm4', bokId: 'ma4', skapad: '2026-08-10' });
+  }
+  const rad = (s: Struktur) => amnesPlanFor(s, 'm4', IDAG)!.a.filter((r) => r.datum !== null).map((r) => `${r.datum!.slice(5)}:${r.nyckel}`);
+
+  it('kapitel 3 från 27/8: kapitlet först, kapitel 2 flyttas senare, genomförda pass orörda, lektionskorten följer', () => {
+    let s = m4();
+    expect(rad(s)).toEqual(['08-18:1:1', '08-20:1:2', '08-25:1:3', '08-27:2:1', '09-01:2:2', '09-03:2:3', '09-08:2:4', '09-10:3:1', '09-15:3:2']);
+    s = sattLektionsplan(s, { id: 'lp31', amneId: 'm4', lektionsIndex: 7, filmer: ['Omkrets|https://exempel.se/o'] });
+    s = sattLektionsplan(s, { id: 'lp21', amneId: 'm4', lektionsIndex: 3, genomgang: 'Andelar' });
+    const r = laddaKapitel(s, 'm4', 3, '2026-08-27', IDAG);
+    expect(rad(r.s)).toEqual(['08-18:1:1', '08-20:1:2', '08-25:1:3', '08-27:3:1', '09-01:3:2', '09-03:2:1', '09-08:2:2', '09-10:2:3', '09-15:2:4']);
+    expect(r).toMatchObject({ kapitel: 3, namn: 'Geometri', forsta: '2026-08-27', sista: '2026-09-01', inlagda: 2, framflyttade: 4, fasta: 0, hoppade: 0, aterinforda: 0, rymsEj: 0, kort: 1 });
+    expect(hamtaLektionsplan(r.s, 'm4', 3)?.filmer).toEqual(['Omkrets|https://exempel.se/o']);
+    expect(hamtaLektionsplan(r.s, 'm4', 5)?.genomgang).toBe('Andelar');
+    // Idempotent: samma kapitel igen ändrar inget
+    expect(rad(laddaKapitel(r.s, 'm4', 3, '2026-08-27', IDAG).s)).toEqual(rad(r.s));
+  });
+
+  it('eget prov ligger kvar på sitt datum; startdag utan pass tar nästa pass; före idag avvisas; okänt kapitel avvisas', () => {
+    let s = m4();
+    s = tillampaUtkast(s, 'm4', { namn: 'Med prov', fran: '2026-08-25', teori: ['1:3', '2:1', 'u:provA', '2:2', '2:3', '2:4', '3:1', '3:2'], labbar: [], egna: [{ id: 'provA', rubrik: 'Prov kapitel 1', typ: 'prov' }] }, IDAG);
+    expect(rad(s).slice(2, 5)).toEqual(['08-25:1:3', '08-27:2:1', '09-01:u:provA']);
+    const r = laddaKapitel(s, 'm4', 3, '2026-08-27', IDAG);
+    expect(rad(r.s)).toEqual(['08-18:1:1', '08-20:1:2', '08-25:1:3', '08-27:3:1', '09-01:u:provA', '09-03:3:2', '09-08:2:1', '09-10:2:2', '09-15:2:3', '09-17:2:4']);
+    expect(r.fasta).toBe(1);
+    // Måndag 24/8 (= idag, inget pass): första passet 25/8
+    const r2 = laddaKapitel(m4(), 'm4', 3, '2026-08-24', IDAG);
+    expect(rad(r2.s).slice(2, 6)).toEqual(['08-25:3:1', '08-27:3:2', '09-01:1:3', '09-03:2:1']);
+    expect(r2.forsta).toBe('2026-08-25');
+    expect(() => laddaKapitel(m4(), 'm4', 3, '2026-08-20', IDAG)).toThrow(/före idag/);
+    expect(() => laddaKapitel(m4(), 'm4', 9, '2026-08-27', IDAG)).toThrow(/finns inte/);
+  });
+
+  it('borttagna lektioner ur kapitlet läggs in igen; genomförda ur kapitlet hoppas över', () => {
+    let s = m4();
+    s = sattLektionsVal(s, 'm4', '3:2', { bort: true }, IDAG);
+    expect(rad(s)).not.toContain('09-15:3:2');
+    const r = laddaKapitel(s, 'm4', 3, '2026-08-27', IDAG);
+    expect(r.aterinforda).toBe(1);
+    expect(rad(r.s).slice(3, 5)).toEqual(['08-27:3:1', '09-01:3:2']);
+    // Kapitel 1 från 25/8: 1:1 och 1:2 är genomförda → bara 1:3 läggs (och ligger redan där)
+    const r3 = laddaKapitel(m4(), 'm4', 1, '2026-08-25', IDAG);
+    expect(r3).toMatchObject({ inlagda: 1, hoppade: 2 });
+    expect(rad(r3.s)).toEqual(rad(m4()));
+  });
+
+  it('ta bort en lektion: de följande flyttas ett pass tidigare, egna prov ligger kvar; genomförd kan inte tas bort', () => {
+    let s = m4();
+    s = tillampaUtkast(s, 'm4', { namn: 'Med prov', fran: '2026-08-25', teori: ['1:3', '2:1', 'u:provA', '2:2', '2:3', '2:4', '3:1', '3:2'], labbar: [], egna: [{ id: 'provA', rubrik: 'Prov kapitel 1', typ: 'prov' }] }, IDAG);
+    s = sattLektionsplan(s, { id: 'lp22', amneId: 'm4', lektionsIndex: 5, genomgang: 'Delen av det hela' });
+    const r = taBortLektion(s, 'm4', '2:1', IDAG);
+    expect(r).toMatchObject({ rubrik: '2.1 Andelen', datum: '2026-08-27', framflyttade: 5, fasta: 1, hadeKort: false });
+    expect(rad(r.s)).toEqual(['08-18:1:1', '08-20:1:2', '08-25:1:3', '08-27:2:2', '09-01:u:provA', '09-03:2:3', '09-08:2:4', '09-10:3:1', '09-15:3:2']);
+    expect(hamtaLektionsplan(r.s, 'm4', 3)?.genomgang).toBe('Delen av det hela');
+    // Eget kort kan tas bort
+    const r2 = taBortLektion(r.s, 'm4', 'u:provA', IDAG);
+    expect(rad(r2.s).slice(3, 6)).toEqual(['08-27:2:2', '09-01:2:3', '09-03:2:4']);
+    expect(r2.s.amnen.find((a) => a.id === 'm4')?.planFranUtkast?.egna).toEqual([]);
+    expect(() => taBortLektion(s, 'm4', '1:1', IDAG)).toThrow(/genomförd/);
+    expect(() => taBortLektion(s, 'm4', '9:9', IDAG)).toThrow(/finns inte/);
   });
 });
