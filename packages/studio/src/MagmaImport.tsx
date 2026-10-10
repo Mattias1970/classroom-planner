@@ -7,8 +7,8 @@
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
-  arFilImporterad, importeraResultat, laggTillElev, magmaAnalys, magmaOmdome, magmaProcent, magmaProvnamnUrFilnamn, magmaUppgiftsStatistik, matchaElev,
-  nyttId, registreraFil, resultatProcent, tolkaMagmaRapport,
+  arFilImporterad, importeraResultat, laggTillElev, magmaAnalys, magmaOmdome, magmaProcent, magmaProvnamnUrFilnamn, magmaUppgiftsStatistik, MAGMA_TYP_NAMN, matchaElev,
+  nyttId, registreraFil, resultatProcent, taBortAllaMagma, taBortMagmaProv, tolkaMagmaNamn, tolkaMagmaRapport,
   type Amne, type Klass, type MagmaAnalys, type MagmaOmdome, type MagmaRapport, type Resultat, type Struktur,
 } from '@planner/kernel';
 import { lasStruktur } from './store.js';
@@ -163,21 +163,38 @@ export function MagmaImport({ s, klass, amne, kor }: {
 
       <MagmaUppgifter s={s} klass={klass} amne={amne} kor={kor} />
       <MagmaAnalysVy s={s} klass={klass} amne={amne} />
-      <MagmaSparade s={s} klass={klass} amne={amne} />
+      <MagmaSparade s={s} klass={klass} amne={amne} kor={kor} />
     </div>
   );
 }
 
 /** Sparade Magma-prov för klassen: välj prov → en rad per elev med ✓/✗ per uppgift, andel rätt och omdöme. */
-function MagmaSparade({ s, klass, amne }: { s: Struktur; klass: Klass; amne: Amne | undefined }) {
+function MagmaSparade({ s, klass, amne, kor }: { s: Struktur; klass: Klass; amne: Amne | undefined; kor: (fn: () => Struktur, m: string) => void }) {
   const elevIds = new Set(s.elever.filter((e) => e.klassId === klass.id).map((e) => e.id));
   const alla = (s.resultat ?? []).filter((r) => r.kalla === 'magma' && elevIds.has(r.elevId) && (amne === undefined || r.amneId === amne.id));
-  const prov = [...new Map(alla.map((r) => [`${r.datum}|${r.prov}`, { datum: r.datum, prov: r.prov }])).values()].sort((a, b) => b.datum.localeCompare(a.datum) || a.prov.localeCompare(b.prov, 'sv'));
+  // Del 178 · Ett prov per namn (importer med samma namn är kombinerade); typen ur namnkonventionen "Ma 8B Kap 1 Diagnos 1.3 - 1.4"
+  const prov = [...new Map(alla.map((r) => [r.prov, { datum: r.datum, prov: r.prov, antal: 0 }])).values()]
+    .map((p) => ({ ...p, datum: alla.filter((r) => r.prov === p.prov).map((r) => r.datum).sort().at(-1) ?? p.datum, antal: alla.filter((r) => r.prov === p.prov).length, namn: tolkaMagmaNamn(p.prov) }))
+    .sort((a, b) => b.datum.localeCompare(a.datum) || a.prov.localeCompare(b.prov, 'sv'));
   const [valt, setValt] = useState('');
   if (prov.length === 0) return null;
-  const nyckel = valt !== '' && prov.some((p) => `${p.datum}|${p.prov}` === valt) ? valt : `${prov[0].datum}|${prov[0].prov}`;
-  const [datum, provnamn] = nyckel.split('|');
-  const rs = alla.filter((r) => r.datum === datum && r.prov === provnamn);
+  const nyckel = valt !== '' && prov.some((p) => p.prov === valt) ? valt : prov[0].prov;
+  const provnamn = nyckel;
+  const valtProv = prov.find((p) => p.prov === provnamn)!;
+  const datum = valtProv.datum;
+  const rs = alla.filter((r) => r.prov === provnamn);
+  const taBortProv = () => {
+    if (amne === undefined) return;
+    if (!window.confirm(`Ta bort ”${provnamn}” (${rs.length} elevresultat) från ${amne.namn}? Filen kan importeras igen efteråt.`)) return;
+    setValt('');
+    kor(() => taBortMagmaProv(lasStruktur(), amne.id, provnamn), `${provnamn} borttaget — ${rs.length} elevresultat raderade.`);
+  };
+  const taBortAlla = () => {
+    if (amne === undefined) return;
+    if (!window.confirm(`Ta bort SAMTLIGA Magma-resultat i ${klass.namn} · ${amne.namn} (${prov.length} prov, ${alla.length} elevresultat)? Filerna kan importeras igen efteråt.`)) return;
+    setValt('');
+    kor(() => taBortAllaMagma(lasStruktur(), amne.id), `Alla Magma-resultat i ${amne.namn} borttagna (${alla.length} elevresultat).`);
+  };
   const perElev = new Map<string, Resultat>(rs.map((r) => [r.elevId, r]));
   const uppgifter = [...new Set(rs.flatMap((r) => (r.svar ?? []).map((x) => x.fraga)))];
   const elever = s.elever.filter((e) => e.klassId === klass.id).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
@@ -189,9 +206,13 @@ function MagmaSparade({ s, klass, amne }: { s: Struktur; klass: Klass; amne: Amn
       <div className="rad" style={{ gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
         <label>Prov:{' '}
           <select aria-label="Sparat Magma-prov" value={nyckel} onChange={(e) => setValt(e.target.value)}>
-            {prov.map((p) => <option key={`${p.datum}|${p.prov}`} value={`${p.datum}|${p.prov}`}>{p.datum} · {p.prov}</option>)}
+            {prov.map((p) => <option key={p.prov} value={p.prov}>{p.datum} · {MAGMA_TYP_NAMN[p.namn.typ]}{p.namn.kapitel !== null ? ` kap ${p.namn.kapitel}` : ''} · {p.prov}</option>)}
           </select></label>
-        <span className="small muted">{rs.length} elever · Utmärkt {antal('Utmärkt')} · Bra {antal('Bra')} · Godkänt {antal('Godkänt')} · Under godkänt {antal('Under godkänt')}</span>
+        <span className={`st-typ magma-${valtProv.namn.typ}`} title="Typ ur filnamnet: Diagnos, Exit ticket, Läxförhör eller Screening">{MAGMA_TYP_NAMN[valtProv.namn.typ]}</span>
+        <span className="small muted">{datum} · {rs.length} elever · Utmärkt {antal('Utmärkt')} · Bra {antal('Bra')} · Godkänt {antal('Godkänt')} · Under godkänt {antal('Under godkänt')}</span>
+        <span className="spacer" />
+        {amne !== undefined && <button className="btn sec sm" aria-label={`Ta bort ${provnamn}`} title="Tar bort provets alla elevresultat (alla importdatum) och filposten" onClick={taBortProv}>🗑 Ta bort provet</button>}
+        {amne !== undefined && <button className="btn sec sm" aria-label="Ta bort alla Magma-resultat" title="Tar bort samtliga Magma-resultat i ämnet så att filerna kan importeras på nytt" onClick={taBortAlla}>🗑 Ta bort alla Magma-resultat</button>}
       </div>
       <table className="tbl small st-magma-tabell">
         <thead><tr><th>Elev</th>{uppgifter.map((u) => <th key={u} title={u}>{u.replace(/^Uppgift\s*/i, '')}</th>)}<th>Rätt</th><th>%</th><th>Omdöme</th></tr></thead>

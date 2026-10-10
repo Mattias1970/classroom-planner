@@ -227,7 +227,8 @@ describe('Del 172 · matematik — gemensam kapiteltext och förhör per kapitel
     expect(anna.diagnoser.lista.map((d) => d.prov)).toEqual(['1.1 - 1.3 diagnos', 'Stockholm stads screening']);
     expect(anna.kapitel).toEqual([{ nr: 1, namn: 'Tal',
       exit: [{ etikett: '1.1', prov: '1.1 Exit', datum: '2026-08-18', procent: 80 }, { etikett: '1.2', prov: '1.2 Exit', datum: '2026-08-25', procent: 70 }],
-      laxforhor: [{ etikett: '1.1–1.2', prov: '1.1 - 1.2 Läxförhör', datum: '2026-09-01', procent: 90 }, { etikett: '1.1–1.3', prov: '1.1 - 1.3 Läxförhör', datum: '2026-09-08', procent: 100 }] }]);
+      laxforhor: [{ etikett: '1.1–1.2', prov: '1.1 - 1.2 Läxförhör', datum: '2026-09-01', procent: 90 }, { etikett: '1.1–1.3', prov: '1.1 - 1.3 Läxförhör', datum: '2026-09-08', procent: 100 }],
+      magmaExit: [], magmaLaxforhor: [] }]);
     const st = samtalsStycken(anna.text);
     expect(st.map((x) => x.etikett)).toEqual([null, 'Diagnoser', 'Förhören', 'Närvaro', 'Inlämningar', null]);
     expect(st[2].underrader).toEqual([

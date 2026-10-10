@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { magmaAnalys, magmaOmdome, tolkaMagmaRapport, magmaUppgiftsStatistik, magmaDatumUrBladnamn, magmaProvnamnUrFilnamn, type MagmaCell } from '../src/domain/magmaprov';
+import { magmaAnalys, magmaOmdome, taBortAllaMagma, taBortMagmaProv, tolkaMagmaNamn, tolkaMagmaRapport, magmaUppgiftsStatistik, magmaDatumUrBladnamn, magmaProvnamnUrFilnamn, type MagmaCell } from '../src/domain/magmaprov';
 import { importeraResultat, resultatForElev, niva, resultatProcent } from '../src/domain/resultat';
-import { laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst } from '../src/domain/struktur';
+import { laggTillAmne, laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst } from '../src/domain/struktur';
 import { tomStruktur } from '../src/domain/typer';
 
 /** Magmas exportform: rad 1 uppgiftsnummer, sedan Förnamn | Efternamn | 1/0 …; tomt = deltog inte. */
@@ -191,5 +191,35 @@ describe('Del 176 · två Magma-diagnoser med samma namn kombineras', () => {
     // Nyare men med mycket färre uppgifter (5 av 20) → det tidigare behålls
     s = importeraResultat(s, { klassId: 'k', kalla: 'magma', prov: 'Kap 1 diagnos', datum: '2026-09-27', rader: [{ namn: 'Anna Berg', poang: 5, maxPoang: 5 }] }).s;
     expect(resultatForElev(s, 'e1')[0]).toMatchObject({ datum: '2026-09-20', poang: 18 });
+  });
+});
+
+describe('Del 178 · namnkonvention "Ämne Klass Kapitel Typ Del" och borttagning', () => {
+  it('tolkar diagnos, exit ticket, läxförhör och screening ur filnamnet', () => {
+    expect(tolkaMagmaNamn('Ma 8B Kap 1 Diagnos 1.3 - 1.4')).toEqual({ amne: 'Ma', klass: '8B', kapitel: 1, typ: 'diagnos', del: '1.3 - 1.4', kort: 'Diagnos 1.3 - 1.4' });
+    expect(tolkaMagmaNamn('Ma 8B Kap 2 Exit ticket 2.1a.xlsx')).toMatchObject({ klass: '8B', kapitel: 2, typ: 'exit', del: '2.1a', kort: 'Exit ticket 2.1a' });
+    expect(tolkaMagmaNamn('Ma 8B Kap 2 Läxförhör 2.1 - 2.4')).toMatchObject({ kapitel: 2, typ: 'laxforhor', del: '2.1 - 2.4', kort: 'Läxförhör 2.1 - 2.4' });
+    expect(tolkaMagmaNamn('Ma 8A Kap 1 Diagnos')).toMatchObject({ klass: '8A', kapitel: 1, typ: 'diagnos', del: '', kort: 'Diagnos' });
+    expect(tolkaMagmaNamn('Stockholm stads screening')).toMatchObject({ amne: null, klass: null, kapitel: null, typ: 'screening', kort: 'Stockholm stads screening' });
+    // Äldre namn utan konventionen
+    expect(tolkaMagmaNamn('1.1 - 1.3 diagnos')).toMatchObject({ amne: null, kapitel: null, typ: 'diagnos', del: '1.1 - 1.3' });
+    expect(tolkaMagmaNamn('Diagnos kap 1')).toMatchObject({ kapitel: 1, typ: 'diagnos', del: '' });
+  });
+  it('tar bort ett Magma-prov på namnet (alla datum) eller alla Magma-resultat i ämnet — Socrative-resultat rörs inte', () => {
+    let s = tomStruktur();
+    s = laggTillSkolar(s, { id: 'la', namn: '26/27', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'ma', klassId: 'k', namn: 'Matematik', schema: [{ dag: 2, start: '10:00', slut: '11:00' }] });
+    s = laggTillElev(s, { id: 'e1', klassId: 'k', namn: 'Anna Berg', grupp: 'A' });
+    s = importeraResultat(s, { klassId: 'k', amneId: 'ma', kalla: 'magma', prov: 'Ma 8B Kap 1 Diagnos 1.3 - 1.4', datum: '2026-09-05', rader: [{ namn: 'Anna Berg', poang: 8, maxPoang: 10 }] }).s;
+    s = importeraResultat(s, { klassId: 'k', amneId: 'ma', kalla: 'magma', prov: 'Ma 8B Kap 1 Diagnos 1.1 - 1.2', datum: '2026-08-29', rader: [{ namn: 'Anna Berg', poang: 9, maxPoang: 10 }] }).s;
+    s = importeraResultat(s, { klassId: 'k', amneId: 'ma', kalla: 'socrative-exit', prov: '1.1 Exit', datum: '2026-08-20', rum: 'Matte8BB', rader: [{ namn: 'Anna Berg', poang: 9, maxPoang: 10 }] }).s;
+    s = { ...s, filregister: [{ id: 'f1', amneId: 'ma', filnamn: 'Ma 8B Kap 1 Diagnos 1.3 - 1.4.xlsx', importerad: '', kalla: 'magma', prov: 'Ma 8B Kap 1 Diagnos 1.3 - 1.4' }] };
+    const s2 = taBortMagmaProv(s, 'ma', 'ma 8b kap 1 diagnos 1.3 - 1.4');
+    expect(resultatForElev(s2, 'e1').map((r) => r.prov)).toEqual(['Ma 8B Kap 1 Diagnos 1.1 - 1.2', '1.1 Exit']);
+    expect(s2.filregister).toEqual([]);
+    const s3 = taBortAllaMagma(s, 'ma');
+    expect(resultatForElev(s3, 'e1').map((r) => r.prov)).toEqual(['1.1 Exit']);
   });
 });

@@ -1279,6 +1279,10 @@ input.fel { border-color: #B71C1C; }
 .st-samtal-underrader { margin: -6px 0 10px 16px; display: grid; grid-template-columns: max-content auto; column-gap: 16px; row-gap: 2px; }
 .st-samtal-underrad { display: contents; }
 .st-samtal-underrad.text { grid-column: 1 / -1; margin-top: 4px; }
+.st-typ.magma-diagnos { background: #EDE7F6; color: #4527A0; }
+.st-typ.magma-exit { background: #E3F2FD; color: #1565C0; }
+.st-typ.magma-laxforhor { background: #E8F5E9; color: #2E7D32; }
+.st-typ.magma-screening { background: #FFF8E1; color: #7A5A00; }
 .st-samtal-kapitel { border: 1px solid var(--ram); border-radius: 8px; padding: 6px 10px; margin: 0 0 10px; }
 .st-samtal-kapitel summary { cursor: pointer; font-weight: 600; }
 .st-samtal-kapval { display: flex; flex-direction: column; gap: 2px; margin: 6px 0; }

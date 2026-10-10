@@ -17,6 +17,7 @@ import { elevNarvaro } from './dashboard.js';
 import { digiexamLarm } from './digiexam.js';
 import { elevkort, type ElevkortSerie } from './elevkort.js';
 import { inlamningsOversikt, type InlamningsTyp } from './inlamningar.js';
+import { tolkaMagmaNamn } from './magmaprov.js';
 import { gemensamText, kapitelKoder, kapitelNamn, kodEtikett, type SamtalsKapitel } from './samtalskapitel.js';
 import { elevIKlassen } from './struktur.js';
 import type { Struktur } from './typer.js';
@@ -60,8 +61,11 @@ export interface Diagnos { prov: string; datum: string; procent: number; niva: S
 
 /** Del 172 · Ett förhör (Exit ticket/Läxförhör) i ett kapitel: '1.1' eller '1.1–1.3', procent och datum. */
 export interface KapitelForhor { etikett: string; prov: string; datum: string; procent: number }
-/** Del 172 · Elevens Exit tickets och Läxförhör i ett kapitel ur urvalet (matematik). Tomma listor nämns inte i texten. */
-export interface KapitelResultat { nr: number; namn: string; exit: KapitelForhor[]; laxforhor: KapitelForhor[] }
+/**
+ * Del 172 · Elevens Exit tickets och Läxförhör i ett kapitel ur urvalet (matematik). Tomma listor nämns inte i texten.
+ * Del 178 · magmaExit/magmaLaxforhor: Magma-filer döpta "… Exit ticket 2.1a" / "… Läxförhör 2.1 - 2.4" (samlas under Magma).
+ */
+export interface KapitelResultat { nr: number; namn: string; exit: KapitelForhor[]; laxforhor: KapitelForhor[]; magmaExit: KapitelForhor[]; magmaLaxforhor: KapitelForhor[] }
 
 export interface Utvardering {
   elevId: string;
@@ -215,13 +219,15 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
   const l = u.lektioner;
   const lagt = l.nu !== null && l.nu < 70;
   if (u.mall === 'ma') {
-    const med = u.kapitel.filter((k) => k.exit.length > 0 || k.laxforhor.length > 0);
+    const med = u.kapitel.filter((k) => k.exit.length > 0 || k.laxforhor.length > 0 || k.magmaExit.length > 0 || k.magmaLaxforhor.length > 0);
     if (med.length > 0) {
       rader.push('Förhören:');
       const rad = (f: KapitelForhor[]) => f.map((x) => `${x.etikett !== '' ? `${x.etikett} ` : ''}${x.procent} %`).join(', ');
       for (const k of med) {
         if (k.exit.length > 0) rader.push(`${UNDERRAD}${kapitelNamn(k)} · Exit tickets\t${rad(k.exit)}`);
         if (k.laxforhor.length > 0) rader.push(`${UNDERRAD}${kapitelNamn(k)} · Läxförhör\t${rad(k.laxforhor)}`);
+        if (k.magmaExit.length > 0) rader.push(`${UNDERRAD}${kapitelNamn(k)} · Magma Exit tickets\t${rad(k.magmaExit)}`);
+        if (k.magmaLaxforhor.length > 0) rader.push(`${UNDERRAD}${kapitelNamn(k)} · Magma Läxförhör\t${rad(k.magmaLaxforhor)}`);
       }
       if (med.some((k) => k.laxforhor.length > 0)) rader.push(`${UNDERRAD}Alla Läxförhör går att öva hemma på Socrative.com — både inför kommande förhör och som repetition av de olika delkapitlen.`);
     }
@@ -424,18 +430,21 @@ export function utvardering(s: Struktur, elevId: string, amneId: string, idag?: 
   const urvalKoder = new Set(urval.flatMap(kapitelKoder));
   const iUrval = (koder: string[]) => urval.length === 0 || koder.length === 0 || koder.some((k) => urvalKoder.has(k));
   const magmaAlla = serie('magma');
-  const magma = { ...magmaAlla, punkter: magmaAlla.punkter.filter((x) => iUrval(x.koder)) };
-  // Diagnosens slag: screening (inga koder), kapiteldiagnos (heter "kap 1"/"kapitel 1" eller täcker kapitlets alla
-  // genomförda delkapitel), annars delkapiteldiagnos
+  // Del 178 · Magma-filer döpta "Exit ticket …"/"Läxförhör …" är förhör, inte diagnoser
+  const magmaTypAv = (x: { prov: string }) => tolkaMagmaNamn(x.prov).typ;
+  const magma = { ...magmaAlla, punkter: magmaAlla.punkter.filter((x) => iUrval(x.koder) && (magmaTypAv(x) === 'diagnos' || magmaTypAv(x) === 'screening')) };
+  // Diagnosens slag: screening (inga koder), kapiteldiagnos ("Kap 1 Diagnos" utan delkapitel, eller en diagnos som täcker
+  // kapitlets alla genomförda delkapitel), annars delkapiteldiagnos ("Kap 1 Diagnos 1.3 - 1.4")
   const typFor = (prov: string, koder: string[]): DiagnosTyp => {
-    if (/screening/i.test(prov)) return 'screening';
-    const kapNamn = /\bkap(?:itel)?\.?\s*(\d+)\b/i.exec(prov);
-    if (kapNamn !== null && koder.length === 0) return 'kapitel';
+    const nm = tolkaMagmaNamn(prov);
+    if (nm.typ === 'screening') return 'screening';
+    const kapNamn = nm.kapitel !== null;
+    if (kapNamn && koder.length === 0) return 'kapitel';
     if (koder.length === 0) return 'delkapitel';
     const kapNr = koder[0].split('.')[0];
     const alla = (urval.find((k) => String(k.nr) === kapNr) ?? gemensamText(s, amneId, idag ?? '9999-12-31').kapitel.find((k) => String(k.nr) === kapNr))?.delkapitel.map((x) => x.kod) ?? [];
     const tackt = alla.length > 0 && alla.every((c) => koder.includes(c));
-    return tackt || kapNamn !== null ? 'kapitel' : 'delkapitel';
+    return tackt ? 'kapitel' : 'delkapitel';
   };
   const lista: Diagnos[] = magma.punkter.filter((x) => x.procent !== null).map((x) => ({ prov: x.prov, datum: x.datum, procent: x.procent!, niva: magmaNiva(x.procent!), poang: x.poang, maxPoang: x.maxPoang, typ: typFor(x.prov, x.koder), koder: x.koder }));
   const mu = utveckling(magma);
@@ -443,10 +452,13 @@ export function utvardering(s: Struktur, elevId: string, amneId: string, idag?: 
   const delDiag = lista.filter((x) => x.typ === 'delkapitel');
   const kapitel: KapitelResultat[] = urval.map((k: SamtalsKapitel) => {
     const kk = new Set(kapitelKoder(k));
-    const forhor = (kalla: string): KapitelForhor[] => serie(kalla).punkter
-      .filter((x) => x.procent !== null && x.koder.some((c) => kk.has(c)))
+    const forhor = (kalla: string, magmaTyp?: 'exit' | 'laxforhor'): KapitelForhor[] => serie(kalla).punkter
+      .filter((x) => x.procent !== null && x.koder.some((c) => kk.has(c)) && (magmaTyp === undefined || magmaTypAv(x) === magmaTyp))
       .map((x) => ({ etikett: kodEtikett(x.koder.filter((c) => kk.has(c))), prov: x.prov, datum: x.datum, procent: x.procent! }));
-    return { nr: k.nr, namn: k.namn, exit: forhor('socrative-exit'), laxforhor: forhor('socrative-laxforhor') };
+    return {
+      nr: k.nr, namn: k.namn, exit: forhor('socrative-exit'), laxforhor: forhor('socrative-laxforhor'),
+      magmaExit: forhor('magma', 'exit'), magmaLaxforhor: forhor('magma', 'laxforhor'),
+    };
   });
   const diagnoser = {
     lista, snitt: snitt(lista.map((x) => x.procent)),

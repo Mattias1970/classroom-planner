@@ -13,6 +13,7 @@
  */
 import { elevernaIKlassen } from './struktur.js';
 import type { FragaSvar } from './resultat.js';
+import type { Struktur } from './typer.js';
 
 export type MagmaCell = string | number | boolean | null | undefined;
 
@@ -220,6 +221,76 @@ export function valjMagmaResultat<T extends { datum: string; maxPoang: number; s
   const [aldre, senare] = a.datum <= b.datum ? [a, b] : [b, a];
   const ga = magmaGjorda(aldre); const gs = magmaGjorda(senare);
   return ga > 0 && gs < ga * MAGMA_MINST_ANDEL_GJORDA ? aldre : senare;
+}
+
+// ── Del 178 · Namnkonvention för Magma-filer i matematik ─────────────────────
+//   "Ma 8B Kap 1 Diagnos 1.3 - 1.4", "Ma 8B Kap 2 Exit ticket 2.1a", "Ma 8B Kap 2 Läxförhör 2.1 - 2.4",
+//   "Stockholm stads screening". Typen avgör var resultatet hamnar: diagnoser, Exit tickets eller Magma Läxförhör.
+
+export type MagmaTyp = 'diagnos' | 'exit' | 'laxforhor' | 'screening';
+export const MAGMA_TYP_NAMN: Record<MagmaTyp, string> = { diagnos: 'Diagnos', exit: 'Exit ticket', laxforhor: 'Läxförhör', screening: 'Screening' };
+
+export interface MagmaNamn {
+  /** Ämnesförkortning ('Ma') när namnet börjar med en. */
+  amne: string | null;
+  /** Klass ('8B') när namnet anger en. */
+  klass: string | null;
+  /** Kapitel ur 'Kap 1' / 'Kapitel 1'. */
+  kapitel: number | null;
+  typ: MagmaTyp;
+  /** Delen efter typordet: '1.3 - 1.4', '2.1a', '2.1 - 2.4' ('' när den saknas). */
+  del: string;
+  /** Kort visningsnamn: 'Diagnos 1.3 - 1.4', 'Exit ticket 2.1a', 'Läxförhör 2.1 - 2.4', 'Stockholm stads screening'. */
+  kort: string;
+}
+
+/** Typen ur namnet: screening, exit ticket, läxförhör — annars diagnos. */
+export function magmaTyp(prov: string): MagmaTyp {
+  const n = prov.toLowerCase();
+  if (/screening/.test(n)) return 'screening';
+  if (/exit/.test(n)) return 'exit';
+  if (/l[äa]xf[öo]rh[öo]r/.test(n)) return 'laxforhor';
+  return 'diagnos';
+}
+
+/** Tolkar ett Magma-filnamn enligt konventionen Ämne Klass Kapitel Typ Del. Okända delar blir null. */
+export function tolkaMagmaNamn(prov: string): MagmaNamn {
+  let namn = prov.replace(/\.(xlsx|xls|csv|pdf)$/i, '').replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+  const typ = magmaTyp(namn);
+  const am = /^(ma|matte|matematik)\b\s*/i.exec(namn);
+  const amne = am !== null ? 'Ma' : null;
+  if (am !== null) namn = namn.slice(am[0].length);
+  const kl = /^(\d[a-zåäö]?)(?=\s|$)\s*/i.exec(namn);
+  const klass = kl !== null ? kl[1].toUpperCase() : null;
+  if (kl !== null) namn = namn.slice(kl[0].length);
+  const kp = /\bkap(?:itel)?\.?\s*(\d+)\b\s*/i.exec(namn);
+  const kapitel = kp !== null ? Number(kp[1]) : null;
+  if (kp !== null) namn = `${namn.slice(0, kp.index)} ${namn.slice(kp.index + kp[0].length)}`;
+  const ty = /\b(diagnos(?:en)?|exit\s*tickets?|l[äa]xf[öo]rh[öo]r(?:et|en)?|screening)\b\s*/i.exec(namn);
+  if (ty !== null) namn = `${namn.slice(0, ty.index)} ${namn.slice(ty.index + ty[0].length)}`;
+  const del = namn.replace(/\s+/g, ' ').trim();
+  // Screeningen behåller sitt namn ('Stockholm stads screening'); övriga visas som Typ + del
+  const kort = typ === 'screening' ? prov.replace(/\.(xlsx|xls|csv|pdf)$/i, '').replace(/_/g, ' ').replace(/\s+/g, ' ').trim() : `${MAGMA_TYP_NAMN[typ]}${del !== '' ? ` ${del}` : ''}`;
+  return { amne, klass, kapitel, typ, del, kort };
+}
+
+/** Tar bort alla Magma-resultat för ett prov (namnet, oavsett datum) i ett ämne, och filposterna för det. */
+export function taBortMagmaProv(s: Struktur, amneId: string, prov: string): Struktur {
+  const n = prov.trim().toLowerCase();
+  return {
+    ...s,
+    resultat: (s.resultat ?? []).filter((r) => !(r.kalla === 'magma' && r.amneId === amneId && r.prov.trim().toLowerCase() === n)),
+    filregister: (s.filregister ?? []).filter((f) => !(f.kalla === 'magma' && f.amneId === amneId && f.prov.trim().toLowerCase() === n)),
+  };
+}
+
+/** Tar bort samtliga Magma-resultat och Magma-filposter i ett ämne. */
+export function taBortAllaMagma(s: Struktur, amneId: string): Struktur {
+  return {
+    ...s,
+    resultat: (s.resultat ?? []).filter((r) => !(r.kalla === 'magma' && r.amneId === amneId)),
+    filregister: (s.filregister ?? []).filter((f) => !(f.kalla === 'magma' && f.amneId === amneId)),
+  };
 }
 
 /** Procent 0–100 utan avrundning ur ett resultat; null vid maxpoäng 0. */
