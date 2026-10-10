@@ -1600,6 +1600,8 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
 function FoljPlanering({ s, amneId, klassNamn, kor, idag }: { s: Struktur; amneId: string; klassNamn: string; kor: (fn: () => Struktur, m: string) => void; idag: string }) {
   const [kalla, setKalla] = useState('');
   const [fran, setFran] = useState(idag);
+  // Del 174 · Veckovis: samma saker samma vecka (olika scheman), egna prov/laborationer ligger kvar
+  const [veckovis, setVeckovis] = useState(true);
   const val = foljbaraAmnen(s, amneId);
   if (val.length === 0) return null;
   const namn = (x: Amne) => `${s.klasser.find((k) => k.id === x.klassId)?.namn ?? ''} · ${x.namn}`;
@@ -1611,11 +1613,17 @@ function FoljPlanering({ s, amneId, klassNamn, kor, idag }: { s: Struktur; amneI
         {val.map((x) => <option key={x.id} value={x.id}>{namn(x)}</option>)}
       </select>
       <label className="small">från <input type="date" aria-label="Följ från datum" value={fran} min={idag} onChange={(e) => { if (e.target.value !== '') setFran(e.target.value); }} /></label>
+      <label className="small" title="Klasserna gör samma saker samma vecka även om schemana skiljer sig. Egna prov, diagnoser, laborationer och egna rader i den här klassen ligger kvar på sina datum. Har klassen färre pass en vecka stryks en övningslektion; har den fler pass blir de övningar.">
+        <input type="checkbox" aria-label="Vecka för vecka" checked={veckovis} onChange={(e) => setVeckovis(e.target.checked)} /> vecka för vecka
+      </label>
       <button className="btn sm" disabled={kalla === ''} onClick={() => {
         const k = val.find((x) => x.id === kalla); if (k === undefined) return;
-        if (!window.confirm(`Låta ${klassNamn} följa ${namn(k)} från ${fran}?\n\nLektionerna före ${fran} ändras inte. Från ${fran} får ${klassNamn} samma lektioner, laborationer och lektionskort (filmer, genomgång, uppgifter) i samma ordning. Socrative-rummen följer ${klassNamn}.`)) return;
+        const hur = veckovis
+          ? `Från ${fran} får ${klassNamn} samma lektioner som ${namn(k)} samma vecka, med samma lektionskort (filmer, genomgång, uppgifter). Egna prov, diagnoser, laborationer och egna rader i ${klassNamn} ligger kvar på sina datum; har ${klassNamn} färre pass en vecka stryks en övningslektion, fler pass blir övningar.`
+          : `Från ${fran} får ${klassNamn} samma lektioner, laborationer och lektionskort (filmer, genomgång, uppgifter) i samma ordning.`;
+        if (!window.confirm(`Låta ${klassNamn} följa ${namn(k)} från ${fran}?\n\nLektionerna före ${fran} ändras inte. ${hur} Socrative-rummen följer ${klassNamn}.`)) return;
         try {
-          const r = foljPlanering(lasStruktur(), amneId, kalla, fran, idag);
+          const r = foljPlanering(lasStruktur(), amneId, kalla, fran, idag, { veckovis });
           const extra = r.varningar.length > 0 ? ` ⚠ ${r.varningar.join(' ')}` : '';
           kor(() => r.s, `${klassNamn} följer ${namn(k)} från ${fran}: ${r.teori} lektioner${r.labbar > 0 ? `, ${r.labbar} laborationer` : ''}${r.egnaKort > 0 ? `, ${r.egnaKort} egna kort` : ''}, ${r.kort} lektionskort.${extra}`);
         } catch (e) { kor(() => { throw e; }, ''); }

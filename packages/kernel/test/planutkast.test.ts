@@ -176,3 +176,60 @@ describe('Del 161 · följ en annan klass planering', () => {
     expect(r.s.amnen.find((a) => a.id === 'maA')?.planFranUtkast?.namn).toBe('Följer 8B · Matematik');
   });
 });
+
+describe('Del 174 · följ veckovis — samma saker samma vecka', () => {
+  const MA2 = bokFromImport(JSON.stringify({
+    schema: 'classroom-planner-bok', version: 1,
+    bok: { id: 'ma2', titel: 'Matematik Y', förlag: 'Liber', ämne: 'Matematik', årskurs: 8, kapitelMeta: { '1': { name: 'Tal', col: '#2f5aa8' } } },
+    lektioner: { '1': [
+      { id: 1, type: 'regular', avsnitt: '1.1 Bråk', del: 1 },
+      { id: 2, type: 'regular', avsnitt: '1.2 Procent', del: 1 },
+      { id: 3, type: 'repetition', avsnitt: 'Träna mera', del: 1 },
+      { id: 4, type: 'regular', avsnitt: '1.3 Potenser', del: 1 },
+      { id: 5, type: 'repetition', avsnitt: 'Blandade uppgifter', del: 1 },
+      { id: 6, type: 'regular', avsnitt: '1.4 Tal', del: 1 },
+      { id: 7, type: 'exam', avsnitt: '1 Prov', del: 1 },
+    ] },
+  }));
+  function tva(schemaA: Array<{ dag: number; start: string; slut: string }>): Struktur {
+    let s = sparaBok(grund(), MA2);
+    s = laggTillKlass(s, { id: 'k2', tjanstId: 'tj', namn: '8A' });
+    s = laggTillAmne(s, { id: 'maB', klassId: 'k', namn: 'Matematik', bokId: 'ma2', schema: [{ dag: 2, start: '10:00', slut: '11:00' }, { dag: 4, start: '10:00', slut: '11:00' }] });
+    s = laggTillAmne(s, { id: 'maA', klassId: 'k2', namn: 'Matematik', bokId: 'ma2', schema: schemaA });
+    s = registreraPlanering(s, { id: 'plB', amneId: 'maB', bokId: 'ma2', skapad: '2026-08-10' });
+    return registreraPlanering(s, { id: 'plA', amneId: 'maA', bokId: 'ma2', skapad: '2026-08-10' });
+  }
+  const FRAN = '2026-08-17';   // måndag v. 34, läsårets första dag
+
+  it('8A med tre pass i veckan: 8B:s två lektioner läggs samma vecka och det tredje passet blir en övning', () => {
+    const s = tva([{ dag: 1, start: '08:10', slut: '09:10' }, { dag: 3, start: '08:10', slut: '09:10' }, { dag: 5, start: '08:10', slut: '09:10' }]);
+    // 8B v. 34: 1:1 (tis 18/8), 1:2 (tor 20/8); v. 35: 1:3, 1:4; v. 36: 1:5, 1:6; v. 37: 1:7
+    const r = foljPlanering(s, 'maA', 'maB', FRAN, FRAN, { veckovis: true });
+    const plan = amnesPlanFor(r.s, 'maA', FRAN)!.a;
+    expect(plan.slice(0, 10).map((x) => `${x.datum}:${x.nyckel}`)).toEqual([
+      '2026-08-17:1:1', '2026-08-19:1:2', '2026-08-21:u:ov-2026-08-21',
+      '2026-08-24:1:3', '2026-08-26:1:4', '2026-08-28:u:ov-2026-08-28',
+      '2026-08-31:1:5', '2026-09-02:1:6', '2026-09-04:u:ov-2026-09-04', '2026-09-07:1:7']);
+    expect(plan[2].lektion.avsnitt).toBe('Övning');
+    // Efter källans sista lektion fylls inga fler övningar på
+    expect(plan[10]?.nyckel ?? 'pass').toMatch(/^pass|^$/);
+    expect(r.strukna).toEqual([]);
+  });
+
+  it('8A med ett pass i veckan: övningslektioner stryks så att veckorna går ihop, 8A:s eget prov ligger kvar', () => {
+    let s = tva([{ dag: 3, start: '08:10', slut: '09:10' }]);
+    // 8A har ett eget provkort onsdag 26/8 (v. 35)
+    s = tillampaUtkast(s, 'maA', { namn: 'Eget prov', fran: FRAN, teori: ['1:1', 'u:provA', '1:2'], labbar: [], egna: [{ id: 'provA', rubrik: 'Prov kapitel 1 (8A)', typ: 'prov' }] }, FRAN);
+    expect(amnesPlanFor(s, 'maA', FRAN)!.a.slice(0, 3).map((x) => `${x.datum}:${x.nyckel}`)).toEqual(['2026-08-19:1:1', '2026-08-26:u:provA', '2026-09-02:1:2']);
+    const r = foljPlanering(s, 'maA', 'maB', FRAN, FRAN, { veckovis: true });
+    const plan = amnesPlanFor(r.s, 'maA', FRAN)!.a;
+    // v. 34: 8B gör 1:1 och 1:2 — 8A har ett pass → 1:1; 1:2 släpar, så övningen 1:3 (Träna mera) stryks
+    // v. 35: 8A:s pass är provet (ligger kvar); 8B gjorde 1:3 (struken) och 1:4
+    // v. 36: 1:2 (eftersläpning), övningen 1:5 (Blandade uppgifter) stryks; v. 37: 1:4; v. 38: 1:6
+    expect(plan.slice(0, 5).map((x) => `${x.datum}:${x.nyckel}`)).toEqual(['2026-08-19:1:1', '2026-08-26:u:provA', '2026-09-02:1:2', '2026-09-09:1:4', '2026-09-16:1:6']);
+    expect(r.strukna).toEqual(['Träna mera', 'Blandade uppgifter']);
+    // 8B:s eget provkort (1:7) hoppas över eftersom 8A har ett eget prov
+    expect(plan.map((x) => x.nyckel)).not.toContain('1:7');
+    expect(r.varningar.some((v) => v.includes('ströks'))).toBe(true);
+  });
+});

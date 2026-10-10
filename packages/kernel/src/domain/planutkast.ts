@@ -9,6 +9,7 @@
  * lektioner via andraPlanering. Pass före startdatum ändras aldrig.
  */
 import { delkapitelKod } from './bok.js';
+import { isoVecka } from './skolar.js';
 import {
   amnesOffset, amnesPlanFor, andraPlanering, gruppNyckel, hamtaLektionsplan, harLaborationsstandard,
   kopplaOmLektionsplaner, noBudget, nyttId, planeringsRader, registreraPlanering, samlaSlots, sattLektionsplan, type PlanRad,
@@ -463,6 +464,8 @@ export function tabortInlagtUtkast(s: Struktur, amneId: string, idag?: string): 
 
 export interface FoljPlanering {
   s: Struktur;
+  /** Del 174 · Veckovis: lektioner som ströks (övningslektioner) för att veckorna skulle gå ihop. */
+  strukna?: string[];
   /** Antal teorilektioner och laborationer som lades in från startdatum. */
   teori: number;
   labbar: number;
@@ -489,7 +492,26 @@ export function foljbaraAmnen(s: Struktur, amneId: string): Amne[] {
  * målets bokföljd (källans extra lektioner och egna rader) blir egna kort med källans
  * innehåll. Socrative-rummen följer målets klass.
  */
-export function foljPlanering(s: Struktur, malAmneId: string, kallAmneId: string, fran: string, idag?: string): FoljPlanering {
+export interface FoljAlternativ {
+  /**
+   * Del 174 · Veckovis: klasserna gör samma saker samma vecka. Källans lektioner läggs på målets pass i
+   * samma vecka (inte bara i samma ordning); målets egna kort (prov, diagnoser, laborationer, egna rader) och
+   * provdatum ligger kvar på sina datum. Har målet färre pass en vecka stryks i första hand en övningslektion
+   * (repetition/övning) — i den veckan eller nästa — annars flyttas lektionen till veckan efter. Har målet fler
+   * pass fylls de med en övningslektion.
+   */
+  veckovis?: boolean;
+}
+
+/** Måndagen i datumets vecka — nyckel för "samma vecka". */
+function veckoNyckel(datum: string): string {
+  const d = new Date(`${datum}T12:00:00Z`);
+  const dag = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - dag);
+  return d.toISOString().slice(0, 10);
+}
+
+export function foljPlanering(s: Struktur, malAmneId: string, kallAmneId: string, fran: string, idag?: string, alternativ: FoljAlternativ = {}): FoljPlanering {
   const mal = hittaAmne(s, malAmneId);
   const kalla = hittaAmne(s, kallAmneId);
   if (mal.id === kalla.id) throw new Error('Välj ett annat ämne att följa.');
@@ -514,6 +536,24 @@ export function foljPlanering(s: Struktur, malAmneId: string, kallAmneId: string
 
   const u: PlanFranUtkast = { namn: `Följer ${klassNamn(kalla)} · ${kalla.namn}`, fran, teori: [], labbar: [], egna: [], detaljer: {} };
   let egnaKort = 0; let kort = 0; let tappadeLabbar = 0;
+  // Källans teorikort i ordning med datum och sort (för veckovis läggning)
+  const kallKort: Array<{ nyckel: string; datum: string | null; typ: UtkastKort['typ'] }> = [];
+  const veckovis = alternativ.veckovis === true;
+  // Målets egna fasta kort från startdatum (prov, diagnoser, laborationer, egna rader) — rörs inte i veckovis läge
+  const malPlan = veckovis ? (amnesPlanFor(s, malAmneId, idag, false)?.a ?? []) : [];
+  const malEgna = mal.planFranUtkast?.egna ?? [];
+  const fastTyp = (n: string): UtkastKort['typ'] | null => {
+    if (n.startsWith('er:')) return 'annat';
+    const e = malEgna.find((x) => `u:${x.id}` === n);
+    return e !== undefined && e.typ !== 'lektion' && e.typ !== 'ovning' ? e.typ : null;
+  };
+  const fasta = new Map<string, { nyckel: string; typ: UtkastKort['typ'] }>();
+  for (const r of malPlan) {
+    if (r.datum === null || r.datum < fran || r.nyckel === undefined || arLab(r.nyckel) || arPass(r.nyckel)) continue;
+    const typ = fastTyp(r.nyckel);
+    if (typ !== null && !fasta.has(r.datum)) fasta.set(r.datum, { nyckel: r.nyckel, typ });
+  }
+  const malHarProv = veckovis && ([...fasta.values()].some((f) => f.typ === 'prov') || (mal.planFranUtkast?.provDatum !== undefined && mal.planFranUtkast.provDatum >= fran));
   const detaljerFor = (r: PlaneradLektion, radNyckel: string): LektionsDetaljer => {
     const i = kallIndex.get(radNyckel);
     const lp = i === undefined ? null : hamtaLektionsplan(s, kallAmneId, i);
@@ -542,6 +582,8 @@ export function foljPlanering(s: Struktur, malAmneId: string, kallAmneId: string
       const eget = kalla.planFranUtkast?.egna.find((x) => `u:${x.id}` === nyckel);
       const id = `f-${nyckel.replace(/[^a-z0-9]/gi, '-')}`;
       const typ: UtkastKort['typ'] = eget?.typ ?? (r.lektion.typ === 'exam' ? 'prov' : r.lektion.typ === 'test' ? 'diagnos' : r.lektion.typ === 'repetition' ? 'ovning' : 'lektion');
+      // Veckovis: målets eget prov ligger kvar — källans provkort hoppas över
+      if (malHarProv && typ === 'prov') continue;
       u.egna.push({ id, rubrik: r.lektion.avsnitt, typ, ...(r.lektion.genomgang !== '—' ? { beskrivning: r.lektion.genomgang } : {}) });
       egnaKort += 1;
       const bas: LektionsDetaljer = {
@@ -555,16 +597,73 @@ export function foljPlanering(s: Struktur, malAmneId: string, kallAmneId: string
       const d = { ...bas, ...detaljerFor(r, nyckel) };
       nyckel = `u:${id}`;
       if (Object.keys(d).length > 0) { u.detaljer![nyckel] = d; kort += 1; }
+      kallKort.push({ nyckel, datum: r.datum, typ });
     } else {
+      if (malHarProv && r.lektion.typ === 'exam') continue;
       const d = detaljerFor(r, nyckel); if (Object.keys(d).length > 0) { u.detaljer![nyckel] = d; kort += 1; }
+      kallKort.push({ nyckel, datum: r.datum, typ: r.lektion.typ === 'exam' ? 'prov' : r.lektion.typ === 'test' ? 'diagnos' : r.lektion.typ === 'repetition' ? 'ovning' : 'lektion' });
     }
-    u.teori.push(nyckel);
+  }
+  const strukna: string[] = [];
+  if (!veckovis) u.teori = kallKort.map((k) => k.nyckel);
+  else {
+    // Målets pass från startdatum (teoripassen), i datumordning
+    const tomt = tomtUtkast(u.namn, fran);
+    const pass = planeringstavla(ut, malAmneId, tomt, idag).kolumner.filter((k) => k.ko === 'teori' && k.datum !== null);
+    // Lektioner målet redan gjort före startdatum läggs inte igen (passet blir en övning i stället)
+    const gjorda = nycklarFore(ut, malAmneId, fran, idag).teori;
+    for (let i = kallKort.length - 1; i >= 0; i -= 1) if (gjorda.has(kallKort[i].nyckel)) kallKort.splice(i, 1);
+    const rubrikFor = (n: string) => malRader.get(n)?.lektion.avsnitt ?? u.egna.find((x) => `u:${x.id}` === n)?.rubrik ?? n;
+    const ko: typeof kallKort = []; let idx = 0; let vecka: string | null = null;
+    const malNamn = klassNamn(mal);
+    const stryk = (lista: typeof kallKort, fran0: number): boolean => {
+      const i = lista.findIndex((k, j) => j >= fran0 && k.typ === 'ovning');
+      if (i < 0) return false;
+      strukna.push(rubrikFor(lista[i].nyckel)); lista.splice(i, 1); return true;
+    };
+    for (const p of pass) {
+      const w = veckoNyckel(p.datum!);
+      if (w !== vecka) {
+        // Ny vecka: det som inte fick plats förra veckan → stryk en övningslektion (i kön, annars nästa kommande)
+        for (let n = ko.length; n > 0; n -= 1) {
+          if (!stryk(ko, 0) && !stryk(kallKort, idx)) {
+            varningar.push(`v. ${isoVecka(vecka!)}: ${ko.length} ${ko.length === 1 ? 'lektion fick' : 'lektioner fick'} inte plats i ${malNamn} och flyttas till veckan efter.`);
+            break;
+          }
+        }
+        vecka = w;
+      }
+      while (idx < kallKort.length && (kallKort[idx].datum === null || veckoNyckel(kallKort[idx].datum!) <= w)) ko.push(kallKort[idx++]);
+      const fast = fasta.get(p.datum!);
+      if (fast !== undefined) { u.teori.push(fast.nyckel); continue; }
+      const k = ko.shift();
+      if (k !== undefined) u.teori.push(k.nyckel);
+      else if (idx >= kallKort.length) break;   // källan är slut — inga fler övningar
+      else {
+        const id = `ov-${p.datum}`;
+        u.egna.push({ id, rubrik: 'Övning', typ: 'ovning' }); egnaKort += 1;
+        u.teori.push(`u:${id}`);
+      }
+    }
+    for (const k of [...ko, ...kallKort.slice(idx)]) u.teori.push(k.nyckel);
+    // Målets egna kort som ligger kvar måste finnas i utkastet
+    for (const f of fasta.values()) {
+      const e = malEgna.find((x) => `u:${x.id}` === f.nyckel);
+      if (e !== undefined && !u.egna.some((x) => x.id === e.id)) u.egna.push({ ...e });
+    }
+    if (mal.planFranUtkast?.provDatum !== undefined && mal.planFranUtkast.provDatum >= fran) u.provDatum = mal.planFranUtkast.provDatum;
+    if (mal.planFranUtkast !== undefined) {
+      // Målets egna laborationer från startdatum ligger kvar
+      const egnaLabbar = mal.planFranUtkast.labbar.filter((n) => n.startsWith('u:'));
+      if (egnaLabbar.length > 0) u.labbar = [...new Set([...egnaLabbar, ...u.labbar])];
+    }
+    if (strukna.length > 0) varningar.push(`${strukna.length} ${strukna.length === 1 ? 'övningslektion ströks' : 'övningslektioner ströks'} för att veckorna skulle gå ihop: ${strukna.join(', ')}.`);
   }
   if (Object.keys(u.detaljer!).length === 0) delete u.detaljer;
   if (tappadeLabbar > 0) varningar.push(`${tappadeLabbar} laborationer hoppades över — ${klassNamn(mal)} har inte laborationer på halvklasspassen.`);
-  if (u.provDatum === undefined && kalla.planFranUtkast?.provDatum !== undefined && kalla.planFranUtkast.provDatum >= fran) u.provDatum = kalla.planFranUtkast.provDatum;
+  if (!veckovis && u.provDatum === undefined && kalla.planFranUtkast?.provDatum !== undefined && kalla.planFranUtkast.provDatum >= fran) u.provDatum = kalla.planFranUtkast.provDatum;
   ut = tillampaUtkast(ut, malAmneId, u, idag);
   const efter = planeringstavla(ut, malAmneId, u, idag);
   if (efter.rymsEj.length > 0) varningar.push(`${efter.rymsEj.length} lektioner ryms inte före läsårets slut i ${klassNamn(mal)}.`);
-  return { s: ut, teori: u.teori.length, labbar: u.labbar.length, egnaKort, kort, varningar };
+  return { s: ut, teori: u.teori.length, labbar: u.labbar.length, egnaKort, kort, varningar, ...(veckovis ? { strukna } : {}) };
 }
