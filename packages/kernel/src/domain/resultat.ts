@@ -12,7 +12,7 @@
 import type { Elev, PlaneradLektion, Struktur } from './typer.js';
 import { elevernaIKlassen, nyttId } from './struktur.js';
 import { koderForProv } from './delkapitelkoder.js';
-import { MAGMA_GRANSER, magmaOmdome } from './magmaprov.js';
+import { MAGMA_GRANSER, magmaOmdome, valjMagmaResultat } from './magmaprov.js';
 
 /**
  * Källa/testtyp. Socrative-testerna delas i tre typer: läxförhör (början av
@@ -257,8 +257,17 @@ export function importeraResultat(s: Struktur, u: ImportUnderlag): ImportUtfall 
       ...(u.provNyckel !== undefined ? { provNyckel: u.provNyckel } : {}),
     });
   }
-  const ersatta = new Set(nya.map((r) => `${r.elevId}|${r.kalla}|${r.prov}`));
-  const kvar = (s.resultat ?? []).filter((r) => !ersatta.has(`${r.elevId}|${r.kalla}|${r.prov}`));
+  const nyckel = (r: Resultat) => `${r.elevId}|${r.kalla}|${r.prov}`;
+  const ersatta = new Set(nya.map(nyckel));
+  if (u.kalla === 'magma') {
+    // Del 176: två Magma-diagnoser med samma namn kombineras — per elev räknas det senaste försöket,
+    // om det inte har mycket färre gjorda uppgifter än det tidigare (då behålls det tidigare)
+    const tidigare = new Map((s.resultat ?? []).filter((r) => ersatta.has(nyckel(r))).map((r) => [nyckel(r), r]));
+    const valda = nya.map((r) => { const f = tidigare.get(nyckel(r)); return f === undefined ? r : valjMagmaResultat(f, r); });
+    const kvar = (s.resultat ?? []).filter((r) => !ersatta.has(nyckel(r)));
+    return { s: { ...s, resultat: [...kvar, ...valda] }, traffar: nya.length, omatchade };
+  }
+  const kvar = (s.resultat ?? []).filter((r) => !ersatta.has(nyckel(r)));
   return { s: { ...s, resultat: [...kvar, ...nya] }, traffar: nya.length, omatchade };
 }
 

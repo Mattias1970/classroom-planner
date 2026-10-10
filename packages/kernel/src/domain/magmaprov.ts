@@ -203,6 +203,25 @@ export interface MagmaAnalys {
   elever: MagmaElevSerie[];
 }
 
+/**
+ * Del 176 · Två Magma-diagnoser med samma namn kombineras: har en elev resultat i båda räknas det
+ * senaste, så länge det inte har mycket färre gjorda uppgifter (färre än två tredjedelar av det
+ * andra försökets). Gjorda uppgifter = besvarade uppgifter i svaren; saknas svar jämförs maxpoängen.
+ */
+export const MAGMA_MINST_ANDEL_GJORDA = 2 / 3;
+
+/** Antal besvarade uppgifter i ett resultat (svar med rätt/fel), annars maxpoängen som mått. */
+export function magmaGjorda(r: { maxPoang: number; svar?: FragaSvar[] }): number {
+  return r.svar !== undefined && r.svar.length > 0 ? r.svar.filter((x) => x.ratt !== null).length : r.maxPoang;
+}
+
+/** Det resultat som räknas av två försök på samma diagnos: det senaste, om det inte har mycket färre gjorda uppgifter. */
+export function valjMagmaResultat<T extends { datum: string; maxPoang: number; svar?: FragaSvar[] }>(a: T, b: T): T {
+  const [aldre, senare] = a.datum <= b.datum ? [a, b] : [b, a];
+  const ga = magmaGjorda(aldre); const gs = magmaGjorda(senare);
+  return ga > 0 && gs < ga * MAGMA_MINST_ANDEL_GJORDA ? aldre : senare;
+}
+
 /** Procent 0–100 utan avrundning ur ett resultat; null vid maxpoäng 0. */
 export function magmaProcent(r: { poang: number; maxPoang: number }): number | null {
   return r.maxPoang > 0 ? (r.poang / r.maxPoang) * 100 : null;
@@ -225,13 +244,14 @@ export function magmaAnalys(
   // Del 153: prov med samma uppgifter (samma test, olika kopior/namn) räknas som ett test
   const norm = (x: string) => x.toLowerCase().replace(/\.(pdf|xlsx|xls)$/i, '').replace(/[_–—-]+/g, ' ').replace(/\s+/g, ' ').trim();
   const testFor = (prov: string) => (s.magmaTester ?? []).find((t) => norm(t.titel) === norm(prov) || norm(t.filnamn) === norm(prov));
-  const grupp = (r: MinimalResultat) => { const t = testFor(r.prov); return t !== undefined ? `T:${t.testNyckel}` : `${r.datum}|${r.prov}`; };
+  // Del 176: samma namn = samma diagnos (olika importdatum kombineras)
+  const grupp = (r: MinimalResultat) => { const t = testFor(r.prov); return t !== undefined ? `T:${t.testNyckel}` : `P:${r.prov.trim().toLowerCase()}`; };
   const grupper = new Map<string, MinimalResultat[]>();
   for (const r of rs) grupper.set(grupp(r), [...(grupper.get(grupp(r)) ?? []), r]);
   const nycklar = [...grupper.entries()].map(([g, lista]) => ({
     g, datum: lista.map((r) => r.datum).sort()[0], prov: [...new Set(lista.map((r) => r.prov))].sort((a, b) => a.localeCompare(b, 'sv')).join(' = '),
-    // Per elev: senaste försöket när eleven gjort testet flera gånger
-    egna: [...new Map(lista.slice().sort((a, b) => a.datum.localeCompare(b.datum)).map((r) => [r.elevId, r])).values()],
+    // Per elev: det senaste försöket när eleven gjort testet flera gånger — om det inte har mycket färre gjorda uppgifter
+    egna: [...lista.reduce((m, r) => { const f = m.get(r.elevId); m.set(r.elevId, f === undefined ? r : valjMagmaResultat(f, r)); return m; }, new Map<string, MinimalResultat>()).values()],
   })).sort((a, b) => a.datum.localeCompare(b.datum) || a.prov.localeCompare(b.prov, 'sv'));
   const prov: MagmaProvAnalys[] = nycklar.map((n) => {
     const egna = n.egna;

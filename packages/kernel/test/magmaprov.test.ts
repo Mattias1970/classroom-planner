@@ -145,3 +145,51 @@ describe('magmaAnalys — sparade prov per klass', () => {
     expect(magmaAnalys({ elever, resultat }, 'k', 'bi').prov).toEqual([]);
   });
 });
+
+describe('Del 176 · två Magma-diagnoser med samma namn kombineras', () => {
+  const sv = (ratt: Array<boolean | null>) => ratt.map((r, i) => ({ fraga: `Uppgift ${i + 1}`, svar: r === null ? '' : r ? '1' : '0', ratt: r }));
+  function bas() {
+    let s = tomStruktur();
+    s = laggTillSkolar(s, { id: 'la', namn: '26/27', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillElev(s, { id: 'e1', klassId: 'k', namn: 'Anna Berg', grupp: 'A' });
+    s = laggTillElev(s, { id: 'e2', klassId: 'k', namn: 'Omar Ali', grupp: 'B' });
+    s = laggTillElev(s, { id: 'e3', klassId: 'k', namn: 'Pia Provlund', grupp: 'A' });
+    return s;
+  }
+  it('det senaste försöket räknas — utom när det har mycket färre gjorda uppgifter; elever från båda importerna finns kvar', () => {
+    let s = bas();
+    // Första importen 5/9: Anna 6/10 (alla gjorda), Omar 7/10 (alla gjorda)
+    s = importeraResultat(s, { klassId: 'k', kalla: 'magma', prov: '1.1 - 1.3 diagnos', datum: '2026-09-05', rader: [
+      { namn: 'Anna Berg', poang: 6, maxPoang: 10, svar: sv([true, true, true, true, true, true, false, false, false, false]) },
+      { namn: 'Omar Ali', poang: 7, maxPoang: 10, svar: sv([true, true, true, true, true, true, true, false, false, false]) },
+    ] }).s;
+    // Andra importen 12/9 (samma namn): Anna 9/10 (alla gjorda) → senaste räknas; Omar 3/10 med bara 4 gjorda → det tidigare behålls; Pia bara här
+    s = importeraResultat(s, { klassId: 'k', kalla: 'magma', prov: '1.1 - 1.3 diagnos', datum: '2026-09-12', rader: [
+      { namn: 'Anna Berg', poang: 9, maxPoang: 10, svar: sv([true, true, true, true, true, true, true, true, true, false]) },
+      { namn: 'Omar Ali', poang: 3, maxPoang: 10, svar: sv([true, true, true, false, null, null, null, null, null, null]) },
+      { namn: 'Pia Provlund', poang: 10, maxPoang: 10, svar: sv(Array(10).fill(true) as boolean[]) },
+    ] }).s;
+    expect(resultatForElev(s, 'e1')).toHaveLength(1);
+    expect(resultatForElev(s, 'e1')[0]).toMatchObject({ datum: '2026-09-12', poang: 9 });
+    expect(resultatForElev(s, 'e2')).toHaveLength(1);
+    expect(resultatForElev(s, 'e2')[0]).toMatchObject({ datum: '2026-09-05', poang: 7 });
+    expect(resultatForElev(s, 'e3')[0]).toMatchObject({ datum: '2026-09-12', poang: 10 });
+    // Analysen ser ett enda prov med alla tre eleverna
+    const a = magmaAnalys(s, 'k');
+    expect(a.prov).toHaveLength(1);
+    expect(a.prov[0]).toMatchObject({ prov: '1.1 - 1.3 diagnos', antal: 3, medel: 87 });
+    expect(a.elever.map((e) => [e.namn, e.senaste])).toEqual([['Anna Berg', 90], ['Omar Ali', 70], ['Pia Provlund', 100]]);
+  });
+  it('utan svar per uppgift jämförs maxpoängen; en äldre import efter en nyare ersätter inte den nyare', () => {
+    let s = bas();
+    s = importeraResultat(s, { klassId: 'k', kalla: 'magma', prov: 'Kap 1 diagnos', datum: '2026-09-20', rader: [{ namn: 'Anna Berg', poang: 18, maxPoang: 20 }] }).s;
+    // Äldre fil importeras efteråt → det senaste (20/9) räknas fortfarande
+    s = importeraResultat(s, { klassId: 'k', kalla: 'magma', prov: 'Kap 1 diagnos', datum: '2026-09-13', rader: [{ namn: 'Anna Berg', poang: 10, maxPoang: 20 }] }).s;
+    expect(resultatForElev(s, 'e1')[0]).toMatchObject({ datum: '2026-09-20', poang: 18 });
+    // Nyare men med mycket färre uppgifter (5 av 20) → det tidigare behålls
+    s = importeraResultat(s, { klassId: 'k', kalla: 'magma', prov: 'Kap 1 diagnos', datum: '2026-09-27', rader: [{ namn: 'Anna Berg', poang: 5, maxPoang: 5 }] }).s;
+    expect(resultatForElev(s, 'e1')[0]).toMatchObject({ datum: '2026-09-20', poang: 18 });
+  });
+});
