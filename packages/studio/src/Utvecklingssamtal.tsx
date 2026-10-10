@@ -195,7 +195,7 @@ function KapitelOchGemensamText({ gem, amneId, kor, utkast, setUtkast }: {
   const text = utkast ?? gem.text;
   return (
     <div className="st-samtal-kapitel" aria-label="Kapitlen i rapporten">
-      <details open={gem.behoverVal || gem.kapitel.length > 1}>
+      <details open>
         <summary>📚 Kapitel i rapporten: {gem.valda.length === 0 ? 'inget valt' : gem.valda.map(kapitelNamn).join(', ')}{gem.behoverVal ? ' — välj vilka kapitel och delkapitel som ska ingå' : ''}</summary>
         {gem.kapitel.length === 0 ? <p className="small muted">Ingen genomförd lektion i planeringen ännu.</p> : (
           <div className="rad" style={{ gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>

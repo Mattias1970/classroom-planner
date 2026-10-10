@@ -201,7 +201,7 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
     if (diag.length === 0) rader.push('Diagnoser: inga Magma-diagnoser ännu.');
     else {
       rader.push('Diagnoser:');
-      for (const x of diag) rader.push(`${UNDERRAD}${provnamnMedStorBokstav(x.prov)}${x.typ === 'kapitel' ? ' (hela kapitlet)' : ''}\t${x.procent} % (${STATUS_TEXT[x.niva]})`);
+      for (const x of diag) rader.push(`${UNDERRAD}${diagnosNamn(x.prov)}${x.typ === 'kapitel' ? ' (hela kapitlet)' : ''}\t${x.procent} % (${STATUS_TEXT[x.niva]})`);
       const kap = d.lista.filter((x) => x.typ === 'kapitel');
       // Slutresultatet: kapiteldiagnosen väger tyngst; delkapiteldiagnoserna visar utvecklingen fram till den
       if (kap.length > 0 && diag.length > 1) rader.push(`${UNDERRAD}Slutresultat (${kap.length === 1 ? 'diagnosen på hela kapitlet' : 'diagnoserna på hela kapitlen'})\t${pct(d.slut)} (${STATUS_TEXT[magmaNiva(d.slut ?? 0)]})`);
@@ -330,6 +330,15 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
   const tak = u.mall === 'ma' ? 8 : 7;
   const klippta = rader.filter((r) => { if (!r.startsWith(UNDERRAD)) stycken += 1; return stycken <= tak; });
   return klippta.map(medStorBokstav).join('\n');
+}
+
+/**
+ * Del 182 · Diagnosens namn i texten: med namnkonventionen visas "Kap 1 Diagnos 1.3 - 1.4" (utan ämne
+ * och klass — filen kan heta 8B men gälla 8A:s elever); äldre namn visas som de är, med stor bokstav.
+ */
+export function diagnosNamn(prov: string): string {
+  const nm = tolkaMagmaNamn(prov);
+  return nm.kapitel !== null ? `Kap ${nm.kapitel} ${nm.kort}` : provnamnMedStorBokstav(prov);
 }
 
 /** 'läxförhör', 'exit ticket', 'inlämning' → med stor bokstav, även inne i meningar (rubriken 'Inlämningar:' berörs inte). */

@@ -301,7 +301,7 @@ describe('Del 173 · diagnosen på hela kapitlet väger tyngst; utvecklingen bes
     expect(omar.status).toBe('nar');     // kapiteldiagnosen 75 % trots 95/90 på delkapitlen
     const st = samtalsStycken(anna.text)[1];
     expect(st.underrader.map((r) => r.text)).toEqual([
-      '1.1 - 1.2 Diagnos', '1.3 - 1.4 Diagnos', 'Diagnos kap 1 (hela kapitlet)', 'Slutresultat (diagnosen på hela kapitlet)',
+      '1.1 - 1.2 Diagnos', '1.3 - 1.4 Diagnos', 'Kap 1 Diagnos (hela kapitlet)', 'Slutresultat (diagnosen på hela kapitlet)',
       'Utvecklingen är tydlig: från 65 % på delkapiteldiagnoserna till 85 % på diagnosen för hela kapitlet — det som övats under kapitlet har befästs. En diagnos ligger under 70 % — träna på de uppgifterna igen i Magma så att metoderna befästs.']);
     expect(st.underrader[3].varde).toBe('85 % (går bra)');
     expect(samtalsStycken(omar.text)[1].underrader.at(-1)!.text).toContain('På delkapiteldiagnoserna låg resultatet på 93 %, men på diagnosen för hela kapitlet på 75 % — repetera delkapitlen igen i Magma');
@@ -345,7 +345,7 @@ describe('Del 179 · diagnosernas ordning: datum ur planeringen, vid samma datum
       ['Stockholm stads screening', 'screening', null],
     ]);
     const st = samtalsStycken(anna.text);
-    expect(st[1].underrader.slice(0, 4).map((r) => r.text)).toEqual(['Ma 8B Kap 1 Diagnos 1.1 - 1.2', 'Ma 8B Kap 1 Diagnos 1.3 - 1.4', 'Ma 8B Kap 1 Diagnos (hela kapitlet)', 'Ma 8B Kap 2 Diagnos 2.1']);
+    expect(st[1].underrader.slice(0, 4).map((r) => r.text)).toEqual(['Kap 1 Diagnos 1.1 - 1.2', 'Kap 1 Diagnos 1.3 - 1.4', 'Kap 1 Diagnos (hela kapitlet)', 'Kap 2 Diagnos 2.1']);
     expect(st[2]).toMatchObject({ etikett: 'Screening', underrader: [{ text: 'Stockholm stads screening', varde: '90 % (går bra)' }] });
     // Statusen bygger på kapiteldiagnosen (90 %) — screeningen räknas inte in
     expect(anna.diagnoser.slut).toBe(90);
