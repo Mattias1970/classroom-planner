@@ -19,8 +19,9 @@ import { elevkort, type ElevkortSerie } from './elevkort.js';
 import { inlamningsOversikt, type InlamningsTyp } from './inlamningar.js';
 import { tolkaMagmaNamn } from './magmaprov.js';
 import { gemensamText, kapitelKoder, kapitelNamn, kodEtikett, type SamtalsKapitel } from './samtalskapitel.js';
-import { elevIKlassen } from './struktur.js';
-import type { Struktur } from './typer.js';
+import { delkapitelKod } from './bok.js';
+import { amnesPlanFor, elevIKlassen } from './struktur.js';
+import type { PlaneradLektion, Struktur } from './typer.js';
 
 /** Del 173 · 'saknas' = underlag saknas: utan resultat går det inte att säga att eleven når målen. */
 export type SamtalsStatus = 'svart' | 'nar' | 'bra' | 'mycketBra' | 'utmarkt' | 'saknas';
@@ -57,7 +58,13 @@ export function magmaNiva(procent: number): SamtalsStatus {
  * utvecklingen fram till kapiteldiagnosen); 'screening' = Stockholms stads screening (ingen delkapitelkod).
  */
 export type DiagnosTyp = 'kapitel' | 'delkapitel' | 'screening';
-export interface Diagnos { prov: string; datum: string; procent: number; niva: SamtalsStatus; poang: number; maxPoang: number; typ: DiagnosTyp; koder: string[] }
+export interface Diagnos {
+  prov: string; datum: string; procent: number; niva: SamtalsStatus; poang: number; maxPoang: number; typ: DiagnosTyp; koder: string[];
+  /** Del 179 · Datumet diagnosen ligger på i planeringen (diagnoslektionen efter delkapitlet/kapitlet); null när planen saknar det. */
+  planDatum: string | null;
+  /** Kapitlet ur namnet eller koderna. */
+  kapitel: number | null;
+}
 
 /** Del 172 · Ett förhör (Exit ticket/Läxförhör) i ett kapitel: '1.1' eller '1.1–1.3', procent och datum. */
 export interface KapitelForhor { etikett: string; prov: string; datum: string; procent: number }
@@ -161,7 +168,7 @@ export function antalOrd(n: number, stor = false): string {
 export const UNDERRAD = '  ';
 
 /** Rubrikerna som inleder styckena (fet stil i visning och Word). */
-export const SAMTALS_RUBRIKER = ['Diagnoser', 'Förhören', 'Lektionerna', 'Närvaro', 'Läxläsning', 'Inlämningar', 'Prov'] as const;
+export const SAMTALS_RUBRIKER = ['Diagnoser', 'Screening', 'Förhören', 'Lektionerna', 'Närvaro', 'Läxläsning', 'Inlämningar', 'Prov'] as const;
 
 /**
  * Texten: högst sju stycken (status, Lektionerna, Läxläsning, Inlämningar, Prov, avslut),
@@ -188,14 +195,17 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
   // indragna med två blanksteg så att de hör till stycket Diagnoser; sist snittet och en kommentar.
   if (u.mall === 'ma') {
     const d = u.diagnoser;
-    if (d.lista.length === 0) rader.push('Diagnoser: inga Magma-diagnoser ännu.');
+    // Del 179 · Screeningen ligger separat (eget stycke), inte i diagnoslistan
+    const diag = d.lista.filter((x) => x.typ !== 'screening');
+    const screening = d.lista.filter((x) => x.typ === 'screening');
+    if (diag.length === 0) rader.push('Diagnoser: inga Magma-diagnoser ännu.');
     else {
       rader.push('Diagnoser:');
-      for (const x of d.lista) rader.push(`${UNDERRAD}${provnamnMedStorBokstav(x.prov)}${x.typ === 'kapitel' ? ' (hela kapitlet)' : ''}\t${x.procent} % (${STATUS_TEXT[x.niva]})`);
+      for (const x of diag) rader.push(`${UNDERRAD}${provnamnMedStorBokstav(x.prov)}${x.typ === 'kapitel' ? ' (hela kapitlet)' : ''}\t${x.procent} % (${STATUS_TEXT[x.niva]})`);
       const kap = d.lista.filter((x) => x.typ === 'kapitel');
       // Slutresultatet: kapiteldiagnosen väger tyngst; delkapiteldiagnoserna visar utvecklingen fram till den
-      if (kap.length > 0 && d.lista.length > 1) rader.push(`${UNDERRAD}Slutresultat (${kap.length === 1 ? 'diagnosen på hela kapitlet' : 'diagnoserna på hela kapitlen'})\t${pct(d.slut)} (${STATUS_TEXT[magmaNiva(d.slut ?? 0)]})`);
-      else if (d.lista.length > 1) rader.push(`${UNDERRAD}Snitt av ${antalOrd(d.lista.length)} diagnoser\t${pct(d.snitt)} (${STATUS_TEXT[magmaNiva(d.snitt ?? 0)]})`);
+      if (kap.length > 0 && diag.length > 1) rader.push(`${UNDERRAD}Slutresultat (${kap.length === 1 ? 'diagnosen på hela kapitlet' : 'diagnoserna på hela kapitlen'})\t${pct(d.slut)} (${STATUS_TEXT[magmaNiva(d.slut ?? 0)]})`);
+      else if (diag.length > 1) rader.push(`${UNDERRAD}Snitt av ${antalOrd(diag.length)} diagnoser\t${pct(d.snitt)} (${STATUS_TEXT[magmaNiva(d.snitt ?? 0)]})`);
       // Utveckling: delkapiteldiagnoserna jämfört med kapiteldiagnosen, annars de första diagnoserna mot de senaste
       let utv = '';
       if (kap.length > 0 && d.delkapitelSnitt !== null && d.slut !== null) {
@@ -205,12 +215,16 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
           : `Resultatet håller i sig: ${pct(d.delkapitelSnitt)} på delkapiteldiagnoserna och ${pct(d.slut)} på diagnosen för hela kapitlet — kunskaperna är beständiga.`;
       } else if (d.trend === 'upp') utv = 'Diagnoserna går uppåt — ett lärande som syns!';
       else if (d.trend === 'ner') utv = 'De senaste diagnoserna ligger lägre än de första — gå igenom uppgifterna som blev fel, där finns nästa steg.';
-      else if (d.lista.length > 1) utv = 'Diagnoserna ligger på en jämn nivå.';
-      const svaga = d.lista.filter((x) => x.niva === 'svart');
+      else if (diag.length > 1) utv = 'Diagnoserna ligger på en jämn nivå.';
+      const svaga = diag.filter((x) => x.niva === 'svart');
       const kommentar = [utv,
         svaga.length > 0 ? `${svaga.length === 1 ? 'En diagnos ligger' : `${antalOrd(svaga.length, true)} diagnoser ligger`} under 70 % — träna på de uppgifterna igen i Magma så att metoderna befästs.` : '',
       ].filter((x) => x !== '').join(' ');
       if (kommentar !== '') rader.push(`${UNDERRAD}${kommentar}`);
+    }
+    if (screening.length > 0) {
+      rader.push('Screening:');
+      for (const x of screening) rader.push(`${UNDERRAD}${provnamnMedStorBokstav(x.prov)}\t${x.procent} % (${STATUS_TEXT[x.niva]})`);
     }
   }
 
@@ -312,7 +326,9 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
   // Läxförhör, Exit ticket och Inlämning skrivs med stor bokstav (visas i blå stil).
   // Högst sju stycken — underraderna (indragna) hör till sitt stycke och räknas inte.
   let stycken = 0;
-  const klippta = rader.filter((r) => { if (!r.startsWith(UNDERRAD)) stycken += 1; return stycken <= 7; });
+  // Matematik har ett stycke till (Screening) — högst åtta
+  const tak = u.mall === 'ma' ? 8 : 7;
+  const klippta = rader.filter((r) => { if (!r.startsWith(UNDERRAD)) stycken += 1; return stycken <= tak; });
   return klippta.map(medStorBokstav).join('\n');
 }
 
@@ -438,15 +454,55 @@ export function utvardering(s: Struktur, elevId: string, amneId: string, idag?: 
   const typFor = (prov: string, koder: string[]): DiagnosTyp => {
     const nm = tolkaMagmaNamn(prov);
     if (nm.typ === 'screening') return 'screening';
-    const kapNamn = nm.kapitel !== null;
-    if (kapNamn && koder.length === 0) return 'kapitel';
+    // Namnkonventionen "Kap 1 Diagnos" (utan delkapitel) = hela kapitlet; "Kap 1 Diagnos 1.3 - 1.4" = delkapitel
+    if (nm.kapitel !== null) return koder.length === 0 ? 'kapitel' : 'delkapitel';
     if (koder.length === 0) return 'delkapitel';
     const kapNr = koder[0].split('.')[0];
     const alla = (urval.find((k) => String(k.nr) === kapNr) ?? gemensamText(s, amneId, idag ?? '9999-12-31').kapitel.find((k) => String(k.nr) === kapNr))?.delkapitel.map((x) => x.kod) ?? [];
     const tackt = alla.length > 0 && alla.every((c) => koder.includes(c));
     return tackt ? 'kapitel' : 'delkapitel';
   };
-  const lista: Diagnos[] = magma.punkter.filter((x) => x.procent !== null).map((x) => ({ prov: x.prov, datum: x.datum, procent: x.procent!, niva: magmaNiva(x.procent!), poang: x.poang, maxPoang: x.maxPoang, typ: typFor(x.prov, x.koder), koder: x.koder }));
+  // Del 179 · Diagnosens datum ur planeringen (diagnoslektionen efter delkapitlen/kapitlet) används för ordningen;
+  // vid samma datum sorteras efter delkapitel (1.3 före 1.4) och diagnosen på hela kapitlet sist i sitt kapitel.
+  const planRader = mall === 'ma' ? (amnesPlanFor(s, amneId, idag, false)?.a ?? []).filter((r) => r.datum !== null) : [];
+  const kodNr = (k: string) => k.split('.').map(Number);
+  const jmfKod = (a: string, b: string) => { const [ka, da] = kodNr(a); const [kb, db] = kodNr(b); return ka - kb || da - db; };
+  const planDatumFor = (typ: DiagnosTyp, kapitel: number | null, koder: string[]): string | null => {
+    if (typ === 'screening' || planRader.length === 0) return null;
+    const iKap = (r: PlaneradLektion) => kapitel === null || r.kapitel === kapitel;
+    if (koder.length > 0) {
+      const sista = koder.slice().sort(jmfKod)[koder.length - 1];
+      let i = -1;
+      planRader.forEach((r, j) => { const k = delkapitelKod(r.lektion.avsnitt); if (k !== null && koder.includes(k) && jmfKod(k, sista) === 0) i = j; });
+      if (i < 0) return null;
+      for (let j = i + 1; j < planRader.length; j += 1) {
+        const r = planRader[j];
+        if (r.kapitel !== planRader[i].kapitel) break;
+        const k = delkapitelKod(r.lektion.avsnitt);
+        if (k !== null && !koder.includes(k) && typ !== 'kapitel') break;
+        if (r.lektion.typ === 'test') return r.datum;
+      }
+      return planRader[i].datum;
+    }
+    const egna = planRader.filter(iKap);
+    const test = egna.filter((r) => r.lektion.typ === 'test');
+    return (test.length > 0 ? test[test.length - 1] : egna[egna.length - 1])?.datum ?? null;
+  };
+  const lista: Diagnos[] = magma.punkter.filter((x) => x.procent !== null).map((x) => {
+    const typ = typFor(x.prov, x.koder);
+    const nm = tolkaMagmaNamn(x.prov);
+    const kapitel = nm.kapitel ?? (x.koder.length > 0 ? Number(x.koder[0].split('.')[0]) : null);
+    return { prov: x.prov, datum: x.datum, procent: x.procent!, niva: magmaNiva(x.procent!), poang: x.poang, maxPoang: x.maxPoang, typ, koder: x.koder, planDatum: planDatumFor(typ, kapitel, x.koder), kapitel };
+  }).sort((a, b) => {
+    if ((a.typ === 'screening') !== (b.typ === 'screening')) return a.typ === 'screening' ? 1 : -1;   // screeningen sist (visas separat)
+    const da = a.planDatum ?? a.datum; const db = b.planDatum ?? b.datum;
+    if (da !== db) return da.localeCompare(db);
+    if ((a.kapitel ?? 0) !== (b.kapitel ?? 0)) return (a.kapitel ?? 0) - (b.kapitel ?? 0);
+    if ((a.typ === 'kapitel') !== (b.typ === 'kapitel')) return a.typ === 'kapitel' ? 1 : -1;
+    const ka = a.koder.slice().sort(jmfKod)[0]; const kb = b.koder.slice().sort(jmfKod)[0];
+    if (ka !== undefined && kb !== undefined) return jmfKod(ka, kb);
+    return a.prov.localeCompare(b.prov, 'sv', { numeric: true });
+  });
   const mu = utveckling(magma);
   const kapDiag = lista.filter((x) => x.typ === 'kapitel');
   const delDiag = lista.filter((x) => x.typ === 'delkapitel');
@@ -460,9 +516,12 @@ export function utvardering(s: Struktur, elevId: string, amneId: string, idag?: 
       magmaExit: forhor('magma', 'exit'), magmaLaxforhor: forhor('magma', 'laxforhor'),
     };
   });
+  // Del 179 · Screeningen ligger separat: snittet räknas på diagnoserna; finns bara screening styr den statusen
+  const utanScreening = lista.filter((x) => x.typ !== 'screening');
+  const grund = utanScreening.length > 0 ? utanScreening : lista;
   const diagnoser = {
-    lista, snitt: snitt(lista.map((x) => x.procent)),
-    slut: kapDiag.length > 0 ? snitt(kapDiag.map((x) => x.procent)) : snitt(lista.map((x) => x.procent)),
+    lista, snitt: snitt(grund.map((x) => x.procent)),
+    slut: kapDiag.length > 0 ? snitt(kapDiag.map((x) => x.procent)) : snitt(grund.map((x) => x.procent)),
     delkapitelSnitt: snitt(delDiag.map((x) => x.procent)),
     senaste: lista.length > 0 ? lista[lista.length - 1].procent : null, trend: mu.trend,
   };

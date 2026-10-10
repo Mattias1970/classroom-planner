@@ -79,15 +79,15 @@ describe('Del 172 · matematik — diagnoserna över varandra', () => {
     await act(async () => root.render(<Utvecklingssamtal s={s} klass={s.klasser[0]} amneId="ma" kor={() => {}} idag="2026-10-07" onTillbaka={() => {}} />));
     expect([...div.querySelectorAll('thead th')].map((th) => th.textContent)).toContain('Diagnoser');
     expect([...div.querySelectorAll('.st-samtal-diag')].map((x) => x.textContent)).toEqual(['95', '90', '92']);
-    expect(div.textContent).toContain('snitt 92 %');
+    expect(div.textContent).toContain('snitt 93 %');   // Del 179: screeningen räknas inte in
     await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Anna Berg'))!.click(); });
     const visning = div.querySelector('div[aria-label="Text Anna Berg"]')!;
     expect(visning.querySelector('b.st-samtal-rubrik')!.textContent).toBe('Diagnoser: ');
     const rader = [...visning.querySelectorAll('.st-samtal-underrad')].map((r) => [...r.children].map((c) => c.textContent)).filter((r) => r.length === 2);
     expect(rader).toEqual([
       ['1.1 - 1.2 Diagnos', '95 % (mycket bra)'], ['1.3 - 1.4 Diagnos', '90 % (går bra)'],
-      ['Stockholm stads screening', '92 % (mycket bra)'], ['Snitt av tre diagnoser', '92 % (mycket bra)']]);
-    expect(div.textContent).toContain('4 stycken');   // inledning, Diagnoser, Inlämningar, avslut — inga förhör i kapitlet
+      ['Snitt av två diagnoser', '93 % (mycket bra)'], ['Stockholm stads screening', '92 % (mycket bra)']]);
+    expect(div.textContent).toContain('5 stycken');   // inledning, Diagnoser, Screening, Inlämningar, avslut — inga förhör i kapitlet   // inledning, Diagnoser, Inlämningar, avslut — inga förhör i kapitlet
   });
 });
 
