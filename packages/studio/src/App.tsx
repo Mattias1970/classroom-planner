@@ -1611,6 +1611,9 @@ function FoljPlanering({ s, amneId, klassNamn, kor, idag }: { s: Struktur; amneI
   const [fran, setFran] = useState(idag);
   // Del 174 · Veckovis: samma saker samma vecka (olika scheman), egna prov/laborationer ligger kvar
   const [veckovis, setVeckovis] = useState(true);
+  // Del 175 · Följ bara till och med ett datum (sedan boken i ordning); historik = startdatum före idag på uttryckligt val
+  const [till, setTill] = useState('');
+  const [historik, setHistorik] = useState(false);
   const val = foljbaraAmnen(s, amneId);
   if (val.length === 0) return null;
   const namn = (x: Amne) => `${s.klasser.find((k) => k.id === x.klassId)?.namn ?? ''} · ${x.namn}`;
@@ -1621,7 +1624,13 @@ function FoljPlanering({ s, amneId, klassNamn, kor, idag }: { s: Struktur; amneI
         <option value="">— välj klass —</option>
         {val.map((x) => <option key={x.id} value={x.id}>{namn(x)}</option>)}
       </select>
-      <label className="small">från <input type="date" aria-label="Följ från datum" value={fran} min={idag} onChange={(e) => { if (e.target.value !== '') setFran(e.target.value); }} /></label>
+      <label className="small">från <input type="date" aria-label="Följ från datum" value={fran} min={historik ? undefined : idag} onChange={(e) => { if (e.target.value !== '') setFran(e.target.value); }} /></label>
+      <label className="small" title="Lämna tomt för att följa hela vägen. Med ett datum följs den andra klassen bara till och med det datumet — därefter planeras passen utifrån bokens ordning (nästa lektion som klassen inte gjort) på klassens eget schema.">
+        till och med <input type="date" aria-label="Följ till och med datum" value={till} min={fran} onChange={(e) => setTill(e.target.value)} />
+      </label>
+      <label className="small" title="Tillåt startdatum före idag: genomförda lektioner skrivs om så att de stämmer med den andra klassen — bara när klasserna faktiskt gjort samma saker.">
+        <input type="checkbox" aria-label="Skriv om genomförda lektioner" checked={historik} onChange={(e) => { setHistorik(e.target.checked); if (!e.target.checked && fran < idag) setFran(idag); }} /> även genomförda
+      </label>
       <label className="small" title="Klasserna gör samma saker samma vecka även om schemana skiljer sig. Egna prov, diagnoser, laborationer och egna rader i den här klassen ligger kvar på sina datum. Har klassen färre pass en vecka stryks en övningslektion; har den fler pass blir de övningar.">
         <input type="checkbox" aria-label="Vecka för vecka" checked={veckovis} onChange={(e) => setVeckovis(e.target.checked)} /> vecka för vecka
       </label>
@@ -1630,9 +1639,11 @@ function FoljPlanering({ s, amneId, klassNamn, kor, idag }: { s: Struktur; amneI
         const hur = veckovis
           ? `Från ${fran} får ${klassNamn} samma lektioner som ${namn(k)} samma vecka, med samma lektionskort (filmer, genomgång, uppgifter). Egna prov, diagnoser, laborationer och egna rader i ${klassNamn} ligger kvar på sina datum; har ${klassNamn} färre pass en vecka stryks en övningslektion, fler pass blir övningar.`
           : `Från ${fran} får ${klassNamn} samma lektioner, laborationer och lektionskort (filmer, genomgång, uppgifter) i samma ordning.`;
-        if (!window.confirm(`Låta ${klassNamn} följa ${namn(k)} från ${fran}?\n\nLektionerna före ${fran} ändras inte. ${hur} Socrative-rummen följer ${klassNamn}.`)) return;
+        const efter = till !== '' ? ` Efter ${till} följs inte ${namn(k)} längre — passen planeras då utifrån bokens ordning på ${klassNamn}:s schema.` : '';
+        const hist = historik && fran < idag ? `\n\n⚠ Du skriver om genomförda lektioner (${fran}–${idag}) så att de stämmer med ${namn(k)}.` : '';
+        if (!window.confirm(`Låta ${klassNamn} följa ${namn(k)} från ${fran}${till !== '' ? ` till och med ${till}` : ''}?\n\n${historik ? '' : `Lektionerna före ${fran} ändras inte. `}${hur}${efter} Socrative-rummen följer ${klassNamn}.${hist}`)) return;
         try {
-          const r = foljPlanering(lasStruktur(), amneId, kalla, fran, idag, { veckovis });
+          const r = foljPlanering(lasStruktur(), amneId, kalla, fran, idag, { veckovis, ...(till !== '' ? { till } : {}), ...(historik ? { historik: true } : {}) });
           const extra = r.varningar.length > 0 ? ` ⚠ ${r.varningar.join(' ')}` : '';
           kor(() => r.s, `${klassNamn} följer ${namn(k)} från ${fran}: ${r.teori} lektioner${r.labbar > 0 ? `, ${r.labbar} laborationer` : ''}${r.egnaKort > 0 ? `, ${r.egnaKort} egna kort` : ''}, ${r.kort} lektionskort.${extra}`);
         } catch (e) { kor(() => { throw e; }, ''); }

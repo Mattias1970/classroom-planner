@@ -501,6 +501,16 @@ export interface FoljAlternativ {
    * pass fylls de med en övningslektion.
    */
   veckovis?: boolean;
+  /**
+   * Del 175 · Följ källan bara till och med detta datum; därefter planeras målets pass utifrån bokens
+   * ordning (nästa lektion i boken som målet inte gjort) på målets eget schema. Målets fasta kort ligger kvar.
+   */
+  till?: string;
+  /**
+   * Del 175 · Tillåt startdatum före idag: genomförda lektioner skrivs om så att de stämmer med källan
+   * (t.ex. när båda klasserna faktiskt gjort samma saker). Används bara på lärarens uttryckliga val.
+   */
+  historik?: boolean;
 }
 
 /** Måndagen i datumets vecka — nyckel för "samma vecka". */
@@ -511,7 +521,12 @@ function veckoNyckel(datum: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-export function foljPlanering(s: Struktur, malAmneId: string, kallAmneId: string, fran: string, idag?: string, alternativ: FoljAlternativ = {}): FoljPlanering {
+export function foljPlanering(s: Struktur, malAmneId: string, kallAmneId: string, fran: string, idagIn?: string, alternativ: FoljAlternativ = {}): FoljPlanering {
+  // Historik: utan "idag" fryses inget — genomförda pass får källans innehåll
+  const idag = alternativ.historik === true ? undefined : idagIn;
+  const till = alternativ.till;
+  if (till !== undefined && !DATUM.test(till)) throw new Error('Ange ett slutdatum (ÅÅÅÅ-MM-DD).');
+  if (till !== undefined && till < fran) throw new Error('Slutdatum ligger före startdatum.');
   const mal = hittaAmne(s, malAmneId);
   const kalla = hittaAmne(s, kallAmneId);
   if (mal.id === kalla.id) throw new Error('Välj ett annat ämne att följa.');
@@ -553,6 +568,7 @@ export function foljPlanering(s: Struktur, malAmneId: string, kallAmneId: string
     const typ = fastTyp(r.nyckel);
     if (typ !== null && !fasta.has(r.datum)) fasta.set(r.datum, { nyckel: r.nyckel, typ });
   }
+  const fastaNycklar = new Set([...fasta.values()].map((f) => f.nyckel));
   const malHarProv = veckovis && ([...fasta.values()].some((f) => f.typ === 'prov') || (mal.planFranUtkast?.provDatum !== undefined && mal.planFranUtkast.provDatum >= fran));
   const detaljerFor = (r: PlaneradLektion, radNyckel: string): LektionsDetaljer => {
     const i = kallIndex.get(radNyckel);
@@ -563,6 +579,7 @@ export function foljPlanering(s: Struktur, malAmneId: string, kallAmneId: string
   };
   for (const r of kallRader) {
     if ((r.datum !== null && r.datum < fran) || r.nyckel === undefined || arPass(r.nyckel)) continue;
+    if (till !== undefined && (r.datum === null || r.datum > till)) continue;
     if (arLab(r.nyckel)) {
       const k = koNyckel(r.nyckel);
       if (k === null) continue;
@@ -605,7 +622,14 @@ export function foljPlanering(s: Struktur, malAmneId: string, kallAmneId: string
     }
   }
   const strukna: string[] = [];
-  if (!veckovis) u.teori = kallKort.map((k) => k.nyckel);
+  if (!veckovis) {
+    u.teori = kallKort.map((k) => k.nyckel);
+    if (till !== undefined) {
+      const gjorda = nycklarFore(ut, malAmneId, fran, idag).teori;
+      const anvanda = new Set([...gjorda, ...u.teori]);
+      for (const r of bokensRader(ut, malAmneId)) if (!anvanda.has(r.nyckel)) u.teori.push(r.nyckel);
+    }
+  }
   else {
     // Målets pass från startdatum (teoripassen), i datumordning
     const tomt = tomtUtkast(u.namn, fran);
@@ -621,9 +645,18 @@ export function foljPlanering(s: Struktur, malAmneId: string, kallAmneId: string
       if (i < 0) return false;
       strukna.push(rubrikFor(lista[i].nyckel)); lista.splice(i, 1); return true;
     };
+    let bokLage = false;
     for (const p of pass) {
+      if (!bokLage && till !== undefined && p.datum! > till) {
+        // Efter slutdatum: fortsätt med bokens ordning — nästa lektion målet inte gjort (före startdatum eller i följden)
+        bokLage = true;
+        const anvanda = new Set([...gjorda, ...u.teori, ...ko.map((k) => k.nyckel), ...kallKort.slice(idx).map((k) => k.nyckel)]);
+        const rest = bokensRader(ut, malAmneId).filter((r) => !anvanda.has(r.nyckel) && !fastaNycklar.has(r.nyckel))
+          .map((r) => ({ nyckel: r.nyckel, datum: null, typ: (r.lektion.typ === 'exam' ? 'prov' : r.lektion.typ === 'test' ? 'diagnos' : r.lektion.typ === 'repetition' ? 'ovning' : 'lektion') as UtkastKort['typ'] }));
+        kallKort.splice(idx, kallKort.length - idx, ...kallKort.slice(idx), ...rest);
+      }
       const w = veckoNyckel(p.datum!);
-      if (w !== vecka) {
+      if (w !== vecka && !bokLage) {
         // Ny vecka: det som inte fick plats förra veckan → stryk en övningslektion (i kön, annars nästa kommande)
         for (let n = ko.length; n > 0; n -= 1) {
           if (!stryk(ko, 0) && !stryk(kallKort, idx)) {
@@ -638,7 +671,7 @@ export function foljPlanering(s: Struktur, malAmneId: string, kallAmneId: string
       if (fast !== undefined) { u.teori.push(fast.nyckel); continue; }
       const k = ko.shift();
       if (k !== undefined) u.teori.push(k.nyckel);
-      else if (idx >= kallKort.length) break;   // källan är slut — inga fler övningar
+      else if (idx >= kallKort.length && (till === undefined || bokLage)) break;   // källan (eller boken) är slut — inga fler övningar
       else {
         const id = `ov-${p.datum}`;
         u.egna.push({ id, rubrik: 'Övning', typ: 'ovning' }); egnaKort += 1;

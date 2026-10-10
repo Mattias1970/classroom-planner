@@ -232,4 +232,19 @@ describe('Del 174 · följ veckovis — samma saker samma vecka', () => {
     expect(plan.map((x) => x.nyckel)).not.toContain('1:7');
     expect(r.varningar.some((v) => v.includes('ströks'))).toBe(true);
   });
+
+  it('till och med ett datum: därefter fortsätter boken i ordning på 8A:s schema; historik skriver om genomförda pass bara på uttryckligt val', () => {
+    const s = tva([{ dag: 1, start: '08:10', slut: '09:10' }, { dag: 3, start: '08:10', slut: '09:10' }, { dag: 5, start: '08:10', slut: '09:10' }]);
+    const IDAG2 = '2026-09-01';
+    // Startdatum före idag kräver historik
+    expect(() => foljPlanering(s, 'maA', 'maB', FRAN, IDAG2, { veckovis: true, till: '2026-08-28' })).toThrow(/före idag/);
+    const r = foljPlanering(s, 'maA', 'maB', FRAN, IDAG2, { veckovis: true, till: '2026-08-28', historik: true });
+    const plan = amnesPlanFor(r.s, 'maA', IDAG2)!.a;
+    // t.o.m. 28/8 som 8B (vecka för vecka), sedan bokens nästa lektioner (1:5 Blandade uppgifter, 1:6, 1:7 Prov) i ordning
+    expect(plan.slice(0, 9).map((x) => `${x.datum}:${x.nyckel}`)).toEqual([
+      '2026-08-17:1:1', '2026-08-19:1:2', '2026-08-21:u:ov-2026-08-21',
+      '2026-08-24:1:3', '2026-08-26:1:4', '2026-08-28:u:ov-2026-08-28',
+      '2026-08-31:1:5', '2026-09-02:1:6', '2026-09-04:1:7']);
+    expect(r.strukna).toEqual([]);
+  });
 });
