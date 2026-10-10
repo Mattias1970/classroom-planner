@@ -253,7 +253,7 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
       : x.antal === 1 ? `Läxläsning: ett läxförhör hittills (${pct(x.nu)}).`
       : `Läxläsning: läxförhören ligger kring ${pct(x.nu)} (${x.klarade} av ${x.bedomda} över gränsen 90 %).`;
     if (x.tendens === 'gorsEj') s += ` ${antalOrd(x.glomdaBegrepp.length, true)} begrepp har glömts mer än en gång, vilket tyder på att läxorna ofta inte blir gjorda. När begrepp glöms ofta blir kunskaperna inte beständiga — då blir det svårt att nå målen över tid, och nationella prov kan bli en svår utmaning. En fokuserad läxläsning, en kort stund varje dag, vänder det snabbt. ${socrative}`;
-    else if (x.tendens === 'kontinuerligt') s += ` ${antalOrd(x.glomdaBegrepp.length, true)} begrepp har glömts mer än en gång — läs läxan lite varje dag i stället för allt på en gång, så fastnar ${x.glomdaBegrepp.length === 1 ? 'det' : 'de'}. ${socrative}`;
+    else if (x.tendens === 'kontinuerligt') s += ` ${antalOrd(x.glomdaBegrepp.length, true)} begrepp har glömts mer än en gång — läs läxan en kort stund varje dag i stället för allt på en gång, så fastnar ${x.glomdaBegrepp.length === 1 ? 'det' : 'de'}. ${socrative}`;
     else if (x.trend === 'ner' || (x.trend === 'stabil' && x.nu !== null && x.nu < 90)) s += ` En mer fokuserad läxläsning inför varje förhör lyfter resultaten. ${socrative}`;
     else if (x.nu !== null && x.nu >= 90) s += ` Begreppen blir rätt i de senaste förhören — fortsätt så. ${socrative}`;
     else s += ` ${socrative}`;
@@ -284,7 +284,7 @@ export function samtalsText(u: Omit<Utvardering, 'text'>, fornamn: string): stri
 
   // Avslutning
   const avslut: Record<SamtalsStatus, string> = {
-    svart: `Med läxan lite varje dag, fokus på lektionerna och inlämningarna i tid kommer ${fornamn} att se sin utveckling redan till nästa förhör — jag hjälper till på vägen.`,
+    svart: `Om ${fornamn} läser läxan en kort stund varje dag i stället för allt kvällen före förhöret, håller fokus på lektionerna och lämnar in uppgifterna i tid kommer utvecklingen att synas redan på nästa förhör — jag hjälper till på vägen.`,
     nar: `Nästa steg i utvecklingen är att lyfta något av läxförhören eller inlämningarna ett snäpp — ${fornamn} har allt som behövs.`,
     bra: `Fortsätt så här, ${fornamn} — med samma rutiner är nästa nivå nära.`,
     mycketBra: `Mycket bra jobbat, ${fornamn} — håll i rutinerna så fortsätter lärandet uppåt.`,
