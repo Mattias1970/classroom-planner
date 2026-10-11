@@ -22,6 +22,22 @@ export interface SkolarDag {
   slut?: string;
 }
 
+/**
+ * Del 187 · Schemabrytande aktivitet mellan två klockslag (utflykt, prao-info, nationellt prov …).
+ * Lektionspass som överlappar tiden används inte i planeringen — lektionerna flyttas till nästa pass.
+ */
+export interface SchemaAktivitet {
+  id: string;
+  datum: IsoDatum;
+  /** 'HH:MM'. */
+  start: string;
+  /** 'HH:MM' (efter start). */
+  slut: string;
+  label: string;
+  /** Klasserna som berörs; saknas = alla klasser i skolåret. */
+  klassIds?: string[];
+}
+
 export interface Skolar {
   id: string;
   /** 'Läsåret 2026/2027'. */
@@ -29,6 +45,8 @@ export interface Skolar {
   start: IsoDatum;
   slut: IsoDatum;
   dagar: SkolarDag[];
+  /** Del 187 · Schemabrytande aktiviteter. */
+  aktiviteter?: SchemaAktivitet[];
 }
 
 // ── Personal & organisation ──────────────────────────────────

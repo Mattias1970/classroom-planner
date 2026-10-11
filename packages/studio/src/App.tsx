@@ -16,7 +16,7 @@ import {
   slaIhopPlaneringsmall, tolkaPlaneringsmall,
   handelserPerDatum, kalenderHandelser, klassFarg, noBudget, noOverBudget, sattLektionsplan,
   doldaOmraden, sattOmradeDolt, visaAllaOmraden, LEKTIONSOMRADEN, type LektionsOmrade,
-  foljbaraAmnen, foljPlanering, kapitelBorjar, laddaKapitel, taBortLektion,
+  foljbaraAmnen, foljPlanering, kapitelBorjar, laddaKapitel, taBortLektion, laggTillSchemaAktivitet, taBortSchemaAktivitet,
   kapitelKort, manadsRutor, skolarManader, veckaRutor, viktigaDatum, bamTidslinje, begreppForLektion, bokBegrepp,
   tavelTidslinje, standardBamDelar, bamAvvikelse, exitStartFor, type BamDel,
   bokFromValfriImport, bokSidregister, bokSidregisterCsv, elevSchema, exitStart, giltigtPass,
@@ -681,6 +681,25 @@ function SkolarPanelInner(props: {
             </tr>
           ))}</tbody>
         </table>
+      )}
+      {(la.aktiviteter ?? []).length > 0 && (
+        <>
+          <h3>🚫 Schemabrytande aktiviteter</h3>
+          <table className="tbl">
+            <thead><tr><th>Datum</th><th>Tid</th><th>Aktivitet</th><th>Klasser</th><th></th></tr></thead>
+            <tbody>{(la.aktiviteter ?? []).map((a) => (
+              <tr key={a.id}>
+                <td>{a.datum}</td><td>{a.start}–{a.slut}</td><td>{a.label}</td>
+                <td>{a.klassIds === undefined || a.klassIds.length === 0 ? 'alla' : a.klassIds.map((k) => s.klasser.find((x) => x.id === k)?.namn ?? k).join(', ')}</td>
+                <td><button className="icon-btn" title="Ta bort" onClick={() => {
+                  try { const r = taBortSchemaAktivitet(lasStruktur(), id, a.id, new Date().toISOString().slice(0, 10)); kor(() => r.s, `${a.label} borttagen — passen används igen.`); }
+                  catch (e) { kor(() => { throw e; }, ''); }
+                }}>🗑</button></td>
+              </tr>
+            ))}</tbody>
+          </table>
+          <p className="note">Nya aktiviteter läggs till på ämnets planering (🚫 Schemabrytande aktiviteter).</p>
+        </>
       )}
       <NyTjanst s={s} skolarId={id} kor={kor} />
       <div className="modal-actions">
@@ -2525,6 +2544,85 @@ function KapitelDetalj({ s, bok, kap, kor }: { s: Struktur; bok: Bok; kap: Kapit
  * från första passet på eller efter datumet, kommande lektioner flyttas senare, egna prov/diagnoser/
  * laborationer ligger kvar. Förhandsvisningen räknas på en kopia innan något sparas.
  */
+/**
+ * Del 187 · Schemabrytande aktiviteter (utflykt, nationellt prov, prao-info …) mellan två klockslag.
+ * Lektionspass som överlappar används inte i planeringen — lektionerna flyttas till nästa pass,
+ * lärarens egna prov och diagnoser ligger kvar på sina datum. Gäller klassen eller alla klasser.
+ */
+function SchemaAktiviteter({ s, amneId, kor, idag }: { s: Struktur; amneId: string; kor: (fn: () => Struktur, m: string) => void; idag: string }) {
+  const amne = s.amnen.find((a) => a.id === amneId);
+  const klass = s.klasser.find((k) => k.id === amne?.klassId);
+  const tjanst = s.tjanster.find((t) => t.id === klass?.tjanstId);
+  const la = s.skolar.find((x) => x.id === tjanst?.skolarId);
+  const [oppen, setOppen] = useState(false);
+  const [datum, setDatum] = useState(idag);
+  const [start, setStart] = useState('08:00');
+  const [slut, setSlut] = useState('12:00');
+  const [namn, setNamn] = useState('');
+  const [alla, setAlla] = useState(false);
+  if (amne === undefined || klass === undefined || la === undefined) return null;
+  const klassNamn = new Map(s.klasser.map((k) => [k.id, k.namn]));
+  const kommande = (la.aktiviteter ?? []).filter((a) => a.datum >= idag && (a.klassIds === undefined || a.klassIds.length === 0 || a.klassIds.includes(klass.id)));
+  const KORT_DAG = ['sön', 'mån', 'tis', 'ons', 'tor', 'fre', 'lör'];
+  const dag = (d: string) => `${KORT_DAG[new Date(`${d}T12:00:00Z`).getUTCDay()]} ${Number(d.slice(8, 10))}/${Number(d.slice(5, 7))}`;
+  const vem = (ids?: string[]) => (ids === undefined || ids.length === 0 ? 'alla klasser' : ids.map((k) => klassNamn.get(k) ?? k).join(', '));
+  const sammanfatta = (r: ReturnType<typeof laggTillSchemaAktivitet>) => {
+    const berorda = r.berorda.filter((b) => b.pass > 0);
+    const text = berorda.length === 0 ? 'inga lektionspass berörs' : berorda.map((b) => `${b.amne} ${b.pass} pass`).join(', ');
+    return `${text}${r.varningar.length > 0 ? ` · ⚠ ${r.varningar.join(' ')}` : ''}`;
+  };
+  let forhand: string | null = null; let fel: string | null = null;
+  if (oppen && namn.trim() !== '') {
+    try { forhand = sammanfatta(laggTillSchemaAktivitet(s, la.id, { datum, start, slut, label: namn, ...(alla ? {} : { klassIds: [klass.id] }) }, idag)); }
+    catch (e) { fel = e instanceof Error ? e.message : String(e); }
+  }
+  return (
+    <div className="uppg-kort no-print schema-aktiviteter">
+      <div className="rad" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <b>🚫 Schemabrytande aktiviteter</b>
+        <small className="muted">{kommande.length === 0 ? `inga kommande för ${klass.namn}` : `${kommande.length} kommande för ${klass.namn}`} · lektioner som omfattas flyttas till nästa pass, egna prov och diagnoser ligger kvar</small>
+        <button className="btn sec sm" aria-expanded={oppen} onClick={() => setOppen(!oppen)}>{oppen ? 'Stäng' : '➕ Lägg till'}</button>
+      </div>
+      {oppen && (
+        <div className="rad" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
+          <input aria-label="Aktivitetens namn" placeholder="t.ex. Utflykt, Nationellt prov" value={namn} onChange={(e) => setNamn(e.target.value)} />
+          <input type="date" aria-label="Aktivitetens datum" value={datum} min={idag} onChange={(e) => { if (e.target.value !== '') setDatum(e.target.value); }} />
+          <label className="small">från <input type="time" aria-label="Aktiviteten börjar" value={start} onChange={(e) => setStart(e.target.value)} /></label>
+          <label className="small">till <input type="time" aria-label="Aktiviteten slutar" value={slut} onChange={(e) => setSlut(e.target.value)} /></label>
+          <select aria-label="Vilka klasser" value={alla ? 'alla' : 'klass'} onChange={(e) => setAlla(e.target.value === 'alla')}>
+            <option value="klass">bara {klass.namn}</option>
+            <option value="alla">alla klasser</option>
+          </select>
+          <button className="btn sm" disabled={namn.trim() === '' || fel !== null} onClick={() => {
+            try {
+              const r = laggTillSchemaAktivitet(lasStruktur(), la.id, { datum, start, slut, label: namn, ...(alla ? {} : { klassIds: [klass.id] }) }, idag);
+              kor(() => r.s, `${namn.trim()} ${dag(datum)} ${start}–${slut} (${alla ? 'alla klasser' : klass.namn}) inlagd: ${sammanfatta(r)}.`);
+              setNamn('');
+            } catch (e) { kor(() => { throw e; }, ''); }
+          }}>Spara aktiviteten</button>
+          {fel !== null && <span className="status warn small">⚠ {fel}</span>}
+          {forhand !== null && <span className="small muted" aria-label="Förhandsvisning av aktiviteten">Berör: {forhand}</span>}
+        </div>
+      )}
+      {kommande.length > 0 && (
+        <ul className="small" style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+          {kommande.map((a) => (
+            <li key={a.id}>
+              <b>{a.label}</b> {dag(a.datum)} {a.start}–{a.slut} <span className="muted">· {vem(a.klassIds)}</span>{' '}
+              <button className="icon-btn" title="Ta bort aktiviteten" aria-label={`Ta bort aktivitet ${a.label} ${a.datum}`} onClick={() => {
+                try {
+                  const r = taBortSchemaAktivitet(lasStruktur(), la.id, a.id, idag);
+                  kor(() => r.s, `${a.label} ${dag(a.datum)} borttagen — passen används igen.`);
+                } catch (e) { kor(() => { throw e; }, ''); }
+              }}>🗑</button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function LaddaKapitel({ s, bok, amneId, kor, idag }: { s: Struktur; bok: Bok; amneId: string; kor: (fn: () => Struktur, m: string) => void; idag: string }) {
   const [kap, setKap] = useState<number>(bok.kapitel[0]?.nr ?? 1);
   const [fran, setFran] = useState(idag);
@@ -2714,6 +2812,7 @@ function GruppPlanering(props: {
       {kanAndra && <p className="note no-print">Lektioner som ligger framåt i tiden kan tas bort, ersättas eller få fler lektioner på delkapitlet. Genomförda lektioner ändras aldrig. Lektionsplanerna följer sina lektioner när följden ändras.</p>}
       {kanAndra && <KursOrdning plan={plan} amneId={amneId!} kor={kor!} idag={idag!} />}
       {kanAndra && <LaddaKapitel s={s!} bok={bok} amneId={amneId!} kor={kor!} idag={idag!} />}
+      {kanAndra && <SchemaAktiviteter s={s!} amneId={amneId!} kor={kor!} idag={idag!} />}
       {kanAndra && <KapitelBorjar plan={plan} amneId={amneId!} kor={kor!} idag={idag!} />}
       <table className="tbl plan clickable">
         <thead><tr><th title="Avklarad">✓</th><th>Nr</th><th>Datum</th><th>Dag</th><th>V.</th><th>Tid</th>{halvklassAmne && <th>Klass</th>}<th>Kap</th><th>Avsnitt</th>{bokHarNivaer(bok) && <><th>{bok.nivaer.niva1}</th><th>{bok.nivaer.niva2}</th><th>{bok.nivaer.niva3}</th></>}{kanAndra && <><th title="Antal lektioner på delkapitlet">Lekt.</th><th></th></>}</tr></thead>
@@ -6013,6 +6112,7 @@ function startAnkare(la?: Skolar): string {
 
 function KalenderVy({ s, onOppnaLektion, kor }: { s: Struktur; onOppnaLektion?: (amneId: string, i: number) => void; kor?: (fn: () => Struktur, m: string) => void }) {
   const [skolarId, setSkolarId] = useState(s.skolar[0]?.id ?? '');
+  const klassNamnKal = useMemo(() => new Map(s.klasser.map((k) => [k.id, k.namn])), [s]);
   // Del 149: kursernas första lektion får ▲/▼ i kalendern
   const idagIso = new Date().toISOString().slice(0, 10);
   const kursFlytt = useMemo(() => {
@@ -6089,13 +6189,13 @@ function KalenderVy({ s, onOppnaLektion, kor }: { s: Struktur; onOppnaLektion?: 
         {utskriftLage === 'manader' && manader.map(({ ar, m0 }) => (
           <section key={`${ar}-${m0}`} className="kal-utskrift-sida">
             <h3>{skolar.namn} — {MANADSNAMN[m0]} {ar}</h3>
-            <MonadsGrid ar={ar} manad0={m0} skolar={skolar} perDatum={perDatum} onPrev={() => undefined} onNext={() => undefined} />
+            <MonadsGrid ar={ar} manad0={m0} skolar={skolar} perDatum={perDatum} klassNamn={klassNamnKal} onPrev={() => undefined} onNext={() => undefined} />
           </section>
         ))}
         {utskriftLage === 'veckor' && veckoStarter.map((vs) => (
           <section key={vs} className="kal-utskrift-sida">
             <h3>{skolar.namn} — vecka {isoVeckaLbl(vs)} <small className="muted">({vs})</small></h3>
-            <VeckoSchema rutor={veckaRutor(vs, skolar, perDatum)} onPrev={() => undefined} onNext={() => undefined} onIdag={() => undefined} />
+            <VeckoSchema rutor={veckaRutor(vs, skolar, perDatum, klassNamnKal)} onPrev={() => undefined} onNext={() => undefined} onIdag={() => undefined} />
           </section>
         ))}
       </div>
@@ -6140,11 +6240,11 @@ function KalenderVy({ s, onOppnaLektion, kor }: { s: Struktur; onOppnaLektion?: 
       {handelser.length === 0 && <p className="note">Inga planeringar i det här skolåret ännu — skapa en planering på ett ämne, så dyker lektionerna upp här.</p>}
 
       {lage === 'manad' && (
-        <MonadsGrid onOppna={onOppnaLektion} ar={ankAr} manad0={ankManad} skolar={skolar} perDatum={perDatum}
+        <MonadsGrid onOppna={onOppnaLektion} ar={ankAr} manad0={ankManad} skolar={skolar} perDatum={perDatum} klassNamn={klassNamnKal}
           onPrev={() => flyttaManad(-1)} onNext={() => flyttaManad(1)} />
       )}
       {lage === 'vecka' && (
-        <VeckoSchema rutor={veckaRutor(ankare, skolar, perDatum)} onOppna={onOppnaLektion}
+        <VeckoSchema rutor={veckaRutor(ankare, skolar, perDatum, klassNamnKal)} onOppna={onOppnaLektion}
           onPrev={() => flyttaVecka(-1)} onNext={() => flyttaVecka(1)} onIdag={() => setAnkare(new Date().toISOString().slice(0, 10))} />
       )}
       {(lage === 'lasar' || lage === 'termin') && (
@@ -6197,11 +6297,11 @@ function Handelsechip({ h, onOppna }: { h: KalenderHandelse; onOppna?: (amneId: 
 
 const DAGKORT = ['Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön'];
 
-function MonadsGrid({ ar, manad0, skolar, perDatum, onPrev, onNext, onOppna }: {
-  ar: number; manad0: number; skolar: Skolar; perDatum: Map<string, KalenderHandelse[]>;
+function MonadsGrid({ ar, manad0, skolar, perDatum, onPrev, onNext, onOppna, klassNamn }: {
+  ar: number; manad0: number; skolar: Skolar; perDatum: Map<string, KalenderHandelse[]>; klassNamn?: Map<string, string>;
   onPrev: () => void; onNext: () => void; onOppna?: (amneId: string, i: number) => void;
 }) {
-  const rutor = manadsRutor(ar, manad0, skolar, perDatum);
+  const rutor = manadsRutor(ar, manad0, skolar, perDatum, klassNamn);
   const idag = new Date().toISOString().slice(0, 10);
   return (
     <div>
@@ -6218,6 +6318,7 @@ function MonadsGrid({ ar, manad0, skolar, perDatum, onPrev, onNext, onOppna }: {
             {i % 7 === 0 && <div className="mgrid-vk">{isoVeckaLbl(r.datum)}</div>}
             <div className={`mcell ${r.iManad ? '' : 'dim'} ${r.helg ? 'helg' : ''} ${r.ledig ? 'ledig' : ''} ${r.halvdag ? 'halvdag' : ''} ${r.datum === idag ? 'idag' : ''}`}>
               <div className="mcell-d">{Number(r.datum.slice(8))}{r.ledig ? <span className="ledig-l">{r.ledig}</span> : r.halvdag ? <span className="ledig-l">½ {r.halvdag}</span> : null}</div>
+              {r.aktiviteter.map((a) => <div key={a} className="ledig-l akt-l" title={a}>🚫 {a}</div>)}
               {r.handelser.map((h, j) => <Handelsechip key={j} h={h} onOppna={onOppna} />)}
             </div>
           </Fragment>
@@ -6251,6 +6352,7 @@ function VeckoSchema({ rutor, onPrev, onNext, onIdag, onOppna }: {
           <div key={r.datum} className={`sch-hdr ${r.ledig ? 'ledig' : ''}`}>
             {DAGKORT[r.dag - 1]} {Number(r.datum.slice(8))}/{Number(r.datum.slice(5, 7))}
             {r.ledig ? <div className="ledig-l">{r.ledig}</div> : r.halvdag ? <div className="ledig-l">½ {r.halvdag}</div> : null}
+            {r.aktiviteter.map((a) => <div key={a} className="ledig-l akt-l" title={a}>🚫 {a}</div>)}
           </div>
         ))}
         <div className="sch-tidkol">

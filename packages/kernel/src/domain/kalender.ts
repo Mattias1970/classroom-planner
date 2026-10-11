@@ -35,6 +35,8 @@ export interface KalenderDagRuta {
   helg: boolean;
   ledig: string | null; // etikett för lov/röd dag/temadag (heldag)
   halvdag: string | null;
+  /** Del 187 · Schemabrytande aktiviteter: 'Utflykt 09:00–12:00 (8A)'. */
+  aktiviteter: string[];
   handelser: KalenderHandelse[];
 }
 
@@ -110,7 +112,7 @@ export function handelserPerDatum(handelser: KalenderHandelse[]): Map<IsoDatum, 
   return m;
 }
 
-function dagRuta(datum: IsoDatum, iManad: boolean, skolar: Skolar, perDatum: Map<IsoDatum, KalenderHandelse[]>): KalenderDagRuta {
+function dagRuta(datum: IsoDatum, iManad: boolean, skolar: Skolar, perDatum: Map<IsoDatum, KalenderHandelse[]>, klassNamn: Map<string, string> = new Map()): KalenderDagRuta {
   const dag = veckodag(datum);
   const egen = skolar.dagar.find((d) => d.datum === datum);
   // Röda dagar (helgdagar) markeras INTE i kalendern — bara skolans egna
@@ -121,6 +123,7 @@ function dagRuta(datum: IsoDatum, iManad: boolean, skolar: Skolar, perDatum: Map
     helg: dag >= 6,
     ledig,
     halvdag: egen?.typ === 'halvdag' ? `${egen.label}${egen.slut !== undefined ? ` ${egen.slut}` : ''}` : null,
+    aktiviteter: (skolar.aktiviteter ?? []).filter((a) => a.datum === datum).map((a) => `${a.label} ${a.start}–${a.slut}${a.klassIds !== undefined && a.klassIds.length > 0 ? ` (${a.klassIds.map((k) => klassNamn.get(k) ?? k).join(', ')})` : ''}`),
     handelser: perDatum.get(datum) ?? [],
   };
 }
@@ -129,13 +132,13 @@ function dagRuta(datum: IsoDatum, iManad: boolean, skolar: Skolar, perDatum: Map
  * Månadsrutnät (måndag först) med in-/utanför-månad-markering. Alltid hela
  * veckor så rutnätet blir rektangulärt.
  */
-export function manadsRutor(ar: number, manad0: number, skolar: Skolar, perDatum: Map<IsoDatum, KalenderHandelse[]>): KalenderDagRuta[] {
+export function manadsRutor(ar: number, manad0: number, skolar: Skolar, perDatum: Map<IsoDatum, KalenderHandelse[]>, klassNamn?: Map<string, string>): KalenderDagRuta[] {
   const forsta = `${ar}-${String(manad0 + 1).padStart(2, '0')}-01`;
   let d = addDays(forsta, -(veckodag(forsta) - 1)); // backa till måndag
   const rutor: KalenderDagRuta[] = [];
   for (let i = 0; i < 42; i++) {
     const iManad = Number(d.slice(5, 7)) === manad0 + 1;
-    rutor.push(dagRuta(d, iManad, skolar, perDatum));
+    rutor.push(dagRuta(d, iManad, skolar, perDatum, klassNamn));
     d = addDays(d, 1);
     if (i >= 34 && veckodag(d) === 1 && Number(d.slice(5, 7)) !== manad0 + 1) break;
   }
@@ -157,9 +160,9 @@ export function skolarManader(skolar: Skolar): Array<[number, number]> {
 }
 
 /** En veckas sju dagrutor (måndag–söndag) som innehåller datumet. */
-export function veckaRutor(datum: IsoDatum, skolar: Skolar, perDatum: Map<IsoDatum, KalenderHandelse[]>): KalenderDagRuta[] {
+export function veckaRutor(datum: IsoDatum, skolar: Skolar, perDatum: Map<IsoDatum, KalenderHandelse[]>, klassNamn?: Map<string, string>): KalenderDagRuta[] {
   const mandag = addDays(datum, -(veckodag(datum) - 1));
-  return Array.from({ length: 7 }, (_, i) => dagRuta(addDays(mandag, i), true, skolar, perDatum));
+  return Array.from({ length: 7 }, (_, i) => dagRuta(addDays(mandag, i), true, skolar, perDatum, klassNamn));
 }
 
 export { isoVecka };

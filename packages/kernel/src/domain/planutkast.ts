@@ -9,12 +9,12 @@
  * lektioner via andraPlanering. Pass före startdatum ändras aldrig.
  */
 import { delkapitelKod } from './bok.js';
-import { isoVecka } from './skolar.js';
+import { isoVecka, laggTillAktivitet, taBortAktivitet } from './skolar.js';
 import {
   amnesOffset, amnesPlanFor, andraPlanering, gruppNyckel, hamtaLektionsplan, harLaborationsstandard,
   kopplaOmLektionsplaner, noBudget, nyttId, planeringsRader, registreraPlanering, samlaSlots, sattLektionsplan, type PlanRad,
 } from './struktur.js';
-import type { Amne, LektionsDetaljer, LektionsPlan, LektionsTyp, PlaneradLektion, PlanFranUtkast, PlanUtkast, Struktur, UtkastKort } from './typer.js';
+import type { Amne, LektionsDetaljer, LektionsPlan, LektionsTyp, PlaneradLektion, PlanFranUtkast, PlanUtkast, SchemaAktivitet, Skolar, Struktur, UtkastKort } from './typer.js';
 
 export type UtkastKo = 'teori' | 'labbar';
 
@@ -199,7 +199,7 @@ export function planeringstavla(s: Struktur, amneId: string, utkast: PlanFranUtk
     }));
   } else {
     const offset = amnesOffset(skolar, a);
-    const alla = samlaSlots(skolar, a.schema).slice(offset, a.noGrupp !== undefined ? offset + noBudget(skolar, a.schema) : undefined);
+    const alla = samlaSlots(skolar, a.schema, a.klassId).slice(offset, a.noGrupp !== undefined ? offset + noBudget(skolar, a.schema) : undefined);
     pass = alla.filter((x) => x.datum >= u.fran).map((x) => ({ ...x, passTyp: 'teori' as const, b: null }));
   }
 
@@ -944,4 +944,92 @@ export function taBortLektion(s: Struktur, amneId: string, nyckel: string, idag?
   const u: PlanFranUtkast = { ...u0, teori, egna: u0.egna.filter((k) => `u:${k.id}` !== nyckel) };
   const hadeKort = hamtaLektionsplan(s, amneId, i) !== null;
   return { s: tillampaUtkast(s, amneId, u, idag), rubrik: rad.lektion.avsnitt, datum: fran, framflyttade: ko.length, fasta: fasta.size, hadeKort };
+}
+
+// ── Del 187 · Schemabrytande aktiviteter ─────────────────────
+
+export interface AktivitetPaverkan {
+  amneId: string;
+  /** '8A Matematik'. */
+  amne: string;
+  /** Lektionspass som aktiviteten tar (eller lämnar tillbaka vid borttag). */
+  pass: number;
+  /** Lärarens fasta kort (prov, diagnoser, egna rader) som ligger kvar på sina pass. */
+  fasta: number;
+}
+
+export interface AktivitetResultat {
+  s: Struktur;
+  /** Ämnen vars pass berörs. */
+  berorda: AktivitetPaverkan[];
+  varningar: string[];
+}
+
+/** Ämnen i skolåret som aktiviteten gäller (klassens ämnen, eller alla klassers). */
+function aktivitetensAmnen(s: Struktur, skolarId: string, akt: SchemaAktivitet): Amne[] {
+  const tjanster = new Set(s.tjanster.filter((t) => t.skolarId === skolarId).map((t) => t.id));
+  const klasser = new Set(s.klasser.filter((k) => tjanster.has(k.tjanstId) && (akt.klassIds === undefined || akt.klassIds.length === 0 || akt.klassIds.includes(k.id))).map((k) => k.id));
+  return s.amnen.filter((a) => klasser.has(a.klassId));
+}
+
+/** Ämnets veckopass den dagen som överlappar aktiviteten. */
+function passSomTas(a: Amne, akt: SchemaAktivitet): Array<{ start: string; slut: string }> {
+  const d = new Date(`${akt.datum}T00:00:00Z`).getUTCDay();
+  const veckodag = d === 0 ? 7 : d;
+  return [...a.schema, ...(a.schemaB ?? [])].filter((p) => p.dag === veckodag && p.start < akt.slut && p.slut > akt.start);
+}
+
+function bytAktiviteter(s: Struktur, skolarId: string, ny: Skolar, akt: SchemaAktivitet, idag: string | undefined, laggTill: boolean): AktivitetResultat {
+  const klassNamn = new Map(s.klasser.map((k) => [k.id, k.namn]));
+  const s2bas: Struktur = { ...s, skolar: s.skolar.map((x) => (x.id === skolarId ? ny : x)) };
+  let ut = s2bas;
+  const berorda: AktivitetPaverkan[] = []; const varningar: string[] = [];
+  for (const a of aktivitetensAmnen(s, skolarId, akt)) {
+    const pass = passSomTas(a, akt);
+    if (pass.length === 0) continue;
+    const namn = `${klassNamn.get(a.klassId) ?? ''} ${a.namn}`.trim();
+    let fore: ReturnType<typeof amnesPlanFor> = null;
+    try { fore = amnesPlanFor(s, a.id, idag, false); } catch { fore = null; }
+    if (fore === null) { berorda.push({ amneId: a.id, amne: namn, pass: pass.length, fasta: 0 }); continue; }
+    // Lärarens fasta kort ligger kvar på sina pass; ett fast kort på ett pass som aktiviteten tar flyttas till nästa pass
+    const fasta = fastaKortFran(s, a.id, akt.datum, idag);
+    const u0 = utkastFranPlan(s, a.id, akt.datum, idag, `${laggTill ? 'Med' : 'Utan'} ${akt.label} ${akt.datum}`);
+    const tagna = new Set(laggTill ? pass.map((p) => passNyckelFor(akt.datum, p.start)) : []);
+    const flyttas: string[] = [];
+    for (const [k, n] of [...fasta]) if (tagna.has(k)) { fasta.delete(k); flyttas.push(n); }
+    berorda.push({ amneId: a.id, amne: namn, pass: pass.length, fasta: fasta.size });
+    if (fasta.size === 0 && flyttas.length === 0) continue;   // inga fasta kort: lektionerna flyttas av sig själva
+    const fastaNycklar = new Set(fasta.values());
+    const ko = u0.teori.filter((n) => !fastaNycklar.has(n));
+    const teori = laggUtTeori(ut, a.id, akt.datum, ko, fasta, idag);
+    ut = tillampaUtkast(ut, a.id, { ...u0, teori }, idag);
+    for (const n of flyttas) {
+      const rubrik = (fore.a.find((r) => r.nyckel === n)?.lektion.avsnitt) ?? n;
+      varningar.push(`${namn}: "${rubrik}" låg på ett pass som ${akt.label} tar — kortet flyttades till nästa pass.`);
+    }
+  }
+  return { s: ut, berorda, varningar };
+}
+
+/**
+ * Del 187 · Lägger till en schemabrytande aktivitet (datum, från–till, valfria klasser). Pass som
+ * överlappar tiden används inte; lektionerna flyttas till nästa pass, lärarens fasta kort (prov,
+ * diagnoser, egna rader) ligger kvar på sina datum. Genomförda dagar ändras aldrig.
+ */
+export function laggTillSchemaAktivitet(s: Struktur, skolarId: string, akt: Omit<SchemaAktivitet, 'id'> & { id?: string }, idag?: string): AktivitetResultat {
+  const la = s.skolar.find((x) => x.id === skolarId);
+  if (la === undefined) throw new Error('Okänt skolår.');
+  const ny = laggTillAktivitet(la, akt, idag);
+  const lagd = (ny.aktiviteter ?? []).find((x) => x.datum === akt.datum && x.start === akt.start && x.label === akt.label.trim() && (akt.id === undefined || x.id === akt.id))!;
+  return bytAktiviteter(s, skolarId, ny, lagd, idag, true);
+}
+
+/** Del 187 · Tar bort en kommande aktivitet: passen används igen, fasta kort ligger kvar. */
+export function taBortSchemaAktivitet(s: Struktur, skolarId: string, id: string, idag?: string): AktivitetResultat {
+  const la = s.skolar.find((x) => x.id === skolarId);
+  if (la === undefined) throw new Error('Okänt skolår.');
+  const akt = (la.aktiviteter ?? []).find((x) => x.id === id);
+  if (akt === undefined) throw new Error('Aktiviteten finns inte.');
+  const ny = taBortAktivitet(la, id, idag);
+  return bytAktiviteter(s, skolarId, ny, akt, idag, false);
 }

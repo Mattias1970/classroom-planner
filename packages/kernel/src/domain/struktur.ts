@@ -464,8 +464,12 @@ export function passKonflikter(s: Struktur, klassId: string, nyaPass: Pass[], ig
 // ── Planering: bok + ämnesschema + skolår → datumsatta lektioner ──
 interface Slot { datum: string; vecka: number; start: string; slut: string; }
 
-/** Alla lediga lektionsslots i skolåret (helger/röda dagar/lov/temadagar/halvdagar hoppas över). */
-export function samlaSlots(skolar: Skolar, schema: Pass[]): Slot[] {
+/**
+ * Alla lediga lektionsslots i skolåret (helger/röda dagar/lov/temadagar/halvdagar hoppas över).
+ * Del 187: även pass som överlappar en schemabrytande aktivitet för klassen (eller alla klasser);
+ * `klassId` null = bortse från aktiviteter (NO-blockens budget hålls stabil).
+ */
+export function samlaSlots(skolar: Skolar, schema: Pass[], klassId?: string | null): Slot[] {
   const perDag = new Map<number, Pass[]>();
   for (const p of schema.filter(giltigtPass)) {
     if (!perDag.has(p.dag)) perDag.set(p.dag, []);
@@ -480,7 +484,7 @@ export function samlaSlots(skolar: Skolar, schema: Pass[]): Slot[] {
     if (di > skolar.slut) break;
     const veckodag = d.getUTCDay() === 0 ? 7 : d.getUTCDay();
     for (const pass of perDag.get(veckodag) ?? []) {
-      if (veckodag <= 5 && passSparr(di, pass.start, skolar) === null) {
+      if (veckodag <= 5 && passSparr(di, pass.start, skolar, pass.slut, klassId) === null) {
         slots.push({ datum: di, vecka: isoVecka(di), start: pass.start, slut: pass.slut });
       }
     }
@@ -491,7 +495,7 @@ export function samlaSlots(skolar: Skolar, schema: Pass[]): Slot[] {
 
 /** Antal lediga lektionsslots i skolåret för ett schema. */
 export function antalSlots(skolar: Skolar, schema: Pass[]): number {
-  return samlaSlots(skolar, schema).length;
+  return samlaSlots(skolar, schema, null).length;
 }
 
 /**
@@ -753,10 +757,10 @@ function laggPaSlots(rader: PlanRad[], slots: Slot[]): PlaneradLektion[] {
   });
 }
 
-export function skapaPlanering(skolar: Skolar, schema: Pass[], bok: Bok, offset = 0, val: EgenRad[] | PlanInstallning = []): PlaneradLektion[] {
+export function skapaPlanering(skolar: Skolar, schema: Pass[], bok: Bok, offset = 0, val: EgenRad[] | PlanInstallning = [], klassId?: string): PlaneradLektion[] {
   const inst: PlanInstallning = Array.isArray(val) ? { egnaRader: val } : val;
   const rader = planeringsRader(bok, inst);
-  const slots = samlaSlots(skolar, schema).slice(offset);
+  const slots = samlaSlots(skolar, schema, klassId).slice(offset);
   const u = inst.planFranUtkast;
   if (u === undefined) return laggPaSlots(rader, slots);
   // Del 158: passen före utkastets startdatum behåller sina lektioner; därefter utkastets ordning
@@ -973,8 +977,8 @@ export function skapaHalvklassPlanering(skolar: Skolar, amne: Amne, bok: Bok, of
 
 function halvklassPlan(skolar: Skolar, amne: Amne, lektioner: PlanRad[], labbar: Laboration[], offset: number, idag?: string): HalvklassPlanering {
   const budget = amne.noGrupp !== undefined ? noBudget(skolar, amne.schema) : Number.POSITIVE_INFINITY;
-  const slotsA = samlaSlots(skolar, amne.schema).slice(offset, budget === Number.POSITIVE_INFINITY ? undefined : offset + budget);
-  const slotsB = samlaSlots(skolar, amne.schemaB ?? []).slice(offset, budget === Number.POSITIVE_INFINITY ? undefined : offset + budget);
+  const slotsA = samlaSlots(skolar, amne.schema, amne.klassId).slice(offset, budget === Number.POSITIVE_INFINITY ? undefined : offset + budget);
+  const slotsB = samlaSlots(skolar, amne.schemaB ?? [], amne.klassId).slice(offset, budget === Number.POSITIVE_INFINITY ? undefined : offset + budget);
   const fryst = amne.planFrystTill ?? idag ?? '';
   const genomford = (datum: string) => datum < (idag ?? '');
   const bAvNyckel = new Map(slotsB.map((x) => [sessionsNyckel(x.datum, x.start), x]));
@@ -1105,8 +1109,8 @@ export function amnesPlan(skolar: Skolar, amne: Amne, bok: Bok, offset = 0, idag
     return { a: h.a, b: h.b, sessioner: h.sessioner };
   }
   return {
-    a: skapaPlanering(skolar, amne.schema, bok, offset, amne),
-    b: amne.halvklass === true && amne.schemaB !== undefined ? skapaPlanering(skolar, amne.schemaB, bok, offset, amne) : [],
+    a: skapaPlanering(skolar, amne.schema, bok, offset, amne, amne.klassId),
+    b: amne.halvklass === true && amne.schemaB !== undefined ? skapaPlanering(skolar, amne.schemaB, bok, offset, amne, amne.klassId) : [],
     sessioner: null,
   };
 }

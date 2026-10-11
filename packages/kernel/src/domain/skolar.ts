@@ -3,7 +3,7 @@
  * läggs till manuellt, via klistrad text/CSV eller via AI-tolkat kalendarium
  * (.ics eller prompten "Kalendarium" som ger samma textformat).
  */
-import type { IsoDatum, Skolar, SkolarDag } from './typer.js';
+import type { IsoDatum, SchemaAktivitet, Skolar, SkolarDag } from './typer.js';
 
 function iso(d: Date): IsoDatum { return d.toISOString().slice(0, 10); }
 function addDays(d: Date, n: number): Date { const x = new Date(d); x.setUTCDate(x.getUTCDate() + n); return x; }
@@ -150,15 +150,69 @@ export function ledigEtikett(datum: IsoDatum, skolar: Skolar): string | null {
   return helgdagar(Number(datum.slice(0, 4))).get(datum) ?? null;
 }
 
-/** Spärretikett för ett pass (heldag/lov/röd dag spärrar allt; halvdag från sluttiden). */
-export function passSparr(datum: IsoDatum, passStart: string, skolar: Skolar): string | null {
+/**
+ * Del 187 · Aktiviteten som bryter passet: samma datum, berör klassen (eller alla klasser)
+ * och överlappar passets tid. Utan passets sluttid räknas passet som träffat om det börjar
+ * inom aktiviteten. `klassId` null = ingen klass (t.ex. stödpass) — bara aktiviteter för alla.
+ */
+export function brytandeAktivitet(datum: IsoDatum, passStart: string, passSlut: string | undefined, skolar: Skolar, klassId?: string | null): SchemaAktivitet | null {
+  for (const a of skolar.aktiviteter ?? []) {
+    if (a.datum !== datum) continue;
+    const allaKlasser = a.klassIds === undefined || a.klassIds.length === 0;
+    if (!allaKlasser && (klassId === undefined || klassId === null || !a.klassIds!.includes(klassId))) continue;
+    const traff = passSlut !== undefined && passSlut > passStart
+      ? passStart < a.slut && passSlut > a.start
+      : passStart >= a.start && passStart < a.slut;
+    if (traff) return a;
+  }
+  return null;
+}
+
+/**
+ * Spärretikett för ett pass (heldag/lov/röd dag spärrar allt; halvdag från sluttiden;
+ * Del 187: schemabrytande aktivitet som överlappar passet). `klassId` null = bortse från aktiviteter.
+ */
+export function passSparr(datum: IsoDatum, passStart: string, skolar: Skolar, passSlut?: string, klassId?: string | null): string | null {
   const röd = ledigEtikett(datum, skolar);
   if (röd) return röd;
   const egen = skolar.dagar.find((d) => d.datum === datum);
   if (egen?.typ === 'halvdag' && egen.slut !== undefined && passStart >= egen.slut) {
     return `${egen.label} (halvdag ${egen.slut})`;
   }
+  if (klassId !== null) {
+    const akt = brytandeAktivitet(datum, passStart, passSlut, skolar, klassId);
+    if (akt !== null) return `${akt.label} ${akt.start}–${akt.slut}`;
+  }
   return null;
+}
+
+const TID = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** Del 187 · Lägger till en schemabrytande aktivitet. Genomförda dagar (före idag) ändras aldrig. */
+export function laggTillAktivitet(skolar: Skolar, akt: Omit<SchemaAktivitet, 'id'> & { id?: string }, idag?: IsoDatum): Skolar {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(akt.datum)) throw new Error('Ange ett datum (ÅÅÅÅ-MM-DD).');
+  if (!TID.test(akt.start) || !TID.test(akt.slut)) throw new Error('Ange tiderna som TT:MM, t.ex. 09:30.');
+  if (akt.slut <= akt.start) throw new Error('Sluttiden måste vara efter starttiden.');
+  if (akt.label.trim() === '') throw new Error('Ge aktiviteten ett namn.');
+  if (akt.datum < skolar.start || akt.datum > skolar.slut) throw new Error(`Datumet ligger utanför ${skolar.namn} (${skolar.start} – ${skolar.slut}).`);
+  if (idag !== undefined && akt.datum < idag) throw new Error('Datumet har redan varit — genomförda lektioner ändras aldrig.');
+  const id = akt.id ?? `akt-${akt.datum}-${akt.start.replace(':', '')}-${(skolar.aktiviteter ?? []).length + 1}`;
+  const klassIds = akt.klassIds !== undefined && akt.klassIds.length > 0 ? [...new Set(akt.klassIds)] : undefined;
+  const ny: SchemaAktivitet = { id, datum: akt.datum, start: akt.start, slut: akt.slut, label: akt.label.trim(), ...(klassIds !== undefined ? { klassIds } : {}) };
+  const aktiviteter = [...(skolar.aktiviteter ?? []).filter((x) => x.id !== id), ny]
+    .sort((a, b) => a.datum.localeCompare(b.datum) || a.start.localeCompare(b.start));
+  return { ...skolar, aktiviteter };
+}
+
+/** Del 187 · Tar bort en aktivitet. Aktiviteter som redan varit ligger kvar (historiken ändras aldrig). */
+export function taBortAktivitet(skolar: Skolar, id: string, idag?: IsoDatum): Skolar {
+  const akt = (skolar.aktiviteter ?? []).find((x) => x.id === id);
+  if (akt === undefined) throw new Error('Aktiviteten finns inte.');
+  if (idag !== undefined && akt.datum < idag) throw new Error('Aktiviteten har redan varit — genomförda lektioner ändras aldrig.');
+  const aktiviteter = (skolar.aktiviteter ?? []).filter((x) => x.id !== id);
+  if (aktiviteter.length > 0) return { ...skolar, aktiviteter };
+  const { aktiviteter: _a, ...rest } = skolar; void _a;
+  return rest;
 }
 
 export function isoVecka(datum: IsoDatum): number {
