@@ -201,7 +201,7 @@ describe('Del 180 · samma elev med och utan mellannamn', () => {
     s = laggTillElev(s, { id: 'e3', klassId: 'k', namn: 'Omar Ali', grupp: 'B' });
     s = { ...s, resultat: [{ id: 'r1', elevId: 'e2', amneId: 'ma', kalla: 'magma', prov: 'Ma 8B Kap 1 Diagnos', datum: '2026-10-01', poang: 9, maxPoang: 10 }] };
     const d = hittaDubbletter(s, 'k');
-    expect(d.map((x) => [x.fran.namn, x.till.namn])).toEqual([['Anna Testsson', 'Anna Berg Testsson']]);
+    expect(d.map((x) => [x.fran.namn, x.till.namn, x.konflikt])).toEqual([['Anna Testsson', 'Anna Berg Testsson', []]]);
     const r = slaIhopDubbletter(s, 'k');
     expect(r.ihop).toEqual([{ fran: 'Anna Testsson', till: 'Anna Berg Testsson', flyttade: 1 }]);
     expect(r.s.elever.map((e) => e.namn)).toEqual(['Anna Berg Testsson', 'Omar Ali']);
@@ -260,5 +260,47 @@ describe('Del 181 · namn som passar flera elever: appen frågar i stället för
     const d = importera(s, { ...underlag, beslut: { 'anna testsson': 'hoppa' } });
     expect(d.traffar).toBe(0);
     expect(d.s.resultat).toHaveLength(1);
+  });
+});
+
+import { sammaElevNamn, slaIhopSakraDubbletter } from '../src/index.js';
+
+describe('Del 189 · samma namn är samma elev om de inte har resultat på samma prov', () => {
+  function bas(): Struktur {
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '26/27', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    return laggTillAmne(s, { id: 'ma', klassId: 'k', namn: 'Matematik', schema: [{ dag: 2, start: '10:00', slut: '11:00' }] });
+  }
+  it('namnregeln: exakt, mellannamn, extra efternamn — inte olika förnamn eller bara förnamn', () => {
+    expect(sammaElevNamn('Kalle Testsson', 'kalle  testsson')).toBe(true);
+    expect(sammaElevNamn('Kalle Testsson', 'Kalle Testsson Provlund')).toBe(true);
+    expect(sammaElevNamn('Kalle Testsson', 'Kalle Ted Testsson')).toBe(true);
+    expect(sammaElevNamn('Kalle Testsson', 'Ted Testsson')).toBe(false);
+    expect(sammaElevNamn('Kalle', 'Kalle Testsson')).toBe(false);
+    expect(sammaElevNamn('Kalle Testsson', 'Kalle Provlund')).toBe(false);
+  });
+  it('säkra dubbletter slås ihop automatiskt; samma prov hos båda kräver lärarens beslut', () => {
+    let s = bas();
+    s = laggTillElev(s, { id: 'e1', klassId: 'k', namn: 'Kalle Testsson', grupp: 'A' });
+    s = laggTillElev(s, { id: 'e2', klassId: 'k', namn: 'Kalle Testsson Provlund', grupp: 'A' });
+    s = laggTillElev(s, { id: 'e3', klassId: 'k', namn: 'Sara Övnegård', grupp: 'B' });
+    s = laggTillElev(s, { id: 'e4', klassId: 'k', namn: 'Sara Övnegård', grupp: 'B' });
+    s = { ...s, resultat: [
+      { id: 'r1', elevId: 'e1', amneId: 'ma', kalla: 'magma', prov: 'Diagnos 1', datum: '2026-09-01', poang: 8, maxPoang: 10 },
+      { id: 'r2', elevId: 'e2', amneId: 'ma', kalla: 'magma', prov: 'Diagnos 2', datum: '2026-09-15', poang: 9, maxPoang: 10 },
+      { id: 'r3', elevId: 'e3', amneId: 'ma', kalla: 'magma', prov: 'Diagnos 1', datum: '2026-09-01', poang: 5, maxPoang: 10 },
+      { id: 'r4', elevId: 'e4', amneId: 'ma', kalla: 'magma', prov: 'Diagnos 1', datum: '2026-09-01', poang: 9, maxPoang: 10 },
+    ] };
+    const d = hittaDubbletter(s, 'k');
+    expect(d.map((x) => [x.till.namn, x.konflikt])).toEqual([['Kalle Testsson Provlund', []], ['Sara Övnegård', ['Diagnos 1']]]);
+    const r = slaIhopSakraDubbletter(s);
+    expect(r.ihop).toEqual([{ fran: 'Kalle Testsson', till: 'Kalle Testsson Provlund', flyttade: 1 }]);
+    expect(r.s.elever.map((e) => e.namn)).toEqual(['Kalle Testsson Provlund', 'Sara Övnegård', 'Sara Övnegård']);
+    expect(resultatForElev(r.s, 'e2')).toHaveLength(2);
+    // Ny fil med det korta namnet hamnar på den sammanslagna eleven
+    const u = importeraResultat(r.s, { klassId: 'k', amneId: 'ma', kalla: 'magma', prov: 'Diagnos 3', datum: '2026-10-01', rader: [{ namn: 'Kalle Testsson', poang: 7, maxPoang: 10 }] });
+    expect(u.omatchade).toEqual([]);
+    expect(resultatForElev(u.s, 'e2')).toHaveLength(3);
   });
 });

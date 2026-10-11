@@ -241,6 +241,23 @@ export function sammaPersonUtanMellannamn(a: string, b: string): boolean {
 }
 
 /**
+ * Del 189 · Samma elev: exakt samma namn, med eller utan mellannamn ('Alice Hultman' =
+ * 'Alice Alexandrou Hultman') eller med ett extra efternamn ('Björn Björnsson' = 'Björn Björnsson
+ * Lund'). Förnamnet måste vara lika och det kortare namnet (minst två ord) ska finnas i ordning i det längre.
+ */
+export function sammaElevNamn(a: string, b: string): boolean {
+  const na = normalisera(a).split(' ').filter((x) => x !== '');
+  const nb = normalisera(b).split(' ').filter((x) => x !== '');
+  if (na.join(' ') === nb.join(' ')) return na.length > 0;
+  if (sammaPersonUtanMellannamn(a, b)) return true;
+  const [kort, lang] = na.length <= nb.length ? [na, nb] : [nb, na];
+  if (kort.length < 2 || kort.length === lang.length || kort[0] !== lang[0]) return false;
+  let i = 0;
+  for (const ord of lang) if (i < kort.length && ord === kort[i]) i += 1;
+  return i === kort.length;
+}
+
+/**
  * Matchar ett namn ur en resultatfil mot klassens elever. Ett Student ID
  * som finns i rostern (`socrativeId`) vinner alltid.
  * Exakt (normaliserad) träff vinner; annars ordningsoberoende ('Efternamn, Förnamn');
@@ -277,6 +294,9 @@ export function matchaElevKandidater(s: Struktur, klassId: string, namn: string,
   // Del 180: med eller utan mellannamn ('Alice Hultman' ↔ 'Alice Alexandrou Hultman'), även mot tidigare namn
   const mellannamn = elever.filter((e) => sammaPersonUtanMellannamn(e.namn, namn) || (e.tidigareNamn ?? []).some((n) => sammaPersonUtanMellannamn(n, namn)));
   if (mellannamn.length >= 1) return en(mellannamn) ?? { elev: null, kandidater: mellannamn };
+  // Del 189: med ett extra efternamn ('Björn Björnsson' ↔ 'Björn Björnsson Lund')
+  const extra = elever.filter((e) => sammaElevNamn(e.namn, namn) || (e.tidigareNamn ?? []).some((n) => sammaElevNamn(n, namn)));
+  if (extra.length >= 1) return en(extra) ?? { elev: null, kandidater: extra };
   const fornamn = elever.filter((e) => normalisera(e.namn).split(' ')[0] === mal);
   if (fornamn.length >= 1) return en(fornamn) ?? { elev: null, kandidater: fornamn };
   return { elev: null, kandidater: [] };

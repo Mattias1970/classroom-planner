@@ -35,7 +35,7 @@ import {
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
   elevrapport, elevrapportText, tillfalleEtiketter, normeradSpridning, klusterKurvor, normeraBand, taBortFil, rensaResultat,
   NORM_BAND, NORM_MAX, amnesKallor, lektionstester, elevLektionstest, tillfalleKortEtikett, KLUSTER_NAMN, TID_PASS, type Kluster,
-  begransaTillElever, elevUrval, klassensElever, type ElevUrvalVal, arSocrative, elevIKlassen, sattElevStatus, rattaNamnordning, hittaDubbletter, slaIhopDubbletter,
+  begransaTillElever, elevUrval, klassensElever, type ElevUrvalVal, arSocrative, elevIKlassen, sattElevStatus, rattaNamnordning, hittaDubbletter, slaIhopDubbletter, slaIhopSakraDubbletter,
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
@@ -112,11 +112,19 @@ export function App() {
   const kor = (fn: () => Struktur, m: string) => {
     try {
       const fore = JSON.stringify(lasStruktur());
-      const ny = fn();
+      // Del 189: säkra dubbletter (samma namn, inga resultat på samma prov hos båda) slås alltid ihop
+      const d = slaIhopSakraDubbletter(fn());
       angraStack.current = [...angraStack.current.slice(-19), fore];   // max 20 steg
-      spara(ny, `✓ ${m}`);
+      spara(d.s, `✓ ${m}${d.ihop.length > 0 ? ` · ${dubblettText(d.ihop)}` : ''}`);
     } catch (e) { setMsg(`✗ ${(e as Error).message}`); }
   };
+  // Del 189: dubbletter som redan finns i sparad data slås ihop när appen startar (går att ångra)
+  useEffect(() => {
+    const d = slaIhopSakraDubbletter(lasStruktur());
+    if (d.ihop.length === 0) return;
+    angraStack.current = [...angraStack.current.slice(-19), JSON.stringify(lasStruktur())];
+    spara(d.s, `✓ ${dubblettText(d.ihop)} (↩ Ångra finns)`);
+  }, []);
   const angra = () => {
     const fore = angraStack.current.pop();
     if (fore === undefined) { setMsg('Inget att ångra.'); return; }
@@ -627,6 +635,11 @@ function NyBokPanel({ kor, setVald }: { kor: (fn: () => Struktur, m: string) => 
       {rapport.map((r, i) => <p key={i} className="note">{r}</p>)}
     </div>
   );
+}
+
+/** Del 189 · '2 dubbletter ihopslagna: Anna Testsson → Anna Berg Testsson (3 resultat)'. */
+function dubblettText(ihop: Array<{ fran: string; till: string; flyttade: number }>): string {
+  return `${ihop.length} ${ihop.length === 1 ? 'dubblett' : 'dubbletter'} ihopslagna: ${ihop.map((x) => `${x.fran} → ${x.till} (${x.flyttade} resultat)`).join(' · ')}`;
 }
 
 // ── Skolår ───────────────────────────────────────────────────
@@ -1189,13 +1202,13 @@ function Elevlista({ s, klassId, klassNamn, kor }: {
       <h3>Elever <small className="muted">{elever.length} i klassen · Grupp A: {antal('A')} · Grupp B: {antal('B')}</small>{' '}
         <button className="btn sec sm" aria-expanded={visaSlutade} disabled={slutade.length === 0} onClick={() => setVisaSlutade(!visaSlutade)}>👋 Elever som slutat ({slutade.length})</button>{' '}
         {hittaDubbletter(s, klassId).length > 0 && (
-          <button className="btn sec sm" title="Samma elev med och utan mellannamn ('Alice Hultman' och 'Alice Alexandrou Hultman') slås ihop — resultaten flyttas till namnet med mellannamn"
+          <button className="btn sec sm" title="Samma namn där båda posterna har resultat på samma prov — appen slår inte ihop dem själv. Kontrollera att det är samma elev (t.ex. ett omprov) innan du slår ihop."
             onClick={() => {
               const d = hittaDubbletter(lasStruktur(), klassId);
-              if (!window.confirm(`Slå ihop ${d.length} dubbletter i ${klassNamn}?\n\n${d.map((x) => `${x.fran.namn} → ${x.till.namn}`).join('\n')}\n\nAlla resultat flyttas till namnet med mellannamn; det kortare namnet sparas som tidigare namn så att nya filer matchar.`)) return;
+              if (!window.confirm(`Samma namn men båda har resultat på samma prov:\n\n${d.map((x) => `${x.fran.namn} → ${x.till.namn}${x.konflikt.length > 0 ? `\n   båda har: ${x.konflikt.join(', ')}` : ''}`).join('\n')}\n\nÄr det samma elev? OK slår ihop — resultaten flyttas till det längre namnet (där båda har samma prov och datum behålls det längre namnets resultat). Avbryt låter dem vara två elever.`)) return;
               const r = slaIhopDubbletter(lasStruktur(), klassId);
               kor(() => r.s, `${r.ihop.length} dubbletter ihopslagna: ${r.ihop.map((x) => `${x.fran} → ${x.till} (${x.flyttade} resultat)`).join(' · ')}.`);
-            }}>🔗 Slå ihop dubbletter ({hittaDubbletter(s, klassId).length})</button>
+            }}>❓ Samma namn med olika resultat ({hittaDubbletter(s, klassId).length})</button>
         )}{' '}
         {alla.some((e) => e.namn.includes(',')) && (
           <button className="btn sec sm" title="Namn som står 'Efternamn, Förnamn' skrivs om till 'Förnamn Efternamn'"

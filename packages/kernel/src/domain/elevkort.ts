@@ -9,7 +9,7 @@
  */
 import type { Elev, Struktur, Vardnadshavare } from './typer.js';
 import { koderForProv } from './delkapitelkoder.js';
-import { godkantGransFor, klaratKrav, kravFor, nivaText, resultatProcent, sammaPersonUtanMellannamn, TYPNAMN, type Resultat, type ResultatKalla } from './resultat.js';
+import { godkantGransFor, klaratKrav, kravFor, nivaText, resultatProcent, sammaElevNamn, TYPNAMN, type Resultat, type ResultatKalla } from './resultat.js';
 
 export const ELEVKORT_KALLOR: ResultatKalla[] = ['socrative-laxforhor', 'socrative-exit', 'socrative-ovning', 'digiexam', 'magma'];
 const RUBRIK: Record<ResultatKalla, string> = {
@@ -215,34 +215,72 @@ export function slaIhopElever(s: Struktur, franId: string, tillId: string): Samm
 
 // ── Del 180 · Dubbletter på grund av mellannamn ─────────────────────────────
 
-export interface Dubblett { /** Posten som slås ihop (det kortare namnet). */ fran: Elev; /** Posten som behålls (namnet med mellannamn). */ till: Elev }
+export interface Dubblett {
+  /** Posten som slås ihop (det kortare namnet, eller den med färre resultat). */ fran: Elev;
+  /** Posten som behålls (det längre namnet). */ till: Elev;
+  /** Del 189 · Prov som båda posterna har resultat på — då är det inte säkert att det är samma person. */ konflikt: string[];
+}
 
-/** Elever i klassen som är samma person med och utan mellannamn ('Alice Hultman' och 'Alice Alexandrou Hultman'). */
+const ordAv = (n: string) => n.toLowerCase().replace(/\s+/g, ' ').trim().split(' ').filter((x) => x !== '');
+
+/** Prov (källa + namn + ämne) som båda eleverna har resultat på. */
+function gemensammaProv(s: Struktur, a: string, b: string): string[] {
+  const nyckel = (r: Resultat) => `${r.kalla}|${r.prov.trim().toLowerCase()}|${r.amneId ?? ''}`;
+  const hosA = new Map((s.resultat ?? []).filter((r) => r.elevId === a).map((r) => [nyckel(r), r.prov] as const));
+  const ut = new Set<string>();
+  for (const r of s.resultat ?? []) if (r.elevId === b && hosA.has(nyckel(r))) ut.add(hosA.get(nyckel(r))!);
+  return [...ut].sort((x, y) => x.localeCompare(y, 'sv'));
+}
+
+/**
+ * Elever i klassen som är samma person (se sammaElevNamn). Har båda resultat på samma prov
+ * markeras paret med `konflikt` — då slås det inte ihop automatiskt utan läraren får avgöra.
+ */
 export function hittaDubbletter(s: Struktur, klassId: string): Dubblett[] {
   const elever = s.elever.filter((e) => e.klassId === klassId);
+  const antal = (id: string) => (s.resultat ?? []).filter((r) => r.elevId === id).length;
   const par: Dubblett[] = [];
   const tagna = new Set<string>();
   for (const a of elever) {
     if (tagna.has(a.id)) continue;
     for (const b of elever) {
-      if (a.id === b.id || tagna.has(b.id) || a.namn.trim().toLowerCase() === b.namn.trim().toLowerCase()) continue;
-      if (!sammaPersonUtanMellannamn(a.namn, b.namn)) continue;
-      // Behåll det längre namnet (med mellannamn)
-      const [fran, till] = a.namn.split(' ').length <= b.namn.split(' ').length ? [a, b] : [b, a];
-      par.push({ fran, till }); tagna.add(a.id); tagna.add(b.id);
+      if (a.id === b.id || tagna.has(b.id)) continue;
+      if (!sammaElevNamn(a.namn, b.namn)) continue;
+      // Behåll det längre namnet; vid lika långa den post som har flest resultat
+      const la = ordAv(a.namn).length; const lb = ordAv(b.namn).length;
+      const [fran, till] = la !== lb ? (la < lb ? [a, b] : [b, a]) : (antal(a.id) >= antal(b.id) ? [b, a] : [a, b]);
+      par.push({ fran, till, konflikt: gemensammaProv(s, a.id, b.id) }); tagna.add(a.id); tagna.add(b.id);
       break;
     }
   }
   return par.sort((x, y) => x.till.namn.localeCompare(y.till.namn, 'sv'));
 }
 
-/** Slår ihop alla dubbletter i klassen; resultaten flyttas till namnet med mellannamn. */
-export function slaIhopDubbletter(s: Struktur, klassId: string): { s: Struktur; ihop: Array<{ fran: string; till: string; flyttade: number }> } {
+/**
+ * Slår ihop dubbletterna i klassen; resultaten flyttas till namnet som behålls.
+ * `baraSakra` = bara par utan konflikt (inga resultat på samma prov hos båda).
+ */
+export function slaIhopDubbletter(s: Struktur, klassId: string, baraSakra = false): { s: Struktur; ihop: Array<{ fran: string; till: string; flyttade: number }> } {
   let ut = s;
   const ihop: Array<{ fran: string; till: string; flyttade: number }> = [];
   for (const d of hittaDubbletter(s, klassId)) {
+    if (baraSakra && d.konflikt.length > 0) continue;
     const r = slaIhopElever(ut, d.fran.id, d.till.id);
     ut = r.s; ihop.push({ fran: d.fran.namn, till: d.till.namn, flyttade: r.flyttade });
+  }
+  return { s: ut, ihop };
+}
+
+/**
+ * Del 189 · Slår automatiskt ihop alla säkra dubbletter i alla klasser: samma namn (även med
+ * mellannamn eller extra efternamn) och inga resultat på samma prov hos båda.
+ */
+export function slaIhopSakraDubbletter(s: Struktur): { s: Struktur; ihop: Array<{ fran: string; till: string; flyttade: number }> } {
+  let ut = s;
+  const ihop: Array<{ fran: string; till: string; flyttade: number }> = [];
+  for (const k of s.klasser) {
+    const r = slaIhopDubbletter(ut, k.id, true);
+    ut = r.s; ihop.push(...r.ihop);
   }
   return { s: ut, ihop };
 }
