@@ -1167,10 +1167,20 @@ export function andraPlanering(s: Struktur, amneId: string, patch: Partial<PlanI
   return kopplaOmLektionsplaner(ut, amneId, fore, efter);
 }
 
-/** Tar bort (bort: true), ersätter (ersatt) eller återställer (null) en lektion. */
+/**
+ * Tar bort (bort: true), ersätter (ersatt) eller återställer (null) en lektion.
+ * Del 188: en genomförd lektion (före idag) kan få nytt innehåll (ersätt/återställ) — den behåller
+ * sitt pass och inget annat flyttas — men kan aldrig tas bort, eftersom det skulle flytta historiken.
+ */
 export function sattLektionsVal(s: Struktur, amneId: string, nyckel: string, val: LektionsVal | null, idag?: string): Struktur {
   const amne = s.amnen.find((a) => a.id === amneId);
   if (amne === undefined) throw new Error('Okänt ämne.');
+  if (val?.bort === true && idag !== undefined) {
+    const rad = (amnesPlanFor(s, amneId, idag, false)?.a ?? []).find((r) => r.nyckel === nyckel);
+    if (rad?.datum !== null && rad?.datum !== undefined && rad.datum < idag) {
+      throw new Error('Lektionen har varit och kan inte tas bort — då skulle alla genomförda lektioner efter den flyttas. Ersätt innehållet i stället.');
+    }
+  }
   const lv = { ...(amne.lektionsVal ?? {}) };
   if (val === null || (val.bort !== true && val.ersatt === undefined)) delete lv[nyckel]; else lv[nyckel] = val;
   return andraPlanering(s, amneId, { lektionsVal: lv }, idag);

@@ -2098,6 +2098,12 @@ describe('Detaljplanering som egen flik', () => {
     act(() => { knapp(host, '+ Lägg till film').click(); });
     expect(lasStruktur().lektionsplaner.find((p) => p.lektionsIndex === 1)?.filmer).toEqual(['Fotosyntes|https://binogi.se/f']);
     // Del 148: lektionen kan tas bort från lektionssidan — efterföljande flyttas fram; ämnet finns kvar
+    // Del 188: lektionen har varit (aug 2026) och kan inte tas bort — knappen finns bara för kommande lektioner
+    if (new Date().toISOString().slice(0, 10) > '2026-08-18') {
+      expect(panel.textContent).toContain('Lektionen har varit och kan inte tas bort');
+      expect([...host.querySelectorAll('button')].some((b) => b.textContent?.includes('🗑 Ta bort denna lektion'))).toBe(false);
+      return;
+    }
     const antalFore = lasStruktur().amnen.length;
     window.confirm = () => true;
     act(() => { knapp(host, '🗑 Ta bort denna lektion').click(); });
@@ -3504,6 +3510,53 @@ describe('Del 187: schemabrytande aktivitet mellan två klockslag', () => {
 
     act(() => { (host.querySelector('button[aria-label="Ta bort aktivitet Utflykt 2026-08-26"]') as HTMLButtonElement).click(); });
     expect(datum(host)).toEqual(['2026-08-19 1.1 Tal', '2026-08-26 1.2 Potenser', '2026-09-02 1.3 Bråk']);
+    vi.useRealTimers();
+  });
+});
+
+describe('Del 188: redigera genomförda lektioner — låsta tills läraren låser upp', () => {
+  const BOK188 = JSON.stringify({
+    schema: 'classroom-planner-bok', version: 1,
+    bok: { id: 'bok-188', titel: 'Matematik Y', förlag: 'Liber', ämne: 'Matematik', årskurs: 8, kapitelMeta: { '1': { name: 'Tal', col: '#2f5aa8' } } },
+    lektioner: { '1': [{ id: 1, type: 'regular', avsnitt: '1.1 Tal', del: 1 }, { id: 2, type: 'regular', avsnitt: '1.2 Potenser', del: 1 }, { id: 3, type: 'regular', avsnitt: '1.3 Bråk', del: 1 }] },
+  });
+  const rader = (host: HTMLElement) => [...host.querySelectorAll('table.plan tbody tr')].map((tr) => `${tr.querySelectorAll('td')[2]?.textContent ?? ''} ${tr.querySelector('td.lekt-avsnitt')?.textContent ?? ''}`);
+
+  it('låst som standard; upplåst + bekräftelse ändrar bara det passet', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-27T10:00:00Z'));   // torsdag — ons 19/8 och 26/8 har varit
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host, BOK188);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8A');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8A').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'bok-188');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '📋 Planering').click(); });
+    const fore = rader(host);
+    expect(fore).toEqual(['2026-08-19 1.1 Tal', '2026-08-26 1.2 Potenser', '2026-09-02 1.3 Bråk']);
+    expect(host.querySelector('select[aria-label="Ändra genomförd lektion 2"]')).toBeNull();
+
+    act(() => { knapp(host, '🔓 Redigera genomförda lektioner').click(); });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    valj(select(host, 'Ändra genomförd lektion 2'), 'bok:1:3');
+    expect(rader(host)).toEqual(fore);                                   // avbrutet: inget ändras
+    confirm.mockReturnValue(true);
+    valj(select(host, 'Ändra genomförd lektion 2'), 'bok:1:3');
+    expect(confirm.mock.calls[1][0]).toContain('Bara det här passet ändras');
+    expect(rader(host)).toEqual(['2026-08-19 1.1 Tal', '2026-08-26 1.3 Bråk · ersatt', '2026-09-02 1.3 Bråk']);
+    act(() => { knapp(host, '🔒 Lås genomförda lektioner').click(); });
+    expect(host.querySelector('select[aria-label="Ändra genomförd lektion 2"]')).toBeNull();
+    confirm.mockRestore();
     vi.useRealTimers();
   });
 });
