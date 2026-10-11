@@ -340,6 +340,31 @@ describe('Del 185 · ladda ett kapitel från ett pass · ta bort en lektion', ()
     expect(rad(r3.s)).toEqual(rad(m4()));
   });
 
+  it('Del 186: egna kopior av kapitlets lektioner (från Följ planering) ersätts av boken — prov och andra kapitel ligger kvar', () => {
+    let s = m4();
+    // Gammal följd planering: kapitel 2 som egna kopior (f-2-…), en kopia med samma rubrik, ett eget prov och kapitel 3
+    s = tillampaUtkast(s, 'm4', {
+      namn: 'Följer 8B', fran: '2026-08-27',
+      teori: ['u:f-2-1', 'u:f-2-3-2', 'u:blandat', 'u:provB', '3:1', '3:2'], labbar: [],
+      egna: [
+        { id: 'f-2-1', rubrik: '2.1 Andelen', typ: 'lektion' },
+        { id: 'f-2-3-2', rubrik: 'Blandade uppgifter', typ: 'ovning' },
+        { id: 'blandat', rubrik: 'blandade uppgifter', typ: 'ovning' },
+        { id: 'provB', rubrik: 'Prov kapitel 2', typ: 'prov' },
+      ],
+    }, IDAG);
+    expect(rad(s).slice(3, 7)).toEqual(['08-27:u:f-2-1', '09-01:u:f-2-3-2', '09-03:u:blandat', '09-08:u:provB']);
+    const r = laddaKapitel(s, 'm4', 2, '2026-08-27', IDAG);
+    const efter = rad(r.s);
+    expect(efter.filter((x) => x.includes('u:f-2') || x.includes('u:blandat'))).toEqual([]);
+    expect(efter).toContain('09-08:u:provB');            // provet ligger kvar på sitt datum
+    expect(efter.slice(3, 6)).toEqual(['08-27:2:1', '09-01:2:2', '09-03:2:3']);
+    expect(efter.filter((x) => x.endsWith(':3:1') || x.endsWith(':3:2'))).toHaveLength(2);   // kapitel 3 kvar efter
+    expect(r.kopior).toBe(3);
+    expect(r.varningar.join(' ')).toMatch(/3 egna kopior/);
+    expect(r.s.amnen.find((a) => a.id === 'm4')?.planFranUtkast?.egna.map((k) => k.id)).toEqual(['provB']);
+  });
+
   it('ta bort en lektion: de följande flyttas ett pass tidigare, egna prov ligger kvar; genomförd kan inte tas bort', () => {
     let s = m4();
     s = tillampaUtkast(s, 'm4', { namn: 'Med prov', fran: '2026-08-25', teori: ['1:3', '2:1', 'u:provA', '2:2', '2:3', '2:4', '3:1', '3:2'], labbar: [], egna: [{ id: 'provA', rubrik: 'Prov kapitel 1', typ: 'prov' }] }, IDAG);

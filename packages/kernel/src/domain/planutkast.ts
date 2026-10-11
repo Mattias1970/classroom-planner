@@ -836,6 +836,8 @@ export interface LaddatKapitel {
   kort: number;
   /** Lektioner som inte ryms före läsårets slut. */
   rymsEj: number;
+  /** Del 186 · Egna kopior av kapitlets lektioner (t.ex. från 'Följ planering') som togs bort — boken ersätter dem. */
+  kopior: number;
   varningar: string[];
 }
 
@@ -871,7 +873,18 @@ export function laddaKapitel(s: Struktur, amneId: string, kapitel: number, fran:
   const kapKo = kapNycklar.filter((n) => !gjorda.has(n) && !fastaNycklar.has(n));
   const hoppade = kapNycklar.filter((n) => gjorda.has(n)).length;
   const kapSet = new Set(kapKo);
-  const ovriga = u0.teori.filter((n) => !kapSet.has(n) && !fastaNycklar.has(n));
+  // Del 186 · Egna lektions-/övningskort som är kopior av kapitlets lektioner (skapade av 'Följ planering'
+  // som f-<kap>-…, eller med samma rubrik som en lektion i kapitlet) ersätts av bokens rader — annars
+  // hamnar de en gång till efter kapitlet. Fasta kort (prov, diagnoser, laborationer) rörs aldrig.
+  const kapRubriker = new Set(bokensRader(st, amneId).filter((r) => r.kapitel === kapitel).map((r) => r.lektion.avsnitt.trim().toLowerCase()));
+  const egnaAv = new Map(u0.egna.map((k) => [`u:${k.id}`, k]));
+  const arKopia = (n: string): boolean => {
+    const k = egnaAv.get(n);
+    if (k === undefined || fastaNycklar.has(n) || (k.typ !== 'lektion' && k.typ !== 'ovning')) return false;
+    return k.id.startsWith(`f-${kapitel}-`) || kapRubriker.has(k.rubrik.trim().toLowerCase());
+  };
+  const kopior = u0.teori.filter(arKopia);
+  const ovriga = u0.teori.filter((n) => !kapSet.has(n) && !fastaNycklar.has(n) && !arKopia(n));
   const teori = laggUtTeori(st, amneId, fran, [...kapKo, ...ovriga], fasta, idag);
   const u: PlanFranUtkast = { ...u0, teori };
   const fore = amnesPlanFor(st, amneId, idag, false)?.a ?? [];
@@ -884,13 +897,14 @@ export function laddaKapitel(s: Struktur, amneId: string, kapitel: number, fran:
   if (tavla.rymsEj.length > 0) varningar.push(`${tavla.rymsEj.length} lektioner ryms inte före läsårets slut.`);
   if (hoppade > 0) varningar.push(`${hoppade} lektioner ur kapitlet var redan genomförda före ${fran} och lades inte igen.`);
   if (bortMarkerade.length > 0) varningar.push(`${bortMarkerade.length} borttagna lektioner ur kapitlet lades in igen.`);
+  if (kopior.length > 0) varningar.push(`${kopior.length} egna kopior av kapitlets lektioner togs bort (boken ersätter dem).`);
   const provDatum = a.planFranUtkast?.provDatum;
   if (provDatum !== undefined && provDatum >= fran && kapRader.some((r) => r.datum !== null && r.datum > provDatum)) varningar.push(`Kapitlets sista lektion hamnar efter provdatumet ${provDatum}.`);
   return {
     s: ut, kapitel, namn: kap.namn,
     forsta: kapRader[0]?.datum ?? null, sista: kapRader[kapRader.length - 1]?.datum ?? null,
     inlagda: kapKo.length, framflyttade: ovriga.length, fasta: fasta.size, aterinforda: bortMarkerade.length, hoppade,
-    kort: kortFore, rymsEj: tavla.rymsEj.length, varningar,
+    kort: kortFore, rymsEj: tavla.rymsEj.length, kopior: kopior.length, varningar,
   };
 }
 
