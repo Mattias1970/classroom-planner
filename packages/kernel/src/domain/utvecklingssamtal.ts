@@ -19,7 +19,7 @@ import { elevkort, type ElevkortSerie } from './elevkort.js';
 import { inlamningsOversikt, type InlamningsTyp } from './inlamningar.js';
 import { tolkaMagmaNamn } from './magmaprov.js';
 import { gemensamText, kapitelKoder, kapitelNamn, kodEtikett, type SamtalsKapitel } from './samtalskapitel.js';
-import { inomPeriod, periodText, samtalsPeriod, type SamtalsPeriod } from './samtalsperiod.js';
+import { angraAvslutatSamtal, avslutaSamtal, inomPeriod, periodText, samtalsPeriod, type SamtalsPeriod } from './samtalsperiod.js';
 import { delkapitelKod } from './bok.js';
 import { amnesPlanFor, elevIKlassen } from './struktur.js';
 import type { PlaneradLektion, Struktur } from './typer.js';
@@ -553,4 +553,62 @@ export function sattSamtalsUtvardering(s: Struktur, elevId: string, amneId: stri
   if (Object.keys(nu).length === 0) delete alla[nyckel]; else alla[nyckel] = nu;
   const { samtalsUtvarderingar: _g, ...rest } = s; void _g;
   return Object.keys(alla).length === 0 ? rest : { ...rest, samtalsUtvarderingar: alla };
+}
+
+// ── Del 193 · Arkiv: texterna som användes vid ett samtal sparas under datumet ──────────────
+
+export interface SamtalsArkivElev { elevId: string; namn: string; status: SamtalsStatus; text: string }
+export interface SamtalsArkivPost {
+  id: string;
+  amneId: string;
+  klassId: string;
+  /** Samtalsdatumet (periodens slut). */
+  datum: string;
+  /** Periodens början. */
+  fran: string;
+  amne: string;
+  klassNamn: string;
+  gemensam: string;
+  elever: SamtalsArkivElev[];
+}
+
+/**
+ * Samtalen är klara: texterna (gemensam text, status och text per elev — lärarens egna när sådana finns)
+ * sparas under samtalsdatumet, perioden avslutas så att nästa rapport börjar där, och lärarens egna
+ * texter/status och kapitelval nollställs — nästa samtal får ett nytt dokument.
+ */
+export function arkiveraSamtal(s: Struktur, amneId: string, idag: string): { s: Struktur; post: SamtalsArkivPost } {
+  const amne = s.amnen.find((a) => a.id === amneId);
+  if (amne === undefined) throw new Error('Okänt ämne.');
+  const klass = s.klasser.find((k) => k.id === amne.klassId);
+  const period = samtalsPeriod(s, amneId, idag);
+  const gem = gemensamText(s, amneId, idag);
+  const elever = klassensUtvarderingar(s, amne.klassId, amneId, idag).map((u) => ({ elevId: u.elevId, namn: u.namn, status: u.egenStatus ?? u.status, text: u.egenText ?? u.text }));
+  const post: SamtalsArkivPost = {
+    id: `samtal-${amneId}-${period.till}-${(s.samtalsArkiv ?? []).length + 1}`, amneId, klassId: amne.klassId,
+    datum: period.till, fran: period.fran, amne: amne.namn, klassNamn: klass?.namn ?? '', gemensam: gem.text, elever,
+  };
+  let ut = avslutaSamtal(s, amneId, idag);
+  // Lärarens egna texter och status gällde det här samtalet — nollställ inför nästa
+  const egna = { ...(ut.samtalsUtvarderingar ?? {}) };
+  for (const k of Object.keys(egna)) if (k.endsWith(`|${amneId}`)) delete egna[k];
+  const kap = { ...(ut.samtalsKapitel ?? {}) }; delete kap[amneId];
+  const { samtalsUtvarderingar: _u, samtalsKapitel: _k, ...rest } = ut; void _u; void _k;
+  ut = { ...rest, ...(Object.keys(egna).length > 0 ? { samtalsUtvarderingar: egna } : {}), ...(Object.keys(kap).length > 0 ? { samtalsKapitel: kap } : {}) };
+  return { s: { ...ut, samtalsArkiv: [...(ut.samtalsArkiv ?? []), post] }, post };
+}
+
+/** Arkiverade samtal för ämnet, senaste först. */
+export function samtalsArkivFor(s: Struktur, amneId: string): SamtalsArkivPost[] {
+  return (s.samtalsArkiv ?? []).filter((p) => p.amneId === amneId).sort((a, b) => b.datum.localeCompare(a.datum));
+}
+
+/** Ångrar det senast arkiverade samtalet i ämnet: posten tas bort och perioden börjar tidigare igen. */
+export function angraArkiveratSamtal(s: Struktur, amneId: string): Struktur {
+  const mina = samtalsArkivFor(s, amneId);
+  if (mina.length === 0) return s;
+  const bort = mina[0].id;
+  const kvar = (s.samtalsArkiv ?? []).filter((p) => p.id !== bort);
+  const { samtalsArkiv: _a, ...rest } = angraAvslutatSamtal(s, amneId); void _a;
+  return kvar.length > 0 ? { ...rest, samtalsArkiv: kvar } : rest;
 }

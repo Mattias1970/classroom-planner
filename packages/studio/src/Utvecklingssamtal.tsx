@@ -7,8 +7,8 @@
 import { useMemo, useState } from 'react';
 import { Document, HeadingLevel, Packer, Paragraph, TabStopType, TextRun } from 'docx';
 import {
-  antalStycken, angraAvslutatSamtal, avslutaSamtal, gemensamText, kapitelNamn, klassensUtvarderingar, periodText, samtalsPeriod, samtalsStycken, sattSamtalsKapitel, sattSamtalsPeriod, sattSamtalsUtvardering, STATUS_ORDNING, STATUS_TEXT,
-  type GemensamText, type Klass, type SamtalsPeriod, type SamtalsStatus, type Struktur, type Utvardering,
+  angraArkiveratSamtal, antalStycken, arkiveraSamtal, gemensamText, kapitelNamn, klassensUtvarderingar, periodText, samtalsPeriod, samtalsStycken, sattSamtalsKapitel, sattSamtalsPeriod, sattSamtalsUtvardering, STATUS_ORDNING, STATUS_TEXT,
+  samtalsArkivFor, type GemensamText, type Klass, type SamtalsArkivPost, type SamtalsPeriod, type SamtalsStatus, type Struktur, type Utvardering,
 } from '@planner/kernel';
 import { NamnFragor } from './NamnFragor.js';
 import { lasStruktur } from './store.js';
@@ -16,7 +16,8 @@ import { lasStruktur } from './store.js';
 const pct = (v: number | null) => (v === null ? '—' : `${v} %`);
 const pil = (t: 'upp' | 'stabil' | 'ner' | null) => (t === 'upp' ? '↗' : t === 'ner' ? '↘' : t === 'stabil' ? '→' : '');
 
-async function tillWord(klassNamn: string, amne: string, lista: Utvardering[], gemensam: string | null, period: SamtalsPeriod): Promise<void> {
+type WordRad = { namn: string; status: SamtalsStatus; text: string };
+async function tillWord(klassNamn: string, amne: string, lista: WordRad[], gemensam: string | null, period: Pick<SamtalsPeriod, 'fran' | 'till'>): Promise<void> {
   const doc = new Document({
     styles: { default: { document: { run: { font: 'Calibri', size: 22 } } } },
     sections: [{
@@ -26,10 +27,10 @@ async function tillWord(klassNamn: string, amne: string, lista: Utvardering[], g
         // Del 172 · Gemensam text för alla elever: kapitlen klassen arbetat med och vad de handlar om
         ...(gemensam === null ? [] : gemensam.split('\n').filter((r) => r.trim() !== '').map((r) => new Paragraph({ spacing: { after: 240, line: 300 }, children: [new TextRun({ text: r })] }))),
         ...lista.flatMap((u) => [
-          new Paragraph({ text: `${u.namn} — ${STATUS_TEXT[u.egenStatus ?? u.status]}`, heading: HeadingLevel.HEADING_2, spacing: { before: 360, after: 160 } }),
+          new Paragraph({ text: `${u.namn} — ${STATUS_TEXT[u.status]}`, heading: HeadingLevel.HEADING_2, spacing: { before: 360, after: 160 } }),
           // Rubrikerna i fet svart stil, "Exit tickets" i fet blå, dubbel radbrytning mellan styckena
           // Underrader (diagnoserna över varandra) blir egna indragna rader med procenten vid en tabbposition
-          ...samtalsStycken(u.egenText ?? u.text).flatMap((st) => [
+          ...samtalsStycken(u.text).flatMap((st) => [
             new Paragraph({
               spacing: { after: st.underrader.length > 0 ? 60 : 240, line: 300 },
               children: [
@@ -51,7 +52,7 @@ async function tillWord(klassNamn: string, amne: string, lista: Utvardering[], g
   const blob = await Packer.toBlob(doc);
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `Utvecklingssamtal ${klassNamn} ${amne}.docx`;
+  a.download = `Utvecklingssamtal ${klassNamn} ${amne} ${period.till}.docx`;
   a.click();
   URL.revokeObjectURL(a.href);
 }
@@ -84,7 +85,7 @@ export function Utvecklingssamtal({ s, klass, amneId, kor, idag, onTillbaka }: {
         <button className="btn sm" onClick={onTillbaka}>← Alla elever</button>
         <h3 style={{ margin: 0 }}>🗣 Utvecklingssamtal · {klass.namn} · {amne.namn}</h3>
         <span className="spacer" />
-        <button className="btn sec sm" onClick={() => { void tillWord(klass.namn, amne.namn, lista, gem?.text ?? null, period); }}>📄 Alla till Word</button>
+        <button className="btn sec sm" onClick={() => { void tillWord(klass.namn, amne.namn, lista.map((u) => ({ namn: u.namn, status: u.egenStatus ?? u.status, text: u.egenText ?? u.text })), gem?.text ?? null, period); }}>📄 Alla till Word</button>
       </div>
       <SamtalsPeriodPanel s={s} amneId={amneId} period={period} idag={idag} kor={kor} />
       <p className="small muted" style={{ margin: '4px 0 8px' }}>
@@ -171,6 +172,48 @@ export function Utvecklingssamtal({ s, klass, amneId, kor, idag, onTillbaka }: {
           ];
         })}</tbody>
       </table>
+      <SamtalsArkiv s={s} amneId={amneId} kor={kor} />
+    </div>
+  );
+}
+
+/**
+ * Del 193 · Tidigare utvecklingssamtal: ett datum per samtal och under det texterna som användes.
+ */
+function SamtalsArkiv({ s, amneId, kor }: { s: Struktur; amneId: string; kor: (fn: () => Struktur, m: string) => void }) {
+  const [oppen, setOppen] = useState<string | null>(null);
+  const poster = samtalsArkivFor(s, amneId);
+  if (poster.length === 0) return null;
+  const senaste = poster[0];
+  return (
+    <div className="st-samtal-arkiv" aria-label="Tidigare utvecklingssamtal">
+      <h4 style={{ margin: '12px 0 4px' }}>🗂 Tidigare utvecklingssamtal</h4>
+      {poster.map((p) => (
+        <details key={p.id} open={oppen === p.id} onToggle={(e) => setOppen((e.target as HTMLDetailsElement).open ? p.id : null)}>
+          <summary><b>{p.datum}</b> <span className="muted">· underlag {periodText({ fran: p.fran, till: p.datum })} · {p.elever.length} elever</span></summary>
+          <div className="rad" style={{ gap: 6, flexWrap: 'wrap', margin: '6px 0' }}>
+            <button className="btn sec sm" onClick={() => { void tillWord(p.klassNamn, p.amne, p.elever, p.gemensam, { fran: p.fran, till: p.datum }); }}>📄 Till Word</button>
+            {p.id === senaste.id && <button className="btn sec sm" title="Tar bort det senaste samtalet ur arkivet — perioden börjar tidigare igen" onClick={() => {
+              if (!window.confirm(`Ta bort samtalet ${p.datum} ur arkivet? Perioden för rapporten börjar då tidigare igen.`)) return;
+              kor(() => angraArkiveratSamtal(lasStruktur(), amneId), `Samtalet ${p.datum} borttaget ur arkivet.`);
+            }}>↩ Ångra detta samtal</button>}
+          </div>
+          <div className="st-samtal-gemensam"><b className="st-samtal-rubrik">Gemensam text</b>{p.gemensam.split('\n').map((r, i) => <p key={i}>{r}</p>)}</div>
+          {p.elever.map((e) => (
+            <div key={e.elevId} className="st-samtal-arkivelev">
+              <b>{e.namn}</b> <span className={`chip st-samtal-chip ${e.status}`}>{STATUS_TEXT[e.status]}</span>
+              <div className="st-samtal-visning">
+                {samtalsStycken(e.text).map((st, si) => (
+                  <div key={si} className="st-samtal-stycke">
+                    <p>{st.etikett !== null && <b className="st-samtal-rubrik">{st.etikett}: </b>}{st.delar.map((d, di) => (d.exit ? <b key={di} className="st-samtal-exit">{d.text}</b> : <span key={di}>{d.text}</span>))}</p>
+                    {st.underrader.length > 0 && <div className="st-samtal-underrader">{st.underrader.map((r, ri) => (r.varde === null ? <div key={ri} className="st-samtal-underrad text">{r.text}</div> : <div key={ri} className="st-samtal-underrad"><span>{r.text}</span><b>{r.varde}</b></div>))}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </details>
+      ))}
     </div>
   );
 }
@@ -252,13 +295,14 @@ function SamtalsPeriodPanel({ s, amneId, period, idag, kor }: { s: Struktur; amn
       <label className="small">till <input type="date" aria-label="Perioden till" value={period.till} min={period.fran} onChange={(e) => { if (e.target.value !== '') kor(() => sattSamtalsPeriod(lasStruktur(), amneId, { till: e.target.value }, idag), `Rapporten gäller till ${e.target.value}.`); }} /></label>
       {egen && <button className="btn sec sm" onClick={() => kor(() => sattSamtalsPeriod(lasStruktur(), amneId, { fran: null, till: null }, idag), 'Perioden återställd.')}>↺ Standard</button>}
       <span className="spacer" />
-      <button className="btn sm" title="Sparar samtalsdatumet — nästa rapport blir en uppdatering från det datumet" onClick={() => {
-        if (!window.confirm(`Samtalen klara?\n\nDatumet ${period.till} sparas. Nästa rapport visar utvecklingen från ${period.till} och framåt. Det går att ångra.`)) return;
-        kor(() => avslutaSamtal(lasStruktur(), amneId, idag), `Samtalen ${period.till} sparade — nästa rapport börjar där.`);
+      <button className="btn sm" title="Sparar texterna under samtalsdatumet — nästa rapport blir ett nytt dokument från det datumet" onClick={() => {
+        if (!window.confirm(`Samtalen klara?\n\nTexterna sparas under ${period.till} (Tidigare utvecklingssamtal). Nästa rapport blir ett nytt dokument från ${period.till}; egna texter och kapitelval nollställs. Det går att ångra.`)) return;
+        try {
+          const r = arkiveraSamtal(lasStruktur(), amneId, idag);
+          kor(() => r.s, `Samtalen ${r.post.datum} sparade (${r.post.elever.length} elever) — nästa rapport börjar där.`);
+        } catch (e) { kor(() => { throw e; }, ''); }
       }}>✓ Samtalen klara — spara {period.till}</button>
-      {tidigare.length > 0 && (
-        <button className="btn sec sm" title={`Tidigare samtal: ${tidigare.join(', ')}`} onClick={() => kor(() => angraAvslutatSamtal(lasStruktur(), amneId), `Samtalet ${tidigare[tidigare.length - 1]} borttaget — perioden börjar tidigare igen.`)}>↩ Ångra senaste ({tidigare[tidigare.length - 1]})</button>
-      )}
+      {tidigare.length > 0 && <small className="muted">· tidigare: {tidigare.join(', ')}</small>}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   importeraInlamningar, importeraResultat, klassensUtvarderingar, laggTillAmne, laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst,
-  antalStycken, avslutaSamtal, angraAvslutatSamtal, bokFromImport, gemensamText, kodEtikett, medStorBokstav, periodText, provnamnMedStorBokstav, registreraPlanering, resetIdRaknare, samtalsPeriod, samtalsStycken, samtalsText, sattSamtalsKapitel, sattSamtalsPeriod, sattSamtalsUtvardering, sparaBok, STATUS_TEXT, tolkaTeamsTilldelningar, tomStruktur, utvardering, type Struktur,
+  angraArkiveratSamtal, antalStycken, arkiveraSamtal, avslutaSamtal, angraAvslutatSamtal, bokFromImport, gemensamText, kodEtikett, medStorBokstav, periodText, provnamnMedStorBokstav, registreraPlanering, resetIdRaknare, samtalsArkivFor, samtalsPeriod, samtalsStycken, samtalsText, sattSamtalsKapitel, sattSamtalsPeriod, sattSamtalsUtvardering, sparaBok, STATUS_TEXT, tolkaTeamsTilldelningar, tomStruktur, utvardering, type Struktur,
 } from '../src/index.js';
 
 const IDAG = '2026-10-07';
@@ -419,5 +419,35 @@ describe('Del 192 · gemensam text i alla ämnen — biologi', () => {
     const anna = utvardering(s2, 'e1', 'bi', '2026-09-02')!;
     expect(anna.lektioner).toMatchObject({ antal: 2, borjan: 60, nu: 70 });
     expect(utvardering(s, 'e1', 'bi', '2026-09-02')!.lektioner.antal).toBe(3);
+  });
+});
+
+describe('Del 193 · tidigare utvecklingssamtal — texterna sparas under datumet, nytt dokument från det datumet', () => {
+  it('arkivera: gemensam text + text/status per elev (lärarens egna när de finns); egna texter och kapitelval nollställs; ångra', () => {
+    let s = bygg();
+    s = sattSamtalsUtvardering(s, 'e2', 'bi', { status: 'bra', text: 'Omar har tagit sig an biologin.' });
+    s = sattSamtalsKapitel(s, 'bi', { text: 'Vi har jobbat med ekologi.' });
+    const r = arkiveraSamtal(s, 'bi', IDAG);
+    expect(r.post).toMatchObject({ amneId: 'bi', klassId: 'k', datum: IDAG, fran: '2026-08-17', amne: 'Biologi', klassNamn: '8B', gemensam: 'Vi har jobbat med ekologi.' });
+    expect(r.post.elever.map((e) => e.namn)).toEqual(['Anna Berg', 'Omar Ali', 'Pia Provlund']);
+    expect(r.post.elever[1]).toMatchObject({ elevId: 'e2', status: 'bra', text: 'Omar har tagit sig an biologin.' });
+    expect(r.post.elever[0].text).toContain('(underlag 17 augusti–7 oktober 2026)');
+    // Perioden är avslutad, egna texter och kapitelval borta — nästa samtal får ett nytt dokument från 7/10
+    expect(samtalsPeriod(r.s, 'bi', '2027-02-10')).toMatchObject({ fran: IDAG, forra: IDAG });
+    expect(r.s.samtalsUtvarderingar).toBeUndefined();
+    expect(r.s.samtalsKapitel).toBeUndefined();
+    expect(utvardering(r.s, 'e2', 'bi', '2027-02-10')!.egenText).toBeUndefined();
+    expect(samtalsArkivFor(r.s, 'bi')).toHaveLength(1);
+    expect(samtalsArkivFor(r.s, 'ma')).toEqual([]);
+    // Ett andra samtal i februari hamnar först i listan
+    const r2 = arkiveraSamtal(r.s, 'bi', '2027-02-10');
+    expect(samtalsArkivFor(r2.s, 'bi').map((p) => p.datum)).toEqual(['2027-02-10', IDAG]);
+    expect(r2.post.fran).toBe(IDAG);
+    // Ångra tar bort det senaste och perioden börjar vid förra samtalet igen
+    const s3 = angraArkiveratSamtal(r2.s, 'bi');
+    expect(samtalsArkivFor(s3, 'bi').map((p) => p.datum)).toEqual([IDAG]);
+    expect(samtalsPeriod(s3, 'bi', '2027-02-10')).toMatchObject({ fran: IDAG, forra: IDAG });
+    expect(angraArkiveratSamtal(angraArkiveratSamtal(s3, 'bi'), 'bi').samtalsArkiv).toBeUndefined();
+    expect(() => arkiveraSamtal(s, 'xx', IDAG)).toThrow(/Okänt ämne/);
   });
 });

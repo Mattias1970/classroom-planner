@@ -162,8 +162,17 @@ describe('Del 191 · perioden: från terminsstart till samtalsdatumet, sparas n�
     expect(panel().textContent).toContain('Underlag 7 oktober 2026–10 februari 2027');
     expect(panel().textContent).toContain('uppdatering sedan förra samtalet 2026-10-07');
     expect((div.querySelector('select[aria-label="Status Anna Berg"]') as HTMLSelectElement).value).toBe('saknas');
-    await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Ångra senaste'))!.click(); });
+    // Del 193: texterna ligger under datumet i arkivet
+    const arkiv = () => div.querySelector('[aria-label="Tidigare utvecklingssamtal"]')!;
+    expect(s.samtalsArkiv).toHaveLength(1);
+    expect(s.samtalsArkiv![0]).toMatchObject({ datum: '2026-10-07', fran: '2026-08-17', amne: 'Biologi', klassNamn: '8B' });
+    expect(arkiv().textContent).toContain('2026-10-07');
+    expect(arkiv().textContent).toContain('Anna Berg');
+    expect(arkiv().textContent).toContain('(underlag 17 augusti–7 oktober 2026)');
+    await act(async () => { [...arkiv().querySelectorAll('button')].find((b) => b.textContent?.includes('Ångra detta samtal'))!.click(); });
     expect(s.samtalsPeriod).toBeUndefined();
+    expect(s.samtalsArkiv).toBeUndefined();
+    expect(div.querySelector('[aria-label="Tidigare utvecklingssamtal"]')).toBeNull();
     expect((div.querySelector('select[aria-label="Status Anna Berg"]') as HTMLSelectElement).value).toBe('mycketBra');
   });
 });

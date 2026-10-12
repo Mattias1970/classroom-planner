@@ -453,6 +453,8 @@ export interface Struktur {
   samtalsKapitel?: Record<string, import('./samtalskapitel.js').SamtalsKapitelVal>;
   /** Del 191 · Perioden för rapporten inför utvecklingssamtal per ämne (från terminsstart/förra samtalet till samtalsdatumet). */
   samtalsPeriod?: Record<string, import('./samtalsperiod.js').SamtalsPeriodVal>;
+  /** Del 193 · Arkiverade utvecklingssamtal: datum, gemensam text och elevernas texter som de var vid samtalet. */
+  samtalsArkiv?: import('./utvecklingssamtal.js').SamtalsArkivPost[];
   /** Del 190 · Elevpar med snarlika namn som läraren sagt är olika personer ('idA|idB', sorterat) — appen frågar inte igen. */
   olikaElever?: string[];
   /** Del 163: inlämningar ur Teams tilldelningsdata (elev × uppgift). */
