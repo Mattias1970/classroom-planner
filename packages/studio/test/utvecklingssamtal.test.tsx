@@ -42,7 +42,9 @@ describe('Del 164 · Utvecklingssamtal', () => {
     expect([...visning.querySelectorAll('b.st-samtal-rubrik')].map((b) => b.textContent)).toEqual(['Lektionerna: ', 'Närvaro: ', 'Läxläsning: ', 'Inlämningar: ', 'Nästa steg: ']);
     expect(visning.querySelector('b.st-samtal-exit')!.textContent).toBe('Exit tickets');
     expect(visning.querySelectorAll('p').length).toBeLessThanOrEqual(7);
-    await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Redigera'))!.click(); });
+    // Del 192: den gemensamma texten finns i alla ämnen — kapitlet ur planeringen, perioden först
+    expect(div.querySelector('div[aria-label="Gemensam text"]')).not.toBeNull();
+    await act(async () => { [...div.querySelectorAll('button')].filter((b) => b.textContent?.includes('Redigera')).pop()!.click(); });
     const ta = div.querySelector('textarea[aria-label="Text Omar Ali"]') as HTMLTextAreaElement;
     expect(ta.value.split('\n').length).toBeLessThanOrEqual(7);
     expect(ta.value).toContain('Omar har svårt att nå målen i biologi just nu (underlag 17 augusti–7 oktober 2026)');
@@ -55,7 +57,7 @@ describe('Del 164 · Utvecklingssamtal', () => {
     const tsetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
     const ta2 = div.querySelector('textarea[aria-label="Text Omar Ali"]') as HTMLTextAreaElement;
     await act(async () => { tsetter.call(ta2, 'Min egen text.'); ta2.dispatchEvent(new Event('input', { bubbles: true })); });
-    await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Spara text'))!.click(); });
+    await act(async () => { [...div.querySelectorAll('button')].filter((b) => b.textContent?.includes('Spara text')).pop()!.click(); });
     expect(s.samtalsUtvarderingar?.['e2|bi']?.text).toBe('Min egen text.');
     expect(div.textContent).toContain('egen text');
     expect([...div.querySelectorAll('button')].some((b) => b.textContent?.includes('Alla till Word'))).toBe(true);

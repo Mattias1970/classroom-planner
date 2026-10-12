@@ -66,8 +66,8 @@ export function Utvecklingssamtal({ s, klass, amneId, kor, idag, onTillbaka }: {
   const [utkast, setUtkast] = useState<Record<string, string>>({});
   const [redigerar, setRedigerar] = useState<string | null>(null);
   const [gemUtkast, setGemUtkast] = useState<string | null>(null);
-  // Del 172 · Matematik: kapitlen i rapporten (checklista när flera kapitel är genomförda) och den gemensamma texten
-  const gem: GemensamText | null = useMemo(() => (lista.some((u) => u.mall === 'ma') ? gemensamText(s, amneId, idag) : null), [s, amneId, idag, lista]);
+  // Del 172/192 · Alla ämnen: kapitlen i rapporten (checklista när flera kapitel är genomförda) och den gemensamma texten
+  const gem: GemensamText | null = useMemo(() => gemensamText(s, amneId, idag), [s, amneId, idag]);
   // Del 191 · Perioden: från terminsstart (eller förra samtalet) till samtalsdatumet
   const period = useMemo(() => samtalsPeriod(s, amneId, idag), [s, amneId, idag]);
   if (amne === undefined) return null;

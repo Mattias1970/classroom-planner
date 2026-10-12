@@ -400,7 +400,14 @@ export function utvardering(s: Struktur, elevId: string, amneId: string, idag?: 
   idag = period.till;
   const kort = elevkort(s, elevId, amneId);
   if (kort === null) return null;
-  const serie = (k: string) => kort.serier.find((x) => x.kalla === k)!;
+  const mall: SamtalsMall = /^matematik/i.test(amne.namn) ? 'ma' : 'no';
+  // Del 172/192 · Kapitlen i rapportens urval (alla ämnen): resultat utanför urvalet lämnas — resultat utan
+  // delkapitelkoder (t.ex. screening) är alltid med. Exit tickets/Läxförhör sorteras in per kapitel ur koderna.
+  const gem = gemensamText(s, amneId, idag);
+  const urval = gem.valda;
+  const urvalKoder = new Set(urval.flatMap(kapitelKoder));
+  const iUrval = (koder: string[]) => urval.length === 0 || koder.length === 0 || koder.some((k) => urvalKoder.has(k));
+  const serie = (k: string) => { const x = kort.serier.find((y) => y.kalla === k)!; return { ...x, punkter: x.punkter.filter((p) => iUrval(p.koder)) }; };
   const lektioner = utveckling(serie('socrative-exit'));
   const lax = utveckling(serie('socrative-laxforhor'));
   const glomda = aterkommandeFel(s, elevId, { klassId: elev.klassId, amneId }).map((b) => b.fraga);
@@ -436,12 +443,6 @@ export function utvardering(s: Struktur, elevId: string, amneId: string, idag?: 
     };
   });
 
-  const mall: SamtalsMall = /^matematik/i.test(amne.namn) ? 'ma' : 'no';
-  // Del 172 · Kapitlen i rapportens urval: diagnoser utanför urvalet lämnas (screening utan koder är alltid med),
-  // och Exit tickets/Läxförhör sorteras in per kapitel ur quiznamnens delkapitelkoder.
-  const urval = mall === 'ma' ? gemensamText(s, amneId, idag ?? '9999-12-31').valda : [];
-  const urvalKoder = new Set(urval.flatMap(kapitelKoder));
-  const iUrval = (koder: string[]) => urval.length === 0 || koder.length === 0 || koder.some((k) => urvalKoder.has(k));
   const magmaAlla = serie('magma');
   // Del 178 · Magma-filer döpta "Exit ticket …"/"Läxförhör …" är förhör, inte diagnoser
   const magmaTypAv = (x: { prov: string }) => tolkaMagmaNamn(x.prov).typ;
@@ -455,7 +456,7 @@ export function utvardering(s: Struktur, elevId: string, amneId: string, idag?: 
     if (nm.kapitel !== null) return koder.length === 0 ? 'kapitel' : 'delkapitel';
     if (koder.length === 0) return 'delkapitel';
     const kapNr = koder[0].split('.')[0];
-    const alla = (urval.find((k) => String(k.nr) === kapNr) ?? gemensamText(s, amneId, idag ?? '9999-12-31').kapitel.find((k) => String(k.nr) === kapNr))?.delkapitel.map((x) => x.kod) ?? [];
+    const alla = (urval.find((k) => String(k.nr) === kapNr) ?? gem.kapitel.find((k) => String(k.nr) === kapNr))?.delkapitel.map((x) => x.kod) ?? [];
     const tackt = alla.length > 0 && alla.every((c) => koder.includes(c));
     return tackt ? 'kapitel' : 'delkapitel';
   };

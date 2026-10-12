@@ -381,3 +381,43 @@ describe('Del 191 · perioden: från terminsstart (eller förra samtalet) till s
     expect(gemensamText(s4, 'bi', IDAG).period.till).toBe('2026-09-01');
   });
 });
+
+describe('Del 192 · gemensam text i alla ämnen — biologi', () => {
+  it('kapitlet ur planeringen med bokens mål; urvalet av kapitel styr vilka förhör som räknas', () => {
+    const BIO = bokFromImport(JSON.stringify({
+      schema: 'classroom-planner-bok', version: 1,
+      bok: { id: 'bio', titel: 'Spektrum Biologi', förlag: 'Liber', ämne: 'Biologi', årskurs: 8, kapitelMeta: {
+        '4': { name: 'Ekologi', col: '#2f8f5a', mal: ['hur ekosystem är uppbyggda', 'näringskedjor och kretslopp'] },
+        '7': { name: 'Människokroppen', col: '#8a2f5a', mal: ['nervsystemet'] },
+      } },
+      lektioner: {
+        '4': [{ id: 1, type: 'regular', avsnitt: '4.1 Ekosystem', del: 1 }, { id: 2, type: 'regular', avsnitt: '4.2 Näringskedjor', del: 1 }],
+        '7': [{ id: 1, type: 'regular', avsnitt: '7.1 Nervsystemet', del: 1 }],
+      },
+    }));
+    resetIdRaknare();
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '26/27', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = sparaBok(s, BIO);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', bokId: 'bio', schema: [{ dag: 1, start: '08:10', slut: '09:10' }] });
+    s = registreraPlanering(s, { id: 'pl', amneId: 'bi', bokId: 'bio', skapad: '2026-08-10' });
+    s = laggTillElev(s, { id: 'e1', klassId: 'k', namn: 'Anna Berg', grupp: 'A' });
+    const imp = (kalla: 'socrative-laxforhor' | 'socrative-exit', prov: string, datum: string, p: number) => {
+      s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla, prov, datum, rum: prov.toUpperCase(), rader: [{ namn: 'Anna Berg', poang: p, maxPoang: 10 }] }).s;
+    };
+    imp('socrative-exit', 'Biologi41', '2026-08-17', 6); imp('socrative-exit', 'Biologi42', '2026-08-24', 8); imp('socrative-exit', 'Biologi71', '2026-08-31', 10);
+    // Måndagar: 17/8 4.1, 24/8 4.2, 31/8 7.1
+    const g = gemensamText(s, 'bi', '2026-09-02');
+    expect(g.kapitel.map((k) => [k.nr, k.namn, k.delkapitel.map((d) => d.kod)])).toEqual([[4, 'Ekologi', ['4.1', '4.2']], [7, 'Människokroppen', ['7.1']]]);
+    expect(g.behoverVal).toBe(true);
+    expect(g.text).toBe(
+      'Under perioden 17 augusti–2 september 2026 har klassen arbetat med kapitel 4 Ekologi — delkapitlen 4.1 Ekosystem och 4.2 Näringskedjor. Kapitlet handlar om: hur ekosystem är uppbyggda; näringskedjor och kretslopp.\n'
+      + 'Klassen har arbetat med kapitel 7 Människokroppen — delkapitlet 7.1 Nervsystemet. Kapitlet handlar om: nervsystemet.');
+    // Bara kapitel 4 i rapporten: Exit ticket 7.1 räknas inte
+    const s2 = sattSamtalsKapitel(s, 'bi', { koder: ['4.1', '4.2'] });
+    const anna = utvardering(s2, 'e1', 'bi', '2026-09-02')!;
+    expect(anna.lektioner).toMatchObject({ antal: 2, borjan: 60, nu: 70 });
+    expect(utvardering(s, 'e1', 'bi', '2026-09-02')!.lektioner.antal).toBe(3);
+  });
+});
