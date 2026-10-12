@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import { Document, HeadingLevel, Packer, Paragraph, TextRun } from 'docx';
 import {
-  sattVeckorapportTodo, skapaVeckorapport, svenskTid, taBortVeckorapport, veckaFor, veckaText, veckorapportLarm, veckorapportText, veckorapporter, VECKORAPPORT_TID,
+  arVeckorapportAmne, sattVeckorapportTodo, skapaVeckorapport, svenskTid, taBortVeckorapport, veckaFor, veckaText, veckorapportLarm, veckorapportText, veckorapporter, VECKORAPPORT_TID,
   type Struktur, type Tidpunkt, type Vecka, type Veckorapport,
 } from '@planner/kernel';
 import { lasStruktur } from './store.js';
@@ -105,7 +105,7 @@ export function Veckorapporter({ s, kor, nu, onTillbaka }: { s: Struktur; kor: K
       <div className="rad" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         {onTillbaka !== undefined && <button className="btn sm" onClick={onTillbaka}>← Rapporter</button>}
         <h3 style={{ margin: 0 }}>📅 Veckorapporter</h3>
-        <small className="muted">en rapport per vecka — vad som hänt i varje ämne, skapas fredag {VECKORAPPORT_TID}, texten fryses när rapporten skapas</small>
+        <small className="muted">en rapport per vecka för NO och matematik — vad vi gjort, läxförhör, exit tickets och inlämningar i Teams; skapas fredag {VECKORAPPORT_TID}, texten fryses när rapporten skapas</small>
       </div>
       <VeckorapportLarm s={s} kor={kor} nu={tid} />
       {larm.saknade.length === 0 && (
@@ -140,7 +140,7 @@ export function Veckorapporter({ s, kor, nu, onTillbaka }: { s: Struktur; kor: K
 
 function Forhandsvisning({ s, nu }: { s: Struktur; nu: Tidpunkt }) {
   const v = veckaFor(nu.datum);
-  const amnen = s.amnen.map((a) => ({ a, klass: s.klasser.find((k) => k.id === a.klassId)?.namn ?? '', text: veckorapportText(s, a.id, v) })).filter((x) => !x.text.startsWith('Lektioner: inga'));
+  const amnen = s.amnen.map((a) => ({ a, klass: s.klasser.find((k) => k.id === a.klassId)?.namn ?? '', text: veckorapportText(s, a.id, v) })).filter((x) => arVeckorapportAmne(x.a.namn) && x.text !== '');
   return (
     <div className="st-vecko-forhand">
       <small className="muted">Innevarande vecka {veckaText(v)} — så här ser texten ut just nu:</small>

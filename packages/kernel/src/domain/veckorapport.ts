@@ -1,9 +1,10 @@
 /**
  * Del 194 · Veckorapporter.
  *
- *  - Varje vecka får en rapport med veckonummer: vad som hänt i varje ämne
- *    (lektioner, Exit tickets, läxförhör, Magma, DigiExam, inlämningar som
- *    förföll). Beskrivande siffror, inga orsaksförklaringar.
+ *  - Varje vecka får en rapport med veckonummer för NO och matematik: en kort
+ *    beskrivning av vad som gjorts (kapitel och delkapitel ur planeringen) och
+ *    resultaten från läxförhör, exit tickets och inlämningar i Teams
+ *    (matematik: även Magma-diagnoser). Beskrivande siffror, inga orsaksförklaringar.
  *  - Rapporten blir "dags" fredag 16:00. Appen kan inte köra något av sig själv,
  *    så kärnan svarar på frågan "vilka veckor saknar rapport nu?" och studion
  *    visar ett larm med en att-göra-lista (ladda upp inlämningar i Teams, spara
@@ -80,22 +81,29 @@ export function veckorapporter(s: Struktur): Veckorapport[] {
   return [...(s.veckorapporter ?? [])].sort((a, b) => b.fran.localeCompare(a.fran));
 }
 
-/** Ämnen som har en planerad lektion i veckan — en vecka utan lektioner (lov) får ingen rapport. */
-function amnenMedLektioner(s: Struktur, v: Vecka): string[] {
-  return s.amnen.filter((a) => lektionerIVeckan(s, a.id, v).length > 0).map((a) => a.id);
+/** Veckorapporten gäller NO (biologi, fysik, kemi) och matematik — inte teknik eller stödämnen. */
+export function arVeckorapportAmne(amnesNamn: string): boolean {
+  return /^(matematik|biologi|fysik|kemi)$/i.test(amnesNamn.trim());
 }
 
-function lektionerIVeckan(s: Struktur, amneId: string, v: Vecka): Array<{ datum: IsoDatum; avsnitt: string }> {
+/** Ämnen (NO och matematik) som har en planerad lektion i veckan — en vecka utan lektioner (lov) får ingen rapport. */
+function amnenMedLektioner(s: Struktur, v: Vecka): string[] {
+  return s.amnen.filter((a) => arVeckorapportAmne(a.namn) && lektionerIVeckan(s, a.id, v).length > 0).map((a) => a.id);
+}
+
+interface VeckoLektion { datum: IsoDatum; avsnitt: string; kapitel: number }
+
+function lektionerIVeckan(s: Struktur, amneId: string, v: Vecka): VeckoLektion[] {
   let plan: ReturnType<typeof amnesPlanFor> = null;
   try { plan = amnesPlanFor(s, amneId, v.till, false); } catch { plan = null; }
   if (plan === null) return [];
   const sett = new Set<string>();
-  const ut: Array<{ datum: IsoDatum; avsnitt: string }> = [];
+  const ut: VeckoLektion[] = [];
   for (const r of [...plan.a, ...plan.b]) {
     if (r.datum === null || r.datum < v.fran || r.datum > v.till) continue;
     const nyckel = `${r.datum}|${r.lektion.avsnitt}`;
     if (sett.has(nyckel)) continue;
-    sett.add(nyckel); ut.push({ datum: r.datum, avsnitt: r.lektion.avsnitt });
+    sett.add(nyckel); ut.push({ datum: r.datum, avsnitt: r.lektion.avsnitt, kapitel: r.kapitel });
   }
   return ut.sort((a, b) => a.datum.localeCompare(b.datum));
 }
@@ -130,19 +138,45 @@ export function veckorapportLarm(s: Struktur, nu: Tidpunkt): VeckorapportLarm {
 
 const pct = (poang: number, max: number) => (max === 0 ? 0 : Math.round((poang / max) * 100));
 const kort = (datum: IsoDatum) => kortDatum(datum);
+const antalOrd = (n: number, ett: string, flera: string) => `${n} ${n === 1 ? ett : flera}`;
 
-/** Veckans text för ett ämne — beskrivande siffror, inga orsaksförklaringar. */
+/**
+ * Veckans text för ett ämne: en kort beskrivning av vad som gjorts (kapitel och delkapitel ur
+ * planeringen), sedan resultaten från läxförhör, exit tickets och inlämningar i Teams.
+ * Beskrivande siffror, inga orsaksförklaringar. Tom sträng = inga lektioner i veckan.
+ */
 export function veckorapportText(s: Struktur, amneId: string, v: Vecka): string {
   const amne = s.amnen.find((a) => a.id === amneId);
   if (amne === undefined) return '';
+  const lektioner = lektionerIVeckan(s, amneId, v);
+  if (lektioner.length === 0) return '';
+  const bok = s.bocker.find((b) => b.id === amne.bokId);
   const elever = s.elever.filter((e) => e.klassId === amne.klassId && elevIKlassen(e, v.till));
   const antalElever = elever.length;
+  const avN = (n: number) => `${n}${antalElever > 0 ? ` av ${antalElever}` : ''} elever`;
   const rader: string[] = [];
-  const lektioner = lektionerIVeckan(s, amneId, v);
-  rader.push(lektioner.length === 0 ? 'Lektioner: inga planerade.' : `Lektioner: ${lektioner.length} — ${lektioner.map((l) => `${kort(l.datum)} ${l.avsnitt}`).join(', ')}.`);
 
+  // Vad vi gjort: kapitel och delkapitel med antal lektioner, i ordning
+  const perKapitel = new Map<number, Map<string, number>>();
+  for (const l of lektioner) {
+    const kap = perKapitel.get(l.kapitel) ?? new Map<string, number>();
+    kap.set(l.avsnitt, (kap.get(l.avsnitt) ?? 0) + 1); perKapitel.set(l.kapitel, kap);
+  }
+  const delar = [...perKapitel.entries()].map(([nr, avsnitt]) => {
+    const namn = bok?.kapitel.find((k) => k.nr === nr)?.namn ?? '';
+    const lista = [...avsnitt.entries()].map(([a, n]) => `${a} (${antalOrd(n, 'lektion', 'lektioner')})`).join(', ');
+    return `kapitel ${nr}${namn === '' ? '' : ` ${namn}`} — ${lista}`;
+  });
+  rader.push(`Vad vi gjort: ${delar.join('; ')}.`);
+
+  // Förhör i veckan: Socrative (och Magma-filer döpta Läxförhör/Exit ticket i matematik)
   const res = (s.resultat ?? []).filter((r) => r.amneId === amneId && r.datum >= v.fran && r.datum <= v.till);
-  const typAv = (r: (typeof res)[number]) => r.inkluderadSom ?? r.kalla;
+  const typAv = (r: (typeof res)[number]): string => {
+    const k = r.inkluderadSom ?? r.kalla;
+    if (k !== 'magma') return k;
+    const mt = tolkaMagmaNamn(r.prov).typ;
+    return mt === 'exit' ? 'socrative-exit' : mt === 'laxforhor' ? 'socrative-laxforhor' : 'magma';
+  };
   const perProv = (typ: string) => {
     const grupper = new Map<string, { datum: string; prov: string; sum: number; n: number }>();
     for (const r of res) {
@@ -153,25 +187,21 @@ export function veckorapportText(s: Struktur, amneId: string, v: Vecka): string 
     }
     return [...grupper.values()].sort((a, b) => a.datum.localeCompare(b.datum));
   };
-  const provRad = (etikett: string, typ: string) => {
+  const provRad = (etikett: string, typ: string, tomt: string) => {
     const lista = perProv(typ);
-    if (lista.length === 0) return;
-    rader.push(`${etikett}: ${lista.map((g) => `${g.prov} (${kort(g.datum)}) snitt ${Math.round(g.sum / g.n)} %, ${g.n}${antalElever > 0 ? ` av ${antalElever}` : ''} elever`).join('; ')}.`);
+    rader.push(lista.length === 0 ? `${etikett}: ${tomt}.` : `${etikett}: ${lista.map((g) => `${g.prov} (${kort(g.datum)}) snitt ${Math.round(g.sum / g.n)} %, ${avN(g.n)}`).join('; ')}.`);
   };
-  provRad('Exit tickets', 'socrative-exit');
-  provRad('Läxförhör', 'socrative-laxforhor');
-  // Magma: diagnoser och screening (förhör i Magma räknas redan ovan via inkluderadSom)
-  const magma = perProv('magma').filter((g) => { const t = tolkaMagmaNamn(g.prov).typ; return t === 'diagnos' || t === 'screening'; });
-  if (magma.length > 0) rader.push(`Magma: ${magma.map((g) => `${g.prov} (${kort(g.datum)}) snitt ${Math.round(g.sum / g.n)} %, ${g.n}${antalElever > 0 ? ` av ${antalElever}` : ''} elever`).join('; ')}.`);
-  const digi = (s.resultat ?? []).filter((r) => r.amneId === amneId && r.kalla === 'digiexam' && r.datum >= v.fran && r.datum <= v.till);
-  if (digi.length > 0) {
-    const prov = [...new Set(digi.map((r) => r.prov))];
-    rader.push(`DigiExam: ${prov.map((p) => { const mina = digi.filter((r) => r.prov === p); return `${p} (${kort(mina[0].datum)}) ${mina.length}${antalElever > 0 ? ` av ${antalElever}` : ''} elever skrev`; }).join('; ')}.`);
+  provRad('Läxförhör', 'socrative-laxforhor', 'inga i veckan');
+  provRad('Exit tickets', 'socrative-exit', 'inga i veckan');
+  // Matematik: diagnoser i Magma är veckans resultat när de gjorts
+  if (/matematik|matte/i.test(amne.namn)) {
+    const magma = perProv('magma').filter((g) => { const t = tolkaMagmaNamn(g.prov).typ; return t === 'diagnos' || t === 'screening'; });
+    if (magma.length > 0) rader.push(`Diagnoser (Magma): ${magma.map((g) => `${g.prov} (${kort(g.datum)}) snitt ${Math.round(g.sum / g.n)} %, ${avN(g.n)}`).join('; ')}.`);
   }
-  // Inlämningar som förföll i veckan
+  // Inlämningar i Teams som förföll i veckan
   const o = inlamningsOversikt(s, amne.klassId, amneId, v.till);
   const forfoll = o.forfallna.filter((u) => u.forfallo >= v.fran && u.forfallo <= v.till);
-  if (forfoll.length > 0) rader.push(`Inlämningar som förföll: ${forfoll.map((u) => `${u.uppgift} (${kort(u.forfallo)}) ${u.inlamnade + u.sena} av ${u.antal} inlämnade`).join('; ')}.`);
+  rader.push(forfoll.length === 0 ? 'Inlämningar (Teams): inga förföll i veckan.' : `Inlämningar (Teams): ${forfoll.map((u) => `${u.uppgift} (${kort(u.forfallo)}) ${u.inlamnade + u.sena} av ${u.antal} inlämnade`).join('; ')}.`);
   return rader.join('\n');
 }
 

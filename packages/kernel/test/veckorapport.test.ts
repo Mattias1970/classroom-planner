@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  bokFromImport, importeraInlamningar, importeraResultat, laggTillAmne, laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering, resetIdRaknare,
+  arVeckorapportAmne, bokFromImport, importeraInlamningar, importeraResultat, laggTillAmne, laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering, resetIdRaknare,
   sattVeckorapportTodo, skapaVeckorapport, sparaBok, taBortVeckorapport, tolkaTeamsTilldelningar, tomStruktur, veckaFor, veckaText, veckanArDags, veckorUtanRapport, veckorapportLarm, veckorapportText, veckorapporter, VECKORAPPORT_TODO, type Struktur,
 } from '../src/index.js';
 
@@ -63,16 +63,19 @@ describe('Del 194 · veckorapporter — veckonummer, fredag 16:00, att-göra-lis
     // Texten för v.34 — beskrivande siffror
     const v34 = veckaFor('2026-08-17');
     expect(veckorapportText(s, 'bi', v34)).toBe(
-      'Lektioner: 2 — mån 17 aug 4.1 Ekosystem, ons 19 aug 4.1 Ekosystem.\n'
-      + 'Exit tickets: Biologi41 (mån 17 aug) snitt 60 %, 3 av 3 elever; Biologi412 (ons 19 aug) snitt 70 %, 2 av 3 elever.\n'
+      'Vad vi gjort: kapitel 4 Ekologi — 4.1 Ekosystem (2 lektioner).\n'
       + 'Läxförhör: Biologi41 (ons 19 aug) snitt 70 %, 3 av 3 elever.\n'
-      + 'Inlämningar som förföll: Biologi 4.1 Begrepp (fre 21 aug) 2 av 3 inlämnade.');
+      + 'Exit tickets: Biologi41 (mån 17 aug) snitt 60 %, 3 av 3 elever; Biologi412 (ons 19 aug) snitt 70 %, 2 av 3 elever.\n'
+      + 'Inlämningar (Teams): Biologi 4.1 Begrepp (fre 21 aug) 2 av 3 inlämnade.');
+    // Bara NO och matematik får veckorapport
+    expect(arVeckorapportAmne('Biologi')).toBe(true); expect(arVeckorapportAmne('Matematik')).toBe(true);
+    expect(arVeckorapportAmne('Teknik')).toBe(false); expect(arVeckorapportAmne('Matematik stöd')).toBe(false);
     // Skapa rapporten
     const r = skapaVeckorapport(s, v34, nu);
     s = r.s;
     expect(r.rapport).toMatchObject({ id: 'vr-2026-34', ar: 2026, vecka: 34, fran: '2026-08-17', till: '2026-08-21', skapad: '2026-08-21 16:00' });
     expect(r.rapport.amnen.map((a) => [a.klassNamn, a.amne])).toEqual([['8B', 'Biologi']]);
-    expect(r.rapport.amnen[0].text).toContain('Lektioner: 2');
+    expect(r.rapport.amnen[0].text).toContain('Vad vi gjort: kapitel 4 Ekologi — 4.1 Ekosystem (2 lektioner).');
     expect(r.rapport.todo.map((t) => [t.text, t.klar])).toEqual(VECKORAPPORT_TODO.map((t) => [t, false]));
     expect(() => skapaVeckorapport(s, v34, nu)).toThrow(/finns redan/);
     expect(veckorUtanRapport(s, nu)).toEqual([]);
@@ -88,7 +91,8 @@ describe('Del 194 · veckorapporter — veckonummer, fredag 16:00, att-göra-lis
     expect(larm).toEqual({ saknade: [], oklara: [] });
     // v.35 utan resultat: bara lektionerna
     const v35 = veckaFor('2026-08-24');
-    expect(veckorapportText(s, 'bi', v35)).toBe('Lektioner: 2 — mån 24 aug 4.2 Näringskedjor, ons 26 aug 4.2 Näringskedjor.\nExit tickets: Biologi42 (mån 24 aug) snitt 83 %, 3 av 3 elever.');
+    expect(veckorapportText(s, 'bi', v35)).toBe('Vad vi gjort: kapitel 4 Ekologi — 4.2 Näringskedjor (2 lektioner).\nLäxförhör: inga i veckan.\nExit tickets: Biologi42 (mån 24 aug) snitt 83 %, 3 av 3 elever.\nInlämningar (Teams): inga förföll i veckan.');
+    expect(veckorapportText(s, 'bi', veckaFor('2027-07-05'))).toBe('');
     s = skapaVeckorapport(s, v35, { datum: '2026-08-28', tid: '16:30' }).s;
     expect(veckorapporter(s).map((x) => x.vecka)).toEqual([35, 34]);
     // Ta bort → veckan saknas igen

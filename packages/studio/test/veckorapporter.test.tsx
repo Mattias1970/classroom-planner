@@ -43,7 +43,7 @@ describe('Del 194 · Veckorapporter', () => {
     await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Skapa veckorapport v.34'))!.click(); });
     expect(s.veckorapporter).toHaveLength(1);
     expect(s.veckorapporter![0]).toMatchObject({ vecka: 34, skapad: '2026-08-21 16:00' });
-    expect(s.veckorapporter![0].amnen[0].text).toContain('Lektioner: 1 — mån 17 aug 4.1 Ekosystem.');
+    expect(s.veckorapporter![0].amnen[0].text).toContain('Vad vi gjort: kapitel 4 Ekologi — 4.1 Ekosystem (1 lektion).');
     expect(s.veckorapporter![0].amnen[0].text).toContain('Exit tickets: Biologi41 (mån 17 aug) snitt 70 %, 1 av 1 elever.');
     // Rapporten i listan, larmet visar att-göra-listan
     expect(div.textContent).toContain('8B · Biologi');
