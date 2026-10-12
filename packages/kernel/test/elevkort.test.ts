@@ -304,3 +304,32 @@ describe('Del 189 · samma namn är samma elev om de inte har resultat på samma
     expect(resultatForElev(u.s, 'e2')).toHaveLength(3);
   });
 });
+
+import { markeraOlikaElever, snarlikaElever } from '../src/index.js';
+
+describe('Del 190 · snarlika namn — appen frågar', () => {
+  function bas(): Struktur {
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '26/27', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillElev(s, { id: 'e1', klassId: 'k', namn: 'Kalle Testsson Ek', grupp: 'A' });
+    s = laggTillElev(s, { id: 'e2', klassId: 'k', namn: 'Kalle Testsson Lund', grupp: 'A' });
+    s = laggTillElev(s, { id: 'e3', klassId: 'k', namn: 'Kalle Provlund', grupp: 'A' });     // inget gemensamt efternamn
+    s = laggTillElev(s, { id: 'e4', klassId: 'k', namn: 'Ted Testsson', grupp: 'B' });        // annat förnamn
+    return s;
+  }
+  it('samma förnamn och minst ett namn efter förnamnet lika → fråga; olika elever frågas inte igen', () => {
+    const s = bas();
+    const p = snarlikaElever(s, 'k');
+    expect(p.map((x) => [x.a.namn, x.b.namn, x.gemensamt])).toEqual([['Kalle Testsson Ek', 'Kalle Testsson Lund', ['testsson']]]);
+    const s2 = markeraOlikaElever(s, 'e2', 'e1');
+    expect(snarlikaElever(s2, 'k')).toEqual([]);
+    expect(markeraOlikaElever(s2, 'e1', 'e2')).toBe(s2);
+    // 'Kalle Testsson' passar två elever → frågas (slås inte ihop); passar den bara en slås den ihop automatiskt
+    const s3 = laggTillElev(s, { id: 'e5', klassId: 'k', namn: 'Kalle Testsson', grupp: 'A' });
+    expect(hittaDubbletter(s3, 'k')).toEqual([]);
+    expect(snarlikaElever(s3, 'k').filter((x) => x.a.id === 'e5' || x.b.id === 'e5')).toHaveLength(2);
+    const s4 = laggTillElev(s2, { id: 'e5', klassId: 'k', namn: 'Kalle Testsson', grupp: 'A' });
+    expect(hittaDubbletter(markeraOlikaElever(s4, 'e5', 'e2'), 'k').map((d) => [d.fran.namn, d.till.namn])).toEqual([['Kalle Testsson', 'Kalle Testsson Ek']]);
+  });
+});

@@ -233,6 +233,21 @@ function gemensammaProv(s: Struktur, a: string, b: string): string[] {
 }
 
 /**
+ * Del 190 · Elever vars namn passar flera andra elever ('Kalle Testsson' passar både 'Kalle Testsson Ek'
+ * och 'Kalle Testsson Lund') — då vet appen inte vem det är och frågar i stället för att slå ihop.
+ */
+function flertydigaElever(s: Struktur, klassId: string): Set<string> {
+  const elever = s.elever.filter((e) => e.klassId === klassId);
+  const olika = new Set(s.olikaElever ?? []);
+  const ut = new Set<string>();
+  for (const a of elever) {
+    const traffar = elever.filter((b) => b.id !== a.id && !olika.has([a.id, b.id].sort().join('|')) && sammaElevNamn(a.namn, b.namn));
+    if (traffar.length > 1) { ut.add(a.id); for (const b of traffar) ut.add(b.id); }
+  }
+  return ut;
+}
+
+/**
  * Elever i klassen som är samma person (se sammaElevNamn). Har båda resultat på samma prov
  * markeras paret med `konflikt` — då slås det inte ihop automatiskt utan läraren får avgöra.
  */
@@ -241,10 +256,12 @@ export function hittaDubbletter(s: Struktur, klassId: string): Dubblett[] {
   const antal = (id: string) => (s.resultat ?? []).filter((r) => r.elevId === id).length;
   const par: Dubblett[] = [];
   const tagna = new Set<string>();
+  const olika = new Set(s.olikaElever ?? []);
+  const flertydig = flertydigaElever(s, klassId);
   for (const a of elever) {
-    if (tagna.has(a.id)) continue;
+    if (tagna.has(a.id) || flertydig.has(a.id)) continue;
     for (const b of elever) {
-      if (a.id === b.id || tagna.has(b.id)) continue;
+      if (a.id === b.id || tagna.has(b.id) || flertydig.has(b.id) || olika.has([a.id, b.id].sort().join('|'))) continue;
       if (!sammaElevNamn(a.namn, b.namn)) continue;
       // Behåll det längre namnet; vid lika långa den post som har flest resultat
       const la = ordAv(a.namn).length; const lb = ordAv(b.namn).length;
@@ -283,4 +300,47 @@ export function slaIhopSakraDubbletter(s: Struktur): { s: Struktur; ihop: Array<
     ut = r.s; ihop.push(...r.ihop);
   }
   return { s: ut, ihop };
+}
+
+// ── Del 190 · Snarlika namn: appen frågar ────────────────────────────────
+
+export interface SnarliktPar {
+  a: Elev; b: Elev;
+  /** Namn efter förnamnet som båda har. */ gemensamt: string[];
+  /** Prov som båda har resultat på. */ konflikt: string[];
+}
+
+const parNyckel = (a: string, b: string) => [a, b].sort().join('|');
+
+/**
+ * Del 190 · Snarlika namn: samma förnamn och minst ett namn efter förnamnet lika ('Kalle Testsson Ek'
+ * och 'Kalle Testsson Lund'), men inte så lika att appen slår ihop dem själv. Par som läraren sagt är
+ * olika personer (olikaElever) visas inte igen.
+ */
+export function snarlikaElever(s: Struktur, klassId: string): SnarliktPar[] {
+  const elever = s.elever.filter((e) => e.klassId === klassId);
+  const olika = new Set(s.olikaElever ?? []);
+  const flertydig = flertydigaElever(s, klassId);
+  const ut: SnarliktPar[] = [];
+  for (let i = 0; i < elever.length; i += 1) {
+    for (let j = i + 1; j < elever.length; j += 1) {
+      const a = elever[i]; const b = elever[j];
+      if (olika.has(parNyckel(a.id, b.id))) continue;
+      // Säkra par slås ihop automatiskt — utom när namnet passar flera elever, då frågar appen
+      if (sammaElevNamn(a.namn, b.namn) && !(flertydig.has(a.id) && flertydig.has(b.id))) continue;
+      const na = ordAv(a.namn); const nb = ordAv(b.namn);
+      if (na.length < 2 || nb.length < 2 || na[0] !== nb[0]) continue;
+      const gemensamt = na.slice(1).filter((x) => nb.slice(1).includes(x));
+      if (gemensamt.length === 0) continue;
+      ut.push({ a, b, gemensamt, konflikt: gemensammaProv(s, a.id, b.id) });
+    }
+  }
+  return ut.sort((x, y) => x.a.namn.localeCompare(y.a.namn, 'sv'));
+}
+
+/** Del 190 · Läraren: de två eleverna är olika personer — appen frågar inte igen. */
+export function markeraOlikaElever(s: Struktur, aId: string, bId: string): Struktur {
+  const n = parNyckel(aId, bId);
+  if ((s.olikaElever ?? []).includes(n)) return s;
+  return { ...s, olikaElever: [...(s.olikaElever ?? []), n] };
 }

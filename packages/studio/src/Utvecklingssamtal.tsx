@@ -10,6 +10,7 @@ import {
   antalStycken, gemensamText, kapitelNamn, klassensUtvarderingar, samtalsStycken, sattSamtalsKapitel, sattSamtalsUtvardering, STATUS_ORDNING, STATUS_TEXT,
   type GemensamText, type Klass, type SamtalsStatus, type Struktur, type Utvardering,
 } from '@planner/kernel';
+import { NamnFragor } from './NamnFragor.js';
 import { lasStruktur } from './store.js';
 
 const pct = (v: number | null) => (v === null ? '—' : `${v} %`);
@@ -94,6 +95,7 @@ export function Utvecklingssamtal({ s, klass, amneId, kor, idag, onTillbaka }: {
       {gem !== null && (
         <KapitelOchGemensamText gem={gem} amneId={amneId} kor={kor} utkast={gemUtkast} setUtkast={setGemUtkast} />
       )}
+      <NamnFragor s={s} klassId={klass.id} kor={kor} />
       <div className="rad" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
         {antalPer.map(([st, n]) => <span key={st} className={`chip st-samtal-chip ${st}`}>{STATUS_TEXT[st]}: <b>{n}</b></span>)}
       </div>

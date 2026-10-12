@@ -35,7 +35,7 @@ import {
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
   elevrapport, elevrapportText, tillfalleEtiketter, normeradSpridning, klusterKurvor, normeraBand, taBortFil, rensaResultat,
   NORM_BAND, NORM_MAX, amnesKallor, lektionstester, elevLektionstest, tillfalleKortEtikett, KLUSTER_NAMN, TID_PASS, type Kluster,
-  begransaTillElever, elevUrval, klassensElever, type ElevUrvalVal, arSocrative, elevIKlassen, sattElevStatus, rattaNamnordning, hittaDubbletter, slaIhopDubbletter, slaIhopSakraDubbletter,
+  begransaTillElever, elevUrval, klassensElever, type ElevUrvalVal, arSocrative, elevIKlassen, sattElevStatus, rattaNamnordning, slaIhopSakraDubbletter,
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
@@ -49,6 +49,7 @@ import { exportJson, importJson, lasInstallning, lasStruktur, sparaInstallning, 
 import { RapportdesignVy, MallRendering, Trendsteg } from './rapportdesign.js';
 import { MagmaImport } from './MagmaImport.js';
 import { ImportFragor, type VantandeImport } from './ImportFragor.js';
+import { NamnFragor } from './NamnFragor.js';
 import { DigiExamImport } from './DigiExamImport.js';
 import { TeamsImport } from './TeamsImport.js';
 import { Utvecklingssamtal } from './Utvecklingssamtal.js';
@@ -1201,20 +1202,12 @@ function Elevlista({ s, klassId, klassNamn, kor }: {
     <div className="elevlista">
       <h3>Elever <small className="muted">{elever.length} i klassen · Grupp A: {antal('A')} · Grupp B: {antal('B')}</small>{' '}
         <button className="btn sec sm" aria-expanded={visaSlutade} disabled={slutade.length === 0} onClick={() => setVisaSlutade(!visaSlutade)}>👋 Elever som slutat ({slutade.length})</button>{' '}
-        {hittaDubbletter(s, klassId).length > 0 && (
-          <button className="btn sec sm" title="Samma namn där båda posterna har resultat på samma prov — appen slår inte ihop dem själv. Kontrollera att det är samma elev (t.ex. ett omprov) innan du slår ihop."
-            onClick={() => {
-              const d = hittaDubbletter(lasStruktur(), klassId);
-              if (!window.confirm(`Samma namn men båda har resultat på samma prov:\n\n${d.map((x) => `${x.fran.namn} → ${x.till.namn}${x.konflikt.length > 0 ? `\n   båda har: ${x.konflikt.join(', ')}` : ''}`).join('\n')}\n\nÄr det samma elev? OK slår ihop — resultaten flyttas till det längre namnet (där båda har samma prov och datum behålls det längre namnets resultat). Avbryt låter dem vara två elever.`)) return;
-              const r = slaIhopDubbletter(lasStruktur(), klassId);
-              kor(() => r.s, `${r.ihop.length} dubbletter ihopslagna: ${r.ihop.map((x) => `${x.fran} → ${x.till} (${x.flyttade} resultat)`).join(' · ')}.`);
-            }}>❓ Samma namn med olika resultat ({hittaDubbletter(s, klassId).length})</button>
-        )}{' '}
         {alla.some((e) => e.namn.includes(',')) && (
           <button className="btn sec sm" title="Namn som står 'Efternamn, Förnamn' skrivs om till 'Förnamn Efternamn'"
             onClick={() => { const r = rattaNamnordning(lasStruktur(), klassId); kor(() => r.s, `${r.rattade.length} namn rättade: ${r.rattade.map((x) => `${x.fore} → ${x.efter}`).join(' · ')}.`); }}>
             ⇄ Rätta namnordning ({alla.filter((e) => e.namn.includes(',')).length})</button>
         )}</h3>
+      <NamnFragor s={s} klassId={klassId} kor={kor} />
       {visaSlutade && slutade.length > 0 && (
         <table className="tbl small st-slutade" aria-label={`Elever som slutat i ${klassNamn}`}>
           <tbody>{slutade.map((e, nr) => (

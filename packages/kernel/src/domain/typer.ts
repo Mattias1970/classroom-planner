@@ -451,6 +451,8 @@ export interface Struktur {
   samtalsUtvarderingar?: Record<string, { status?: import('./utvecklingssamtal.js').SamtalsStatus; text?: string }>;
   /** Del 172: kapitelurval och egen gemensam text i rapporten inför utvecklingssamtal, per ämne. */
   samtalsKapitel?: Record<string, import('./samtalskapitel.js').SamtalsKapitelVal>;
+  /** Del 190 · Elevpar med snarlika namn som läraren sagt är olika personer ('idA|idB', sorterat) — appen frågar inte igen. */
+  olikaElever?: string[];
   /** Del 163: inlämningar ur Teams tilldelningsdata (elev × uppgift). */
   inlamningar?: import('./inlamningar.js').Inlamning[];
   /** Del 153: Magma-testens uppgifter ur testens PDF (en post per test). */

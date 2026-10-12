@@ -3560,3 +3560,31 @@ describe('Del 188: redigera genomförda lektioner — låsta tills läraren lås
     vi.useRealTimers();
   });
 });
+
+describe('Del 189–190: samma och snarlika elevnamn', () => {
+  it('samma namn med extra efternamn slås ihop automatiskt; snarlika namn ger en fråga', () => {
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    for (const n of ['Kalle Testsson Ek', 'Kalle Testsson Lund']) { skriv(input(host, 'Elevens namn'), n); act(() => { knapp(host, '➕ Lägg till elev').click(); }); }
+    expect(host.querySelector('[aria-label="Frågor om elevnamn"]')?.textContent).toContain('samma förnamn och namnet "testsson"');
+    act(() => { (host.querySelector('button[aria-label="Olika elever: Kalle Testsson Ek och Kalle Testsson Lund"]') as HTMLButtonElement).click(); });
+    expect(host.querySelector('[aria-label="Frågor om elevnamn"]')).toBeNull();
+    skriv(input(host, 'Elevens namn'), 'Kalle Testsson');
+    act(() => { knapp(host, '➕ Lägg till elev').click(); });
+    // 'Kalle Testsson' passar både Ek och Lund → ingen automatisk sammanslagning, appen frågar
+    expect(lasStruktur().elever).toHaveLength(3);
+    const fragor = host.querySelector('[aria-label="Frågor om elevnamn"]')!.textContent!;
+    expect(fragor).toContain('Kalle Testsson Ek (0 resultat) och Kalle Testsson (0 resultat)');
+    expect(fragor).toContain('Kalle Testsson Lund (0 resultat) och Kalle Testsson (0 resultat)');
+    // Läraren väljer: samma elev som Kalle Testsson Ek
+    act(() => { (host.querySelector('button[aria-label="Samma elev: Kalle Testsson och Kalle Testsson Ek, behåll Kalle Testsson Ek"]') as HTMLButtonElement).click(); });
+    expect(lasStruktur().elever.map((e) => e.namn).sort()).toEqual(['Kalle Testsson Ek', 'Kalle Testsson Lund']);
+    expect(host.querySelector('[aria-label="Frågor om elevnamn"]')).toBeNull();
+  });
+});
