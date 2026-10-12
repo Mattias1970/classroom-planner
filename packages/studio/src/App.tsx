@@ -39,7 +39,7 @@ import {
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
-  resultatProcent, saknadeResultat, tolkaResultatRader, digiexamProvInfo, digiexamProvTyp, eProvGrans, ordinarieProvFor, planForAmne, harLaborationsstandard, kursLista, flyttaKurs, amnesPlanFor, type Kurs, amnesPlan, amnesOffset, sattLaborationsstandard, sattPlanFrystTill, sparaLaborationer, sattPassVal, type HalvklassSession, type Laboration, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type Elev, type KalenderDagRuta, type KalenderHandelse,
+  resultatProcent, saknadeResultat, veckorapportLarm, veckaText, tolkaResultatRader, digiexamProvInfo, digiexamProvTyp, eProvGrans, ordinarieProvFor, planForAmne, harLaborationsstandard, kursLista, flyttaKurs, amnesPlanFor, type Kurs, amnesPlan, amnesOffset, sattLaborationsstandard, sattPlanFrystTill, sparaLaborationer, sattPassVal, type HalvklassSession, type Laboration, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type Elev, type KalenderDagRuta, type KalenderHandelse,
   pedagogiskPlanering, gruppNyckel, grundRader, planeringsRader, antalIBoken, lektionerPerDelkapitel, sattLektionerPerDelkapitel, sattAntalLektioner, sattLektionsVal, laggTillEgenRad, taBortEgenRad, bokLektioner, type LektionsVal,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
@@ -53,6 +53,7 @@ import { NamnFragor } from './NamnFragor.js';
 import { DigiExamImport } from './DigiExamImport.js';
 import { TeamsImport } from './TeamsImport.js';
 import { Utvecklingssamtal } from './Utvecklingssamtal.js';
+import { VeckorapportLarm, Veckorapporter, nuSvensk } from './Veckorapporter.js';
 import { DigiExamLarmPanel } from './ProvLarm.js';
 import { Elevkort } from './Elevkort.js';
 import { ProvlappPanel } from './Provlapp.js';
@@ -176,6 +177,10 @@ export function App() {
         for (const x of saknade.slice(0, 3)) ut.push({ text: `${a.namn}: ${x.prov} (${kortDatum(x.datum)}) saknar resultat`, onKlick: () => setVy({ typ: 'resultat' }) });
       } catch { /* ämne utan plan */ }
     }
+    // Del 194 · Veckorapporten är dags (fredag 16:00) eller att-göra-listan är inte klar
+    const larm = veckorapportLarm(s, nuSvensk());
+    for (const v of larm.saknade) ut.unshift({ text: `Veckorapport ${veckaText(v)} är dags`, onKlick: () => setVy({ typ: 'elever' }) });
+    for (const r of larm.oklara) ut.unshift({ text: `Veckorapport ${veckaText(r)}: ${r.todo.filter((t) => !t.klar).length} punkter kvar att göra`, onKlick: () => setVy({ typ: 'elever' }) });
     return ut.slice(0, 8);
   }, [s, filter.klassId]);
 
@@ -203,6 +208,7 @@ export function App() {
       <div className="studio">
         <Skal s={s} vy={vy} setVy={setVy} filter={filter} setFilter={setFilter} notiser={notiser} larareNamn={larare} verktyg={verktyg}>
           {msg && <p className="status">{msg}</p>}
+          {vy.typ !== 'elever' && <VeckorapportLarm s={s} kor={kor} onOppna={() => setVy({ typ: 'elever' })} />}
           {vy.typ === 'oversikt' && <Oversikt s={s} filter={filter} setVy={setVy} struktur={struktur} />}
           {vy.typ === 'planering' && (
             <div className="v3-sida-innehall">
@@ -260,6 +266,7 @@ export function App() {
         </label>
         <button className="btn sec" onClick={() => setLayout('v3')} title="Den nya layouten">✨ v3</button>
       </header>
+      {huvudvy !== 'rapporter' && <VeckorapportLarm s={s} kor={kor} onOppna={() => setHuvudvy('rapporter')} />}
       {huvudvy === 'kalender' || huvudvy === 'superteach' || huvudvy === 'rapporter' ? (
         <main className="panel full">
           {msg && <p className="status">{msg}</p>}
@@ -5209,6 +5216,7 @@ function EnkelRapportVy({ s, elev, f, periodText, onTillbaka, onFull, onStudie, 
  */
 function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur, m: string) => void; meddela: (m: string) => void }) {
   const [design, setDesign] = useState(false);
+  const [vecko, setVecko] = useState(false);
   const [mallAlla, setMallAlla] = useState<string | null>(null);
   const [valAlla, setValAlla] = useState(false);
   const klasser = [...s.klasser].sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
@@ -5301,6 +5309,13 @@ function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur,
       </div>
     );
   }
+  if (vecko) {
+    return (
+      <div className="card superteach st-dash">
+        <Veckorapporter s={s} kor={kor} onTillbaka={() => setVecko(false)} />
+      </div>
+    );
+  }
   if (design) {
     return (
       <div className="card superteach st-dash">
@@ -5334,11 +5349,13 @@ function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur,
         <span className="spacer" />
         <small className="muted">{rader.length} elever</small>
         <button className="btn sec" disabled={valtAmne === ''} onClick={() => { setSamtal(true); setKortElev(''); setElevId(''); }} title="Kort utvärdering per elev inför utvecklingssamtal — status, utveckling, läxläsning, inlämningar och prov">🗣 Utvecklingssamtal</button>
+        <button className="btn sec" onClick={() => setVecko(true)} title="En rapport per vecka — vad som hänt i varje ämne, med att-göra-lista (Teams, Magma, Socrative)">📅 Veckorapporter{(s.veckorapporter ?? []).length > 0 ? ` (${(s.veckorapporter ?? []).length})` : ''}</button>
         <button className="btn sec" onClick={() => setDesign(true)} title="Bygg och redigera rapportmallar">🎨 Rapportdesign{(s.rapportmallar ?? []).length > 0 ? ` (${(s.rapportmallar ?? []).length})` : ''}</button>
         <button className="btn" disabled={skriver !== ''} onClick={() => setValAlla(true)} title="Välj mall eller Word-format för alla elever i urvalet">
           {skriver !== '' ? `… skapar ${forlopp}` : '🖨 Skriv ut alla…'}
         </button>
       </div>
+      <VeckorapportLarm s={s} kor={kor} onOppna={() => setVecko(true)} />
       {valAlla && (
         <UtskriftVal s={s} rubrik={`Skriv ut ${rader.filter((r) => r.antalProv > 0).length} elever`} onStang={() => setValAlla(false)} onDesign={() => setDesign(true)}
           val={[

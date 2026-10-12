@@ -455,6 +455,8 @@ export interface Struktur {
   samtalsPeriod?: Record<string, import('./samtalsperiod.js').SamtalsPeriodVal>;
   /** Del 193 · Arkiverade utvecklingssamtal: datum, gemensam text och elevernas texter som de var vid samtalet. */
   samtalsArkiv?: import('./utvecklingssamtal.js').SamtalsArkivPost[];
+  /** Del 194 · Veckorapporter: veckonummer, en text per ämne och att-göra-listan (Teams, Magma, Socrative). */
+  veckorapporter?: import('./veckorapport.js').Veckorapport[];
   /** Del 190 · Elevpar med snarlika namn som läraren sagt är olika personer ('idA|idB', sorterat) — appen frågar inte igen. */
   olikaElever?: string[];
   /** Del 163: inlämningar ur Teams tilldelningsdata (elev × uppgift). */

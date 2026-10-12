@@ -1302,3 +1302,13 @@ input.fel { border-color: #B71C1C; }
 .st-samtal-arkiv details { border: 1px solid var(--ram); border-radius: 8px; padding: 4px 10px; margin-bottom: 6px; }
 .st-samtal-arkiv summary { cursor: pointer; }
 .st-samtal-arkivelev { margin: 8px 0 10px; padding-top: 6px; border-top: 1px dashed var(--ram); }
+
+/* Del 194 · Veckorapporter */
+.st-vecko-larm { border: 1px solid #e0a800; background: #fff8e1; border-radius: 8px; padding: 8px 12px; margin: 6px 0 10px; }
+.st-vecko-todo { list-style: none; margin: 4px 0; padding: 0; display: flex; gap: 14px; flex-wrap: wrap; }
+.st-vecko-todo li.klar label { text-decoration: line-through; opacity: 0.6; }
+.st-veckorapporter details { border: 1px solid var(--ram); border-radius: 8px; padding: 4px 10px; margin-bottom: 6px; }
+.st-veckorapporter summary { cursor: pointer; }
+.st-vecko-amne { margin: 8px 0 10px; padding-top: 6px; border-top: 1px dashed var(--ram); }
+.st-vecko-amne p { margin: 2px 0; }
+.st-vecko-forhand { border: 1px dashed var(--ram); border-radius: 8px; padding: 6px 10px; margin-bottom: 8px; }
