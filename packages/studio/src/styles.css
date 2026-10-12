@@ -1298,3 +1298,4 @@ input.fel { border-color: #B71C1C; }
 .akt-l { color: #8a1f2b; }
 .genomforda-las.upplast { border-color: #e0a100; background: #fff8e1; }
 .st-namnfragor { border-color: #e0a100; background: #fffbea; margin-bottom: 10px; }
+.st-samtal-period { border: 1px solid var(--ram); border-radius: 8px; padding: 6px 10px; background: #f7f9fc; }

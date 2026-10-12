@@ -39,3 +39,4 @@ export * from './domain/lektionsomraden.js';
 export * from './domain/inlamningar.js';
 export * from './domain/utvecklingssamtal.js';
 export * from './domain/samtalskapitel.js';
+export * from './domain/samtalsperiod.js';

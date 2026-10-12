@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   importeraInlamningar, importeraResultat, klassensUtvarderingar, laggTillAmne, laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst,
-  antalStycken, bokFromImport, gemensamText, kodEtikett, medStorBokstav, provnamnMedStorBokstav, registreraPlanering, resetIdRaknare, samtalsStycken, samtalsText, sattSamtalsKapitel, sattSamtalsUtvardering, sparaBok, STATUS_TEXT, tolkaTeamsTilldelningar, tomStruktur, utvardering, type Struktur,
+  antalStycken, avslutaSamtal, angraAvslutatSamtal, bokFromImport, gemensamText, kodEtikett, medStorBokstav, periodText, provnamnMedStorBokstav, registreraPlanering, resetIdRaknare, samtalsPeriod, samtalsStycken, samtalsText, sattSamtalsKapitel, sattSamtalsPeriod, sattSamtalsUtvardering, sparaBok, STATUS_TEXT, tolkaTeamsTilldelningar, tomStruktur, utvardering, type Struktur,
 } from '../src/index.js';
 
 const IDAG = '2026-10-07';
@@ -65,45 +65,37 @@ describe('Del 164 · utvärdering inför utvecklingssamtal', () => {
       expect(u.text).toContain(u.namn.split(' ')[0]);
     }
     console.log(alla.map((u) => `--- ${u.namn} (${u.status})\n${u.text}`).join('\n'));
-    expect(anna.text).toContain('från 60 % i början till 90 % nu');
-    expect(anna.text).toContain('Ekologi E-prov: godkänt (11 av 14 p)');
-    expect(omar.text).toContain('har just nu svårt att nå målen');
-    expect(omar.text).toContain('Fyra begrepp har glömts mer än en gång');
-    expect(omar.text).toContain('inte godkänt ännu (5 av 14 p)');
-    expect(omar.text).toContain('Frågorna är hemligheten till nästa nivå');   // Omar saknar frågor
-    expect(anna.text).toContain('Alla frågorna är gjorda — där finns hemligheten till nästa nivå');
-    // Slutsatsen tar hänsyn till inlämningarna: Omar saknar både laborationen (eget kunskapskrav) och frågorna; Anna har allt
-    const omarSlut = omar.text.split('\n').pop()!;
-    expect(omarSlut).toContain('Laborationerna är ett eget kunskapskrav — en laboration saknas');
-    expect(omarSlut).toContain('Gör också frågorna till varje avsnitt — det är Inlämningarna som öppnar vägen till högre nivå.');
-    expect(anna.text.split('\n').pop()).toContain('Laborationer och frågor är inlämnade');
-    const medLab = samtalsText({ ...omar, inlamningar: { ...omar.inlamningar, laborationer: { inlamnade: 1, antal: 1 } } }, 'Omar');
-    expect(medLab.split('\n').pop()).toContain('Gör frågorna till varje avsnitt');
-    expect(medLab).not.toContain('eget kunskapskrav');
+    // Del 191: kärnfull text — siffrorna, inga orsaksförklaringar, perioden i inledningen, "Nästa steg" sist
+    expect(anna.text.split('\n')[0]).toBe('Anna visar utmärkta resultat i biologi (underlag 17 augusti–7 oktober 2026).');
+    expect(anna.text).toContain('Lektionerna: Exit tickets från 60 % till 90 % (2 av 4 över 70 %).');
+    expect(anna.text).toContain('Närvaro: 5 av 5 lektioner (100 %).');
+    expect(anna.text).toContain('Läxläsning: Läxförhör från 92 % till 100 % (3 av 4 över 90 %).');
+    expect(anna.text).toContain('Inlämningar: begrepp 3/3, frågor 2/2, laborationer 1/1 (100 % av det som ska vara inne).');
+    expect(anna.text).toContain('Prov: Ekologi E-prov godkänt (11 av 14 p).');
+    expect(anna.text.split('\n').pop()).toBe('Nästa steg: utmana sig med de svårare uppgifterna.');
+    expect(omar.text.split('\n')[0]).toBe('Omar har svårt att nå målen i biologi just nu (underlag 17 augusti–7 oktober 2026).');
+    expect(omar.text).toContain('Lektionerna: Exit tickets kring 50 % (0 av 4 över 70 %).');
+    expect(omar.text).toContain('Läxläsning: Läxförhör från 33 % till 42 % (0 av 4 över 90 %). Fyra begrepp har glömts mer än en gång.');
+    expect(omar.text).toContain('Prov: Ekologi E-prov inte godkänt (5 av 14 p).');
+    // Nästa steg: högst två fokus — omprovet först, sedan det som väger tyngst
+    expect(omar.text.split('\n').pop()).toBe('Nästa steg: omprovet på Ekologi E-prov och hålla fokus på lektionerna.');
+    expect(omar.text).not.toMatch(/kan bero på|hemligheten|nationella prov/);
+    const medLab = samtalsText({ ...omar, digiexam: [], narvaro: { procent: 100, lektioner: 5, narvarande: 5 } }, 'Omar');
+    expect(medLab.split('\n').pop()).toBe('Nästa steg: hålla fokus på lektionerna och läsa läxan en kort stund varje dag.');
     expect(pia.text).toContain('utmärkta resultat');
-    expect(omar.text).toContain('Låga resultat på Exit tickets kan bero på att fokus på genomgångarna brister');
-    expect(anna.text).toContain('Alla Läxförhör går att öva hemma på Socrative.com');
     const st = samtalsStycken(anna.text);
-    expect(st.map((x) => x.etikett)).toEqual([null, 'Lektionerna', 'Närvaro', 'Läxläsning', 'Inlämningar', 'Prov', null]);
+    expect(st.map((x) => x.etikett)).toEqual([null, 'Lektionerna', 'Närvaro', 'Läxläsning', 'Inlämningar', 'Prov', 'Nästa steg']);
     expect(anna.narvaro).toMatchObject({ lektioner: 5, narvarande: 5, procent: 100 });
-    expect(anna.text).toContain('Närvaro: 5 av 5 lektioner (100 %, räknat på lektioner med genomförda quizzar)');
-    expect(st[1].delar[1]).toEqual({ text: 'Exit tickets', exit: true });
-    // Läxförhör och Inlämning med stor bokstav och blå stil, provnamn med stor bokstav
+    expect(st[1].delar[0]).toEqual({ text: 'Exit tickets', exit: true });
     expect(st[3].delar.filter((d) => d.exit).map((d) => d.text)[0]).toMatch(/^Läxförhör/);
-    expect(st[3].delar.some((d) => d.exit && d.text.startsWith('Inlämning')) || !anna.text.includes('inlämning')).toBe(true);
     expect(anna.text).not.toMatch(/\bläxförhör/);
     expect(provnamnMedStorBokstav('8b ekologi eprov')).toBe('8b Ekologi eprov');   // svensk skrivregel: bara första ordet
-    // Många glömda begrepp utan utveckling → läxorna görs ej: beständiga kunskaper och nationella prov nämns
-    const sv = samtalsText({ ...omar, laxlasning: { ...omar.laxlasning, glomdaBegrepp: ['a', 'b', 'c', 'd', 'e'], tendens: 'gorsEj' } }, 'Omar');
-    expect(sv).toContain('kunskaperna inte beständiga');
-    expect(sv).toContain('nationella prov kan bli en svår utmaning');
+    const sv = samtalsText({ ...omar, digiexam: [], laxlasning: { ...omar.laxlasning, glomdaBegrepp: ['a', 'b', 'c', 'd', 'e'], tendens: 'gorsEj' } }, 'Omar');
+    expect(sv.split('\n').pop()).toBe('Nästa steg: hålla fokus på lektionerna och läsa läxan en kort stund varje dag (Läxförhören går att öva på Socrative.com).');
     const lag = samtalsText({ ...omar, narvaro: { procent: 60, lektioner: 10, narvarande: 6 } }, 'Omar');
-    expect(lag).toContain('Närvaro: Omar har varit med på 6 av 10 lektioner (60 %, räknat på lektioner med genomförda quizzar)');
-    expect(lag).toContain('genom att vara med oftare');
+    expect(lag).toContain('Närvaro: 6 av 10 lektioner (60 %).');
+    expect(lag.split('\n').pop()).toBe('Nästa steg: omprovet på Ekologi E-prov och vara med på lektionerna.');
     expect(lag.split('\n').length).toBeLessThanOrEqual(7);
-    const mycketLag = samtalsText({ ...omar, narvaro: { procent: 30, lektioner: 10, narvarande: 3 } }, 'Omar');
-    expect(mycketLag).toContain('Utan att komma till skolan går det inte att nå målen eller se resultat på Läxförhören');
-    expect(mycketLag).toContain('det första steget är att vara med på lektionerna');
     expect(sv.split('\n').length).toBeLessThanOrEqual(7);
     expect(medStorBokstav('ett läxförhör och en inlämning, exit ticket')).toBe('ett Läxförhör och en Inlämning, Exit ticket');
     expect(STATUS_TEXT.svart).toBe('har svårt att nå målen');
@@ -146,7 +138,7 @@ describe('Del 171 · matematikmallen — Magma-diagnoser styr', () => {
     expect(anna.text).toContain('Diagnoser:\n  1.1 - 1.2 Diagnos\t95 % (mycket bra)\n  1.3 - 1.4 Diagnos\t90 % (går bra)\n  1.5 - 1.6 Diagnos\t100 % (utmärkt)\n  Snitt av tre diagnoser\t95 % (mycket bra)\n');
     // Del 179: screeningen i ett eget stycke
     expect(anna.text).toContain('\nScreening:\n  Stockholm stads screening\t92 % (mycket bra)\n');
-    expect(omar.text).toContain('En diagnos ligger under 70 % — träna på de uppgifterna igen i Magma så att metoderna befästs.');   // screeningen räknas separat
+    expect(omar.text.split('\n').pop()).toBe('Nästa steg: träna uppgifterna som blev fel igen i Magma.');   // en diagnos under 70 %; screeningen räknas separat
     const st = samtalsStycken(anna.text);
     expect(st[1].etikett).toBe('Diagnoser');
     expect(st[1].underrader.map((r) => [r.text, r.varde])).toEqual([
@@ -154,8 +146,9 @@ describe('Del 171 · matematikmallen — Magma-diagnoser styr', () => {
       ['Snitt av tre diagnoser', '95 % (mycket bra)'], ['Diagnoserna ligger på en jämn nivå.', null]]);
     expect(st[2].etikett).toBe('Screening');
     expect(st[3].etikett).toBe('Inlämningar');   // Del 172: Lektionerna/Läxläsning ersätts av Förhören per kapitel (inga förhör här)
+    expect(st[4].etikett).toBe('Nästa steg');
     // Del 184: screeningen (60 %) ingår inte i trenden — 65 → 75, 80 är uppåt
-    expect(samtalsStycken(omar.text)[1].underrader.at(-1)).toEqual({ text: 'Diagnoserna går uppåt — ett lärande som syns! En diagnos ligger under 70 % — träna på de uppgifterna igen i Magma så att metoderna befästs.', varde: null });
+    expect(samtalsStycken(omar.text)[1].underrader.at(-1)).toEqual({ text: 'Diagnoserna går uppåt.', varde: null });
     expect(anna.text).not.toContain('Laborationer');
     for (const u of alla) expect(antalStycken(u.text)).toBeLessThanOrEqual(8);
   });
@@ -207,8 +200,10 @@ describe('Del 172 · matematik — gemensam kapiteltext och förhör per kapitel
     expect(g.kapitel.map((k) => [k.nr, k.namn, k.delkapitel.map((d) => d.kod)])).toEqual([[1, 'Tal', ['1.1', '1.2', '1.3']], [2, 'Geometri', ['2.1', '2.2']]]);
     expect(g.behoverVal).toBe(true);
     expect(g.egen).toBe(false);
+    // Del 191: perioden (terminsstart–idag) inleder texten
+    expect(g.period).toMatchObject({ fran: '2026-08-17', till: IDAG2, forra: null, franTerminsstart: true });
     expect(g.text).toBe(
-      'Klassen har arbetat med kapitel 1 Tal — delkapitlen 1.1 Negativa tal, 1.2 Potenser och 1.3 Tal i bråkform. Kapitlet handlar om: räkna med negativa tal; använda potenser.\n'
+      'Under perioden 17 augusti–7 oktober 2026 har klassen arbetat med kapitel 1 Tal — delkapitlen 1.1 Negativa tal, 1.2 Potenser och 1.3 Tal i bråkform. Kapitlet handlar om: räkna med negativa tal; använda potenser.\n'
       + 'Klassen har arbetat med kapitel 2 Geometri — delkapitlen 2.1 Vinklar och 2.2 Omkrets.');
     // Urval: bara kapitel 1
     const s2 = sattSamtalsKapitel(s, 'ma', { koder: ['1.1', '1.2', '1.3'] });
@@ -234,11 +229,10 @@ describe('Del 172 · matematik — gemensam kapiteltext och förhör per kapitel
       laxforhor: [{ etikett: '1.1–1.2', prov: '1.1 - 1.2 Läxförhör', datum: '2026-09-01', procent: 90 }, { etikett: '1.1–1.3', prov: '1.1 - 1.3 Läxförhör', datum: '2026-09-08', procent: 100 }],
       magmaExit: [], magmaLaxforhor: [] }]);
     const st = samtalsStycken(anna.text);
-    expect(st.map((x) => x.etikett)).toEqual([null, 'Diagnoser', 'Screening', 'Förhören', 'Närvaro', 'Inlämningar', null]);
+    expect(st.map((x) => x.etikett)).toEqual([null, 'Diagnoser', 'Screening', 'Förhören', 'Närvaro', 'Inlämningar', 'Nästa steg']);
     expect(st[3].underrader).toEqual([
       { text: 'Kapitel 1 Tal · Exit tickets', varde: '1.1 80 %, 1.2 70 %' },
       { text: 'Kapitel 1 Tal · Läxförhör', varde: '1.1–1.2 90 %, 1.1–1.3 100 %' },
-      { text: 'Alla Läxförhör går att öva hemma på Socrative.com — både inför kommande förhör och som repetition av de olika delkapitlen.', varde: null },
     ]);
     expect(anna.text).not.toContain('Lektionerna');
     expect(anna.text).not.toContain('Läxläsning');
@@ -271,12 +265,12 @@ describe('Del 173 · utan underlag går det inte att säga att eleven når måle
     expect(anna.status).toBe('nar');
     expect(omar.status).toBe('saknas');
     expect(STATUS_TEXT.saknas).toBe('underlag saknas');
-    expect(omar.text).toContain('Det finns inga diagnosresultat för Omar i matematik ännu, så det går inte att säga hur Omar ligger till i förhållande till målen');
+    expect(omar.text).toContain('Det finns inget underlag för Omar i matematik (underlag 17 augusti–7 oktober 2026), så det går inte att säga hur Omar ligger till i förhållande till målen');
     expect(omar.text).not.toContain('når målen i');
-    expect(omar.text).toContain('gör diagnoserna i Magma');
+    expect(omar.text).toContain('Nästa steg: göra diagnoserna i Magma.');
     const bio = utvardering(s, 'e1', 'bi', IDAG)!;
     expect(bio.status).toBe('saknas');
-    expect(bio.text).toContain('Det finns inga resultat för Anna i biologi ännu');
+    expect(bio.text).toContain('Det finns inget underlag för Anna i biologi');
   });
 });
 
@@ -302,10 +296,12 @@ describe('Del 173 · diagnosen på hela kapitlet väger tyngst; utvecklingen bes
     expect(omar.status).toBe('nar');     // kapiteldiagnosen 75 % trots 95/90 på delkapitlen
     const st = samtalsStycken(anna.text)[1];
     expect(st.underrader.map((r) => r.text)).toEqual([
-      '1.1 - 1.2 Diagnos', '1.3 - 1.4 Diagnos', 'Kap 1 Diagnos (hela kapitlet)', 'Slutresultat (diagnosen på hela kapitlet)',
-      'Utvecklingen är tydlig: från 65 % på delkapiteldiagnoserna till 85 % på diagnosen för hela kapitlet — det som övats under kapitlet har befästs. En diagnos ligger under 70 % — träna på de uppgifterna igen i Magma så att metoderna befästs.']);
+      '1.1 - 1.2 Diagnos', '1.3 - 1.4 Diagnos', 'Kap 1 Diagnos (hela kapitlet)', 'Slutresultat (hela kapitlet)',
+      'Från 65 % på delkapitlen till 85 % på hela kapitlet — kunskaperna har befästs.']);
+    expect(anna.text.split('\n').pop()).toBe('Nästa steg: träna uppgifterna som blev fel igen i Magma.');
     expect(st.underrader[3].varde).toBe('85 % (går bra)');
-    expect(samtalsStycken(omar.text)[1].underrader.at(-1)!.text).toContain('På delkapiteldiagnoserna låg resultatet på 93 %, men på diagnosen för hela kapitlet på 75 % — repetera delkapitlen igen i Magma');
+    expect(samtalsStycken(omar.text)[1].underrader.at(-1)!.text).toBe('93 % på delkapitlen men 75 % på hela kapitlet.');
+    expect(omar.text.split('\n').pop()).toBe('Nästa steg: repetera delkapitlen i Magma.');
   });
 });
 
@@ -350,5 +346,38 @@ describe('Del 179 · diagnosernas ordning: datum ur planeringen, vid samma datum
     expect(st[2]).toMatchObject({ etikett: 'Screening', underrader: [{ text: 'Stockholm stads screening', varde: '90 % (går bra)' }] });
     // Statusen bygger på kapiteldiagnosen (90 %) — screeningen räknas inte in
     expect(anna.diagnoser.slut).toBe(90);
+  });
+});
+
+describe('Del 191 · perioden: från terminsstart (eller förra samtalet) till samtalsdatumet', () => {
+  it('standard = terminsstart–idag; sparat samtal flyttar starten; bara resultat i perioden räknas', () => {
+    const s = bygg();
+    expect(samtalsPeriod(s, 'bi', IDAG)).toEqual({ fran: '2026-08-17', till: IDAG, forra: null, franTerminsstart: true });
+    expect(periodText({ fran: '2026-08-17', till: '2026-10-07' })).toBe('17 augusti–7 oktober 2026');
+    expect(periodText({ fran: '2026-10-07', till: '2027-02-10' })).toBe('7 oktober 2026–10 februari 2027');
+    // Samtalen klara den 7/10: nästa rapport börjar där
+    const s2 = avslutaSamtal(s, 'bi', IDAG);
+    expect(samtalsPeriod(s2, 'bi', '2027-02-10')).toEqual({ fran: IDAG, till: '2027-02-10', forra: IDAG, franTerminsstart: false });
+    const anna = utvardering(s2, 'e1', 'bi', '2027-02-10')!;
+    // Inget nytt sedan 7/10 utom inlämningen 9/10 → Exit tickets och Läxförhör saknas i perioden
+    expect(anna.lektioner.antal).toBe(0);
+    expect(anna.laxlasning.antal).toBe(0);
+    expect(anna.inlamningar.begrepp).toEqual({ inlamnade: 1, antal: 1 });
+    expect(anna.text.split('\n')[0]).toContain('(underlag 7 oktober 2026–10 februari 2027)');
+    expect(anna.text).toContain('Lektionerna: inga Exit tickets.');
+    // Eget från/till
+    const s3 = sattSamtalsPeriod(s2, 'bi', { fran: '2026-09-01', till: '2026-09-10' }, '2027-02-10');
+    const p3 = samtalsPeriod(s3, 'bi', '2027-02-10');
+    expect(p3).toMatchObject({ fran: '2026-09-01', till: '2026-09-10', forra: IDAG });
+    const a3 = utvardering(s3, 'e1', 'bi', '2027-02-10')!;
+    expect(a3.lektioner.antal).toBe(2);   // 4/9 och 9/9
+    expect(a3.digiexam).toEqual([]);      // provet 30/9 ligger utanför
+    expect(() => sattSamtalsPeriod(s2, 'bi', { till: '2026-01-01' }, '2027-02-10')).toThrow(/före dess början/);
+    expect(() => sattSamtalsPeriod(s2, 'bi', { fran: '1/9' }, '2027-02-10')).toThrow(/ÅÅÅÅ-MM-DD/);
+    // Ångra det sparade samtalet
+    expect(angraAvslutatSamtal(s2, 'bi').samtalsPeriod).toBeUndefined();
+    // Den gemensamma texten följer perioden
+    const s4 = sattSamtalsPeriod(s, 'bi', { till: '2026-09-01' }, IDAG);
+    expect(gemensamText(s4, 'bi', IDAG).period.till).toBe('2026-09-01');
   });
 });

@@ -7,8 +7,8 @@
 import { useMemo, useState } from 'react';
 import { Document, HeadingLevel, Packer, Paragraph, TabStopType, TextRun } from 'docx';
 import {
-  antalStycken, gemensamText, kapitelNamn, klassensUtvarderingar, samtalsStycken, sattSamtalsKapitel, sattSamtalsUtvardering, STATUS_ORDNING, STATUS_TEXT,
-  type GemensamText, type Klass, type SamtalsStatus, type Struktur, type Utvardering,
+  antalStycken, angraAvslutatSamtal, avslutaSamtal, gemensamText, kapitelNamn, klassensUtvarderingar, periodText, samtalsPeriod, samtalsStycken, sattSamtalsKapitel, sattSamtalsPeriod, sattSamtalsUtvardering, STATUS_ORDNING, STATUS_TEXT,
+  type GemensamText, type Klass, type SamtalsPeriod, type SamtalsStatus, type Struktur, type Utvardering,
 } from '@planner/kernel';
 import { NamnFragor } from './NamnFragor.js';
 import { lasStruktur } from './store.js';
@@ -16,12 +16,13 @@ import { lasStruktur } from './store.js';
 const pct = (v: number | null) => (v === null ? '—' : `${v} %`);
 const pil = (t: 'upp' | 'stabil' | 'ner' | null) => (t === 'upp' ? '↗' : t === 'ner' ? '↘' : t === 'stabil' ? '→' : '');
 
-async function tillWord(klassNamn: string, amne: string, lista: Utvardering[], gemensam: string | null): Promise<void> {
+async function tillWord(klassNamn: string, amne: string, lista: Utvardering[], gemensam: string | null, period: SamtalsPeriod): Promise<void> {
   const doc = new Document({
     styles: { default: { document: { run: { font: 'Calibri', size: 22 } } } },
     sections: [{
       children: [
         new Paragraph({ text: `Utvecklingssamtal · ${klassNamn} · ${amne}`, heading: HeadingLevel.HEADING_1 }),
+        new Paragraph({ spacing: { after: 240 }, children: [new TextRun({ text: `Underlag ${periodText(period)}`, italics: true })] }),
         // Del 172 · Gemensam text för alla elever: kapitlen klassen arbetat med och vad de handlar om
         ...(gemensam === null ? [] : gemensam.split('\n').filter((r) => r.trim() !== '').map((r) => new Paragraph({ spacing: { after: 240, line: 300 }, children: [new TextRun({ text: r })] }))),
         ...lista.flatMap((u) => [
@@ -67,6 +68,8 @@ export function Utvecklingssamtal({ s, klass, amneId, kor, idag, onTillbaka }: {
   const [gemUtkast, setGemUtkast] = useState<string | null>(null);
   // Del 172 · Matematik: kapitlen i rapporten (checklista när flera kapitel är genomförda) och den gemensamma texten
   const gem: GemensamText | null = useMemo(() => (lista.some((u) => u.mall === 'ma') ? gemensamText(s, amneId, idag) : null), [s, amneId, idag, lista]);
+  // Del 191 · Perioden: från terminsstart (eller förra samtalet) till samtalsdatumet
+  const period = useMemo(() => samtalsPeriod(s, amneId, idag), [s, amneId, idag]);
   if (amne === undefined) return null;
   const kopiera = (u: Utvardering) => {
     const text = u.egenText ?? u.text;
@@ -81,16 +84,14 @@ export function Utvecklingssamtal({ s, klass, amneId, kor, idag, onTillbaka }: {
         <button className="btn sm" onClick={onTillbaka}>← Alla elever</button>
         <h3 style={{ margin: 0 }}>🗣 Utvecklingssamtal · {klass.namn} · {amne.namn}</h3>
         <span className="spacer" />
-        <button className="btn sec sm" onClick={() => { void tillWord(klass.namn, amne.namn, lista, gem?.text ?? null); }}>📄 Alla till Word</button>
+        <button className="btn sec sm" onClick={() => { void tillWord(klass.namn, amne.namn, lista, gem?.text ?? null, period); }}>📄 Alla till Word</button>
       </div>
+      <SamtalsPeriodPanel s={s} amneId={amneId} period={period} idag={idag} kor={kor} />
       <p className="small muted" style={{ margin: '4px 0 8px' }}>
-        {ma ? (
-          <>Matematikmallen: statusen sätts av Magma-diagnoserna — 70–80 % når målen, 81–90 % går bra, 91–95 % mycket bra, över 95 % utmärkt. En diagnos på hela kapitlet väger tyngst (slutresultatet); tidigare delkapiteldiagnoser visar utvecklingen fram till den. Utan diagnoser saknas underlag.
-            Alla diagnoser sammanfattas i texten, och Exit tickets och Läxförhör redovisas per kapitel i rapportens urval (bara när de finns). Provresultat med förmågorna (begrepp, metod, problemlösning, resonemang) och omdöme i kommunikation kommer senare. </>
-        ) : (
-          <>Texten bygger på läxförhör (gräns 90 %), exit tickets (70 %), inlämningar ur Teams och DigiExam-prov. Utveckling = de första förhören jämfört med de senaste. </>
-        )}
-        Statusen är beräknad — ändra den så skrivs texten om; du kan också skriva om texten själv.{!ma && ' Ett prov som inte är godkänt ger ”har svårt att nå målen” tills omprovet är klarat.'}
+        {ma
+          ? <>Statusen sätts av Magma-diagnoserna (70–80 % når målen, 81–90 % går bra, 91–95 % mycket bra, över 95 % utmärkt); en diagnos på hela kapitlet väger tyngst. </>
+          : <>Statusen bygger på Läxförhör (gräns 90 %), Exit tickets (70 %), Inlämningar och DigiExam-prov. </>}
+        Texten är kort: siffrorna i perioden och ett nästa steg. Ändra statusen så skrivs texten om, eller skriv om den själv.
       </p>
       {gem !== null && (
         <KapitelOchGemensamText gem={gem} amneId={amneId} kor={kor} utkast={gemUtkast} setUtkast={setGemUtkast} />
@@ -232,6 +233,32 @@ function KapitelOchGemensamText({ gem, amneId, kor, utkast, setUtkast }: {
           <button className="btn sm" disabled={utkast === null || utkast === gem.text} onClick={() => { const v = utkast!; setUtkast(null); kor(() => sattSamtalsKapitel(lasStruktur(), amneId, { text: v }), 'Gemensam text sparad.'); }}>💾 Spara text</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Del 191 · Perioden rapporten gäller: från terminsstart (eller förra samtalet) till samtalsdatumet.
+ * När samtalen är klara sparas datumet — nästa rapport blir en uppdatering från det datumet.
+ */
+function SamtalsPeriodPanel({ s, amneId, period, idag, kor }: { s: Struktur; amneId: string; period: SamtalsPeriod; idag: string; kor: (fn: () => Struktur, m: string) => void }) {
+  const tidigare = s.samtalsPeriod?.[amneId]?.tidigare ?? [];
+  const egen = s.samtalsPeriod?.[amneId]?.fran !== undefined || s.samtalsPeriod?.[amneId]?.till !== undefined;
+  return (
+    <div className="rad st-samtal-period" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center', margin: '6px 0' }} aria-label="Rapportens period">
+      <b>📅 Underlag {periodText(period)}</b>
+      <small className="muted">{period.forra !== null ? `· uppdatering sedan förra samtalet ${period.forra}` : period.franTerminsstart ? '· från terminsstart' : ''}</small>
+      <label className="small">från <input type="date" aria-label="Perioden från" value={period.fran} max={period.till} onChange={(e) => { if (e.target.value !== '') kor(() => sattSamtalsPeriod(lasStruktur(), amneId, { fran: e.target.value }, idag), `Rapporten gäller från ${e.target.value}.`); }} /></label>
+      <label className="small">till <input type="date" aria-label="Perioden till" value={period.till} min={period.fran} onChange={(e) => { if (e.target.value !== '') kor(() => sattSamtalsPeriod(lasStruktur(), amneId, { till: e.target.value }, idag), `Rapporten gäller till ${e.target.value}.`); }} /></label>
+      {egen && <button className="btn sec sm" onClick={() => kor(() => sattSamtalsPeriod(lasStruktur(), amneId, { fran: null, till: null }, idag), 'Perioden återställd.')}>↺ Standard</button>}
+      <span className="spacer" />
+      <button className="btn sm" title="Sparar samtalsdatumet — nästa rapport blir en uppdatering från det datumet" onClick={() => {
+        if (!window.confirm(`Samtalen klara?\n\nDatumet ${period.till} sparas. Nästa rapport visar utvecklingen från ${period.till} och framåt. Det går att ångra.`)) return;
+        kor(() => avslutaSamtal(lasStruktur(), amneId, idag), `Samtalen ${period.till} sparade — nästa rapport börjar där.`);
+      }}>✓ Samtalen klara — spara {period.till}</button>
+      {tidigare.length > 0 && (
+        <button className="btn sec sm" title={`Tidigare samtal: ${tidigare.join(', ')}`} onClick={() => kor(() => angraAvslutatSamtal(lasStruktur(), amneId), `Samtalet ${tidigare[tidigare.length - 1]} borttaget — perioden börjar tidigare igen.`)}>↩ Ångra senaste ({tidigare[tidigare.length - 1]})</button>
+      )}
     </div>
   );
 }

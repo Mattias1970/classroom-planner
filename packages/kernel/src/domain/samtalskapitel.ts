@@ -16,6 +16,7 @@
 import { delkapitelKod } from './bok.js';
 import { koderForProv } from './delkapitelkoder.js';
 import { amnesPlanFor } from './struktur.js';
+import { periodText, samtalsPeriod, type SamtalsPeriod } from './samtalsperiod.js';
 import type { Struktur } from './typer.js';
 
 export interface SamtalsDelkapitel { kod: string; namn: string; /** Genomförda lektioner på delkapitlet. */ lektioner: number }
@@ -25,8 +26,8 @@ export interface SamtalsKapitelVal { koder?: string[]; text?: string }
 
 const kodOrdning = (a: string, b: string) => a.localeCompare(b, 'sv', { numeric: true });
 
-/** Kapitel och delkapitel som klassen arbetat med till och med idag, i kapitelordning. */
-export function genomfordaKapitel(s: Struktur, amneId: string, idag: string): SamtalsKapitel[] {
+/** Kapitel och delkapitel som klassen arbetat med till och med idag (Del 191: från `fran` när det anges), i kapitelordning. */
+export function genomfordaKapitel(s: Struktur, amneId: string, idag: string, fran = '0000-01-01'): SamtalsKapitel[] {
   const amne = s.amnen.find((a) => a.id === amneId);
   if (amne === undefined) return [];
   const bok = s.bocker.find((b) => b.id === amne.bokId);
@@ -39,7 +40,7 @@ export function genomfordaKapitel(s: Struktur, amneId: string, idag: string): Sa
   };
   let plan: ReturnType<typeof amnesPlanFor> = null;
   try { plan = amnesPlanFor(s, amneId, idag); } catch { plan = null; }
-  const rader = plan === null ? [] : [...plan.a, ...plan.b].filter((r) => r.datum !== null && r.datum <= idag);
+  const rader = plan === null ? [] : [...plan.a, ...plan.b].filter((r) => r.datum !== null && r.datum <= idag && r.datum >= fran);
   for (const r of rader) {
     const kod = delkapitelKod(r.lektion.avsnitt);
     if (kod === null) { if (!antal.has(r.kapitel)) antal.set(r.kapitel, new Map()); continue; }
@@ -99,18 +100,22 @@ function lista(namn: string[]): string {
   return namn.length <= 1 ? namn.join('') : `${namn.slice(0, -1).join(', ')} och ${namn[namn.length - 1]}`;
 }
 
-/** Den gemensamma texten ur bokens innehåll (ett stycke per kapitel). */
-export function beraknadGemensamText(kapitel: SamtalsKapitel[], amneNamn: string): string {
-  if (kapitel.length === 0) return `Ingen genomförd planering i ${amneNamn.toLowerCase()} att sammanfatta ännu.`;
-  return kapitel.map((k) => {
+/** Den gemensamma texten ur bokens innehåll (ett stycke per kapitel). Del 191: inleds med perioden när den anges. */
+export function beraknadGemensamText(kapitel: SamtalsKapitel[], amneNamn: string, period?: Pick<SamtalsPeriod, 'fran' | 'till'>): string {
+  const under = period === undefined ? '' : `Under perioden ${periodText(period)} har klassen`;
+  if (kapitel.length === 0) return period === undefined ? `Ingen genomförd planering i ${amneNamn.toLowerCase()} att sammanfatta ännu.` : `${under} inte haft några lektioner i ${amneNamn.toLowerCase()} enligt planeringen.`;
+  return kapitel.map((k, i) => {
     const delar = lista(k.delkapitel.map((d) => (d.namn !== '' ? `${d.kod} ${d.namn}` : d.kod)));
-    let t = `Klassen har arbetat med kapitel ${k.nr}${k.namn !== '' ? ` ${k.namn}` : ''}${k.sidor !== '' && k.sidor !== '—' ? ` (${k.sidor})` : ''} — ${k.delkapitel.length === 1 ? 'delkapitlet' : 'delkapitlen'} ${delar}.`;
+    const inled = i === 0 && period !== undefined ? under : 'Klassen har';
+    let t = `${inled} arbetat med kapitel ${k.nr}${k.namn !== '' ? ` ${k.namn}` : ''}${k.sidor !== '' && k.sidor !== '—' ? ` (${k.sidor})` : ''} — ${k.delkapitel.length === 1 ? 'delkapitlet' : 'delkapitlen'} ${delar}.`;
     if (k.mal.length > 0) t += ` Kapitlet handlar om: ${k.mal.map((m) => m.replace(/[.\s]+$/, '')).join('; ')}.`;
     return t;
   }).join('\n');
 }
 
 export interface GemensamText {
+  /** Del 191 · Perioden texten gäller. */
+  period: SamtalsPeriod;
   kapitel: SamtalsKapitel[];
   /** Valda delkapitelkoder. */
   koder: string[];
@@ -126,13 +131,14 @@ export interface GemensamText {
 /** Gemensam text för alla elever i ämnet: kapitlen klassen arbetat med och vad de handlar om. */
 export function gemensamText(s: Struktur, amneId: string, idag: string): GemensamText {
   const amne = s.amnen.find((a) => a.id === amneId);
-  const kapitel = genomfordaKapitel(s, amneId, idag);
+  const period = samtalsPeriod(s, amneId, idag);
+  const kapitel = genomfordaKapitel(s, amneId, period.till, period.fran);
   const koder = valdaKoder(s, amneId, kapitel);
   const valda = valdaKapitel(kapitel, koder);
   const egen = samtalsKapitelVal(s, amneId).text;
   return {
-    kapitel, koder, valda,
-    text: egen ?? beraknadGemensamText(valda, amne?.namn ?? 'ämnet'),
+    period, kapitel, koder, valda,
+    text: egen ?? beraknadGemensamText(valda, amne?.namn ?? 'ämnet', period),
     egen: egen !== undefined,
     behoverVal: kapitel.length > 1 && samtalsKapitelVal(s, amneId).koder === undefined,
   };

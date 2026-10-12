@@ -39,13 +39,13 @@ describe('Del 164 · Utvecklingssamtal', () => {
     await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Omar Ali'))!.click(); });
     // Formaterad visning: rubrikerna i fet stil, Exit tickets i fet blå, ett stycke per rad
     const visning = div.querySelector('div[aria-label="Text Omar Ali"]')!;
-    expect([...visning.querySelectorAll('b.st-samtal-rubrik')].map((b) => b.textContent)).toEqual(['Lektionerna: ', 'Närvaro: ', 'Läxläsning: ', 'Inlämningar: ']);
+    expect([...visning.querySelectorAll('b.st-samtal-rubrik')].map((b) => b.textContent)).toEqual(['Lektionerna: ', 'Närvaro: ', 'Läxläsning: ', 'Inlämningar: ', 'Nästa steg: ']);
     expect(visning.querySelector('b.st-samtal-exit')!.textContent).toBe('Exit tickets');
     expect(visning.querySelectorAll('p').length).toBeLessThanOrEqual(7);
     await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Redigera'))!.click(); });
     const ta = div.querySelector('textarea[aria-label="Text Omar Ali"]') as HTMLTextAreaElement;
     expect(ta.value.split('\n').length).toBeLessThanOrEqual(7);
-    expect(ta.value).toContain('Omar har just nu svårt att nå målen');
+    expect(ta.value).toContain('Omar har svårt att nå målen i biologi just nu (underlag 17 augusti–7 oktober 2026)');
     // Ändra status → texten följer
     const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!;
     await act(async () => { setter.call(status('Omar Ali'), 'nar'); status('Omar Ali').dispatchEvent(new Event('change', { bubbles: true })); });
@@ -137,5 +137,31 @@ describe('Del 172 · matematik — kapitelval och gemensam text', () => {
     await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent === '💾 Spara text')!.click(); });
     expect(s.samtalsKapitel?.ma?.text).toBe('Vi har räknat med tal.');
     expect(gem()).toBe('Vi har räknat med tal.');
+  });
+});
+
+describe('Del 191 · perioden: från terminsstart till samtalsdatumet, sparas när samtalen är klara', () => {
+  it('standardperiod, samtalen klara → nästa rapport från det datumet, ångra', async () => {
+    let s = bygg(); sparaStruktur(s);
+    const div = document.createElement('div'); document.body.appendChild(div);
+    const root = createRoot(div);
+    let idag = '2026-10-07';
+    const kor = (fn: () => Struktur) => { s = fn(); sparaStruktur(s); rendera(); };
+    const rendera = () => act(() => root.render(<Utvecklingssamtal s={s} klass={s.klasser[0]} amneId="bi" kor={kor} idag={idag} onTillbaka={() => {}} />));
+    rendera();
+    const panel = () => div.querySelector('[aria-label="Rapportens period"]')!;
+    expect(panel().textContent).toContain('Underlag 17 augusti–7 oktober 2026');
+    expect(panel().textContent).toContain('från terminsstart');
+    window.confirm = () => true;
+    await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Samtalen klara'))!.click(); });
+    expect(s.samtalsPeriod?.bi?.tidigare).toEqual(['2026-10-07']);
+    // Nästa gång (februari): uppdatering sedan 7/10 — inga nya förhör → underlag saknas
+    idag = '2027-02-10'; rendera();
+    expect(panel().textContent).toContain('Underlag 7 oktober 2026–10 februari 2027');
+    expect(panel().textContent).toContain('uppdatering sedan förra samtalet 2026-10-07');
+    expect((div.querySelector('select[aria-label="Status Anna Berg"]') as HTMLSelectElement).value).toBe('saknas');
+    await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Ångra senaste'))!.click(); });
+    expect(s.samtalsPeriod).toBeUndefined();
+    expect((div.querySelector('select[aria-label="Status Anna Berg"]') as HTMLSelectElement).value).toBe('mycketBra');
   });
 });
