@@ -17,6 +17,7 @@ TypeScript-monorepo. Strict mode. Vitest. Lärarens planerings- och analysverkty
 
 ## Kommandon
 
+- Starta appen (Windows): dubbelklicka `starta.cmd` (git pull → npm install vid behov → vite → öppnar webbläsaren)
 - Allt: `npm test` (lint + typecheck + vitest)
 - Bygg: `cd packages/studio && npx vite build`
 - Enskilt test: `npx vitest run packages/kernel/test/<fil>.test.ts`
