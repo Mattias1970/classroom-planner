@@ -9,7 +9,7 @@
  * lektioner via andraPlanering. Pass före startdatum ändras aldrig.
  */
 import { delkapitelKod } from './bok.js';
-import { isoVecka, laggTillAktivitet, taBortAktivitet } from './skolar.js';
+import { isoVecka, laggTillAktivitet, skoldagarMellan, taBortAktivitet } from './skolar.js';
 import {
   amnesOffset, amnesPlanFor, andraPlanering, gruppNyckel, hamtaLektionsplan, harLaborationsstandard,
   kopplaOmLektionsplaner, noBudget, nyttId, planeringsRader, registreraPlanering, samlaSlots, sattAntalLektioner, sattLektionerPerDelkapitel, sattLektionsplan, type PlanRad,
@@ -1320,6 +1320,61 @@ export function laggTillSchemaAktivitet(s: Struktur, skolarId: string, akt: Omit
   const ny = laggTillAktivitet(la, akt, idag);
   const lagd = (ny.aktiviteter ?? []).find((x) => x.datum === akt.datum && x.start === akt.start && x.label === akt.label.trim() && (akt.id === undefined || x.id === akt.id))!;
   return bytAktiviteter(s, skolarId, ny, lagd, idag, true);
+}
+
+export interface AktivitetsPeriod {
+  fran: string; till: string;
+  /** 'HH:MM' — SKOLDAG_START (00:00) betyder från skoldagens början. */
+  start: string;
+  /** 'HH:MM' — SKOLDAG_SLUT (23:59) betyder resten av skoldagen. */
+  slut: string;
+  label: string;
+  klassIds?: string[];
+}
+
+export interface PeriodResultat extends AktivitetResultat { grupp: string; dagar: string[] }
+
+/**
+ * Del 204 · Tid som försvinner från schemat under en period: en aktivitet per skoldag (mån–fre, inte lov
+ * eller röda dagar) från `fran` till `till`, mellan `start` och `slut` (hela dagen med SKOLDAG_START/SLUT).
+ * Alla dagarna delar en grupp så att perioden kan tas bort i ett svep. Berörda lektioner flyttas till
+ * nästa pass, fasta kort ligger kvar — som för en enskild aktivitet.
+ */
+export function laggTillSchemaPeriod(s: Struktur, skolarId: string, p: AktivitetsPeriod, idag?: string): PeriodResultat {
+  const la = s.skolar.find((x) => x.id === skolarId);
+  if (la === undefined) throw new Error('Okänt skolår.');
+  if (!DATUM.test(p.fran) || !DATUM.test(p.till)) throw new Error('Ange datum (ÅÅÅÅ-MM-DD) för från och till.');
+  if (p.till < p.fran) throw new Error('Slutdatumet ligger före startdatumet.');
+  if (p.label.trim() === '') throw new Error('Ge aktiviteten ett namn.');
+  if (idag !== undefined && p.fran < idag) throw new Error('Startdatumet har redan varit — genomförda lektioner ändras aldrig. Välj idag eller senare.');
+  const dagar = skoldagarMellan(la, p.fran, p.till);
+  if (dagar.length === 0) throw new Error('Inga skoldagar i perioden (helg, lov eller utanför skolåret).');
+  const grupp = `per-${p.fran}-${p.till}-${p.start.replace(':', '')}-${((la.aktiviteter ?? []).length + 1).toString(36)}`;
+  let ut = s; const berorda = new Map<string, AktivitetPaverkan>(); const varningar: string[] = [];
+  for (const datum of dagar) {
+    const r = laggTillSchemaAktivitet(ut, skolarId, { datum, start: p.start, slut: p.slut, label: p.label, grupp, ...(p.klassIds !== undefined && p.klassIds.length > 0 ? { klassIds: p.klassIds } : {}) }, idag);
+    ut = r.s;
+    for (const b of r.berorda) { const x = berorda.get(b.amneId); berorda.set(b.amneId, x === undefined ? { ...b } : { ...x, pass: x.pass + b.pass, fasta: Math.max(x.fasta, b.fasta) }); }
+    varningar.push(...r.varningar);
+  }
+  return { s: ut, berorda: [...berorda.values()], varningar, grupp, dagar };
+}
+
+/** Del 204 · Tar bort alla aktiviteter i en grupp (en period) — bara kommande dagar; dagar som varit lämnas. */
+export function taBortSchemaPeriod(s: Struktur, skolarId: string, grupp: string, idag?: string): AktivitetResultat & { borttagna: number; kvar: number } {
+  const la = s.skolar.find((x) => x.id === skolarId);
+  if (la === undefined) throw new Error('Okänt skolår.');
+  const mina = (la.aktiviteter ?? []).filter((a) => a.grupp === grupp);
+  if (mina.length === 0) throw new Error('Perioden finns inte.');
+  let ut = s; const berorda = new Map<string, AktivitetPaverkan>(); const varningar: string[] = []; let borttagna = 0; let kvar = 0;
+  for (const a of mina) {
+    if (idag !== undefined && a.datum < idag) { kvar += 1; continue; }
+    const r = taBortSchemaAktivitet(ut, skolarId, a.id, idag);
+    ut = r.s; borttagna += 1;
+    for (const b of r.berorda) { const x = berorda.get(b.amneId); berorda.set(b.amneId, x === undefined ? { ...b } : { ...x, pass: x.pass + b.pass, fasta: Math.max(x.fasta, b.fasta) }); }
+    varningar.push(...r.varningar);
+  }
+  return { s: ut, berorda: [...berorda.values()], varningar, borttagna, kvar };
 }
 
 /** Del 187 · Tar bort en kommande aktivitet: passen används igen, fasta kort ligger kvar. */

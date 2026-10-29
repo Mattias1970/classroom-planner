@@ -16,7 +16,7 @@ import {
   slaIhopPlaneringsmall, tolkaPlaneringsmall,
   handelserPerDatum, kalenderHandelser, klassFarg, noBudget, noOverBudget, sattLektionsplan,
   doldaOmraden, sattOmradeDolt, visaAllaOmraden, LEKTIONSOMRADEN, type LektionsOmrade,
-  foljbaraAmnen, foljPlanering, kapitelBorjar, laddaKapitel, taBortLektion, taBortLektioner, laggTillLektionEfter, sattAntalLektionerIPlan, sattLektionerPerDelkapitelIPlan, kapitelSlutFor, avslutaKapitelEfter, aterstallKapitel, borttagnaDelkapitel, kapitelAterstallningFor, laggTillSchemaAktivitet, taBortSchemaAktivitet,
+  foljbaraAmnen, foljPlanering, kapitelBorjar, laddaKapitel, taBortLektion, taBortLektioner, laggTillLektionEfter, laggTillSchemaPeriod, taBortSchemaPeriod, skoldagarMellan, SKOLDAG_START, SKOLDAG_SLUT, sattAntalLektionerIPlan, sattLektionerPerDelkapitelIPlan, kapitelSlutFor, avslutaKapitelEfter, aterstallKapitel, borttagnaDelkapitel, kapitelAterstallningFor, laggTillSchemaAktivitet, taBortSchemaAktivitet,
   kapitelKort, manadsRutor, skolarManader, veckaRutor, viktigaDatum, bamTidslinje, begreppForLektion, bokBegrepp,
   tavelTidslinje, standardBamDelar, bamAvvikelse, exitStartFor, type BamDel,
   bokFromValfriImport, bokSidregister, bokSidregisterCsv, elevSchema, exitStart, giltigtPass,
@@ -39,7 +39,7 @@ import {
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
-  resultatProcent, saknadeResultat, veckorapportLarm, veckaText, tolkaResultatRader, digiexamProvInfo, digiexamProvTyp, eProvGrans, ordinarieProvFor, planForAmne, harLaborationsstandard, kursLista, flyttaKurs, amnesPlanFor, type Kurs, amnesPlan, amnesOffset, sattLaborationsstandard, sattPlanFrystTill, sparaLaborationer, sattPassVal, type HalvklassSession, type Laboration, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type Elev, type KalenderDagRuta, type KalenderHandelse,
+  resultatProcent, saknadeResultat, veckorapportLarm, veckaText, tolkaResultatRader, digiexamProvInfo, digiexamProvTyp, eProvGrans, ordinarieProvFor, planForAmne, harLaborationsstandard, kursLista, flyttaKurs, amnesPlanFor, type Kurs, amnesPlan, amnesOffset, sattLaborationsstandard, sattPlanFrystTill, sparaLaborationer, sattPassVal, type HalvklassSession, type Laboration, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type Elev, type KalenderDagRuta, type KalenderHandelse, type SchemaAktivitet,
   pedagogiskPlanering, gruppNyckel, grundRader, planeringsRader, antalIBoken, lektionerPerDelkapitel, sattLektionerPerDelkapitel, sattAntalLektioner, sattLektionsVal, laggTillEgenRad, taBortEgenRad, bokLektioner, type LektionsVal,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
@@ -710,25 +710,7 @@ function SkolarPanelInner(props: {
           ))}</tbody>
         </table>
       )}
-      {(la.aktiviteter ?? []).length > 0 && (
-        <>
-          <h3>🚫 Schemabrytande aktiviteter</h3>
-          <table className="tbl">
-            <thead><tr><th>Datum</th><th>Tid</th><th>Aktivitet</th><th>Klasser</th><th></th></tr></thead>
-            <tbody>{(la.aktiviteter ?? []).map((a) => (
-              <tr key={a.id}>
-                <td>{a.datum}</td><td>{a.start}–{a.slut}</td><td>{a.label}</td>
-                <td>{a.klassIds === undefined || a.klassIds.length === 0 ? 'alla' : a.klassIds.map((k) => s.klasser.find((x) => x.id === k)?.namn ?? k).join(', ')}</td>
-                <td><button className="icon-btn" title="Ta bort" onClick={() => {
-                  try { const r = taBortSchemaAktivitet(lasStruktur(), id, a.id, new Date().toISOString().slice(0, 10)); kor(() => r.s, `${a.label} borttagen — passen används igen.`); }
-                  catch (e) { kor(() => { throw e; }, ''); }
-                }}>🗑</button></td>
-              </tr>
-            ))}</tbody>
-          </table>
-          <p className="note">Nya aktiviteter läggs till på ämnets planering (🚫 Schemabrytande aktiviteter).</p>
-        </>
-      )}
+      <SchemaBortfall s={s} la={la} kor={kor} />
       <NyTjanst s={s} skolarId={id} kor={kor} />
       <div className="modal-actions">
         <button className="btn warn" onClick={() => {
@@ -737,6 +719,115 @@ function SkolarPanelInner(props: {
           }
         }}>🗑 Ta bort skolår</button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Del 204 · Tid som försvinner från schemat (Struktur → skolår): en period från–till datum och från–till
+ * klockslag, där "från skoldagens början" och "resten av skoldagen" täcker hela dagar. En aktivitet läggs
+ * per skoldag; de delar en grupp och tas bort tillsammans. Berörda lektioner flyttas till nästa pass,
+ * egna prov, diagnoser och laborationer ligger kvar. Enskilda dagar (Del 187) visas också här.
+ */
+function SchemaBortfall({ s, la, kor }: { s: Struktur; la: Skolar; kor: (fn: () => Struktur, m: string) => void }) {
+  const idag = new Date().toISOString().slice(0, 10);
+  const [oppen, setOppen] = useState(false);
+  const [namn, setNamn] = useState('');
+  const [fran, setFran] = useState(idag);
+  const [till, setTill] = useState(idag);
+  const [helaFran, setHelaFran] = useState(true);
+  const [helaTill, setHelaTill] = useState(true);
+  const [start, setStart] = useState('08:00');
+  const [slut, setSlut] = useState('12:00');
+  const [klassIds, setKlassIds] = useState<string[]>([]);
+  const klasser = s.klasser.filter((k) => s.tjanster.some((t) => t.id === k.tjanstId && t.skolarId === la.id)).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
+  const klassNamn = new Map(s.klasser.map((k) => [k.id, k.namn]));
+  const vem = (ids?: string[]) => (ids === undefined || ids.length === 0 ? 'alla klasser' : ids.map((k) => klassNamn.get(k) ?? k).join(', '));
+  const KORT_DAG = ['sön', 'mån', 'tis', 'ons', 'tor', 'fre', 'lör'];
+  const dag = (d: string) => `${KORT_DAG[new Date(`${d}T12:00:00Z`).getUTCDay()]} ${Number(d.slice(8, 10))}/${Number(d.slice(5, 7))}`;
+  const tid = (a: { start: string; slut: string }) => (a.start === SKOLDAG_START && a.slut === SKOLDAG_SLUT ? 'hela dagen' : a.start === SKOLDAG_START ? `till ${a.slut}` : a.slut === SKOLDAG_SLUT ? `från ${a.start}` : `${a.start}–${a.slut}`);
+  const period = { fran, till, start: helaFran ? SKOLDAG_START : start, slut: helaTill ? SKOLDAG_SLUT : slut, label: namn, ...(klassIds.length > 0 ? { klassIds } : {}) };
+  let forhand: string | null = null; let fel: string | null = null;
+  if (oppen && namn.trim() !== '') {
+    try {
+      const r = laggTillSchemaPeriod(s, la.id, period, idag);
+      const ber = r.berorda.filter((b) => b.pass > 0);
+      forhand = `${r.dagar.length} skoldag${r.dagar.length === 1 ? '' : 'ar'} · ${ber.length === 0 ? 'inga lektionspass berörs' : ber.map((b) => `${b.amne} ${b.pass} pass`).join(', ')}${r.varningar.length > 0 ? ` · ⚠ ${r.varningar.join(' ')}` : ''}`;
+    } catch (e) { fel = e instanceof Error ? e.message : String(e); }
+  }
+  // Perioder (grupper) och enskilda dagar
+  const alla = la.aktiviteter ?? [];
+  const grupper = new Map<string, SchemaAktivitet[]>();
+  for (const a of alla) if (a.grupp !== undefined) grupper.set(a.grupp, [...(grupper.get(a.grupp) ?? []), a]);
+  const enskilda = alla.filter((a) => a.grupp === undefined);
+  return (
+    <div className="uppg-kort schema-bortfall">
+      <div className="rad" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <h3 style={{ margin: 0 }}>🚫 Tid som försvinner från schemat</h3>
+        <small className="muted">prao, friluftsdagar, nationella prov, utflykter … — lektioner som omfattas flyttas till nästa pass, egna prov och diagnoser ligger kvar</small>
+        <button className="btn sec sm" aria-expanded={oppen} onClick={() => setOppen(!oppen)}>{oppen ? 'Stäng' : '➕ Lägg till period'}</button>
+      </div>
+      {oppen && (
+        <div className="schema-bortfall-form" style={{ marginTop: 8 }}>
+          <div className="rad" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <input aria-label="Periodens namn" placeholder="t.ex. Prao, Friluftsdagar" value={namn} onChange={(e) => setNamn(e.target.value)} />
+            <label className="small">från <input type="date" aria-label="Perioden från datum" value={fran} min={idag} onChange={(e) => { if (e.target.value !== '') { setFran(e.target.value); if (till < e.target.value) setTill(e.target.value); } }} /></label>
+            <label className="small">till <input type="date" aria-label="Perioden till datum" value={till} min={fran} onChange={(e) => { if (e.target.value !== '') setTill(e.target.value); }} /></label>
+            <select aria-label="Vilka klasser berörs" value={klassIds.length === 0 ? 'alla' : klassIds[0]} onChange={(e) => setKlassIds(e.target.value === 'alla' ? [] : [e.target.value])}>
+              <option value="alla">alla klasser</option>
+              {klasser.map((k) => <option key={k.id} value={k.id}>bara {k.namn}</option>)}
+            </select>
+          </div>
+          <div className="rad" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
+            <label className="small"><input type="checkbox" aria-label="Från skoldagens början" checked={helaFran} onChange={(e) => setHelaFran(e.target.checked)} /> från skoldagens början</label>
+            {!helaFran && <label className="small">från kl. <input type="time" aria-label="Perioden börjar klockan" value={start} onChange={(e) => setStart(e.target.value)} /></label>}
+            <label className="small"><input type="checkbox" aria-label="Resten av skoldagen" checked={helaTill} onChange={(e) => setHelaTill(e.target.checked)} /> resten av skoldagen</label>
+            {!helaTill && <label className="small">till kl. <input type="time" aria-label="Perioden slutar klockan" value={slut} onChange={(e) => setSlut(e.target.value)} /></label>}
+            <button className="btn sm" disabled={namn.trim() === '' || fel !== null} onClick={() => {
+              try {
+                const r = laggTillSchemaPeriod(lasStruktur(), la.id, period, idag);
+                const ber = r.berorda.filter((b) => b.pass > 0);
+                kor(() => r.s, `${namn.trim()} ${dag(fran)}${till !== fran ? `–${dag(till)}` : ''} (${tid(period)}, ${vem(period.klassIds)}): ${r.dagar.length} skoldagar · ${ber.length === 0 ? 'inga pass berörs' : ber.map((b) => `${b.amne} ${b.pass} pass`).join(', ')}.`);
+                setNamn(''); setOppen(false);
+              } catch (e) { kor(() => { throw e; }, ''); }
+            }}>Spara perioden</button>
+            {fel !== null && <span className="status warn small">⚠ {fel}</span>}
+            {forhand !== null && <span className="small muted" aria-label="Förhandsvisning av perioden">Berör: {forhand}</span>}
+          </div>
+        </div>
+      )}
+      {(grupper.size > 0 || enskilda.length > 0) && (
+        <table className="tbl" style={{ marginTop: 8 }}>
+          <thead><tr><th>Datum</th><th>Tid</th><th>Aktivitet</th><th>Klasser</th><th></th></tr></thead>
+          <tbody>
+            {[...grupper.entries()].map(([grupp, lista]) => {
+              const f = lista[0]; const sista = lista[lista.length - 1];
+              const kommande = lista.filter((a) => a.datum >= idag).length;
+              return (
+                <tr key={grupp} className={kommande === 0 ? 'muted' : ''}>
+                  <td>{f.datum}{sista.datum !== f.datum ? ` – ${sista.datum}` : ''} <small className="muted">({lista.length} dagar)</small></td>
+                  <td>{tid(f)}</td><td>{f.label}</td><td>{vem(f.klassIds)}</td>
+                  <td>{kommande > 0 && <button className="icon-btn" title="Ta bort perioden (dagar som varit lämnas)" aria-label={`Ta bort perioden ${f.label}`} onClick={() => {
+                    if (!window.confirm(`Ta bort ${f.label} (${kommande} kommande dagar)? Passen används igen; dagar som redan varit rörs inte.`)) return;
+                    try { const r = taBortSchemaPeriod(lasStruktur(), la.id, grupp, idag); kor(() => r.s, `${f.label} borttagen — ${r.borttagna} dagar, passen används igen${r.kvar > 0 ? ` (${r.kvar} dagar som varit lämnades)` : ''}.`); }
+                    catch (e) { kor(() => { throw e; }, ''); }
+                  }}>🗑</button>}</td>
+                </tr>
+              );
+            })}
+            {enskilda.map((a) => (
+              <tr key={a.id} className={a.datum < idag ? 'muted' : ''}>
+                <td>{a.datum}</td><td>{tid(a)}</td><td>{a.label}</td><td>{vem(a.klassIds)}</td>
+                <td>{a.datum >= idag && <button className="icon-btn" title="Ta bort" aria-label={`Ta bort ${a.label} ${a.datum}`} onClick={() => {
+                  try { const r = taBortSchemaAktivitet(lasStruktur(), la.id, a.id, idag); kor(() => r.s, `${a.label} borttagen — passen används igen.`); }
+                  catch (e) { kor(() => { throw e; }, ''); }
+                }}>🗑</button>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <p className="note">Skoldagar = måndag–fredag utom lov och röda dagar. Enskilda dagar för ett ämne läggs också till under Planering → Lektionsplan → 🚫 Schemabrytande aktiviteter.</p>
     </div>
   );
 }

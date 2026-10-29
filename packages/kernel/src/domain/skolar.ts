@@ -198,7 +198,7 @@ export function laggTillAktivitet(skolar: Skolar, akt: Omit<SchemaAktivitet, 'id
   if (idag !== undefined && akt.datum < idag) throw new Error('Datumet har redan varit — genomförda lektioner ändras aldrig.');
   const id = akt.id ?? `akt-${akt.datum}-${akt.start.replace(':', '')}-${(skolar.aktiviteter ?? []).length + 1}`;
   const klassIds = akt.klassIds !== undefined && akt.klassIds.length > 0 ? [...new Set(akt.klassIds)] : undefined;
-  const ny: SchemaAktivitet = { id, datum: akt.datum, start: akt.start, slut: akt.slut, label: akt.label.trim(), ...(klassIds !== undefined ? { klassIds } : {}) };
+  const ny: SchemaAktivitet = { id, datum: akt.datum, start: akt.start, slut: akt.slut, label: akt.label.trim(), ...(klassIds !== undefined ? { klassIds } : {}), ...(akt.grupp !== undefined ? { grupp: akt.grupp } : {}) };
   const aktiviteter = [...(skolar.aktiviteter ?? []).filter((x) => x.id !== id), ny]
     .sort((a, b) => a.datum.localeCompare(b.datum) || a.start.localeCompare(b.start));
   return { ...skolar, aktiviteter };
@@ -213,6 +213,24 @@ export function taBortAktivitet(skolar: Skolar, id: string, idag?: IsoDatum): Sk
   if (aktiviteter.length > 0) return { ...skolar, aktiviteter };
   const { aktiviteter: _a, ...rest } = skolar; void _a;
   return rest;
+}
+
+/** Del 204 · Hela skoldagen: från skoldagens början till dess slut — träffar alla pass den dagen. */
+export const SKOLDAG_START = '00:00';
+export const SKOLDAG_SLUT = '23:59';
+
+/** Skoldagar (mån–fre, inte röda dagar eller lov) i ett datumintervall, i ordning. */
+export function skoldagarMellan(skolar: Skolar, fran: IsoDatum, till: IsoDatum): IsoDatum[] {
+  const ut: IsoDatum[] = [];
+  for (let d = new Date(`${fran}T00:00:00Z`); d.toISOString().slice(0, 10) <= till; d.setUTCDate(d.getUTCDate() + 1)) {
+    const iso = d.toISOString().slice(0, 10);
+    const vd = d.getUTCDay();
+    if (vd === 0 || vd === 6) continue;
+    if (iso < skolar.start || iso > skolar.slut) continue;
+    if (ledigEtikett(iso, skolar) !== null) continue;
+    ut.push(iso);
+  }
+  return ut;
 }
 
 export function isoVecka(datum: IsoDatum): number {

@@ -36,6 +36,8 @@ export interface SchemaAktivitet {
   label: string;
   /** Klasserna som berörs; saknas = alla klasser i skolåret. */
   klassIds?: string[];
+  /** Del 204 · Aktiviteter som lades in som en period (från–till datum) delar grupp — de tas bort tillsammans. */
+  grupp?: string;
 }
 
 export interface Skolar {

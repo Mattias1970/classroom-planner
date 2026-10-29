@@ -3515,6 +3515,74 @@ describe('Del 187: schemabrytande aktivitet mellan två klockslag', () => {
   });
 });
 
+describe('Del 204: tid som försvinner från schemat (Struktur → skolår) — period, hela dagar eller klockslag', () => {
+  const BOK204 = JSON.stringify({
+    schema: 'classroom-planner-bok', version: 1,
+    bok: { id: 'bok-204', titel: 'Matematik Y', förlag: 'Liber', ämne: 'Matematik', årskurs: 8, kapitelMeta: { '1': { name: 'Tal', col: '#2f5aa8' } } },
+    lektioner: { '1': [1, 2, 3, 4].map((id) => ({ id, type: 'regular', avsnitt: `1.${id} Del`, del: 1 })) },
+  });
+  const datum = (host: HTMLElement) => [...host.querySelectorAll('table.plan tbody tr')].map((tr) => `${tr.querySelectorAll('td')[2]?.textContent ?? ''} ${tr.querySelector('td.lekt-avsnitt')?.textContent ?? ''}`);
+
+  it('en period över två veckor tar alla pass; resten av dagen bara eftermiddagspass; borttag i ett svep', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-24T10:00:00Z'));
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host, BOK204);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8A');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8A').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'bok-204');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '📋 Planering').click(); });
+    expect(datum(host)).toEqual(['2026-08-19 1.1 Del', '2026-08-26 1.2 Del', '2026-09-02 1.3 Del', '2026-09-09 1.4 Del']);
+
+    // Struktur → skolåret: prao 26/8–4/9, hela dagarna, bara 8A
+    act(() => { knapp(host, '🗂 Struktur').click(); });
+    act(() => { treeKnapp(host, '📅 2026/2027').click(); });
+    act(() => { knapp(host, '➕ Lägg till period').click(); });
+    skriv(input(host, 'Periodens namn'), 'Prao');
+    skriv(input(host, 'Perioden från datum'), '2026-08-26');
+    skriv(input(host, 'Perioden till datum'), '2026-09-04');
+    expect(host.querySelector('[aria-label="Förhandsvisning av perioden"]')?.textContent).toContain('8 skoldagar · 8A Matematik 2 pass');
+    act(() => { knapp(host, 'Spara perioden').click(); });
+    expect(host.textContent).toContain('Prao ons 26/8–fre 4/9 (hela dagen, alla klasser): 8 skoldagar · 8A Matematik 2 pass');
+    expect(host.textContent).toContain('2026-08-26 – 2026-09-04');
+    act(() => { knapp(host, '📋 Planering').click(); });
+    expect(datum(host)).toEqual(['2026-08-19 1.1 Del', '2026-09-09 1.2 Del', '2026-09-16 1.3 Del', '2026-09-23 1.4 Del']);
+
+    // Ta bort perioden → som förut
+    act(() => { knapp(host, '🗂 Struktur').click(); });
+    act(() => { treeKnapp(host, '📅 2026/2027').click(); });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    act(() => { (host.querySelector('button[aria-label="Ta bort perioden Prao"]') as HTMLButtonElement).click(); });
+    expect(host.textContent).toContain('Prao borttagen — 8 dagar');
+    act(() => { knapp(host, '📋 Planering').click(); });
+    expect(datum(host)).toEqual(['2026-08-19 1.1 Del', '2026-08-26 1.2 Del', '2026-09-02 1.3 Del', '2026-09-09 1.4 Del']);
+
+    // Resten av dagen från 12:00 (passet 9–10 ligger före) → inget berörs
+    act(() => { knapp(host, '🗂 Struktur').click(); });
+    act(() => { treeKnapp(host, '📅 2026/2027').click(); });
+    act(() => { knapp(host, '➕ Lägg till period').click(); });
+    skriv(input(host, 'Periodens namn'), 'Friluftsdag');
+    skriv(input(host, 'Perioden från datum'), '2026-08-26');
+    skriv(input(host, 'Perioden till datum'), '2026-08-26');
+    act(() => { (host.querySelector('input[aria-label="Från skoldagens början"]') as HTMLInputElement).click(); });
+    skriv(input(host, 'Perioden börjar klockan'), '12:00');
+    expect(host.querySelector('[aria-label="Förhandsvisning av perioden"]')?.textContent).toContain('1 skoldag · inga lektionspass berörs');
+    confirm.mockRestore();
+    vi.useRealTimers();
+  });
+});
+
 describe('Del 188: redigera genomförda lektioner — låsta tills läraren låser upp', () => {
   const BOK188 = JSON.stringify({
     schema: 'classroom-planner-bok', version: 1,
