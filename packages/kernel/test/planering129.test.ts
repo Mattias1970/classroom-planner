@@ -235,3 +235,26 @@ describe('Del 129: strukturoperationer — lektionsplanerna följer sina lektion
     expect(kal[1].lektionsIndex).toBe(1);
   });
 });
+
+describe('Del 208 · repetitionsavsnitt följer inte "lektioner per delkapitel"', () => {
+  const MA2 = bokFromImport(JSON.stringify({
+    schema: 'classroom-planner-bok', version: 1,
+    bok: { id: 'ma2', titel: 'Matematik Y', förlag: 'Test', ämne: 'Matematik', årskurs: 8, kapitelMeta: { '1': { name: 'Tal', col: '#123456' } } },
+    lektioner: { '1': [
+      { id: 1, type: 'regular', avsnitt: '1.1 Bråk', del: 1, ett: '1–8', två: '9–16' },
+      { id: 2, type: 'repetition', avsnitt: 'Blandade uppgifter', del: 1, ett: '118–126', två: '127–135' },
+      { id: 3, type: 'repetition', avsnitt: 'Blandade uppgifter', del: 2, två: '127–135', tre: '136–144' },
+      { id: 4, type: 'exam', avsnitt: '1 Prov', del: 1 },
+    ] },
+  }));
+  it('inställning 3: delkapitlet får 3, Blandade uppgifter behåller bokens 2', () => {
+    const tre = planeringsRader(MA2, { lektionerPerDelkapitel: [{ antal: 3 }] });
+    expect(tre.map((r) => `${r.lektion.avsnitt}·${r.lektion.del}`)).toEqual(['1.1 Bråk·1', '1.1 Bråk·2', '1.1 Bråk·3', 'Blandade uppgifter·1', 'Blandade uppgifter·2', '1 Prov·1']);
+  });
+  it('eget antal på en repetitionsrad fungerar och de extra raderna räknas till samma grupp', () => {
+    const r = planeringsRader(MA2, { lektionerPerDelkapitel: [{ antal: 3 }], antalLektioner: { '1:2': 2 } });
+    expect(r.map((x) => x.nyckel)).toEqual(['1:1', '1:1#2', '1:1#3', '1:2', '1:2#2', '1:3', '1:4']);
+    expect(gruppNyckel(r[4])).toBe('1:2');
+    expect(gruppNyckel(r[1])).toBe('1:1.1');
+  });
+});

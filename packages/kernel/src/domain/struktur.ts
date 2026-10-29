@@ -596,7 +596,8 @@ export function radNyckel(kapitel: number, lektion: Lektion): string { return `$
  */
 export function gruppNyckel(rad: { kapitel: number; lektion: Lektion; nyckel?: string }): string {
   const kod = delkapitelKod(rad.lektion.avsnitt);
-  return kod === null || rad.nyckel?.startsWith('er:') === true ? (rad.nyckel ?? radNyckel(rad.kapitel, rad.lektion)) : `${rad.kapitel}:${kod}`;
+  // Del 208: extra lektioner ('…#2') hör till sin förlagas grupp även för avsnitt utan delkapitelkod (Blandade uppgifter …)
+  return kod === null || rad.nyckel?.startsWith('er:') === true ? (rad.nyckel ?? radNyckel(rad.kapitel, rad.lektion)).replace(/#\d+$/, '') : `${rad.kapitel}:${kod}`;
 }
 
 /** Infogar egna rader i tilläggsordning — varje rads position avser planen som den
@@ -646,9 +647,11 @@ export function planeringsRader(bok: Bok, val: PlanInstallning): PlanRad[] {
   // ── Steg 2: extra lektioner per delkapitel ──
   const logg = val.lektionerPerDelkapitel ?? [];
   const index = new Map(grund.map((r, i) => [r.nyckel, i] as const));
-  const antalForGrupp = (nyckel: string, sistaIndex: number, iBoken: number): number => {
+  const antalForGrupp = (nyckel: string, sistaIndex: number, iBoken: number, delkapitel: boolean): number => {
     let antal = 1;
-    for (const post of logg) {
+    // Del 208: ämnets inställning gäller delkapitel (2.4, 2.5 …) — repetitionsavsnitt (Blandade uppgifter,
+    // Träna, Diagnos …) behåller bokens antal om inte raden fått ett eget antal
+    if (delkapitel) for (const post of logg) {
       const fran = post.fran === undefined ? 0 : index.get(post.fran);
       if (fran !== undefined && fran <= sistaIndex) antal = post.antal;   // posten gäller från och med `fran`
     }
@@ -663,7 +666,7 @@ export function planeringsRader(bok: Bok, val: PlanInstallning): PlanRad[] {
     const sista = idx[idx.length - 1];
     const forlaga = grund[sista];
     if (forlaga.nyckel.startsWith('er:') || forlaga.lektion.typ === 'exam') continue;   // egna rader och prov utökas inte
-    const mal = antalForGrupp(g, sista, idx.length);
+    const mal = antalForGrupp(g, sista, idx.length, delkapitelKod(forlaga.lektion.avsnitt) !== null);
     if (mal <= idx.length) continue;
     const maxDel = Math.max(...idx.map((i) => grund[i].lektion.del));
     const extra: PlanRad[] = [];
