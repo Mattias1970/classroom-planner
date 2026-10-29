@@ -3922,3 +3922,40 @@ describe('Del 206: 📄 Provlapp-fliken i ämnespanelen — hittar provet, gener
     vi.useRealTimers();
   });
 });
+
+describe('Del 207: Planering hoppar inte mellan ämnen när samma ämnesnamn finns i två klasser', () => {
+  const BOK = JSON.stringify({ schema: 'classroom-planner-bok', version: 1, bok: { id: 'bok-207', titel: 'Y', förlag: 'L', ämne: 'Matematik', årskurs: 8, kapitelMeta: { '1': { name: 'Tal', col: '#2f5aa8' } } }, lektioner: { '1': [{ id: 1, type: 'regular', avsnitt: '1.1 A', del: 1 }] } });
+
+  it('senast öppnade ämnet ligger i 8F, topplisten står på 8B → 8B:s första ämne öppnas och topplisten följer; byte i toppen håller', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-10-30T10:00:00Z'));
+    const { bokFromImport, laggTillAmne, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering, sparaBok, tomStruktur } = await import('@planner/kernel');
+    const bok = bokFromImport(BOK);
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = sparaBok(s, bok);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'T' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillKlass(s, { id: 'k2', tjanstId: 'tj', namn: '8F' });
+    const sch = [{ dag: 3, start: '09:00', slut: '10:00' }];
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', bokId: bok.id, schema: sch });
+    s = laggTillAmne(s, { id: 'ma', klassId: 'k', namn: 'Matematik', bokId: bok.id, schema: sch });
+    s = laggTillAmne(s, { id: 'ma2', klassId: 'k2', namn: 'Matematik', bokId: bok.id, schema: sch });
+    for (const id of ['bi', 'ma', 'ma2']) s = registreraPlanering(s, { id: `p${id}`, amneId: id, bokId: bok.id, skapad: '2026-08-10' });
+    window.localStorage.setItem('classroom-planner.studio.v2', JSON.stringify(s));
+    localStorage.setItem('cp.layout', JSON.stringify('v3'));
+    localStorage.setItem('cp3.vy', JSON.stringify({ typ: 'planering' }));
+    localStorage.setItem('cp.planeringAmne', JSON.stringify('ma2'));
+    const host = render();
+    const topp = () => (host.querySelector('select[aria-label="Filter ämne"]') as HTMLSelectElement).value;
+    const visar = () => { const h = [...host.querySelectorAll('h2')].map((x) => x.textContent ?? '').find((x) => x.includes(' · ')) ?? ''; return h.includes('8B · Matematik') ? 'ma' : h.includes('8B · Biologi') ? 'bi' : h.includes('8F · Matematik') ? 'ma2' : '?'; };
+    await act(async () => { vi.advanceTimersByTime(500); });
+    expect([topp(), visar()]).toEqual(['bi', 'bi']);
+    valj(select(host, 'Filter ämne'), 'ma');
+    for (let i = 0; i < 4; i++) { await act(async () => { vi.advanceTimersByTime(200); }); expect([topp(), visar()], `varv ${i}`).toEqual(['ma', 'ma']); }
+    // Byte till 8F i toppen → 8F:s Matematik, topplisten följer
+    valj(select(host, 'Filter klass'), 'k2');
+    await act(async () => { vi.advanceTimersByTime(200); });
+    expect([topp(), visar()]).toEqual(['ma2', 'ma2']);
+    vi.useRealTimers();
+  });
+});

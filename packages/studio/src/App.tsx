@@ -6424,17 +6424,21 @@ function PlaneringVy({ s, kor, setVald, hopp, amneIdIn, klassIdIn, dolAmnesval, 
     return alternativ.some((x) => x.a.id === senaste) ? senaste : s.planeringar[0]?.amneId ?? alternativ[0]?.a.id ?? '';
   });
   const setAmneId = (id: string) => { setAmneIdRaw(id); sparaInstallning('cp.planeringAmne', id); };
-  useEffect(() => { if (hopp != null) setAmneId(hopp.amneId); }, [hopp?.n]);   // kalenderklick → rätt ämne
-  useEffect(() => { if (amneIdIn !== undefined && amneIdIn !== '') setAmneId(amneIdIn); }, [amneIdIn]); // v3: ämnessidan
   const valt = alternativ.some((x) => x.a.id === amneId) ? amneId : alternativ[0]?.a.id ?? '';
+  // Del 207 · Ett håll i taget: byten som görs HÄR (flik, kalenderhopp, klassbyte) rapporteras till topplisten
+  // i samma steg; byten som kommer FRÅN topplisten (amneIdIn) tas bara emot. Tidigare rapporterade en effekt
+  // varje nytt `valt` uppåt samtidigt som en annan tog emot amneIdIn — med samma ämnesnamn i två klasser
+  // (Matematik 8B/8F) hoppade planeringen fram och tillbaka utan att man rörde något.
+  const valj = (id: string) => { setAmneId(id); onAmneVald?.(id); };
+  useEffect(() => { if (hopp != null) valj(hopp.amneId); }, [hopp?.n]);   // eslint-disable-line react-hooks/exhaustive-deps -- kalenderklick → rätt ämne
+  useEffect(() => { if (amneIdIn !== undefined && amneIdIn !== '' && amneIdIn !== amneId) setAmneId(amneIdIn); }, [amneIdIn]); // eslint-disable-line react-hooks/exhaustive-deps -- v3: topplisten/ämnessidan
   // Del 201: klassen i topplisten styr — ligger det öppna ämnet i en annan klass byts till klassens första ämne
   useEffect(() => {
     if (klassIdIn === undefined || klassIdIn === '' || (amneIdIn !== undefined && amneIdIn !== '')) return;
     const nu = alternativ.find((x) => x.a.id === valt);
-    if (nu !== undefined && nu.klass.id !== klassIdIn) { const forsta = alternativ.find((x) => x.klass.id === klassIdIn); if (forsta !== undefined) setAmneId(forsta.a.id); }
+    if (nu !== undefined && nu.klass.id !== klassIdIn) { const forsta = alternativ.find((x) => x.klass.id === klassIdIn); if (forsta !== undefined) { valj(forsta.a.id); return; } }
+    if (valt !== '') onAmneVald?.(valt);   // topplisten saknar ämne — visa det som är öppet
   }, [klassIdIn]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Del 201: det öppna ämnet rapporteras till topplisten så att Klass/Ämne alltid visar det som planeras
-  useEffect(() => { if (valt !== '') onAmneVald?.(valt); }, [valt]); // eslint-disable-line react-hooks/exhaustive-deps
   if (alternativ.length === 0) {
     return <div className="card"><h2>📋 Planering</h2><p className="muted">Skapa skolår, tjänst, klass och ämne under 🗂 Struktur först.</p></div>;
   }
@@ -6451,7 +6455,7 @@ function PlaneringVy({ s, kor, setVald, hopp, amneIdIn, klassIdIn, dolAmnesval, 
                 const akt = a.id === valt;
                 return (
                   <button key={a.id} role="tab" aria-selected={akt} className={`amnesflik${akt ? ' act' : ''}${harPlan.has(a.id) ? '' : ' utan-plan'}`}
-                    title={`${klass.namn} · ${a.namn}${harPlan.has(a.id) ? '' : ' — ingen planering ännu'}`} onClick={() => { setAmneId(a.id); onAmneVald?.(a.id); }}>
+                    title={`${klass.namn} · ${a.namn}${harPlan.has(a.id) ? '' : ' — ingen planering ännu'}`} onClick={() => valj(a.id)}>
                     <I storlek={18} /><span className="amnesflik-text"><b>{a.namn}</b><small>{klass.namn}</small></span>
                   </button>
                 );
