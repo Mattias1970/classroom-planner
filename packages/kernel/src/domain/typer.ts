@@ -127,6 +127,8 @@ export interface Amne {
   noGrupp?: string;
   /** Position 0–3 i NO+Tk-blockens läsordning. */
   noOrder?: number;
+  /** Del 205 · Delämnets period i NO+Tk-blocket satt av läraren (annars fyra lika block): passen från `fran` t.o.m. `till`. */
+  noPeriod?: { fran: IsoDatum; till: IsoDatum };
   /** Egna rader (prov, diagnoser, övningar …) infogade i planeringen. */
   egnaRader?: EgenRad[];
   /**

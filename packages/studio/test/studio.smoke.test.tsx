@@ -3739,3 +3739,82 @@ describe('Del 189–190: samma och snarlika elevnamn', () => {
     expect(host.querySelector('[aria-label="Frågor om elevnamn"]')).toBeNull();
   });
 });
+
+describe('Del 205: 📅 Läsåret i Översikt — lov bakåt i tiden, tid som försvinner, NO+Tk-perioder', () => {
+  const BOK205 = JSON.stringify({
+    schema: 'classroom-planner-bok', version: 1,
+    bok: { id: 'bok-205', titel: 'Matematik Y', förlag: 'Liber', ämne: 'Matematik', årskurs: 8, kapitelMeta: { '1': { name: 'Tal', col: '#2f5aa8' } } },
+    lektioner: { '1': [1, 2, 3, 4].map((id) => ({ id, type: 'regular', avsnitt: `1.${id} Del`, del: 1 })) },
+  });
+  const datum = (host: HTMLElement) => [...host.querySelectorAll('table.plan tbody tr')].map((tr) => `${tr.querySelectorAll('td')[2]?.textContent ?? ''} ${tr.querySelector('td.lekt-avsnitt')?.textContent ?? ''}`);
+  const nav = (host: HTMLElement, t: string) => [...host.querySelectorAll<HTMLButtonElement>('.v3-nav')].find((b) => b.textContent?.trim() === t)!;
+
+  it('lov som intervall bakåt i tiden bekräftas och räknar om genomförda lektioner; perioden bakåt tillåts; dagen kan tas bort', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-09-15T10:00:00Z'));
+    localStorage.setItem('cp.layout', JSON.stringify('v3'));
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host, BOK205);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8A');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8A').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'bok-205');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { nav(host, 'Planering').click(); });
+    expect(datum(host)).toEqual(['2026-08-19 1.1 Del', '2026-08-26 1.2 Del', '2026-09-02 1.3 Del', '2026-09-09 1.4 Del']);
+
+    // Översikt → 📅 Läsåret: temadagar 19–20/8 (har varit) → bekräftas → lektionerna flyttas
+    act(() => { nav(host, 'Översikt').click(); });
+    expect(host.textContent).toContain('📅 Läsåret');
+    expect(host.textContent).toContain('🏖 Lov, temadagar och halvdagar');
+    expect(host.textContent).toContain('🚫 Tid som försvinner från schemat');
+    act(() => { knapp(host, '➕ Lägg till dagar').click(); });
+    valj(select(host, 'Typ av dag'), 'heldag');
+    skriv(input(host, 'Dagens namn'), 'Uppstartsdagar');
+    skriv(input(host, 'Dagar från datum'), '2026-08-19');
+    skriv(input(host, 'Dagar till datum'), '2026-08-20');
+    expect(host.textContent).toContain('bakåt i tiden — lektionerna räknas om');
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    act(() => { knapp(host, 'Spara dagarna').click(); });
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(host.textContent).not.toContain('Uppstartsdagar 2026-08-19');   // avbrutet
+    confirm.mockReturnValue(true);
+    act(() => { knapp(host, 'Spara dagarna').click(); });
+    expect(host.textContent).toContain('Temadag / heldag Uppstartsdagar 2026-08-19 – 2026-08-20 tillagd (bakåt i tiden — lektionerna är omräknade)');
+    act(() => { nav(host, 'Planering').click(); });
+    expect(datum(host)).toEqual(['2026-08-26 1.1 Del', '2026-09-02 1.2 Del', '2026-09-09 1.3 Del', '2026-09-16 1.4 Del']);
+
+    // Tid som försvinner bakåt i tiden går också (ingen min på datumet, bekräftelse)
+    act(() => { nav(host, 'Översikt').click(); });
+    act(() => { knapp(host, '➕ Lägg till period').click(); });
+    expect(input(host, 'Perioden från datum').min).toBe('');
+    skriv(input(host, 'Periodens namn'), 'Prao');
+    skriv(input(host, 'Perioden från datum'), '2026-08-26');
+    skriv(input(host, 'Perioden till datum'), '2026-08-26');
+    act(() => { knapp(host, 'Spara perioden').click(); });
+    expect(host.textContent).toContain('Prao ons 26/8 (hela dagen, alla klasser): 1 skoldagar · 8A Matematik 1 pass');
+    act(() => { nav(host, 'Planering').click(); });
+    expect(datum(host)).toEqual(['2026-09-02 1.1 Del', '2026-09-09 1.2 Del', '2026-09-16 1.3 Del', '2026-09-23 1.4 Del']);
+
+    // Ta bort dagarna som varit (visas under "dagar som varit") → tillbaka
+    act(() => { nav(host, 'Översikt').click(); });
+    act(() => { knapp(host, 'Visa 2 dagar som varit').click(); });
+    act(() => { (host.querySelector('button[aria-label="Ta bort Uppstartsdagar 2026-08-19"]') as HTMLButtonElement).click(); });
+    expect(host.textContent).toContain('Uppstartsdagar borttagen — 2 dagar är skoldagar igen');
+    act(() => { (host.querySelector('button[aria-label="Ta bort perioden Prao"]') as HTMLButtonElement).click(); });
+    expect(host.textContent).toContain('Prao borttagen — 1 dagar');
+    act(() => { nav(host, 'Planering').click(); });
+    expect(datum(host)).toEqual(['2026-08-19 1.1 Del', '2026-08-26 1.2 Del', '2026-09-02 1.3 Del', '2026-09-09 1.4 Del']);
+    confirm.mockRestore();
+    vi.useRealTimers();
+  });
+});

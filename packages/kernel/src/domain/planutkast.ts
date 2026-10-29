@@ -12,7 +12,7 @@ import { delkapitelKod } from './bok.js';
 import { isoVecka, laggTillAktivitet, skoldagarMellan, taBortAktivitet } from './skolar.js';
 import {
   amnesOffset, amnesPlanFor, andraPlanering, gruppNyckel, hamtaLektionsplan, harLaborationsstandard,
-  kopplaOmLektionsplaner, noBudget, nyttId, planeringsRader, registreraPlanering, samlaSlots, sattAntalLektioner, sattLektionerPerDelkapitel, sattLektionsplan, type PlanRad,
+  kopplaOmLektionsplaner, noFonster, nyttId, planeringsRader, registreraPlanering, samlaSlots, sattAntalLektioner, sattLektionerPerDelkapitel, sattLektionsplan, type PlanRad,
 } from './struktur.js';
 import type { Amne, LektionsDetaljer, LektionsPlan, LektionsTyp, PlaneradLektion, PlanFranUtkast, PlanUtkast, SchemaAktivitet, Skolar, Struktur, UtkastKort } from './typer.js';
 
@@ -198,8 +198,8 @@ export function planeringstavla(s: Struktur, amneId: string, utkast: PlanFranUtk
       passTyp: x.val?.kalla === 'egen' ? 'pass' : x.typ, b: x.helklass ? null : x.b,
     }));
   } else {
-    const offset = amnesOffset(skolar, a);
-    const alla = samlaSlots(skolar, a.schema, a.klassId).slice(offset, a.noGrupp !== undefined ? offset + noBudget(skolar, a.schema) : undefined);
+    const { offset, budget } = noFonster(skolar, a);
+    const alla = samlaSlots(skolar, a.schema, a.klassId).slice(offset, a.noGrupp !== undefined ? offset + budget : undefined);
     pass = alla.filter((x) => x.datum >= u.fran).map((x) => ({ ...x, passTyp: 'teori' as const, b: null }));
   }
 
@@ -1340,7 +1340,9 @@ export interface PeriodResultat extends AktivitetResultat { grupp: string; dagar
  * Alla dagarna delar en grupp så att perioden kan tas bort i ett svep. Berörda lektioner flyttas till
  * nästa pass, fasta kort ligger kvar — som för en enskild aktivitet.
  */
-export function laggTillSchemaPeriod(s: Struktur, skolarId: string, p: AktivitetsPeriod, idag?: string): PeriodResultat {
+export function laggTillSchemaPeriod(s: Struktur, skolarId: string, p: AktivitetsPeriod, idag?: string, tillatGenomford = false): PeriodResultat {
+  // Del 205: med tillatGenomford skrivs även pass som varit om — lärarens uttryckliga val
+  if (tillatGenomford) idag = undefined;
   const la = s.skolar.find((x) => x.id === skolarId);
   if (la === undefined) throw new Error('Okänt skolår.');
   if (!DATUM.test(p.fran) || !DATUM.test(p.till)) throw new Error('Ange datum (ÅÅÅÅ-MM-DD) för från och till.');
@@ -1361,7 +1363,8 @@ export function laggTillSchemaPeriod(s: Struktur, skolarId: string, p: Aktivitet
 }
 
 /** Del 204 · Tar bort alla aktiviteter i en grupp (en period) — bara kommande dagar; dagar som varit lämnas. */
-export function taBortSchemaPeriod(s: Struktur, skolarId: string, grupp: string, idag?: string): AktivitetResultat & { borttagna: number; kvar: number } {
+export function taBortSchemaPeriod(s: Struktur, skolarId: string, grupp: string, idag?: string, tillatGenomford = false): AktivitetResultat & { borttagna: number; kvar: number } {
+  if (tillatGenomford) idag = undefined;
   const la = s.skolar.find((x) => x.id === skolarId);
   if (la === undefined) throw new Error('Okänt skolår.');
   const mina = (la.aktiviteter ?? []).filter((a) => a.grupp === grupp);

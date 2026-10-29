@@ -1350,3 +1350,8 @@ input.fel { border-color: #B71C1C; }
 .kortrad-vertikal .kortrad-plus { align-self: center; }
 .kortrad-slapp { border: 1px dashed var(--ram); border-radius: 8px; padding: 6px; color: var(--muted, #777); font-size: 12px; white-space: nowrap; align-self: center; }
 .kortrad-slapp.over { background: #e3f2fd; border-color: #1565c0; color: #1565c0; }
+
+/* Del 205 · 📅 Läsåret i Översikt */
+.st-lasaret { display: flex; flex-direction: column; gap: 10px; }
+.st-lasaret .st-lasaret-sektion, .st-lasaret .schema-bortfall { margin: 0; }
+.st-lasaret .status.warn.small { padding: 2px 6px; }

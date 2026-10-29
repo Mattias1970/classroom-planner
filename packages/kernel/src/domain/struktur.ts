@@ -5,10 +5,10 @@
  */
 import { bokLektioner, delkapitelKod, NIVA_GRON_BLA_ROD, byggKapitel } from './bok.js';
 import { NO_TK_AMNEN } from './amnen.js';
-import { isoVecka, passSparr } from './skolar.js';
+import { isoVecka, normaliseraDagar, passSparr } from './skolar.js';
 import type {
-  Amne, Bok, EgenRad, Elev, Klass, Laboration, Larare, Lektion, LektionsPlan, LektionsVal, Pass, PassVal, PlaneradLektion,
-  Planering, PlanFranUtkast, Skolar, StodPass, Struktur, Tjanst } from './typer.js';
+  Amne, Bok, EgenRad, Elev, IsoDatum, Klass, Laboration, Larare, Lektion, LektionsPlan, LektionsVal, Pass, PassVal, PlaneradLektion,
+  Planering, PlanFranUtkast, Skolar, SkolarDag, StodPass, Struktur, Tjanst } from './typer.js';
 
 let seq = 0;
 // Sessionsunik bas: förhindrar att id:n återanvänds mellan sidladdningar
@@ -34,6 +34,27 @@ export function laggTillSkolar(s: Struktur, skolar: Skolar): Struktur {
   }
   return { ...s, skolar: [...s.skolar, skolar] };
 }
+/**
+ * Del 205 · Lägger in lov, temadagar eller halvdagar för ett datumintervall (en post per dag, helger hoppas).
+ * Gäller även datum som har varit — planeringarna räknas om, det är lärarens uttryckliga val.
+ */
+export function laggTillSkolarDagar(s: Struktur, id: string, p: { fran: IsoDatum; till: IsoDatum; typ: SkolarDag['typ']; label: string; slut?: string }): Struktur {
+  const la = s.skolar.find((x) => x.id === id);
+  if (la === undefined) throw new Error('Okänt skolår.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(p.fran) || !/^\d{4}-\d{2}-\d{2}$/.test(p.till)) throw new Error('Ange datum (ÅÅÅÅ-MM-DD).');
+  if (p.till < p.fran) throw new Error('Slutdatumet ligger före startdatumet.');
+  if (p.label.trim() === '') throw new Error('Ge dagen ett namn.');
+  if (p.typ === 'halvdag' && !/^\d{2}:\d{2}$/.test(p.slut ?? '')) throw new Error('Ange när halvdagen slutar (TT:MM).');
+  const nya: SkolarDag[] = [];
+  for (let d = new Date(`${p.fran}T00:00:00Z`); d.toISOString().slice(0, 10) <= p.till; d.setUTCDate(d.getUTCDate() + 1)) {
+    const iso = d.toISOString().slice(0, 10); const vd = d.getUTCDay();
+    if (vd === 0 || vd === 6) continue;
+    nya.push({ datum: iso, label: p.label.trim(), typ: p.typ, ...(p.typ === 'halvdag' ? { slut: p.slut } : {}) });
+  }
+  if (nya.length === 0) throw new Error('Inga vardagar i intervallet.');
+  return uppdateraSkolar(s, id, { dagar: normaliseraDagar([...la.dagar, ...nya]) });
+}
+
 export function uppdateraSkolar(s: Struktur, id: string, patch: Partial<Skolar>): Struktur {
   if (patch.namn !== undefined) {
     if (patch.namn.trim() === '') throw new Error('Skolåret behöver ett namn.');
@@ -503,6 +524,43 @@ export function antalSlots(skolar: Skolar, schema: Pass[]): number {
  */
 export function noBudget(skolar: Skolar, schema: Pass[]): number {
   return Math.floor(antalSlots(skolar, schema) / NO_TK_AMNEN.length);
+}
+
+/**
+ * Del 205 · Delämnets fönster i NO+Tk-blocket: offset (antal pass före) och budget (antal pass i perioden).
+ * Med lärarens noPeriod räknas passen mellan datumen; annars fyra lika block i läsordning.
+ */
+export function noFonster(skolar: Skolar, amne: Amne): { offset: number; budget: number } {
+  if (amne.noGrupp === undefined) return { offset: 0, budget: Number.POSITIVE_INFINITY };
+  if (amne.noPeriod !== undefined) {
+    const slots = samlaSlots(skolar, amne.schema, amne.klassId);
+    const offset = slots.filter((x) => x.datum < amne.noPeriod!.fran).length;
+    const budget = slots.filter((x) => x.datum >= amne.noPeriod!.fran && x.datum <= amne.noPeriod!.till).length;
+    return { offset, budget };
+  }
+  const budget = noBudget(skolar, amne.schema);
+  return { offset: (amne.noOrder ?? 0) * budget, budget };
+}
+
+/** Del 205 · Delämnets nuvarande period (första och sista passets datum) — lärarens eller den beräknade. */
+export function noPeriodFor(skolar: Skolar, amne: Amne): { fran: IsoDatum; till: IsoDatum; egen: boolean } | null {
+  if (amne.noGrupp === undefined) return null;
+  const { offset, budget } = noFonster(skolar, amne);
+  const slots = samlaSlots(skolar, amne.schema, amne.klassId).slice(offset, offset + budget);
+  if (slots.length === 0) return amne.noPeriod !== undefined ? { ...amne.noPeriod, egen: true } : null;
+  return { fran: amne.noPeriod?.fran ?? slots[0].datum, till: amne.noPeriod?.till ?? slots[slots.length - 1].datum, egen: amne.noPeriod !== undefined };
+}
+
+/** Del 205 · Sätter (eller tar bort med null) delämnets period i NO+Tk-blocket. */
+export function sattNoPeriod(s: Struktur, amneId: string, period: { fran: IsoDatum; till: IsoDatum } | null): Struktur {
+  const amne = s.amnen.find((a) => a.id === amneId);
+  if (amne === undefined) throw new Error('Okänt ämne.');
+  if (amne.noGrupp === undefined) throw new Error('Ämnet ingår inte i ett NO+Tk-block.');
+  if (period !== null) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(period.fran) || !/^\d{4}-\d{2}-\d{2}$/.test(period.till)) throw new Error('Ange datum (ÅÅÅÅ-MM-DD).');
+    if (period.till < period.fran) throw new Error('Slutdatumet ligger före startdatumet.');
+  }
+  return { ...s, amnen: s.amnen.map((a) => { if (a.id !== amneId) return a; const { noPeriod: _p, ...rest } = a; void _p; return period === null ? rest : { ...rest, noPeriod: period }; }) };
 }
 
 /** Sant om planeringens lektioner (bokens + egna rader + extra lektioner) är fler än delämnets budget (för varning). */
@@ -976,7 +1034,7 @@ export function skapaHalvklassPlanering(skolar: Skolar, amne: Amne, bok: Bok, of
 }
 
 function halvklassPlan(skolar: Skolar, amne: Amne, lektioner: PlanRad[], labbar: Laboration[], offset: number, idag?: string): HalvklassPlanering {
-  const budget = amne.noGrupp !== undefined ? noBudget(skolar, amne.schema) : Number.POSITIVE_INFINITY;
+  const budget = noFonster(skolar, amne).budget;
   const slotsA = samlaSlots(skolar, amne.schema, amne.klassId).slice(offset, budget === Number.POSITIVE_INFINITY ? undefined : offset + budget);
   const slotsB = samlaSlots(skolar, amne.schemaB ?? [], amne.klassId).slice(offset, budget === Number.POSITIVE_INFINITY ? undefined : offset + budget);
   const fryst = amne.planFrystTill ?? idag ?? '';
@@ -1117,7 +1175,7 @@ export function amnesPlan(skolar: Skolar, amne: Amne, bok: Bok, offset = 0, idag
 
 /** NO+Tk: delämnet börjar efter föregående delämnens block. */
 export function amnesOffset(skolar: Skolar, amne: Amne): number {
-  return amne.noGrupp !== undefined && amne.noOrder !== undefined ? amne.noOrder * noBudget(skolar, amne.schema) : 0;
+  return amne.noGrupp !== undefined ? noFonster(skolar, amne).offset : 0;
 }
 
 /**

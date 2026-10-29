@@ -18,10 +18,12 @@ import { Ikon, amnesIkon } from './ikoner.js';
 import { DataSaknas, Kort, Kpi, type Filter, type V3Vy } from './Skal.js';
 import { ProvLarmOversikt } from '../ProvLarm.js';
 
-export function Oversikt({ s, filter, setVy, struktur }: {
+export function Oversikt({ s, filter, setVy, struktur, lasaret }: {
   s: Struktur; filter: Filter; setVy: (v: V3Vy) => void;
   /** v2:s strukturträd + paneler, renderade av App. */
   struktur: React.ReactNode;
+  /** Del 205 · Läsåret-menyn (lov, temadagar, tid som försvinner, NO-perioder), renderad av App. */
+  lasaret?: React.ReactNode;
 }) {
   const idag = new Date().toISOString().slice(0, 10);
   const klasser = filter.klassId === '' ? s.klasser : s.klasser.filter((k) => k.id === filter.klassId);
@@ -127,7 +129,12 @@ export function Oversikt({ s, filter, setVy, struktur }: {
         {risk.length > 10 && <button className="v3-lank" onClick={() => setVy({ typ: 'elever' })}>Visa alla {risk.length} →</button>}
       </Kort>
 
-      <details className="v3-struktur" open={visaStruktur} onToggle={(e) => setVisaStruktur((e.target as HTMLDetailsElement).open)}>
+      {lasaret !== undefined && (
+        <Kort rubrik="📅 Läsåret" under="lov, temadagar och halvdagar · tid som försvinner från schemat · NO+Tk-perioder — ändringar bakåt i tiden räknar om lektionerna" hoger={<button className="v3-lank" onClick={() => setVisaStruktur(true)}>Struktur & inställningar ↓</button>}>
+          {lasaret}
+        </Kort>
+      )}
+      <details className="v3-struktur" id="v3-struktur" open={visaStruktur} onToggle={(e) => setVisaStruktur((e.target as HTMLDetailsElement).open)}>
         <summary><Ikon.kugg storlek={18} /> <b>Struktur & inställningar</b> <small className="muted">skolår, tjänster, klasser, ämnen, böcker, lärare, GitHub, schema-import</small></summary>
         <div className="v3-struktur-innehall">{struktur}</div>
       </details>
