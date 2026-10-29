@@ -1553,7 +1553,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
       kor(() => sattPlanFrystTill(lasStruktur(), a.id, idag), `${a.namn}: genomförd planering till och med igår är låst; laborationerna gäller från ${idag}.`);
     }
   }, [a?.id, a?.planFrystTill, a?.laborationsstandard, harPlanering]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [flik, setFlik] = useState<'planering' | 'kortrad' | 'tavla' | 'detalj' | 'oversikt' | 'uppgifter' | 'begrepp' | 'filmer' | 'magma' | 'anteckningar' | 'arsoversikt' | 'installningar' | 'laborationer'>('planering');
+  const [flik, setFlik] = useState<'planering' | 'kortrad' | 'tavla' | 'detalj' | 'oversikt' | 'uppgifter' | 'begrepp' | 'filmer' | 'magma' | 'anteckningar' | 'arsoversikt' | 'installningar' | 'laborationer' | 'provlapp'>('planering');
   // Om planen krymper (t.ex. laboration borttagen) får detaljindex inte peka utanför
   useEffect(() => { if (detaljIdxRef.current >= plan.length && plan.length > 0) setDetaljIdx(plan.length - 1); }, [plan.length]); // eslint-disable-line react-hooks/exhaustive-deps
   // Del 133: detaljplaneringen öppnar på dagens/nästa lektion, inte lektion 1
@@ -1595,6 +1595,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
             title={!bok ? 'Koppla en bok först' : ''}>{txt}</button>
         ))}
         {halv && <button className={`flik ${flik === 'laborationer' ? 'act' : ''}`} onClick={() => setFlik('laborationer')} disabled={!bok} title={!bok ? 'Koppla en bok först' : 'Laborationsplanering för halvklasspassen'}>🧪 Laborationer</button>}
+        <button className={`flik ${flik === 'provlapp' ? 'act' : ''}`} onClick={() => setFlik('provlapp')} disabled={!bok} title={!bok ? 'Koppla en bok först' : 'Provlappar — en per prov i planeringen'}>📄 Provlapp</button>
         <button className={`flik ${flik === 'installningar' ? 'act' : ''}`} onClick={() => setFlik('installningar')}>🗓 Schema</button>
         <button className={`flik ${flik === 'arsoversikt' ? 'act' : ''}`} onClick={() => setFlik('arsoversikt')}>📊 Årsöversikt</button>
         <span className="spacer" />
@@ -1650,6 +1651,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
       {flik === 'detalj' && bok && <DetaljFlik s={s} amneId={a.id} plan={plan} bok={bok} amnesNamn={a.namn} kor={kor} idx={detaljIdx} setIdx={setDetaljIdx} meddela={(m) => kor(() => lasStruktur(), m)} />}
       {flik === 'detalj' && !bok && <p className="muted">Koppla en bok till ämnet för att använda detaljplaneringen.</p>}
       {bok && flik === 'oversikt' && <OversiktFlik plan={plan} bok={bok} oppnaLektion={oppnaLektion} />}
+      {bok && flik === 'provlapp' && <ProvlappFlik s={s} amneId={a.id} plan={plan} bok={bok} kor={kor} oppnaLektion={oppnaLektion} />}
       {bok && flik === 'uppgifter' && <UppgifterFlik plan={plan} bok={bok} s={s} amneId={a.id} oppnaLektion={oppnaLektion} />}
       {bok && flik === 'begrepp' && <BegreppFlik plan={plan} bok={bok} oppnaLektion={oppnaLektion} />}
       {bok && flik === 'filmer' && <FilmerFlik s={s} amneId={a.id} plan={plan} bok={bok} kor={kor} oppnaLektion={oppnaLektion} />}
@@ -2222,6 +2224,43 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx, meddela
         <NoPlanering key={`${amneId}-${i}`} dolj={dolj('detaljerad')} s={s} amneId={amneId} lektionsIndex={i} kor={kor}
           amnesNamn={amnesNamn} rad={rad} bok={bok} alltidOppen />
       )}
+    </div>
+  );
+}
+
+/**
+ * Del 206 · 📄 Provlapp-fliken: alla prov i planeringen med sin provlapp (omfång, lärartext, generera,
+ * Word). Finns inget prov i planeringen förklaras hur man lägger till ett.
+ */
+function ProvlappFlik({ s, amneId, plan, bok, kor, oppnaLektion }: { s: Struktur; amneId: string; plan: PlaneradLektion[]; bok: Bok; kor: (fn: () => Struktur, m: string) => void; oppnaLektion: (i: number) => void }) {
+  const prov = plan.map((r, i) => ({ r, i })).filter(({ r }) => vagTyp(r.lektion) === 'prov');
+  const [vald, setVald] = useState<number>(prov[0]?.i ?? -1);
+  const idx = prov.some((p) => p.i === vald) ? vald : (prov[0]?.i ?? -1);
+  if (prov.length === 0) {
+    return (
+      <div className="uppg-kort">
+        <h3 style={{ margin: 0 }}>📄 Provlapp</h3>
+        <p className="muted">Planeringen har inget prov än. Lägg till ett via ⋯ på raden där provet ska ligga → <b>➕ efter raden</b> → typ <b>Prov</b>, så dyker provlappen upp här och på provets lektionskort.</p>
+      </div>
+    );
+  }
+  const rad = plan[idx];
+  const lp = hamtaLektionsplan(s, amneId, idx);
+  const kap = bok.kapitel.find((k) => k.nr === rad.kapitel);
+  const satt = (falt: 'provlappNotis' | 'provlappOmfang', v: string) =>
+    kor(() => sattLektionsplan(lasStruktur(), { ...(hamtaLektionsplan(lasStruktur(), amneId, idx) ?? { id: `lp-${amneId}-${idx}`, amneId, lektionsIndex: idx }), [falt]: v }), '');
+  return (
+    <div className="uppg-kort">
+      <div className="rad" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <h3 style={{ margin: 0 }}>📄 Provlapp</h3>
+        <small className="muted">en lapp per prov — sammanfattning, mål, begrepp, djup och bredd, E-krav och övningsförslag</small>
+        {prov.length > 1 && <select aria-label="Vilket prov" value={idx} onChange={(e) => setVald(Number(e.target.value))}>
+          {prov.map(({ r, i }) => <option key={i} value={i}>{lektionsNamn(r.lektion, hamtaLektionsplan(s, amneId, i))}{r.datum !== null ? ` · ${r.datum}` : ''}</option>)}
+        </select>}
+        {prov.length === 1 && <b>{lektionsNamn(rad.lektion, lp)}{rad.datum !== null ? ` · ${rad.datum}` : ''}</b>}
+        <button className="v3-lank" onClick={() => oppnaLektion(idx)}>Öppna provlektionen →</button>
+      </div>
+      <ProvlappPanel key={`${amneId}-${idx}`} s={s} amneId={amneId} lektionsIndex={idx} farg={kap?.farg ?? '#B5532C'} notis={lp?.provlappNotis ?? ''} sattNotis={(v) => satt('provlappNotis', v)} omfang={lp?.provlappOmfang ?? ''} sattOmfang={(v) => satt('provlappOmfang', v)} meddela={(m) => kor(() => lasStruktur(), m)} />
     </div>
   );
 }

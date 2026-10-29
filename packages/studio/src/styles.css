@@ -1355,3 +1355,9 @@ input.fel { border-color: #B71C1C; }
 .st-lasaret { display: flex; flex-direction: column; gap: 10px; }
 .st-lasaret .st-lasaret-sektion, .st-lasaret .schema-bortfall { margin: 0; }
 .st-lasaret .status.warn.small { padding: 2px 6px; }
+
+/* Del 206 · Provlapp: djup/bredd, E-krav, figur */
+.provlapp-djupbredd { margin: 4px 0 6px; padding: 6px 8px; border-left: 3px solid var(--kant, #ccc); background: #fafafa; display: flex; flex-direction: column; gap: 2px; }
+.provlapp-figur { display: block; max-width: 100%; height: auto; margin: 6px 0 10px; border: 1px solid #e5e5e5; border-radius: 6px; }
+.provlapp-lab ol { margin: 4px 0 0; padding-left: 20px; }
+.provlapp-sammanfattning { margin: 2px 0; }

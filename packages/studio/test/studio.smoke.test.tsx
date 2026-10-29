@@ -3872,3 +3872,53 @@ describe('Del 205b: Del av dag i Läsåret — utvecklingssamtal 13–17 tar eft
     vi.useRealTimers();
   });
 });
+
+describe('Del 206: 📄 Provlapp-fliken i ämnespanelen — hittar provet, genererar lappen med djup/bredd', () => {
+  const BOK = JSON.stringify({
+    schema: 'classroom-planner-bok', version: 1,
+    bok: { id: 'bok-206', titel: 'Matematik Y', förlag: 'Liber', ämne: 'Matematik', årskurs: 8, kapitelMeta: { '1': { name: 'Tal', col: '#2f5aa8' } } },
+    lektioner: { '1': [
+      { id: 1, type: 'regular', avsnitt: '1.1 Bråk', del: 1, ett: '1–8', två: '9–16', sidor_teori: 's. 10–13', begrepp: 'täljare, nämnare' },
+      { id: 2, type: 'regular', avsnitt: '1.2 Potenser', del: 1, ett: '17–24', två: '25–30', sidor_teori: 's. 14–16', begrepp: 'potens, bas, exponent' },
+    ] },
+  });
+
+  it('utan prov förklaras hur man lägger till ett; med prov visas lappen och Word-knappen', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-24T10:00:00Z'));
+    const { bokFromImport, laggTillAmne, laggTillEgenRad, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering, sparaBok, tomStruktur } = await import('@planner/kernel');
+    const bok = bokFromImport(BOK);
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = sparaBok(s, bok);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'ma', klassId: 'k', namn: 'Matematik', bokId: bok.id, schema: [{ dag: 3, start: '09:00', slut: '10:00' }] });
+    s = registreraPlanering(s, { id: 'pl', amneId: 'ma', bokId: bok.id, skapad: '2026-08-10' });
+    window.localStorage.setItem('classroom-planner.studio.v2', JSON.stringify(s));
+    const host = render();
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    act(() => { treeKnapp(host, '📖 Matematik').click(); });
+    act(() => { knapp(host, '📄 Provlapp').click(); });
+    expect(host.textContent).toContain('Planeringen har inget prov än');
+
+    // Med ett prov
+    s = laggTillEgenRad(s, 'ma', { id: 'er1', position: 2, rubrik: 'Prov kapitel 1', typ: 'prov' }, '2026-08-17');
+    window.localStorage.setItem('classroom-planner.studio.v2', JSON.stringify(s));
+    document.body.innerHTML = '';
+    const host2 = render();
+    act(() => { treeKnapp(host2, '💼 Ma').click(); });
+    act(() => { treeKnapp(host2, '👥 8B').click(); });
+    act(() => { treeKnapp(host2, '📖 Matematik').click(); });
+    act(() => { knapp(host2, '📄 Provlapp').click(); });
+    expect(host2.textContent).toContain('Prov kapitel 1 · 2026-09-02');
+    act(() => { knapp(host2, '📄 Generera provlapp').click(); });
+    const vy = host2.querySelector('[role="document"]')!;
+    expect(vy.getAttribute('aria-label')).toBe('Provlapp Prov kapitel 1');
+    expect(vy.textContent).toContain('Djup: Förklara i flera led hur potens hänger ihop med exponent (via bas)');
+    expect(vy.textContent).toContain('För E-nivå krävs');
+    expect(vy.querySelector('img.provlapp-figur')).not.toBeNull();
+    expect([...host2.querySelectorAll('button')].some((b) => b.textContent?.includes('Ladda ner Word'))).toBe(true);
+    vi.useRealTimers();
+  });
+});

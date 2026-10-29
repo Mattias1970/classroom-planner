@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { bokFromValfriImport } from '../src/domain/biologibok.js';
 import { byggKapitel } from '../src/domain/bok.js';
-import { nivaKarta, omfangText, provlapp, provlappForOmfang, provlappText, tolkaOmfang } from '../src/domain/provlapp.js';
+import { djupBreddFor, labMall, nivaKarta, omfangText, provlapp, provlappForOmfang, provlappText, tolkaOmfang } from '../src/domain/provlapp.js';
 import { laggTillAmne, laggTillEgenRad, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering, sattLektionsplan, sparaBok } from '../src/domain/struktur.js';
 import { tomStruktur, type Bok, type Lektion, type Struktur } from '../src/domain/typer.js';
 
@@ -149,5 +149,57 @@ describe('Del 199 · provlapp för ett omfång av delkapitel (6.1–6.5, 7.1–7
     // Felaktigt omfång → hela kapitlet som förut
     const s2 = sattLektionsplan(s, { id: 'lp', amneId: 'am', lektionsIndex: idx, provlappOmfang: 'kap 1' });
     expect(provlapp(s2, 'am', idx, '2026-09-14')!.omfang).toBeNull();
+  });
+});
+
+describe('Del 206 · Provlappen: sammanfattning, djup och bredd, E-krav och laborationsbeskrivning', () => {
+  it('djupBreddFor bygger ramar ur begreppen (minst två), annars ur målet, annars null', () => {
+    const d = djupBreddFor(['fotosyntes', 'klorofyll', 'glukos', 'cellandning', 'energi'], [])!;
+    expect(d.kedja).toEqual(['fotosyntes', 'klorofyll', 'glukos', 'cellandning']);
+    expect(d.djup).toBe('Förklara i flera led hur fotosyntes hänger ihop med energi (via klorofyll, glukos): fotosyntes → … → energi. Varje pil ska svara på varför.');
+    expect(d.bredd).toBe('Ge tre olika exempel på fotosyntes och säg vad exemplen har gemensamt.');
+    expect(djupBreddFor(['bråk', 'täljare'], [])!.djup).toBe('Förklara i flera led hur bråk hänger ihop med täljare: bråk → … → täljare. Varje pil ska svara på varför.');
+    const m = djupBreddFor([], ['förkorta bråk'])!;
+    expect(m.kedja).toEqual(['förkorta bråk']);
+    expect(m.djup).toContain('orsak → följd → följd');
+    expect(djupBreddFor([], [])).toBeNull();
+    expect(djupBreddFor(['potens'], [])!.kedja).toEqual(['potens']);
+  });
+
+  it('labMall: tre steg, med lärarens fråga när den finns', () => {
+    expect(labMall(null).map((m) => m.steg)).toEqual(['Vad söker vi?', 'Hur ser vi resultatet?', 'Koppling']);
+    expect(labMall('Hur påverkar ljuset fotosyntesen?')[0].text).toBe('Frågan: Hur påverkar ljuset fotosyntesen?');
+    expect(labMall(null)[0].text).toContain('Skriv frågan');
+  });
+
+  it('Matematik: inga labkrav; lärarens sammanfattning tas med per avsnitt; djup/bredd ur avsnittets begrepp', () => {
+    let s = laggTillEgenRad(bygg(MATTE, 'Matematik'), 'am', { id: 'er1', position: 7, rubrik: 'Prov kapitel 1', typ: 'prov' }, '2026-09-14');
+    s = sattLektionsplan(s, { id: 'lp0', amneId: 'am', lektionsIndex: 0, sammanfattning: 'Bråk är delar av en helhet.' });
+    const p = provlapp(s, 'am', 7, '2026-09-14')!;
+    expect(p.noAmne).toBe(false);
+    expect(p.kravE).toHaveLength(2);
+    expect(p.avsnitt[0].sammanfattning).toEqual(['Bråk är delar av en helhet.']);
+    expect(p.avsnitt[0].djupBredd?.kedja).toEqual(['bråk', 'täljare']);
+    expect(p.avsnitt[1].djupBredd?.kedja).toEqual(['potens', 'bas', 'exponent']);
+    expect(p.avsnitt[2].djupBredd?.kedja).toEqual(['Repetera hela kapitlet inför diagnosen.']);  // bara mål
+    const text = provlappText(p);
+    expect(text).toContain('SÅ VISAR DU DJUP OCH BREDD');
+    expect(text).toContain('Djup: Förklara i flera led hur bråk hänger ihop med täljare');
+    expect(text).toContain('FÖR E-NIVÅ KRÄVS');
+    expect(text).not.toContain('Laborationsbeskrivning');
+  });
+
+  it('Biologi: tre E-krav inkl. laborationsbeskrivning, labfrågan ur lektionsplanen tas med', () => {
+    let s = bygg(SPEKTRUM, 'Biologi');
+    s = laggTillEgenRad(s, 'am', { id: 'er1', position: 3, rubrik: 'Prov kap 6', typ: 'prov' }, '2026-09-14');
+    s = sattLektionsplan(s, { id: 'lp1', amneId: 'am', lektionsIndex: 1, labFraga: 'Hur påverkar ljuset fotosyntesen?' });
+    const p = provlapp(s, 'am', 3, '2026-09-14')!;
+    expect(p.noAmne).toBe(true);
+    expect(p.kravE).toHaveLength(3);
+    expect(p.kravE[2]).toContain('laborationsbeskrivning');
+    expect(p.avsnitt.flatMap((a) => a.labFragor)).toEqual(['Hur påverkar ljuset fotosyntesen?']);
+    const text = provlappText(p);
+    expect(text).toContain('Laborationsbeskrivning i tre steg:');
+    expect(text).toContain('Vad söker vi? Frågan: Hur påverkar ljuset fotosyntesen?');
   });
 });

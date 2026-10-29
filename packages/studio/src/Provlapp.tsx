@@ -6,8 +6,9 @@
  * (hjälpmedel, tider) sparas på lektionsplanen och tas med på lappen.
  */
 import { useState } from 'react';
-import { provlapp, provlappText, tolkaOmfang, type Betygsniva, type Provlapp as ProvlappData, type Struktur } from '@planner/kernel';
+import { labMall, provlapp, provlappText, tolkaOmfang, type Betygsniva, type Provlapp as ProvlappData, type Struktur } from '@planner/kernel';
 import { lasStruktur } from './store.js';
+import { djupBreddDataUrl } from './provlappFigur.js';
 
 const NIVAER: Betygsniva[] = ['E', 'C', 'A'];
 
@@ -84,10 +85,32 @@ function ProvlappVisning({ p, farg }: { p: ProvlappData; farg: string }) {
       {delkap.map((a) => (
         <div key={a.rubrik} className="provlapp-avsnitt">
           <b>{a.rubrik}</b>{a.sidor !== '' && a.sidor !== '—' && <span className="muted small"> ({a.sidor})</span>}
-          {a.mal.length > 0 ? <ul>{a.mal.map((m, i) => <li key={i}>{m}</li>)}</ul> : a.begrepp.length > 0 ? <p className="small"><b>Begrepp:</b> {a.begrepp.join(', ')}</p> : null}
+          {a.sammanfattning.map((sm, i) => <p key={`s${i}`} className="small provlapp-sammanfattning"><b>Sammanfattning:</b> {sm}</p>)}
+          {a.mal.length > 0 ? <ul>{a.mal.map((m, i) => <li key={i}>{m}</li>)}</ul> : null}
+          {a.begrepp.length > 0 && <p className="small"><b>Begrepp:</b> {a.begrepp.join(', ')}</p>}
           {a.exempel.length > 0 && <p className="small"><b>Exempel vi räknat:</b> {a.exempel.join(' · ')}</p>}
+          {a.djupBredd !== null && (
+            <div className="provlapp-djupbredd small">
+              <div><b>Djup:</b> {a.djupBredd.djup}</div>
+              <div><b>Bredd:</b> {a.djupBredd.bredd}</div>
+            </div>
+          )}
         </div>
       ))}
+
+      <h4>Så visar du djup och bredd</h4>
+      <p className="small"><b>Djup</b> = orsakssamband i flera led: A → B → C, där varje pil svarar på <i>varför</i>. <b>Bredd</b> = flera exempel i ett led: A — exempel 1, 2, 3 — och vad de har gemensamt. Under varje avsnitt ovan finns en djup- och en breddfråga byggd på avsnittets begrepp.</p>
+      {(() => { const f = delkap.find((a) => a.djupBredd !== null)?.djupBredd; return f === undefined || f === null ? null : <img className="provlapp-figur" alt="Djup: kedja av orsak och följd. Bredd: ett begrepp med tre exempel." src={djupBreddDataUrl(f.kedja, farg)} />; })()}
+
+      <h4>För E-nivå krävs</h4>
+      <ul>{p.kravE.map((k, i) => <li key={i}>{k}</li>)}</ul>
+      {p.noAmne && (() => { const fragor = delkap.flatMap((a) => a.labFragor); return (
+        <div className="provlapp-lab small">
+          <b>Enkel laborationsbeskrivning — tre steg</b>
+          <ol>{labMall(fragor[0] ?? null).map((m) => <li key={m.steg}><b>{m.steg}</b> {m.text}</li>)}</ol>
+          {fragor.length > 1 && <p className="muted">Laborationsfrågor i omfånget: {fragor.join(' · ')}</p>}
+        </div>
+      ); })()}
 
       {p.begrepp.length > 0 && (<>
         <h4>2. Begrepp du ska kunna förklara</h4>

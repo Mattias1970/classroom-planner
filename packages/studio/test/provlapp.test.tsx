@@ -117,3 +117,37 @@ describe('Del 151 · Provlapp på provets lektionskort', () => {
     expect(provlappForOmfang(s, 'am', [{ fran: '2.1', till: '2.2' }], { namn: 'Geometriprov', datum: null, vecka: null, notis: null })!.avsnitt.map((a) => a.rubrik)).toEqual(['2.1 Vinklar', '2.2 Area']);
   });
 });
+
+describe('Del 206 · Provlappen visar djup och bredd med bild, E-krav och lärarens sammanfattning', () => {
+  it('vyn: sammanfattning per avsnitt, djup-/breddfrågor ur begreppen, figuren som bild, E-kraven', async () => {
+    const s = sattLektionsplan(bygg(), { id: 'lp0', amneId: 'am', lektionsIndex: 0, sammanfattning: 'Ett bråk är en del av en helhet.' });
+    sparaStruktur(s);
+    const div = document.createElement('div'); document.body.appendChild(div);
+    const root = createRoot(div);
+    await act(async () => root.render(<ProvlappPanel s={s} amneId="am" lektionsIndex={2} farg="#b5532c" notis="" sattNotis={() => {}} />));
+    const knapp = [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Generera provlapp'))!;
+    await act(async () => { knapp.click(); });
+    const vy = div.querySelector('[role="document"]')!;
+    expect(vy.textContent).toContain('Sammanfattning: Ett bråk är en del av en helhet.');
+    expect(vy.textContent).toContain('Djup: Förklara i flera led hur täljare hänger ihop med nämnare');
+    expect(vy.textContent).toContain('Bredd: Ge tre olika exempel på täljare');
+    expect(vy.textContent).toContain('Så visar du djup och bredd');
+    const img = vy.querySelector<HTMLImageElement>('img.provlapp-figur')!;
+    expect(img).not.toBeNull();
+    expect(decodeURIComponent(img.src)).toContain('DJUP — orsakssamband i flera led');
+    expect(decodeURIComponent(img.src)).toContain('täljare');
+    expect(vy.textContent).toContain('För E-nivå krävs');
+    expect(vy.textContent).toContain('Kunna begreppen');
+    expect(vy.textContent).not.toContain('laborationsbeskrivning');   // matematik
+  });
+
+  it('Word-filen får djup/bredd, E-kraven och bilden som PNG när en ges', async () => {
+    const p = provlapp(bygg(), 'am', 2, '2026-09-14')!;
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 218, 99, 248, 255, 255, 63, 0, 5, 254, 2, 254, 167, 53, 129, 132, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130]);
+    const buf = await Packer.toBuffer(provlappDokument(p, '#b5532c', png));
+    const zip = await JSZip.loadAsync(buf);
+    const text = (await zip.file('word/document.xml')!.async('string')).replace(/<[^>]+>/g, '');
+    for (const del of ['Så visar du djup och bredd', 'Djup: Förklara i flera led hur täljare hänger ihop med nämnare', 'Bredd: Ge tre olika exempel på täljare', 'För E-nivå krävs', 'Kunna sammanfattningen']) expect(text).toContain(del);
+    expect(Object.keys(zip.files).some((f) => f.startsWith('word/media/'))).toBe(true);
+  });
+});

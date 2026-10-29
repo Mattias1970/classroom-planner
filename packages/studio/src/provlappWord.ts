@@ -4,10 +4,11 @@
  * import) från provets lektionskort.
  */
 import {
-  AlignmentType, BorderStyle, Document, Footer, Header, HeadingLevel, LevelFormat, Packer, PageNumber,
+  AlignmentType, BorderStyle, Document, Footer, Header, HeadingLevel, ImageRun, LevelFormat, Packer, PageNumber,
   Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType,
 } from 'docx';
-import type { Betygsniva, Provlapp } from '@planner/kernel';
+import { labMall, type Betygsniva, type Provlapp } from '@planner/kernel';
+import { djupBreddSvg, svgTillPng } from './provlappFigur.js';
 
 const FONT = 'Calibri';
 const BRED = 9638; // A4 minus 2 cm marginaler (DXA)
@@ -45,7 +46,7 @@ const datumText = (iso: string) => {
 };
 
 /** Bygger provlappens Word-dokument. `farg` = kapitlets färg ur boken. */
-export function provlappDokument(pl: Provlapp, farg: string): Document {
+export function provlappDokument(pl: Provlapp, farg: string, figur: Uint8Array | null = null): Document {
   const F = hex(farg);
   const h1 = (text: string) => new Paragraph({ heading: HeadingLevel.HEADING_1, spacing: { before: 260, after: 100 }, children: [t(text, { bold: true, size: 30, color: F })] });
   const h2 = (text: string) => new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 180, after: 70 }, children: [t(text, { bold: true, size: 24, color: '333333' })] });
@@ -81,9 +82,27 @@ export function provlappDokument(pl: Provlapp, farg: string): Document {
     const visa = a.typ === 'delkapitel' || a.mal.length > 0;
     if (!visa) continue;
     ut.push(h2(`${a.rubrik}${a.sidor !== '' && a.sidor !== '—' ? `  (${a.sidor})` : ''}`));
+    a.sammanfattning.forEach((sm) => ut.push(p([t('Sammanfattning: ', { bold: true }), t(sm)])));
     if (a.mal.length > 0) a.mal.forEach((m) => ut.push(punkt(m)));
-    else if (a.begrepp.length > 0) ut.push(punkt(`Förstå och använda begreppen: ${a.begrepp.join(', ')}.`));
+    if (a.begrepp.length > 0) ut.push(punkt(`Begrepp: ${a.begrepp.join(', ')}.`));
     a.exempel.forEach((e) => ut.push(p([t('Exempel från lektionerna: ', { italics: true, color: '555555' }), t(e, { italics: true, color: '555555' })], 50)));
+    if (a.djupBredd !== null) {
+      ut.push(p([t('Djup: ', { bold: true, color: F }), t(a.djupBredd.djup)], 40));
+      ut.push(p([t('Bredd: ', { bold: true, color: F }), t(a.djupBredd.bredd)], 80));
+    }
+  }
+
+  ut.push(h1('Så visar du djup och bredd'));
+  ut.push(p([t('Djup', { bold: true }), t(' = orsakssamband i flera led: A → B → C, där varje pil svarar på '), t('varför', { italics: true }), t('. '), t('Bredd', { bold: true }), t(' = flera exempel i ett led: A — exempel 1, 2, 3 — och vad de har gemensamt. Under varje avsnitt finns en djup- och en breddfråga byggd på avsnittets begrepp.')]));
+  if (figur !== null) ut.push(new Paragraph({ spacing: { after: 120 }, children: [new ImageRun({ type: 'png', data: figur, transformation: { width: 600, height: 208 }, altText: { title: 'Djup och bredd', description: 'Djup: kedja av orsak och följd. Bredd: ett begrepp med tre exempel.', name: 'djupbredd' } })] }));
+
+  ut.push(h1('För E-nivå krävs'));
+  pl.kravE.forEach((k) => ut.push(punkt(k)));
+  if (pl.noAmne) {
+    const fragor = pl.avsnitt.flatMap((a) => a.labFragor);
+    ut.push(h2('Enkel laborationsbeskrivning — tre steg'));
+    labMall(fragor[0] ?? null).forEach((m, i) => ut.push(p([t(`${i + 1}. ${m.steg} `, { bold: true }), t(m.text)], 50)));
+    if (fragor.length > 1) ut.push(p([t(`Laborationsfrågor i omfånget: ${fragor.join(' · ')}`, { italics: true, color: '555555' })]));
   }
 
   if (pl.begrepp.length > 0) {
@@ -135,7 +154,9 @@ export function provlappFilnamn(pl: Provlapp): string {
 
 /** Bygger och laddar ner provlappen. */
 export async function laddaNerProvlapp(pl: Provlapp, farg: string): Promise<void> {
-  const blob = await Packer.toBlob(provlappDokument(pl, farg));
+  const kedja = pl.avsnitt.find((a) => a.djupBredd !== null)?.djupBredd?.kedja ?? [];
+  const figur = kedja.length > 0 ? await svgTillPng(djupBreddSvg(kedja, farg)) : null;
+  const blob = await Packer.toBlob(provlappDokument(pl, farg, figur));
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `${provlappFilnamn(pl)}.docx`;

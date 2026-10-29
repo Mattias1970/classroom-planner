@@ -15,6 +15,7 @@
  * ger en lapp över just de delkapitlen, även över flera kapitel.
  */
 import type { Bok, NivaEtiketter, Struktur } from './typer.js';
+import { NO_TK_AMNEN } from './amnen.js';
 import { amnesPlanFor, hamtaLektionsplan, lektionsNamn } from './struktur.js';
 import { vagTillProvet, vagTyp, type VagBox, type VagTyp } from './vagtillprovet.js';
 
@@ -32,6 +33,22 @@ export interface ProvlappAvsnitt {
   /** Genomgångens innehåll och bokens exempel — det som gåtts igenom på lektionerna. */
   genomgang: string[];
   exempel: string[];
+  /** Del 206 · Lärarens sammanfattning av delkapitlet (LektionsPlan.sammanfattning, en per lektion). */
+  sammanfattning: string[];
+  /** Del 206 · Laborationsfrågor som hör till delkapitlet (LektionsPlan.labFraga). */
+  labFragor: string[];
+  /** Del 206 · Ramar för att visa djup (orsakssamband i flera led) och bredd (flera exempel i ett led), byggda ur avsnittets egna begrepp och mål. */
+  djupBredd: DjupBredd | null;
+}
+
+/** Del 206 · Så visar eleven djup och bredd i ett avsnitt — ramar, inte färdiga svar. */
+export interface DjupBredd {
+  /** Begreppen (eller målet) ramen bygger på. */
+  kedja: string[];
+  /** 'Förklara i flera led hur fotosyntes leder till … → … → cellandning. Varje pil svarar på varför.' */
+  djup: string;
+  /** 'Ge tre olika exempel på …, och säg vad de har gemensamt.' */
+  bredd: string;
 }
 
 export interface ProvlappOvning {
@@ -68,6 +85,40 @@ export interface Provlapp {
   notis: string | null;
   /** Sidor med repetition att läsa (Sammanfattning o.d.). */
   repetitionSidor: string[];
+  /** Del 206 · Sant för NO-ämnen: lappen tar med laborationsbeskrivning på E-nivå. */
+  noAmne: boolean;
+  /** Del 206 · E-nivåns tre krav i ord (begrepp, sammanfattning, enkel laborationsbeskrivning för NO). */
+  kravE: string[];
+}
+
+/** Del 206 · Ramar för djup och bredd ur avsnittets begrepp (minst två) eller mål. null när inget finns att bygga på. */
+export function djupBreddFor(begrepp: string[], mal: string[]): DjupBredd | null {
+  const b = begrepp.map((x) => x.trim()).filter((x) => x !== '');
+  if (b.length >= 2) {
+    const forsta = b[0]; const sista = b[b.length - 1];
+    const mellan = b.length > 2 ? ` (via ${b.slice(1, -1).slice(0, 2).join(', ')})` : '';
+    return {
+      kedja: b.slice(0, 4),
+      djup: `Förklara i flera led hur ${forsta} hänger ihop med ${sista}${mellan}: ${forsta} → … → ${sista}. Varje pil ska svara på varför.`,
+      bredd: `Ge tre olika exempel på ${forsta} och säg vad exemplen har gemensamt.`,
+    };
+  }
+  const m = mal.map((x) => x.trim()).filter((x) => x !== '')[0] ?? b[0];
+  if (m === undefined) return null;
+  return {
+    kedja: [m],
+    djup: `Välj något ur "${m}" och förklara orsak → följd → följd i flera led. Varje pil ska svara på varför.`,
+    bredd: `Ge tre olika exempel som visar "${m}" och säg vad de har gemensamt.`,
+  };
+}
+
+/** Del 206 · E-nivåns laborationsbeskrivning i tre steg: vad vi söker, hur vi ser resultatet, kopplingen. `fraga` = lärarens labfråga när den finns. */
+export function labMall(fraga: string | null): Array<{ steg: string; text: string }> {
+  return [
+    { steg: 'Vad söker vi?', text: fraga !== null ? `Frågan: ${fraga}` : 'Skriv frågan laborationen ska svara på.' },
+    { steg: 'Hur ser vi resultatet?', text: 'Beskriv vad vi gjorde och vad vi såg, mätte eller jämförde.' },
+    { steg: 'Koppling', text: 'Vad säger resultatet om frågan? Svara på frågan med hjälp av det du såg.' },
+  ];
 }
 
 function har(v: string | undefined | null): v is string { return v !== undefined && v !== null && v.trim() !== '' && v.trim() !== '—'; }
@@ -97,9 +148,13 @@ function slaIhop(intervall: string[]): string {
   return [...new Set(delar)].join(' · ');
 }
 
-function avsnittUrBox(b: VagBox): ProvlappAvsnitt {
+function avsnittUrBox(s: Struktur, amneId: string, b: VagBox): ProvlappAvsnitt {
   const lekt = b.lektioner;
+  const planer = lekt.map((l) => hamtaLektionsplan(s, amneId, l.index));
   return {
+    sammanfattning: [...new Set(planer.map((lp) => lp?.sammanfattning).filter(har).map((x) => x.trim()))],
+    labFragor: [...new Set(planer.map((lp) => lp?.labFraga).filter(har).map((x) => x.trim()))],
+    djupBredd: djupBreddFor(b.begrepp, b.mal),
     rubrik: b.rubrik, typ: b.typ, sidor: b.sidor,
     mal: b.mal, begrepp: b.begrepp,
     uppgifter: {
@@ -133,7 +188,8 @@ function byggLapp(s: Struktur, amneId: string, bok: Bok, boxar: VagBox[], kapite
   const klass = s.klasser.find((k) => k.id === amne.klassId);
   const n = bok.nivaer;
   const { karta, text } = nivaKarta(n);
-  const avsnitt = boxar.map(avsnittUrBox);
+  const avsnitt = boxar.map((b) => avsnittUrBox(s, amneId, b));
+  const noAmne = (NO_TK_AMNEN as readonly string[]).includes(amne.namn);
   const hitta = (b: string): string | null => {
     for (const k of kapitel) {
       const nyckel = Object.keys(k.forklaringar).find((x) => x.toLowerCase().trim() === b.toLowerCase().trim());
@@ -171,6 +227,12 @@ function byggLapp(s: Struktur, amneId: string, bok: Bok, boxar: VagBox[], kapite
     avsnitt, begrepp, ovningar,
     notis: prov.notis,
     repetitionSidor: avsnitt.filter((a) => a.typ === 'sammanfattning' && har(a.sidor)).map((a) => `${a.rubrik} ${a.sidor}`),
+    noAmne,
+    kravE: [
+      'Kunna begreppen: förklara varje begrepp med egna ord och ge ett exempel.',
+      'Kunna sammanfattningen: berätta det viktigaste i varje avsnitt.',
+      ...(noAmne ? ['Göra en enkel laborationsbeskrivning: vad vi söker, hur vi ser resultatet och hur resultatet kopplas till det vi söker.'] : []),
+    ],
   };
 }
 
@@ -282,6 +344,20 @@ export function provlappText(p: Provlapp): string {
     r.push(`${a.rubrik}${har(a.sidor) ? ` (${a.sidor})` : ''}`);
     a.mal.forEach((m) => r.push(`  • ${m}`));
     if (a.mal.length === 0 && a.begrepp.length > 0) r.push(`  Begrepp: ${a.begrepp.join(', ')}`);
+  }
+  r.push(''); r.push('SÅ VISAR DU DJUP OCH BREDD');
+  r.push('Djup = orsakssamband i flera led (A → B → C, varje pil svarar på varför). Bredd = flera exempel i ett led (A: exempel 1, 2, 3).');
+  for (const a of p.avsnitt.filter((x) => x.typ === 'delkapitel' && x.djupBredd !== null)) {
+    r.push(a.rubrik);
+    r.push(`  Djup: ${a.djupBredd!.djup}`);
+    r.push(`  Bredd: ${a.djupBredd!.bredd}`);
+  }
+  r.push(''); r.push('FÖR E-NIVÅ KRÄVS');
+  p.kravE.forEach((k) => r.push(`• ${k}`));
+  if (p.noAmne) {
+    r.push('Laborationsbeskrivning i tre steg:');
+    const fragor = p.avsnitt.flatMap((a) => a.labFragor);
+    labMall(fragor[0] ?? null).forEach((m) => r.push(`  ${m.steg} ${m.text}`));
   }
   if (p.begrepp.length > 0) {
     r.push(''); r.push('BEGREPP DU SKA KUNNA FÖRKLARA');
