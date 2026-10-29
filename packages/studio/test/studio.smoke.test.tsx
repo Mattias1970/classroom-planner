@@ -3415,7 +3415,7 @@ describe('Del 185: ladda ett kapitel från ett pass och ta bort en lektion med �
   });
   const avsnitten = (host: HTMLElement) => [...host.querySelectorAll('table.plan tbody tr')].map((tr) => tr.querySelector('td.lekt-avsnitt')?.textContent ?? '');
 
-  it('förhandsvisning, inläggning från valt datum och borttag med 🗑 — genomförda rader har ingen 🗑', async () => {
+  it('förhandsvisning, inläggning från valt datum och borttag med 🗑 — genomförda rader har 🗑 med varning (Del 198)', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date('2026-08-24T10:00:00Z'));   // måndag v. 35 — ons 19/8 är genomförd
     const host = render();
@@ -3437,7 +3437,7 @@ describe('Del 185: ladda ett kapitel från ett pass och ta bort en lektion med �
     act(() => { knapp(host, '📋 Planering').click(); });
     // ons 19/8 1.1 (genomförd), 26/8 1.2, 2/9 Prov, 9/9 2.1, 16/9 2.2
     expect(avsnitten(host)).toEqual(['1.1 Tal', '1.2 Potenser', 'Prov kap 1', '2.1 Andelen', '2.2 Delen']);
-    expect(host.querySelector('button[aria-label^="Ta bort lektion 1.1 Tal"]')).toBeNull();
+    expect((host.querySelector('button[aria-label^="Ta bort lektion 1.1 Tal"]') as HTMLButtonElement).title).toContain('fast den har varit');
 
     // Ladda kapitel 2 från 26/8: förhandsvisning, sedan inläggning
     valj(select(host, 'Kapitel att ladda'), '2');
@@ -3556,6 +3556,47 @@ describe('Del 188: redigera genomförda lektioner — låsta tills läraren lås
     expect(rader(host)).toEqual(['2026-08-19 1.3 Bråk · ersatt', '2026-08-26 1.3 Bråk']);
     act(() => { knapp(host, '🔒 Lås genomförda lektioner').click(); });
     expect(host.querySelector('select[aria-label="Ändra genomförd lektion 2"]')).toBeNull();
+    confirm.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it('Del 198: 🗑 på en genomförd rad utan upplåsning, och ☑ välj flera (även genomförda) → ta bort på en gång', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-27T10:00:00Z'));   // ons 19/8 och 26/8 har varit
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host, BOK188);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8A');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8A').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'bok-188');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '📋 Planering').click(); });
+    expect(rader(host)).toEqual(['2026-08-19 1.1 Tal', '2026-08-26 1.2 Potenser', '2026-09-02 1.3 Bråk']);
+    // 🗑 finns på den genomförda raden utan 🔓; avbryt ändrar inget, OK tar bort och de följande flyttas tidigare
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    act(() => { (host.querySelector('button[aria-label="Ta bort lektion 1.2 Potenser 2026-08-26"]') as HTMLButtonElement).click(); });
+    expect(confirm.mock.calls[0][0]).toContain('har varit (2026-08-26)');
+    expect(rader(host)).toEqual(['2026-08-19 1.1 Tal', '2026-08-26 1.2 Potenser', '2026-09-02 1.3 Bråk']);
+    confirm.mockReturnValue(true);
+    act(() => { (host.querySelector('button[aria-label="Ta bort lektion 1.2 Potenser 2026-08-26"]') as HTMLButtonElement).click(); });
+    expect(rader(host)).toEqual(['2026-08-19 1.1 Tal', '2026-08-26 1.3 Bråk']);
+    // Välj flera: bocka i båda (en genomförd) och ta bort på en gång
+    act(() => { knapp(host, '☑ Välj lektioner att ta bort').click(); });
+    act(() => { (host.querySelector('input[aria-label="Välj lektion 1"]') as HTMLInputElement).click(); });
+    act(() => { (host.querySelector('input[aria-label="Välj lektion 2"]') as HTMLInputElement).click(); });
+    act(() => { knapp(host, '🗑 Ta bort 2 valda').click(); });
+    expect(confirm.mock.calls[2][0]).toContain('Ta bort 2 lektioner?');
+    expect(confirm.mock.calls[2][0]).toContain('2 av dem har varit');
+    expect(rader(host)).toEqual([]);
     confirm.mockRestore();
     vi.useRealTimers();
   });
