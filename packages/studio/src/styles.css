@@ -1312,3 +1312,41 @@ input.fel { border-color: #B71C1C; }
 .st-vecko-amne { margin: 8px 0 10px; padding-top: 6px; border-top: 1px dashed var(--ram); }
 .st-vecko-amne p { margin: 2px 0; }
 .st-vecko-forhand { border: 1px dashed var(--ram); border-radius: 8px; padding: 6px 10px; margin-bottom: 8px; }
+
+/* Del 202 · Kortraden */
+.kortrad-karta { display: flex; gap: 6px; flex-wrap: wrap; align-items: flex-end; padding: 6px 8px; border: 1px solid var(--ram); border-radius: 8px; background: var(--bg2, #fafafa); margin-bottom: 8px; }
+.kortrad-karta-vecka { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.kortrad-karta-v { font-size: 10px; color: var(--muted, #777); }
+.kortrad-karta-block { display: flex; gap: 2px; }
+.kortrad-karta-kort { width: 10px; height: 14px; border: 1px solid rgba(0,0,0,.15); border-radius: 2px; padding: 0; cursor: pointer; opacity: .45; }
+.kortrad-karta-kort.varit { opacity: .25; }
+.kortrad-karta-kort.syns { opacity: 1; outline: 2px solid #1565c0; outline-offset: 1px; }
+.kortrad-karta-kort.idag { box-shadow: 0 0 0 2px #e65100; }
+.kortrad-rull { overflow: auto; max-height: 72vh; border: 1px solid var(--ram); border-radius: 8px; padding: 8px; background: var(--bg2, #fafafa); }
+.kortrad-horisontell .kortrad-rull { display: flex; gap: 10px; align-items: flex-start; }
+.kortrad-vertikal .kortrad-rull { display: flex; flex-direction: column; gap: 10px; }
+.kortrad-vecka { display: flex; flex-direction: column; gap: 6px; }
+.kortrad-horisontell .kortrad-vecka { border-left: 3px solid var(--ram); padding-left: 8px; }
+.kortrad-vecka-rubrik { white-space: nowrap; }
+.kortrad-vecka-kort { display: flex; gap: 8px; }
+.kortrad-vertikal .kortrad-vecka-kort { flex-direction: column; }
+.kortrad-post { display: flex; align-items: center; gap: 4px; }
+.kortrad-vertikal .kortrad-post { flex-direction: column; align-items: stretch; }
+.kortrad-kort { width: 190px; min-height: 96px; background: #fff; border: 1px solid var(--ram); border-top: 4px solid #5c6b7a; border-radius: 8px; padding: 6px 8px; cursor: pointer; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.kortrad-vertikal .kortrad-kort { width: auto; }
+.kortrad-kort:hover, .kortrad-kort:focus-visible { box-shadow: 0 2px 8px rgba(0,0,0,.15); outline: none; }
+.kortrad-kort.varit { opacity: .7; }
+.kortrad-kort.klar .kortrad-kort-rubrik::before { content: '✓ '; color: #2e7d32; }
+.kortrad-kort.aktuell { box-shadow: 0 0 0 2px #e65100; }
+.kortrad-kort.dras { opacity: .4; }
+.kortrad-kort.over { outline: 2px dashed #1565c0; }
+.kortrad-kort.fast { cursor: default; background: #f6f6f6; }
+.kortrad-kort-dag { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; }
+.kortrad-kort-rubrik { font-weight: 700; margin: 2px 0; line-height: 1.2; }
+.kortrad-kort-knappar { position: absolute; right: 4px; bottom: 4px; display: none; }
+.kortrad-kort:hover .kortrad-kort-knappar { display: block; }
+.kortrad-plus { border: 1px dashed var(--ram); background: transparent; color: var(--muted, #777); border-radius: 50%; width: 22px; height: 22px; line-height: 18px; padding: 0; cursor: pointer; font-size: 14px; }
+.kortrad-plus:hover { background: #e3f2fd; color: #1565c0; border-color: #1565c0; }
+.kortrad-vertikal .kortrad-plus { align-self: center; }
+.kortrad-slapp { border: 1px dashed var(--ram); border-radius: 8px; padding: 6px; color: var(--muted, #777); font-size: 12px; white-space: nowrap; align-self: center; }
+.kortrad-slapp.over { background: #e3f2fd; border-color: #1565c0; color: #1565c0; }

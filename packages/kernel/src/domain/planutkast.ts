@@ -1038,6 +1038,37 @@ export function laggTillLektionEfter(s: Struktur, amneId: string, efterNyckel: s
 }
 
 /**
+ * Del 202 · Flyttar en lektion så att den hamnar direkt efter `efterNyckel` (null = först bland passen
+ * från den tidigaste berörda lektionen). De andra lektionerna behåller sin inbördes ordning, fasta
+ * kort ligger kvar på sina datum. Berörs genomförda pass krävs `tillatGenomford`.
+ */
+export function flyttaLektionEfter(s: Struktur, amneId: string, nyckel: string, efterNyckel: string | null, idag?: string, tillatGenomford = false): { s: Struktur; fran: string; datum: string | null } {
+  hittaAmne(s, amneId);
+  if (nyckel === efterNyckel) throw new Error('Lektionen ligger redan där.');
+  const plan = (amnesPlanFor(s, amneId, idag, false)?.a ?? []).filter((r) => r.datum !== null && r.nyckel !== undefined && !arPass(r.nyckel) && !arLab(r.nyckel));
+  const i = plan.findIndex((r) => r.nyckel === nyckel);
+  if (i === -1) throw new Error('Lektionen finns inte i planeringen.');
+  const j = efterNyckel === null ? -1 : plan.findIndex((r) => r.nyckel === efterNyckel);
+  if (efterNyckel !== null && j === -1) throw new Error('Lektionen att lägga efter finns inte i planeringen.');
+  if (j === i - 1) return { s, fran: plan[i].datum!, datum: plan[i].datum };   // redan på plats
+  const forstaBerord = Math.min(i, j + 1);
+  const fran = plan[forstaBerord].datum!;
+  if (idag !== undefined && fran < idag && !tillatGenomford) throw new Error('Flytten berör pass som har varit — bekräfta att genomförda lektioner får skrivas om.');
+  const dag = idag !== undefined && fran < idag ? undefined : idag;
+  const u0 = utkastFranPlan(s, amneId, fran, dag, `Flytt ${fran}`);
+  const fasta = fastaKortFran(s, amneId, fran, dag);
+  const fastaNycklar = new Set(fasta.values());
+  // Den nya ordningen bland de fria korten från startpasset: som nu, men med lektionen efter målet
+  const fria = u0.teori.filter((n) => !fastaNycklar.has(n) && n !== nyckel);
+  const malIdx = efterNyckel === null ? -1 : fria.indexOf(efterNyckel);
+  const ko = efterNyckel !== null && malIdx === -1 ? [nyckel, ...fria] : [...fria.slice(0, malIdx + 1), nyckel, ...fria.slice(malIdx + 1)];
+  const teori = laggUtTeori(s, amneId, fran, ko, fasta, dag);
+  const ut = tillampaUtkast(s, amneId, { ...u0, teori }, dag);
+  const efter = amnesPlanFor(ut, amneId, idag, false)?.a ?? [];
+  return { s: ut, fran, datum: efter.find((r) => r.nyckel === nyckel)?.datum ?? null };
+}
+
+/**
  * Del 200 · Rader som en inställning gav upphov till (fler lektioner på ett delkapitel) läggs in i ett
  * inlagt utkast — annars syns de inte, eftersom utkastet bara visar de nycklar det känner till. Varje ny
  * nyckel hamnar efter sin föregångare i bokens följd (sista lektionen på delkapitlet).

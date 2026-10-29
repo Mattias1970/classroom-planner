@@ -59,6 +59,7 @@ import { Elevkort } from './Elevkort.js';
 import { ProvlappPanel } from './Provlapp.js';
 import { BamRedigering } from './BamRedigering.js';
 import { PlaneringsTavla } from './PlaneringsTavla.js';
+import { Kortrad } from './Kortrad.js';
 import { Skal, Kort, type Filter, type V3Vy } from './v3/Skal.js';
 import { Oversikt } from './v3/Oversikt.js';
 import { Amnessida } from './v3/Amnessida.js';
@@ -1456,7 +1457,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
       kor(() => sattPlanFrystTill(lasStruktur(), a.id, idag), `${a.namn}: genomförd planering till och med igår är låst; laborationerna gäller från ${idag}.`);
     }
   }, [a?.id, a?.planFrystTill, a?.laborationsstandard, harPlanering]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [flik, setFlik] = useState<'planering' | 'tavla' | 'detalj' | 'oversikt' | 'uppgifter' | 'begrepp' | 'filmer' | 'magma' | 'anteckningar' | 'arsoversikt' | 'installningar' | 'laborationer'>('planering');
+  const [flik, setFlik] = useState<'planering' | 'kortrad' | 'tavla' | 'detalj' | 'oversikt' | 'uppgifter' | 'begrepp' | 'filmer' | 'magma' | 'anteckningar' | 'arsoversikt' | 'installningar' | 'laborationer'>('planering');
   // Om planen krymper (t.ex. laboration borttagen) får detaljindex inte peka utanför
   useEffect(() => { if (detaljIdxRef.current >= plan.length && plan.length > 0) setDetaljIdx(plan.length - 1); }, [plan.length]); // eslint-disable-line react-hooks/exhaustive-deps
   // Del 133: detaljplaneringen öppnar på dagens/nästa lektion, inte lektion 1
@@ -1488,6 +1489,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
       )}
       <div className="flikar no-print">
         <button className={`flik ${flik === 'planering' ? 'act' : ''}`} onClick={() => setFlik('planering')}>📝 Lektionsplan</button>
+        <button className={`flik ${flik === 'kortrad' ? 'act' : ''}`} onClick={() => setFlik('kortrad')} disabled={!bok} title={!bok ? 'Koppla en bok först' : 'Alla lektionsplanskort i en rad — klicka, dra, lägg till och ta bort; karta överst'}>🃏 Kortrad</button>
         <button className={`flik ${flik === 'tavla' ? 'act' : ''}`} onClick={() => setFlik('tavla')} disabled={!bok} title={!bok ? 'Koppla en bok först' : 'Alla lektioner som kort i en rad — dra in kapitel, laborationer och egna kort'}>🗂 Planeringstavla</button>
         <button className={`flik ${flik === 'detalj' ? 'act' : ''}`} onClick={() => setFlik('detalj')}>🧭 Detaljplanering</button>
         {([['oversikt', 'ℹ Översikt'], ['uppgifter', '✏ Uppgifter'], ['begrepp', '💡 Begrepp'], ['filmer', '🎬 Filmer'], ['magma', '🟫 Magma'], ['anteckningar', '👥 Anteckningar']] as const)
@@ -1547,6 +1549,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
       </div>
       {flik === 'arsoversikt' && bok && <Arsoversikt s={s} bok={bok} plan={plan} kor={kor} />}
       {flik === 'arsoversikt' && !bok && <p className="muted">Koppla en bok för att se årsöversikten.</p>}
+      {flik === 'kortrad' && bok && <Kortrad s={s} amneId={a.id} bok={bok} plan={plan} idag={idag} kor={kor} oppnaLektion={oppnaLektion} />}
       {flik === 'tavla' && bok && <PlaneringsTavla s={s} amneId={a.id} bok={bok} kor={kor} idag={idag} />}
       {flik === 'detalj' && bok && <DetaljFlik s={s} amneId={a.id} plan={plan} bok={bok} amnesNamn={a.namn} kor={kor} idx={detaljIdx} setIdx={setDetaljIdx} meddela={(m) => kor(() => lasStruktur(), m)} />}
       {flik === 'detalj' && !bok && <p className="muted">Koppla en bok till ämnet för att använda detaljplaneringen.</p>}

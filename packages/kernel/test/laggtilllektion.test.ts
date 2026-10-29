@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  amnesPlanFor, bokFromImport, laggTillAmne, laggTillKlass, laggTillLektionEfter, laggTillSkolar, laggTillTjanst, registreraPlanering, resetIdRaknare,
+  amnesPlanFor, bokFromImport, flyttaLektionEfter, laggTillAmne, laggTillKlass, laggTillLektionEfter, laggTillSkolar, laggTillTjanst, registreraPlanering, resetIdRaknare,
   sattAntalLektionerIPlan, sattLektionerPerDelkapitelIPlan, sparaBok, tillampaUtkast, tomStruktur, utkastFranPlan, type Struktur,
 } from '../src/index.js';
 
@@ -65,5 +65,28 @@ describe('Del 200 · fler lektioner på ett delkapitel syns även under ett utka
     // Ämnesinställningen 2 per delkapitel från 1:3
     const s3 = sattLektionerPerDelkapitelIPlan(s, 'ma', 2, '1:3', '2026-08-17');
     expect(rad(s3, '2026-08-17')).toEqual(['2026-08-19 1.1 Avsnitt', '2026-08-26 1.2 Avsnitt', '2026-09-02 Prov', '2026-09-09 1.3 Avsnitt', '2026-09-16 1.3 Avsnitt', '2026-09-23 1.4 Avsnitt', '2026-09-30 1.4 Avsnitt']);
+  });
+});
+
+describe('Del 202 · flytta en lektion efter en annan', () => {
+  it('framåt och bakåt, med ett fast prov som ligger kvar; först i raden med null', () => {
+    let s = bygg();
+    const u = utkastFranPlan(s, 'ma', '2026-08-17', '2026-08-17', 'U');
+    s = tillampaUtkast(s, 'ma', { ...u, teori: ['1:1', '1:2', 'u:prov', '1:3', '1:4'], egna: [{ id: 'prov', rubrik: 'Prov', typ: 'prov' }] }, '2026-08-17');
+    const idag = '2026-08-17';
+    // 1.4 flyttas till efter 1.1
+    const r = flyttaLektionEfter(s, 'ma', '1:4', '1:1', idag);
+    expect(r).toMatchObject({ fran: '2026-08-26', datum: '2026-08-26' });
+    expect(rad(r.s, idag)).toEqual(['2026-08-19 1.1 Avsnitt', '2026-08-26 1.4 Avsnitt', '2026-09-02 Prov', '2026-09-09 1.2 Avsnitt', '2026-09-16 1.3 Avsnitt']);
+    // 1.1 flyttas till efter 1.3 (bakåt i raden)
+    const r2 = flyttaLektionEfter(r.s, 'ma', '1:1', '1:3', idag);
+    expect(rad(r2.s, idag)).toEqual(['2026-08-19 1.4 Avsnitt', '2026-08-26 1.2 Avsnitt', '2026-09-02 Prov', '2026-09-09 1.3 Avsnitt', '2026-09-16 1.1 Avsnitt']);
+    // Först: null
+    const r3 = flyttaLektionEfter(r2.s, 'ma', '1:3', null, idag);
+    expect(rad(r3.s, idag)).toEqual(['2026-08-19 1.3 Avsnitt', '2026-08-26 1.4 Avsnitt', '2026-09-02 Prov', '2026-09-09 1.2 Avsnitt', '2026-09-16 1.1 Avsnitt']);
+    // Redan på plats → oförändrat; genomförda pass kräver flaggan
+    expect(flyttaLektionEfter(r3.s, 'ma', '1:4', '1:3', idag).s).toBe(r3.s);
+    expect(() => flyttaLektionEfter(r3.s, 'ma', '1:1', '1:3', '2026-09-10')).toThrow(/har varit/);
+    expect(rad(flyttaLektionEfter(r3.s, 'ma', '1:1', '1:3', '2026-09-10', true).s, '2026-09-10')).toEqual(['2026-08-19 1.3 Avsnitt', '2026-08-26 1.1 Avsnitt', '2026-09-02 Prov', '2026-09-09 1.4 Avsnitt', '2026-09-16 1.2 Avsnitt']);
   });
 });
