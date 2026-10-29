@@ -3818,3 +3818,57 @@ describe('Del 205: 📅 Läsåret i Översikt — lov bakåt i tiden, tid som f�
     vi.useRealTimers();
   });
 });
+
+describe('Del 205b: Del av dag i Läsåret — utvecklingssamtal 13–17 tar eftermiddagspasset, förmiddagen kvar', () => {
+  const BOK = JSON.stringify({
+    schema: 'classroom-planner-bok', version: 1,
+    bok: { id: 'bok-205b', titel: 'Matematik Y', förlag: 'Liber', ämne: 'Matematik', årskurs: 8, kapitelMeta: { '1': { name: 'Tal', col: '#2f5aa8' } } },
+    lektioner: { '1': [1, 2, 3, 4].map((id) => ({ id, type: 'regular', avsnitt: `1.${id} Del`, del: 1 })) },
+  });
+  const datum = (host: HTMLElement) => [...host.querySelectorAll('table.plan tbody tr')].map((tr) => `${tr.querySelectorAll('td')[2]?.textContent ?? ''} ${tr.querySelector('td.lekt-avsnitt')?.textContent ?? ''}`);
+  const nav = (host: HTMLElement, t: string) => [...host.querySelectorAll<HTMLButtonElement>('.v3-nav')].find((b) => b.textContent?.trim() === t)!;
+
+  it('ons 9:00 och ons 14:00; utvecklingssamtal ons 26/8 13–17 → bara eftermiddagspasset flyttas', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-24T10:00:00Z'));
+    localStorage.setItem('cp.layout', JSON.stringify('v3'));
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host, BOK);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8A');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8A').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'bok-205b');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Pass').click(); });
+    valj(select(host, 'Veckodag pass 2'), '3');
+    skriv(input(host, 'Start pass 2'), '14:00');
+    skriv(input(host, 'Slut pass 2'), '15:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { nav(host, 'Planering').click(); });
+    expect(datum(host)).toEqual(['2026-08-19 1.1 Del', '2026-08-19 1.2 Del', '2026-08-26 1.3 Del', '2026-08-26 1.4 Del']);
+
+    act(() => { nav(host, 'Översikt').click(); });
+    act(() => { knapp(host, '➕ Lägg till dagar').click(); });
+    valj(select(host, 'Typ av dag'), 'del');
+    expect(host.textContent).toContain('Del av dag: passen som överlappar klockslagen utgår');
+    skriv(input(host, 'Dagens namn'), 'Utvecklingssamtal');
+    skriv(input(host, 'Dagar från datum'), '2026-08-26');
+    skriv(input(host, 'Dagar till datum'), '2026-08-26');
+    skriv(input(host, 'Del av dag från klockan'), '13:00');
+    skriv(input(host, 'Del av dag till klockan'), '17:00');
+    act(() => { knapp(host, 'Spara dagarna').click(); });
+    expect(host.textContent).toContain('Utvecklingssamtal 2026-08-26 kl. 13:00–17:00: 8A Matematik 1 pass — visas under 🚫 Tid som försvinner');
+    expect(host.textContent).toContain('13:00–17:00');   // i 🚫-listan
+    act(() => { nav(host, 'Planering').click(); });
+    expect(datum(host)).toEqual(['2026-08-19 1.1 Del', '2026-08-19 1.2 Del', '2026-08-26 1.3 Del', '2026-09-02 1.4 Del']);
+    vi.useRealTimers();
+  });
+});

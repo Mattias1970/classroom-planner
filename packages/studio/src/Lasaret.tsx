@@ -11,7 +11,7 @@
  */
 import { useState } from 'react';
 import {
-  laggTillSkolarDagar, noPeriodFor, samlaSlots, sattNoPeriod, uppdateraSkolar,
+  laggTillSchemaPeriod, laggTillSkolarDagar, noPeriodFor, samlaSlots, sattNoPeriod, uppdateraSkolar,
   type Amne, type Skolar, type SkolarDag, type Struktur,
 } from '@planner/kernel';
 import { lasStruktur } from './store.js';
@@ -19,7 +19,9 @@ import { SchemaBortfall } from './App.js';
 
 type Kor = (fn: () => Struktur, m: string) => void;
 
-const TYP_TEXT: Record<SkolarDag['typ'], string> = { lov: 'Lov', heldag: 'Temadag / heldag', halvdag: 'Halvdag' };
+const TYP_TEXT: Record<SkolarDag['typ'], string> = { lov: 'Lov', heldag: 'Temadag / heldag', halvdag: 'Halvdag — skoldagen slutar tidigare' };
+/** Del 205b · "Del av dag" (utvecklingssamtal 13–17, friluftsförmiddag …) läggs som tid som försvinner från schemat: från kl – till kl samma dag(ar). */
+type DagTyp = SkolarDag['typ'] | 'del';
 
 export function Lasaret({ s, skolarId, kor }: { s: Struktur; skolarId: string; kor: Kor }) {
   const la = s.skolar.find((x) => x.id === skolarId) ?? s.skolar[0];
@@ -38,7 +40,8 @@ export function Lasaret({ s, skolarId, kor }: { s: Struktur; skolarId: string; k
 function Dagar({ s, la, kor }: { s: Struktur; la: Skolar; kor: Kor }) {
   const idag = new Date().toISOString().slice(0, 10);
   const [oppen, setOppen] = useState(false);
-  const [typ, setTyp] = useState<SkolarDag['typ']>('lov');
+  const [typ, setTyp] = useState<DagTyp>('lov');
+  const [start, setStart] = useState('13:00');
   const [label, setLabel] = useState('');
   const [fran, setFran] = useState(idag);
   const [till, setTill] = useState(idag);
@@ -57,6 +60,15 @@ function Dagar({ s, la, kor }: { s: Struktur; la: Skolar; kor: Kor }) {
   const spara = () => {
     const bakat = fran < idag;
     if (bakat && !window.confirm(`${label.trim()} börjar ${fran}, som redan varit. Lektioner på de dagarna utgår och planeringen räknas om — även genomförda lektioner. Fortsätt?`)) return;
+    if (typ === 'del') {
+      try {
+        const r = laggTillSchemaPeriod(lasStruktur(), la.id, { fran, till, start, slut, label }, idag, true);
+        const ber = r.berorda.filter((b) => b.pass > 0);
+        kor(() => r.s, `${label.trim()} ${fran}${till !== fran ? ` – ${till}` : ''} kl. ${start}–${slut}: ${ber.length === 0 ? 'inga lektionspass berörs' : ber.map((b) => `${b.amne} ${b.pass} pass`).join(', ')} — visas under 🚫 Tid som försvinner från schemat.`);
+        setLabel(''); setOppen(false);
+      } catch (e) { kor(() => { throw e; }, ''); }
+      return;
+    }
     kor(() => laggTillSkolarDagar(lasStruktur(), la.id, { fran, till, typ, label, ...(typ === 'halvdag' ? { slut } : {}) }),
       `${TYP_TEXT[typ]} ${label.trim()} ${fran}${till !== fran ? ` – ${till}` : ''} tillagd${bakat ? ' (bakåt i tiden — lektionerna är omräknade)' : ' — berörda lektioner utgår ur planeringarna'}.`);
     setLabel(''); setOppen(false);
@@ -75,16 +87,26 @@ function Dagar({ s, la, kor }: { s: Struktur; la: Skolar; kor: Kor }) {
       </div>
       {oppen && (
         <div className="rad" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 8 }}>
-          <select aria-label="Typ av dag" value={typ} onChange={(e) => setTyp(e.target.value as SkolarDag['typ'])}>
+          <select aria-label="Typ av dag" value={typ} onChange={(e) => setTyp(e.target.value as DagTyp)}>
             {(Object.keys(TYP_TEXT) as SkolarDag['typ'][]).map((k) => <option key={k} value={k}>{TYP_TEXT[k]}</option>)}
+            <option value="del">Del av dag — från kl. till kl.</option>
           </select>
-          <input aria-label="Dagens namn" placeholder={typ === 'lov' ? 't.ex. Höstlov' : typ === 'heldag' ? 't.ex. Temadag, Idrottsdag' : 't.ex. Julavslutning'} value={label} onChange={(e) => setLabel(e.target.value)} />
+          <input aria-label="Dagens namn" placeholder={typ === 'lov' ? 't.ex. Höstlov' : typ === 'heldag' ? 't.ex. Temadag, Idrottsdag' : typ === 'halvdag' ? 't.ex. Julavslutning' : 't.ex. Utvecklingssamtal'} value={label} onChange={(e) => setLabel(e.target.value)} />
           <label className="small">från <input type="date" aria-label="Dagar från datum" value={fran} onChange={(e) => { if (e.target.value !== '') { setFran(e.target.value); if (till < e.target.value) setTill(e.target.value); } }} /></label>
           <label className="small">till <input type="date" aria-label="Dagar till datum" value={till} min={fran} onChange={(e) => { if (e.target.value !== '') setTill(e.target.value); }} /></label>
-          {typ === 'halvdag' && <label className="small">slutar kl. <input type="time" aria-label="Halvdagen slutar klockan" value={slut} onChange={(e) => setSlut(e.target.value)} /></label>}
+          {typ === 'halvdag' && <label className="small">skoldagen slutar kl. <input type="time" aria-label="Halvdagen slutar klockan" value={slut} onChange={(e) => setSlut(e.target.value)} /></label>}
+          {typ === 'del' && <>
+            <label className="small">från kl. <input type="time" aria-label="Del av dag från klockan" value={start} onChange={(e) => setStart(e.target.value)} /></label>
+            <label className="small">till kl. <input type="time" aria-label="Del av dag till klockan" value={slut} onChange={(e) => setSlut(e.target.value)} /></label>
+          </>}
           <button className="btn sm" disabled={label.trim() === ''} onClick={spara}>Spara dagarna</button>
           {fran < idag && <span className="status warn small">⚠ bakåt i tiden — lektionerna räknas om</span>}
         </div>
+      )}
+      {oppen && (
+        <p className="note" style={{ margin: '4px 0 0' }}>
+          {typ === 'halvdag' ? 'Halvdag: passen som börjar efter sluttiden utgår, förmiddagen är kvar.' : typ === 'del' ? 'Del av dag: passen som överlappar klockslagen utgår (t.ex. utvecklingssamtal 13:00–17:00 tar eftermiddagens lektioner); resten av dagen är kvar. Hamnar i listan under 🚫 Tid som försvinner från schemat.' : 'Hela dagen utgår — inga lektioner.'}
+        </p>
       )}
       {rader.length === 0 ? <p className="muted small" style={{ margin: '6px 0 0' }}>Inga {visaGamla ? '' : 'kommande '}lov eller temadagar inlagda.</p> : (
         <table className="tbl" style={{ marginTop: 8 }}>
