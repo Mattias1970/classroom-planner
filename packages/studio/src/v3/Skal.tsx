@@ -26,7 +26,7 @@ export function vyNyckel(v: V3Vy): string { return v.typ === 'amne' ? `amne:${v.
 /** Globala filter i toppraden. Vyerna som har egna väljare fortsätter med dem; de nya vyerna läser härifrån. */
 export interface Filter { klassId: string; skolarId: string; amneId: string; periodText: string; sok: string }
 
-export function Skal({ s, vy, setVy, filter, setFilter, notiser, larareNamn, verktyg, detalj, children }: {
+export function Skal({ s, vy, setVy, filter, setFilter, notiser, larareNamn, verktyg, detalj, angra, children }: {
   s: Struktur; vy: V3Vy; setVy: (v: V3Vy) => void;
   filter: Filter; setFilter: (f: Filter) => void;
   /** Antal varningar (t.ex. förväntade prov utan resultat) — visas på klockan. */
@@ -34,6 +34,8 @@ export function Skal({ s, vy, setVy, filter, setFilter, notiser, larareNamn, ver
   larareNamn: string;
   /** Knappar i användarmenyn: Ångra, tema, GitHub, Backup, Återställ. */
   verktyg: React.ReactNode;
+  /** Del 200 · ↩ Ångra synlig i topplisten (fanns tidigare bara i användarmenyn). */
+  angra?: () => void;
   /** Valfri detaljpanel till höger. */
   detalj?: React.ReactNode;
   children: React.ReactNode;
@@ -102,6 +104,7 @@ export function Skal({ s, vy, setVy, filter, setFilter, notiser, larareNamn, ver
             <input aria-label="Filter period" placeholder="v.34–42" value={filter.periodText} onChange={(e) => setFilter({ ...filter, periodText: e.target.value })} /></label>
           <span className="spacer" />
           <label className="v3-sok"><Ikon.sok storlek={16} /><input aria-label="Filter sök" placeholder="Sök elev, delkapitel, moment…" value={filter.sok} onChange={(e) => setFilter({ ...filter, sok: e.target.value })} /></label>
+          {angra !== undefined && <button className="v3-ikonknapp" aria-label="Ångra" title="Ångra senaste ändring (upp till 20 steg)" onClick={angra}>↩</button>}
           <div className="v3-meny-anker">
             <button className="v3-ikonknapp" aria-label={`Notiser (${notiser.length})`} onClick={() => setMeny(meny === 'notiser' ? 'ingen' : 'notiser')}>
               <Ikon.klocka storlek={20} />{notiser.length > 0 && <span className="v3-badge">{notiser.length}</span>}

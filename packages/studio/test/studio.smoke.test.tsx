@@ -2842,7 +2842,7 @@ describe('Del 129: lektioner tas bort, ersätts och utökas i Lektionsplan', () 
     expect(host.textContent).toContain('1.2 Potenser');   // veckovyn (24–30/8) visar samma plan
     act(() => { knapp(host, '📋 Planering').click(); });
     expect(select(host, 'Åtgärd lektion 1')).toBeNull();
-    expect(select(host, 'Åtgärd lektion 2')).toBeNull();
+    expect(select(host, 'Ändra genomförd lektion 1')).not.toBeNull();   // Del 200: genomförda rader har samma meny (med bekräftelse)
     expect(select(host, 'Åtgärd lektion 3')).not.toBeNull();
     expect(select(host, 'Antal lektioner 2')).toBeNull();   // 1.2 Del 1 är genomförd …
     expect(select(host, 'Antal lektioner 3')).not.toBeNull(); // … men delkapitlet kan utökas från Del 2
@@ -3518,7 +3518,7 @@ describe('Del 188: redigera genomförda lektioner — låsta tills läraren lås
   });
   const rader = (host: HTMLElement) => [...host.querySelectorAll('table.plan tbody tr')].map((tr) => `${tr.querySelectorAll('td')[2]?.textContent ?? ''} ${tr.querySelector('td.lekt-avsnitt')?.textContent ?? ''}`);
 
-  it('låst som standard; upplåst + bekräftelse ändrar bara det passet', async () => {
+  it('genomförda rader har samma meny — ändringar bekräftas och gäller bara det passet (Del 200: inget lås)', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date('2026-08-27T10:00:00Z'));   // torsdag — ons 19/8 och 26/8 har varit
     const host = render();
@@ -3540,9 +3540,7 @@ describe('Del 188: redigera genomförda lektioner — låsta tills läraren lås
     act(() => { knapp(host, '📋 Planering').click(); });
     const fore = rader(host);
     expect(fore).toEqual(['2026-08-19 1.1 Tal', '2026-08-26 1.2 Potenser', '2026-09-02 1.3 Bråk']);
-    expect(host.querySelector('select[aria-label="Ändra genomförd lektion 2"]')).toBeNull();
-
-    act(() => { knapp(host, '🔓 Redigera genomförda lektioner').click(); });
+    expect(host.querySelector('select[aria-label="Ändra genomförd lektion 2"]')).not.toBeNull();
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     valj(select(host, 'Ändra genomförd lektion 2'), 'bok:1:3');
     expect(rader(host)).toEqual(fore);                                   // avbrutet: inget ändras
@@ -3554,13 +3552,19 @@ describe('Del 188: redigera genomförda lektioner — låsta tills läraren lås
     valj(select(host, 'Ändra genomförd lektion 1'), 'bort');
     expect(confirm.mock.calls[2][0]).toContain('flyttas ett pass tidigare');
     expect(rader(host)).toEqual(['2026-08-19 1.3 Bråk · ersatt', '2026-08-26 1.3 Bråk']);
-    act(() => { knapp(host, '🔒 Lås genomförda lektioner').click(); });
-    expect(host.querySelector('select[aria-label="Ändra genomförd lektion 2"]')).toBeNull();
+    // Del 200: ↩ Ångra i tabellens verktygsrad tar tillbaka borttaget
+    act(() => { knapp(host, '↩ Ångra').click(); });
+    expect(rader(host)).toEqual(['2026-08-19 1.1 Tal', '2026-08-26 1.3 Bråk · ersatt', '2026-09-02 1.3 Bråk']);
+    // ➕ på en rad: ny lektion efter lektion 2 (passet efter har inte varit: 2/9) — 1.3 flyttas en vecka
+    const prompt = vi.spyOn(window, 'prompt').mockReturnValue('Repetition');
+    act(() => { (host.querySelector('button[aria-label="Lägg till lektion efter 2"]') as HTMLButtonElement).click(); });
+    expect(rader(host)).toEqual(['2026-08-19 1.1 Tal', '2026-08-26 1.3 Bråk · ersatt', '2026-09-02 Repetition', '2026-09-09 1.3 Bråk']);
+    prompt.mockRestore();
     confirm.mockRestore();
     vi.useRealTimers();
   });
 
-  it('Del 198: 🗑 på en genomförd rad utan upplåsning, och ☑ välj flera (även genomförda) → ta bort på en gång', async () => {
+  it('Del 198: 🗑 på en genomförd rad, och ☑ välj flera (även genomförda, klick på raden) → ta bort på en gång', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date('2026-08-27T10:00:00Z'));   // ons 19/8 och 26/8 har varit
     const host = render();
@@ -3590,9 +3594,10 @@ describe('Del 188: redigera genomförda lektioner — låsta tills läraren lås
     act(() => { (host.querySelector('button[aria-label="Ta bort lektion 1.2 Potenser 2026-08-26"]') as HTMLButtonElement).click(); });
     expect(rader(host)).toEqual(['2026-08-19 1.1 Tal', '2026-08-26 1.3 Bråk']);
     // Välj flera: bocka i båda (en genomförd) och ta bort på en gång
-    act(() => { knapp(host, '☑ Välj lektioner att ta bort').click(); });
+    act(() => { knapp(host, '☑ Välj flera att ta bort').click(); });
+    expect(host.querySelector('input[aria-label="Lektion 1 avklarad"]')).toBeNull();   // ✓-kolumnen döljs i välj-läget
     act(() => { (host.querySelector('input[aria-label="Välj lektion 1"]') as HTMLInputElement).click(); });
-    act(() => { (host.querySelector('input[aria-label="Välj lektion 2"]') as HTMLInputElement).click(); });
+    act(() => { (host.querySelectorAll('table.plan tbody tr')[1] as HTMLTableRowElement).click(); });   // klick på raden väljer också
     act(() => { knapp(host, '🗑 Ta bort 2 valda').click(); });
     expect(confirm.mock.calls[2][0]).toContain('Ta bort 2 lektioner?');
     expect(confirm.mock.calls[2][0]).toContain('2 av dem har varit');

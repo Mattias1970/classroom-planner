@@ -12,7 +12,7 @@ import { delkapitelKod } from './bok.js';
 import { isoVecka, laggTillAktivitet, taBortAktivitet } from './skolar.js';
 import {
   amnesOffset, amnesPlanFor, andraPlanering, gruppNyckel, hamtaLektionsplan, harLaborationsstandard,
-  kopplaOmLektionsplaner, noBudget, nyttId, planeringsRader, registreraPlanering, samlaSlots, sattLektionsplan, type PlanRad,
+  kopplaOmLektionsplaner, noBudget, nyttId, planeringsRader, registreraPlanering, samlaSlots, sattAntalLektioner, sattLektionerPerDelkapitel, sattLektionsplan, type PlanRad,
 } from './struktur.js';
 import type { Amne, LektionsDetaljer, LektionsPlan, LektionsTyp, PlaneradLektion, PlanFranUtkast, PlanUtkast, SchemaAktivitet, Skolar, Struktur, UtkastKort } from './typer.js';
 
@@ -982,6 +982,93 @@ export function taBortLektion(s: Struktur, amneId: string, nyckel: string, idag?
   if (rad === undefined || rad.datum === null) throw new Error('Lektionen finns inte i planeringen.');
   const b = taBortLektioner(s, amneId, [nyckel], idag, tillatGenomford);
   return { s: b.s, rubrik: rad.lektion.avsnitt, datum: b.fran, framflyttade: b.framflyttade, fasta: b.fasta, hadeKort: b.kort > 0 };
+}
+
+// ── Del 200 · Lägg till en lektion efter en rad ───────────────────────────────
+
+export interface TillagdLektion {
+  s: Struktur;
+  /** Nyckeln till det nya kortet ('u:…'). */
+  nyckel: string;
+  /** Passet den hamnade på. */
+  datum: string | null;
+  /** Lektioner efter som flyttades ett pass senare. */
+  senarelagda: number;
+  fasta: number;
+}
+
+/**
+ * Lägger in nycklar (bokens rader eller egna kort) direkt efter lektionen `efterNyckel`: det som låg efter
+ * flyttas ett pass senare, fasta kort ligger kvar på sina datum. Ligger passet efter raden i det förflutna
+ * krävs `tillatGenomford` — passen skrivs då om därifrån.
+ */
+function laggInEfter(s: Struktur, amneId: string, efterNyckel: string, nycklar: string[], egna: UtkastKort[], idag?: string, tillatGenomford = false): TillagdLektion {
+  const plan = (amnesPlanFor(s, amneId, idag, false)?.a ?? []).filter((r) => r.datum !== null && r.nyckel !== undefined && !arPass(r.nyckel) && !arLab(r.nyckel));
+  const i = plan.findIndex((r) => r.nyckel === efterNyckel);
+  if (i === -1) throw new Error('Lektionen finns inte i planeringen.');
+  const nasta = plan[i + 1];
+  const fran = nasta?.datum ?? plan[i].datum!;
+  if (idag !== undefined && fran < idag && !tillatGenomford) throw new Error('Passet efter lektionen har varit — bekräfta att genomförda lektioner får skrivas om.');
+  const dag = idag !== undefined && fran < idag ? undefined : idag;
+  const u0 = utkastFranPlan(s, amneId, fran, dag, `Efter ${efterNyckel} ${fran}`);
+  const fasta = fastaKortFran(s, amneId, fran, dag);
+  const fastaNycklar = new Set(fasta.values());
+  const nya = new Set(nycklar);
+  const fria = u0.teori.filter((n) => !fastaNycklar.has(n) && !nya.has(n));
+  const ko = nasta === undefined ? [...fria, ...nycklar] : [...nycklar, ...fria];
+  const teori = laggUtTeori(s, amneId, fran, ko, fasta, dag);
+  const u: PlanFranUtkast = { ...u0, teori, egna: [...u0.egna, ...egna.filter((k) => !u0.egna.some((x) => x.id === k.id))] };
+  const ut = tillampaUtkast(s, amneId, u, dag);
+  const efter = amnesPlanFor(ut, amneId, idag, false)?.a ?? [];
+  return { s: ut, nyckel: nycklar[0] ?? '', datum: efter.find((r) => r.nyckel === nycklar[0])?.datum ?? null, senarelagda: nasta === undefined ? 0 : fria.length, fasta: fasta.size };
+}
+
+/**
+ * Lägger in en egen lektion (övning, prov, diagnos …) direkt efter lektionen `efterNyckel`: det som
+ * låg efter flyttas ett pass senare, fasta kort ligger kvar på sina datum. Fungerar både med och utan
+ * inlagt utkast (laggTillEgenRad syns inte under ett utkast — det här är vägen som alltid fungerar).
+ * Ligger passet efter raden i det förflutna krävs `tillatGenomford`.
+ */
+export function laggTillLektionEfter(s: Struktur, amneId: string, efterNyckel: string, kort: { rubrik: string; typ: Exclude<UtkastKort['typ'], 'lab'>; beskrivning?: string }, idag?: string, tillatGenomford = false): TillagdLektion {
+  hittaAmne(s, amneId);
+  if (kort.rubrik.trim() === '') throw new Error('Ge lektionen en rubrik.');
+  const id = nyttId('eg');
+  const egen: UtkastKort = { id, rubrik: kort.rubrik.trim(), typ: kort.typ, ...(kort.beskrivning !== undefined && kort.beskrivning.trim() !== '' ? { beskrivning: kort.beskrivning.trim() } : {}) };
+  return laggInEfter(s, amneId, efterNyckel, [`u:${id}`], [egen], idag, tillatGenomford);
+}
+
+/**
+ * Del 200 · Rader som en inställning gav upphov till (fler lektioner på ett delkapitel) läggs in i ett
+ * inlagt utkast — annars syns de inte, eftersom utkastet bara visar de nycklar det känner till. Varje ny
+ * nyckel hamnar efter sin föregångare i bokens följd (sista lektionen på delkapitlet).
+ */
+function synkaNyaRader(fore: Struktur, efter: Struktur, amneId: string, idag?: string): Struktur {
+  const a = hittaAmne(efter, amneId);
+  if (a.planFranUtkast === undefined) return efter;
+  const gamla = new Set(bokensRader(fore, amneId).map((r) => r.nyckel));
+  const rader = bokensRader(efter, amneId);
+  const nya = rader.filter((r) => !gamla.has(r.nyckel)).map((r) => r.nyckel);
+  if (nya.length === 0) return efter;
+  let ut = efter;
+  for (const n of nya) {
+    const iPlan = new Set((amnesPlanFor(ut, amneId, idag, false)?.a ?? []).map((r) => r.nyckel));
+    if (iPlan.has(n)) continue;   // låg redan i den frysta delen
+    const pos = rader.findIndex((r) => r.nyckel === n);
+    const fore = [...rader.slice(0, pos)].reverse().find((r) => iPlan.has(r.nyckel));
+    if (fore === undefined) continue;
+    try { ut = laggInEfter(ut, amneId, fore.nyckel, [n], [], idag, true).s; } catch { /* ryms inte — lämnas */ }
+  }
+  return ut;
+}
+
+/** Antal lektioner (1–4) på ett delkapitel — fungerar även när ett utkast är inlagt. */
+export function sattAntalLektionerIPlan(s: Struktur, amneId: string, grupp: string, antal: number | null, idag?: string): Struktur {
+  return synkaNyaRader(s, sattAntalLektioner(s, amneId, grupp, antal, idag), amneId, idag);
+}
+
+/** Ämnets inställning 'lektioner per delkapitel' — fungerar även när ett utkast är inlagt. */
+export function sattLektionerPerDelkapitelIPlan(s: Struktur, amneId: string, antal: number, fran?: string, idag?: string): Struktur {
+  return synkaNyaRader(s, sattLektionerPerDelkapitel(s, amneId, antal, fran, idag), amneId, idag);
 }
 
 // ── Del 197 · Avsluta ett kapitel efter ett visst delkapitel ─────────────────

@@ -16,7 +16,7 @@ import {
   slaIhopPlaneringsmall, tolkaPlaneringsmall,
   handelserPerDatum, kalenderHandelser, klassFarg, noBudget, noOverBudget, sattLektionsplan,
   doldaOmraden, sattOmradeDolt, visaAllaOmraden, LEKTIONSOMRADEN, type LektionsOmrade,
-  foljbaraAmnen, foljPlanering, kapitelBorjar, laddaKapitel, taBortLektion, taBortLektioner, kapitelSlutFor, avslutaKapitelEfter, aterstallKapitel, borttagnaDelkapitel, kapitelAterstallningFor, laggTillSchemaAktivitet, taBortSchemaAktivitet,
+  foljbaraAmnen, foljPlanering, kapitelBorjar, laddaKapitel, taBortLektion, taBortLektioner, laggTillLektionEfter, sattAntalLektionerIPlan, sattLektionerPerDelkapitelIPlan, kapitelSlutFor, avslutaKapitelEfter, aterstallKapitel, borttagnaDelkapitel, kapitelAterstallningFor, laggTillSchemaAktivitet, taBortSchemaAktivitet,
   kapitelKort, manadsRutor, skolarManader, veckaRutor, viktigaDatum, bamTidslinje, begreppForLektion, bokBegrepp,
   tavelTidslinje, standardBamDelar, bamAvvikelse, exitStartFor, type BamDel,
   bokFromValfriImport, bokSidregister, bokSidregisterCsv, elevSchema, exitStart, giltigtPass,
@@ -205,8 +205,9 @@ export function App() {
     );
     const larare = s.larare[0]?.namn ?? '';
     return (
+      <AngraContext.Provider value={angra}>
       <div className="studio">
-        <Skal s={s} vy={vy} setVy={setVy} filter={filter} setFilter={setFilter} notiser={notiser} larareNamn={larare} verktyg={verktyg}>
+        <Skal s={s} vy={vy} setVy={setVy} filter={filter} setFilter={setFilter} notiser={notiser} larareNamn={larare} verktyg={verktyg} angra={angra}>
           {msg && <p className="status">{msg}</p>}
           {vy.typ !== 'elever' && <VeckorapportLarm s={s} kor={kor} onOppna={() => setVy({ typ: 'elever' })} />}
           {vy.typ === 'oversikt' && <Oversikt s={s} filter={filter} setVy={setVy} struktur={struktur} />}
@@ -229,10 +230,12 @@ export function App() {
           {vy.typ === 'datarepo' && <Datarepo s={s} spara={spara} kor={kor} meddela={setMsg} />}
         </Skal>
       </div>
+      </AngraContext.Provider>
     );
   }
 
   return (
+    <AngraContext.Provider value={angra}>
     <div className="studio">
       <header className="topbar">
         <span className="logo">📘 Classroom Planner <b>Studio</b> <small>v2</small></span>
@@ -301,6 +304,7 @@ export function App() {
         </div>
       )}
     </div>
+    </AngraContext.Provider>
   );
 }
 
@@ -1565,7 +1569,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
                 const n = Number(e.target.value);
                 const fran = franForInstallning(plan, idag);
                 if (fran === null) { window.alert('Alla lektioner är genomförda — inget att ändra.'); return; }
-                kor(() => sattLektionerPerDelkapitel(lasStruktur(), a.id, n, fran.fran, idag),
+                kor(() => sattLektionerPerDelkapitelIPlan(lasStruktur(), a.id, n, fran.fran, idag),
                   `${a.namn}: ${n} lektion${n === 1 ? '' : 'er'} per delkapitel${fran.fran !== undefined ? ' — från nästa lektion som inte är genomförd' : ''}.`);
               }}>
               {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
@@ -1837,6 +1841,7 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx, meddela
     ? lpForBegrepp.begreppText.split(',').map((b) => b.trim()).filter((b) => b !== '')
     : begreppForLektion(bok, rad.kapitel, rad.lektion);
   const forklaringar = kap?.resurser.forklaringar ?? {};
+  const angra = useContext(AngraContext);
   const lp = hamtaLektionsplan(s, amneId, i);
   const filmer = lp?.filmer ?? [];
   const klass = s.klasser.find((k) => k.id === s.amnen.find((a) => a.id === amneId)?.klassId);
@@ -2084,12 +2089,18 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx, meddela
       <button className="btn sec ls-nyrad no-print" onClick={() => {
         const rubrik = window.prompt('Rubrik för den nya lektionen (t.ex. Repetition, Diagnos, Prov):', 'Extra övning');
         if (rubrik === null || rubrik.trim() === '') return;
-        const amne = lasStruktur().amnen.find((x) => x.id === amneId);
-        const position = amne === undefined ? i + 1 : grundPositionEfter(grundRader(bok, amne), plan, i);
-        const typ = /\bprov\b|kapiteltest|slutprov/i.test(rubrik) ? 'prov' as const : /diagnos/i.test(rubrik) ? 'diagnos' as const : 'ovning' as const; // Del 151: provrader får provlapp
-        kor(() => laggTillEgenRad(lasStruktur(), amneId, { id: nyttId('er'), position, rubrik: rubrik.trim(), typ }, new Date().toISOString().slice(0, 10)),
-          `\"${rubrik.trim()}\" infogad efter lektion ${i + 1} — bokens lektioner skjuts framåt.`);
+        const typ = /\bprov\b|kapiteltest|slutprov/i.test(rubrik) ? 'prov' as const : /diagnos/i.test(rubrik) ? 'diagnos' as const : /övning|repetition|träna/i.test(rubrik) ? 'ovning' as const : 'lektion' as const; // Del 151: provrader får provlapp
+        const idagIso = new Date().toISOString().slice(0, 10);
+        const nasta = plan.slice(i + 1).find((x) => x.datum !== null && x.nyckel !== undefined && !x.nyckel.startsWith('lab:') && !x.nyckel.startsWith('pass:'));
+        const passHarVarit = (nasta?.datum ?? rad.datum ?? '') < idagIso;
+        if (passHarVarit && !window.confirm(`Passet efter den här lektionen har varit (${nasta?.datum ?? rad.datum}).\n\nLägga in "${rubrik.trim()}" där ändå? Passen därifrån skrivs om — lektionerna efter flyttas ett pass senare, även genomförda. Det går att ångra med ↩ Ångra.`)) return;
+        try {
+          const n = laggTillLektionEfter(lasStruktur(), amneId, rad.nyckel ?? '', { rubrik: rubrik.trim(), typ }, idagIso, passHarVarit);
+          kor(() => n.s, `"${rubrik.trim()}" inlagd efter lektion ${i + 1}${n.datum !== null ? ` (${n.datum})` : ''} — ${n.senarelagda} lektioner flyttade ett pass senare.`);
+          setIdx(i + 1);
+        } catch (e) { kor(() => { throw e; }, ''); }
       }}>➕ Lägg till lektion efter denna</button>
+      {angra !== null && <button className="btn sec ls-nyrad no-print" onClick={angra} title="Ångra senaste ändring (upp till 20 steg)">↩ Ångra</button>}
       {rad.nyckel !== undefined && !rad.nyckel.startsWith('lab:') && !rad.nyckel.startsWith('pass:') && (() => {
         const idagIso = new Date().toISOString().slice(0, 10);
         const harVarit = rad.datum !== null && rad.datum < idagIso;
@@ -2828,8 +2839,7 @@ function GruppPlanering(props: {
 }) {
   const { plan, planB, bok, amnesNamn, klassNamn, rum, rubrik, s, amneId, kor, amne, idag } = props;
   const [valdRad, setValdRad] = useState<number | null>(null);
-  // Del 188: genomförda lektioner är låsta tills läraren uttryckligen låser upp dem (gäller bara den här vyn)
-  const [upplast, setUpplast] = useState(false);
+  const angra = useContext(AngraContext);
   // Del 198: välj flera lektioner (även genomförda) och ta bort dem på en gång
   const [valjLage, setValjLage] = useState(false);
   const [valda, setValda] = useState<Set<string>>(() => new Set());
@@ -2871,30 +2881,32 @@ function GruppPlanering(props: {
       setValda(new Set()); setValjLage(false);
     } catch (e) { kor(() => { throw e; }, ''); }
   };
+  /** Del 200 · Samma meny på alla rader: ➕ lägg till efter, ✏ ersätt, ↺ bokens lektion, bokens lektioner, 🗑. Genomförda rader bekräftas med varning. */
   const atgard = (r: PlaneradLektion, i: number, kod: string) => {
     if (!kanAndra || r.nyckel === undefined) return;
     const nyckel = r.nyckel;
     const namn = lektionsNamn(r.lektion, hamtaLektionsplan(s, amneId, i));
-    if (genomford(r)) {
+    const harVarit = genomford(r);
+    if (kod === 'bort') { taBortRad(r, i); return; }
+    if (kod === 'ny') {
+      const rubrik = window.prompt(`Rubrik på lektionen som läggs in efter lektion ${i + 1} (${namn}):`, 'Övning');
+      if (rubrik === null || rubrik.trim() === '') return;
+      const typ = /\bprov\b|kapiteltest|slutprov/i.test(rubrik) ? 'prov' as const : /diagnos/i.test(rubrik) ? 'diagnos' as const : /övning|repetition|träna/i.test(rubrik) ? 'ovning' as const : 'lektion' as const;
+      const nasta = plan.slice(i + 1).find((x) => x.datum !== null && bokRad(x));
+      const passHarVarit = (nasta?.datum ?? r.datum ?? '') < idag;
+      if (passHarVarit && !window.confirm(`Passet efter lektion ${i + 1} har varit (${nasta?.datum ?? r.datum}).\n\nLägga in "${rubrik.trim()}" där ändå? Passen därifrån skrivs om — lektionerna efter flyttas ett pass senare, även genomförda. Det går att ångra med ↩ Ångra.`)) return;
+      try {
+        const n = laggTillLektionEfter(lasStruktur(), amneId, nyckel, { rubrik: rubrik.trim(), typ }, idag, passHarVarit);
+        kor(() => n.s, `"${rubrik.trim()}" inlagd efter lektion ${i + 1}${n.datum !== null ? ` (${n.datum})` : ''} — ${n.senarelagda} lektioner flyttade ett pass senare${n.fasta > 0 ? `, ${n.fasta} fasta kort ligger kvar` : ''}.`);
+      } catch (e) { kor(() => { throw e; }, ''); }
+      return;
+    }
+    if (harVarit) {
       // Del 188: bara innehållet på det här passet ändras — inget annat flyttas
-      if (!upplast) return;
-      if (kod === 'bort') {
-        const harPlan = hamtaLektionsplan(s, amneId, i) !== null;
-        if (!window.confirm(`Ta bort lektion ${i + 1} (${namn}, ${r.datum}) som har varit?\n\nDe följande lektionerna flyttas ett pass tidigare — även genomförda pass får nytt innehåll. Gör det bara om lektionen inte blev av.${harPlan ? '\nLektionens detaljplanering försvinner.' : ''}\n\nDet går att ångra med ↩ Ångra.`)) return;
-        try {
-          const b = taBortLektion(lasStruktur(), amneId, nyckel, idag, true);
-          kor(() => b.s, `Lektion ${i + 1} (${namn}, ${r.datum}) borttagen — ${b.framflyttade} lektioner flyttade ett pass tidigare${b.fasta > 0 ? `, ${b.fasta} fasta kort ligger kvar` : ''}.`);
-        } catch (e) { kor(() => { throw e; }, ''); }
-        return;
-      }
       const vad = kod === 'egen' ? 'en egen lektion' : kod === 'aterstall' ? 'bokens lektion igen' : (() => { const [, k, id] = kod.split(':'); return bokensLektioner.find((x) => x.kapitel === Number(k) && x.lektion.id === Number(id))?.lektion.avsnitt ?? 'en annan lektion'; })();
       if (!window.confirm(`Lektion ${i + 1} (${namn}, ${r.datum}) har varit.\n\nÄndra vad som gjordes på passet till ${vad}?\n\nBara det här passet ändras — inga andra lektioner flyttas. Det går att ångra med ↩ Ångra.`)) return;
     }
-    if (kod === 'bort') {
-      const harPlan = hamtaLektionsplan(s, amneId, i) !== null;
-      if (!window.confirm(`Ta bort lektion ${i + 1} (${namn}) ur planeringen?${harPlan ? ' Lektionens detaljplanering försvinner.' : ''} Efterföljande lektioner flyttas fram ett pass.`)) return;
-      kor(() => sattLektionsVal(lasStruktur(), amneId, nyckel, { bort: true }, idag), `Lektion ${i + 1} (${namn}) borttagen — efterföljande lektioner flyttade fram.`);
-    } else if (kod === 'egen') {
+    if (kod === 'egen') {
       const rubrik = window.prompt('Rubrik på lektionen som ersätter:', '');
       if (rubrik === null || rubrik.trim() === '') return;
       kor(() => sattLektionsVal(lasStruktur(), amneId, nyckel, { ersatt: { rubrik: rubrik.trim(), typ: 'annat' } }, idag), `Lektion ${i + 1} ersatt med "${rubrik.trim()}".`);
@@ -2937,40 +2949,27 @@ function GruppPlanering(props: {
   return (
     <>
       {rubrik !== undefined && <h3 className="grupp-h">{rubrik}</h3>}
-      {kanAndra && <p className="note no-print">Lektioner kan tas bort (🗑 — även genomförda, efter en varning), ersättas eller få fler lektioner på delkapitlet. Innehållet på genomförda pass ändras bara när du låser upp dem (🔓). Lektionsplanerna följer sina lektioner när följden ändras.</p>}
       {kanAndra && <KursOrdning plan={plan} amneId={amneId!} kor={kor!} idag={idag!} />}
       {kanAndra && <LaddaKapitel s={s!} bok={bok} amneId={amneId!} kor={kor!} idag={idag!} />}
       {kanAndra && <SchemaAktiviteter s={s!} amneId={amneId!} kor={kor!} idag={idag!} />}
       {kanAndra && (
         <div className="uppg-kort no-print rad valj-lektioner" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {angra !== null && <button className="btn sec sm" onClick={angra} title="Ångra senaste ändring (upp till 20 steg)">↩ Ångra</button>}
           <button className={`btn sm ${valjLage ? 'warn' : 'sec'}`} aria-pressed={valjLage} onClick={() => { setValjLage(!valjLage); setValda(new Set()); }}>
-            {valjLage ? '✕ Avbryt val' : '☑ Välj lektioner att ta bort'}
+            {valjLage ? '✕ Avbryt val' : '☑ Välj flera att ta bort'}
           </button>
-          {valjLage && (
-            <>
-              <button className="btn sm" disabled={valda.size === 0} onClick={taBortValda}>🗑 Ta bort {valda.size} vald{valda.size === 1 ? '' : 'a'}</button>
-              <small className="muted">Bocka i rutorna i tabellen — även genomförda lektioner går att ta bort. De följande flyttas tidigare; prov, diagnoser och laborationer ligger kvar.</small>
-            </>
-          )}
-          {!valjLage && <small className="muted">🗑 på en rad tar bort den lektionen — även om den har varit (du får en varning). Flera på en gång: välj dem här.</small>}
-        </div>
-      )}
-      {kanAndra && plan.some((r) => genomford(r) && bokRad(r)) && (
-        <div className={`uppg-kort no-print genomforda-las ${upplast ? 'upplast' : ''}`}>
-          <div className="rad" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <button className={`btn sm ${upplast ? 'warn' : 'sec'}`} aria-pressed={upplast} onClick={() => setUpplast(!upplast)}>
-              {upplast ? '🔒 Lås genomförda lektioner' : '🔓 Redigera genomförda lektioner'}
-            </button>
-            <small className="muted">{upplast
-              ? 'Upplåst: välj i ✏ ändra… på en genomförd rad vad som faktiskt gjordes, eller ta bort lektionen. Varje ändring bekräftas; att ersätta flyttar inget, att ta bort flyttar de följande lektionerna ett pass tidigare.'
-              : 'Genomförda lektioner är låsta och ändras aldrig av sig själva.'}</small>
-          </div>
+          {valjLage
+            ? (<>
+                <button className="btn sm" disabled={valda.size === 0} onClick={taBortValda}>🗑 Ta bort {valda.size} vald{valda.size === 1 ? '' : 'a'}</button>
+                <small className="muted">Klicka på raderna (eller bocka i rutan längst till vänster) — även genomförda lektioner. De följande flyttas tidigare; prov, diagnoser och laborationer ligger kvar.</small>
+              </>)
+            : <small className="muted">På varje rad: 🗑 tar bort lektionen, ➕ lägger in en ny efter den, ✏ byter innehåll. Gäller även genomförda lektioner — då får du en varning först. Allt går att ångra.</small>}
         </div>
       )}
       {kanAndra && <KapitelBorjar plan={plan} amneId={amneId!} kor={kor!} idag={idag!} />}
       {kanAndra && <KapitelSlut s={s!} bok={bok} plan={plan} amneId={amneId!} kor={kor!} idag={idag!} />}
       <table className="tbl plan clickable">
-        <thead><tr>{valjLage && <th title="Välj">☑</th>}<th title="Avklarad">✓</th><th>Nr</th><th>Datum</th><th>Dag</th><th>V.</th><th>Tid</th>{halvklassAmne && <th>Klass</th>}<th>Kap</th><th>Avsnitt</th>{bokHarNivaer(bok) && <><th>{bok.nivaer.niva1}</th><th>{bok.nivaer.niva2}</th><th>{bok.nivaer.niva3}</th></>}{kanAndra && <><th title="Antal lektioner på delkapitlet">Lekt.</th><th></th></>}</tr></thead>
+        <thead><tr>{valjLage ? <th title="Välj">☑</th> : <th title="Avklarad">✓</th>}<th>Nr</th><th>Datum</th><th>Dag</th><th>V.</th><th>Tid</th>{halvklassAmne && <th>Klass</th>}<th>Kap</th><th>Avsnitt</th>{bokHarNivaer(bok) && <><th>{bok.nivaer.niva1}</th><th>{bok.nivaer.niva2}</th><th>{bok.nivaer.niva3}</th></>}{kanAndra && <><th title="Antal lektioner på delkapitlet">Lekt.</th><th></th></>}</tr></thead>
         <tbody>{rader.map(({ r, index: i, klassTyp }, radNr) => {
           const klar = s !== undefined && amneId !== undefined && hamtaLektionsplan(s, amneId, i)?.klar === true;
           const val: LektionsVal | undefined = r.nyckel !== undefined ? amne?.lektionsVal?.[r.nyckel] : undefined;
@@ -2979,14 +2978,14 @@ function GruppPlanering(props: {
           const iBoken = grupp !== null && amne !== undefined && !r.nyckel!.startsWith('er:') && r.lektion.typ !== 'exam' && !ersatt ? antalIBoken(bok, amne, grupp) : null;
           const minst = grupp !== null && iBoken !== null ? Math.max(iBoken, genomfordaIGrupp(grupp)) : 0;
           return (
-          <tr key={radNr} className={`${r.datum === null ? 'saknas' : ''} ${valdRad === radNr ? 'vald' : ''} ${klar ? 'klar' : ''} ${ersatt ? 'ersatt' : ''} ${idag !== undefined && i === aktuellLektionsIndex(plan, idag) ? 'aktuell' : ''}`}
-            onClick={() => setValdRad(valdRad === radNr ? null : radNr)} title="Öppna lektionskort">
-            {valjLage && (
+          <tr key={radNr} className={`${r.datum === null ? 'saknas' : ''} ${valdRad === radNr || (valjLage && r.nyckel !== undefined && valda.has(r.nyckel)) ? 'vald' : ''} ${klar ? 'klar' : ''} ${ersatt ? 'ersatt' : ''} ${idag !== undefined && i === aktuellLektionsIndex(plan, idag) ? 'aktuell' : ''}`}
+            onClick={() => { if (valjLage) { if (bokRad(r)) setValda((v) => { const n = new Set(v); if (n.has(r.nyckel!)) n.delete(r.nyckel!); else n.add(r.nyckel!); return n; }); } else setValdRad(valdRad === radNr ? null : radNr); }} title={valjLage ? 'Välj / avmarkera' : 'Öppna lektionskort'}>
+            {valjLage ? (
               <td onClick={(e) => e.stopPropagation()}>
                 {bokRad(r) && <input type="checkbox" aria-label={`Välj lektion ${i + 1}`} checked={valda.has(r.nyckel!)}
                   onChange={(e) => setValda((v) => { const n = new Set(v); if (e.target.checked) n.add(r.nyckel!); else n.delete(r.nyckel!); return n; })} />}
               </td>
-            )}
+            ) : (
             <td onClick={(e) => e.stopPropagation()}>
               {s !== undefined && amneId !== undefined && kor !== undefined && (
                 <input type="checkbox" aria-label={`Lektion ${i + 1} avklarad`} checked={klar}
@@ -2996,6 +2995,7 @@ function GruppPlanering(props: {
                   }), e.target.checked ? `Lektion ${i + 1} avklarad ✓` : `Lektion ${i + 1} markerad som ej klar.`)} />
               )}
             </td>
+            )}
             <td className="lekt-nr"><b>{i + 1}</b></td>
             <td>{r.datum ?? 'ryms ej'}</td>
             <td>{r.datum !== null ? DAGNAMN[new Date(`${r.datum}T00:00:00Z`).getUTCDay()] ?? '' : ''}</td>
@@ -3010,7 +3010,7 @@ function GruppPlanering(props: {
                   iBoken >= 4
                     ? <span className="muted small" title="Boken har redan fyra lektioner på delkapitlet">{iBoken}</span>
                     : <select aria-label={`Antal lektioner ${i + 1}`} title="Antal lektioner på delkapitlet — extra lektioner läggs efter den sista" value={antalNu.get(grupp) ?? iBoken}
-                        onChange={(e) => { const n = Number(e.target.value); kor(() => sattAntalLektioner(lasStruktur(), amneId, grupp, n, idag), `${r.lektion.avsnitt}: ${n} lektion${n === 1 ? '' : 'er'} på delkapitlet.`); }}>
+                        onChange={(e) => { const n = Number(e.target.value); kor(() => sattAntalLektionerIPlan(lasStruktur(), amneId, grupp, n, idag), `${r.lektion.avsnitt}: ${n} lektion${n === 1 ? '' : 'er'} på delkapitlet.`); }}>
                         {[1, 2, 3, 4].filter((n) => n >= minst).map((n) => <option key={n} value={n}>{n}{n === iBoken ? ' (boken)' : ''}</option>)}
                       </select>
                 )}
@@ -3018,45 +3018,25 @@ function GruppPlanering(props: {
             )}
             {kanAndra && (
               <td onClick={(e) => e.stopPropagation()}>
-                {genomford(r) && !(upplast && bokRad(r))
-                  ? (
-                      <>
-                      <small className="muted">genomförd </small>
-                      {bokRad(r) && <button className="icon-btn" aria-label={`Ta bort lektion ${r.lektion.avsnitt} ${r.datum ?? ''}`} title="Ta bort lektionen fast den har varit — de följande flyttas ett pass tidigare (du får en varning, ↩ Ångra finns)" onClick={() => taBortRad(r, i)}>🗑</button>}
-                      </>
-                    )
-                  : genomford(r)
-                    ? (
-                      <>
-                      <small className="muted">genomförd </small>
-                      <button className="icon-btn" aria-label={`Ta bort lektion ${r.lektion.avsnitt} ${r.datum ?? ''}`} title="Ta bort lektionen fast den har varit — de följande flyttas ett pass tidigare (↩ Ångra finns)" onClick={() => taBortRad(r, i)}>🗑</button>
-                      <select aria-label={`Ändra genomförd lektion ${i + 1}`} value="" onChange={(e) => atgard(r, i, e.target.value)} title="Ändra vad som gjordes på passet — inga andra lektioner flyttas">
-                        <option value="">✏ ändra…</option>
+                {!bokRad(r)
+                  ? <small className="muted" title="Laborationer och passlektioner ändras under 🧪 Laborationer">🧪</small>
+                  : (
+                    <span className="rad" style={{ gap: 4, alignItems: 'center', flexWrap: 'nowrap' }}>
+                      {genomford(r) && <small className="muted">genomförd</small>}
+                      <button className="icon-btn" aria-label={`Ta bort lektion ${r.lektion.avsnitt} ${r.datum ?? ''}`} title={genomford(r) ? 'Ta bort lektionen fast den har varit — de följande flyttas ett pass tidigare (du får en varning, ↩ Ångra finns)' : 'Ta bort lektionen — de följande flyttas ett pass tidigare, egna prov och diagnoser ligger kvar (↩ Ångra finns)'} onClick={() => taBortRad(r, i)}>🗑</button>
+                      <button className="icon-btn" aria-label={`Lägg till lektion efter ${i + 1}`} title="Lägg in en ny lektion (övning, prov, diagnos …) efter den här — de följande flyttas ett pass senare" onClick={() => atgard(r, i, 'ny')}>➕</button>
+                      <select aria-label={genomford(r) ? `Ändra genomförd lektion ${i + 1}` : `Åtgärd lektion ${i + 1}`} value="" onChange={(e) => atgard(r, i, e.target.value)} title={genomford(r) ? 'Ändra vad som gjordes på passet — inga andra lektioner flyttas' : 'Ersätt eller ta bort lektionen'}>
+                        <option value="">✏</option>
+                        <option value="ny">➕ Lägg till lektion efter denna…</option>
                         <option value="egen">✏ Ersätt med egen lektion (t.ex. Övning)…</option>
-                        <option value="bort">🗑 Ta bort lektionen (följande flyttas tidigare)…</option>
                         {ersatt && <option value="aterstall">↺ Bokens lektion igen</option>}
-                        <optgroup label="Det vi gjorde var lektionen ur boken">
-                          {bokensLektioner.map((x) => <option key={`${x.kapitel}:${x.lektion.id}`} value={`bok:${x.kapitel}:${x.lektion.id}`}>{x.lektion.avsnitt}{x.lektion.del > 1 ? ` (lektion ${x.lektion.del})` : ''}</option>)}
-                        </optgroup>
-                      </select>
-                      </>
-                    )
-                  : !bokRad(r)
-                    ? <small className="muted" title="Laborationer och passlektioner ändras under 🧪 Laborationer">🧪</small>
-                    : (
-                      <>
-                      <button className="icon-btn" aria-label={`Ta bort lektion ${r.lektion.avsnitt} ${r.datum ?? ''}`} title="Ta bort lektionen — de följande flyttas ett pass tidigare, egna prov och diagnoser ligger kvar (↩ Ångra finns)" onClick={() => taBortRad(r, i)}>🗑</button>
-                      <select aria-label={`Åtgärd lektion ${i + 1}`} value="" onChange={(e) => atgard(r, i, e.target.value)} title="Ta bort eller ersätt lektionen">
-                        <option value="">…</option>
                         <option value="bort">🗑 Ta bort lektionen</option>
-                        <option value="egen">✏ Ersätt med egen lektion…</option>
-                        {ersatt && <option value="aterstall">↺ Bokens lektion igen</option>}
-                        <optgroup label="Ersätt med lektion ur boken">
+                        <optgroup label={genomford(r) ? 'Det vi gjorde var lektionen ur boken' : 'Byt till en lektion ur boken'}>
                           {bokensLektioner.map((x) => <option key={`${x.kapitel}:${x.lektion.id}`} value={`bok:${x.kapitel}:${x.lektion.id}`}>{x.lektion.avsnitt}{x.lektion.del > 1 ? ` (lektion ${x.lektion.del})` : ''}</option>)}
                         </optgroup>
                       </select>
-                      </>
-                    )}
+                    </span>
+                  )}
               </td>
             )}
           </tr>
@@ -6463,6 +6443,8 @@ function KalenderVy({ s, onOppnaLektion, kor }: { s: Struktur; onOppnaLektion?: 
  * kan ändra strukturen.
  */
 interface KursFlytt { kurs: Kurs; kanUpp: boolean; kanNer: boolean; flytta: (steg: -1 | 1) => void; }
+/** Del 200 · ↩ Ångra når tabeller och lektionssidor utan att skickas som prop genom alla lager. */
+const AngraContext = createContext<(() => void) | null>(null);
 const KursFlyttContext = createContext<((amneId: string, lektionsIndex: number) => KursFlytt | null) | null>(null);
 
 function KursPilar({ h }: { h: KalenderHandelse }) {
