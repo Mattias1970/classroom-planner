@@ -46,7 +46,13 @@ Steg "Startar appen pa $url  (Ctrl+C stanger)"
 Start-Job -ScriptBlock {
   param($u)
   for ($i = 0; $i -lt 60; $i++) {
-    try { Invoke-WebRequest -Uri $u -UseBasicParsing -TimeoutSec 1 | Out-Null; Start-Process $u; break } catch { Start-Sleep -Milliseconds 500 }
+    try {
+      Invoke-WebRequest -Uri $u -UseBasicParsing -TimeoutSec 1 | Out-Null
+      # Chrome om den finns, annars standardwebblasaren
+      $chrome = @("$env:ProgramFiles\Google\Chrome\Application\chrome.exe", "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe", "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+      if ($chrome) { Start-Process $chrome $u } else { Start-Process $u }
+      break
+    } catch { Start-Sleep -Milliseconds 500 }
   }
 } -ArgumentList $url | Out-Null
 
