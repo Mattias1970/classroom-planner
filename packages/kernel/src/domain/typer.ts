@@ -268,6 +268,14 @@ export interface Lektion {
   /** Startuppgift/läxförhörsfråga (Socrative) om boken anger en. */
   /** Bokens mål för delkapitlet — 'Det här ska eleven lära sig' (radbrutna punkter). */
   mal?: string;
+  /** Del 209 · Bokens sammanfattning av delkapitlet (kort text). */
+  sammanfattning?: string;
+  /** Del 209 · Exempel på djup (orsakssamband i flera led) för delkapitlet, ur bokens innehåll. */
+  djup?: string;
+  /** Del 209 · Exempel på bredd (flera exempel i ett led) för delkapitlet. */
+  bredd?: string;
+  /** Del 209 · Exempel på enkel laborationsbeskrivning på E-nivå (vad vi söker, hur vi ser resultatet, koppling). */
+  labb?: string;
   socStart: string;
   /** Exit ticket-uppgift om boken anger en. */
   exit: string;

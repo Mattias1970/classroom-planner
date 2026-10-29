@@ -58,6 +58,8 @@ interface RawDelkapitel {
   filmer: Array<{ titel: string; url: string }>;
   /** genomgangLank angavs uttryckligen (inte härledd ur första filmen). */
   egenGenomgangLank: boolean;
+  /** Del 209 · bokens sammanfattning av delkapitlet och exempel på djup, bredd och labb. */
+  sammanfattning?: string; djup?: string; bredd?: string; labb?: string;
 }
 
 function lasFilmer(raw: unknown): Array<{ titel: string; url: string }> {
@@ -99,6 +101,10 @@ function lasDelkapitel(raw: unknown, kapNr: number, index: number): RawDelkapite
     genomgang: typeof r.genomgang === 'string' ? [r.genomgang.trim()].filter((x) => x !== '') : strangLista(r.genomgang),
     filmer,
     egenGenomgangLank: typeof r.genomgangLank === 'string' && r.genomgangLank.startsWith('http'),
+    ...(typeof r.sammanfattning === 'string' && r.sammanfattning.trim() !== '' ? { sammanfattning: r.sammanfattning.trim() } : {}),
+    ...(typeof r.djup === 'string' && r.djup.trim() !== '' ? { djup: r.djup.trim() } : {}),
+    ...(typeof r.bredd === 'string' && r.bredd.trim() !== '' ? { bredd: r.bredd.trim() } : {}),
+    ...(typeof r.labb === 'string' && r.labb.trim() !== '' ? { labb: r.labb.trim() } : {}),
   };
 }
 
@@ -118,6 +124,10 @@ function delkapitelLektion(d: RawDelkapitel, index1: number, prefix: string, kap
     socStart: laxforhor,
     exit: `${socrativeExitRum(prefix, kapNr, index1)} (exit ticket)`,
     ...(d.mal.length > 0 ? { mal: d.mal.join('\n') } : {}),
+    ...(d.sammanfattning !== undefined ? { sammanfattning: d.sammanfattning } : {}),
+    ...(d.djup !== undefined ? { djup: d.djup } : {}),
+    ...(d.bredd !== undefined ? { bredd: d.bredd } : {}),
+    ...(d.labb !== undefined ? { labb: d.labb } : {}),
   };
 }
 

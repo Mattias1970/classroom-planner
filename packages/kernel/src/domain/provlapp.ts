@@ -37,8 +37,12 @@ export interface ProvlappAvsnitt {
   sammanfattning: string[];
   /** Del 206 · Laborationsfrågor som hör till delkapitlet (LektionsPlan.labFraga). */
   labFragor: string[];
-  /** Del 206 · Ramar för att visa djup (orsakssamband i flera led) och bredd (flera exempel i ett led), byggda ur avsnittets egna begrepp och mål. */
+  /** Del 206 · Ramar för att visa djup (orsakssamband i flera led) och bredd (flera exempel i ett led), byggda ur avsnittets egna begrepp och mål. Del 209: bokens egna exempel när de finns. */
   djupBredd: DjupBredd | null;
+  /** Del 209 · Bokens exempel på enkel laborationsbeskrivning för avsnittet. */
+  labb: string | null;
+  /** Del 209 · Filmer som hör till avsnittet (bokens filmresurser, t.ex. Binogi). */
+  filmer: Array<{ titel: string; url: string }>;
 }
 
 /** Del 206 · Så visar eleven djup och bredd i ett avsnitt — ramar, inte färdiga svar. */
@@ -148,13 +152,23 @@ function slaIhop(intervall: string[]): string {
   return [...new Set(delar)].join(' · ');
 }
 
-function avsnittUrBox(s: Struktur, amneId: string, b: VagBox): ProvlappAvsnitt {
+function avsnittUrBox(s: Struktur, amneId: string, bok: Bok, b: VagBox): ProvlappAvsnitt {
   const lekt = b.lektioner;
   const planer = lekt.map((l) => hamtaLektionsplan(s, amneId, l.index));
+  const iBoken = lekt.map((l) => l.bok).find((x) => x !== undefined);
+  const egenSamm = planer.map((lp) => lp?.sammanfattning).filter(har).map((x) => x.trim());
+  const ram = djupBreddFor(b.begrepp, b.mal);
+  const djupBredd: DjupBredd | null = iBoken?.djup !== undefined || iBoken?.bredd !== undefined
+    ? { kedja: ram?.kedja ?? b.begrepp.slice(0, 4), djup: iBoken.djup ?? ram?.djup ?? '', bredd: iBoken.bredd ?? ram?.bredd ?? '' }
+    : ram;
+  const prefix = b.kod !== null ? `${b.kod} · ` : null;
+  const filmer = prefix === null ? [] : bok.kapitel.flatMap((k) => k.resurser.filmer).filter((f) => f.titel.startsWith(prefix)).map((f) => ({ titel: f.titel.slice(prefix.length), url: f.url }));
   return {
-    sammanfattning: [...new Set(planer.map((lp) => lp?.sammanfattning).filter(har).map((x) => x.trim()))],
+    sammanfattning: [...new Set(egenSamm.length > 0 ? egenSamm : (iBoken?.sammanfattning !== undefined ? [iBoken.sammanfattning] : []))],
     labFragor: [...new Set(planer.map((lp) => lp?.labFraga).filter(har).map((x) => x.trim()))],
-    djupBredd: djupBreddFor(b.begrepp, b.mal),
+    djupBredd,
+    labb: iBoken?.labb ?? null,
+    filmer,
     rubrik: b.rubrik, typ: b.typ, sidor: b.sidor,
     mal: b.mal, begrepp: b.begrepp,
     uppgifter: {
@@ -188,7 +202,7 @@ function byggLapp(s: Struktur, amneId: string, bok: Bok, boxar: VagBox[], kapite
   const klass = s.klasser.find((k) => k.id === amne.klassId);
   const n = bok.nivaer;
   const { karta, text } = nivaKarta(n);
-  const avsnitt = boxar.map((b) => avsnittUrBox(s, amneId, b));
+  const avsnitt = boxar.map((b) => avsnittUrBox(s, amneId, bok, b));
   const noAmne = (NO_TK_AMNEN as readonly string[]).includes(amne.namn);
   const hitta = (b: string): string | null => {
     for (const k of kapitel) {
@@ -280,9 +294,13 @@ const kodDelar = (kod: string): [number, number] | null => { const m = KOD.exec(
  * enda delkapitel). Varje spann måste ligga i ett kapitel med början före slutet.
  */
 export function tolkaOmfang(text: string): { spann: DelkapitelSpann[]; fel: string | null } {
-  const delar = text.split(/[,;\n]+/).map((x) => x.trim()).filter((x) => x !== '');
+  // Del 209: tål 'och', 'samt', '&', 'till', decimalkomma (6,5) och slarvfel som '6-5' för 6.5
+  const delar = text.replace(/(\d),(\d)/g, '$1.$2').replace(/\b(och|samt)\b|&/gi, ',').split(/[,;\n]+/).map((x) => x.trim()).filter((x) => x !== '');
   const spann: DelkapitelSpann[] = [];
-  for (const d of delar) {
+  for (const rad of delar) {
+    let d = rad.replace(/\btill\b/gi, '–').replace(/\s+/g, ' ').trim();
+    const slarv = /^(\d+)\.(\d+)\s*[-–—]\s*(\d+)-(\d+)$/.exec(d);   // '6.1 - 6-5' → '6.1 - 6.5'
+    if (slarv !== null && slarv[1] === slarv[3]) d = `${slarv[1]}.${slarv[2]}-${slarv[3]}.${slarv[4]}`;
     const m = /^(\d+\.\d+)\s*(?:[-–—]\s*(\d+\.\d+))?$/.exec(d);
     if (m === null) return { spann: [], fel: `"${d}" — skriv som 6.1-6.5 (eller bara 7.3).` };
     const fran = m[1]; const till = m[2] ?? m[1];
@@ -351,6 +369,12 @@ export function provlappText(p: Provlapp): string {
     r.push(a.rubrik);
     r.push(`  Djup: ${a.djupBredd!.djup}`);
     r.push(`  Bredd: ${a.djupBredd!.bredd}`);
+    if (a.labb !== null) r.push(`  Labb (E): ${a.labb}`);
+  }
+  const medFilm = p.avsnitt.filter((a) => a.filmer.length > 0);
+  if (medFilm.length > 0) {
+    r.push(''); r.push('FILMER');
+    for (const a of medFilm) { r.push(a.rubrik); a.filmer.forEach((f) => r.push(`  • ${f.titel} – ${f.url}`)); }
   }
   r.push(''); r.push('FÖR E-NIVÅ KRÄVS');
   p.kravE.forEach((k) => r.push(`• ${k}`));

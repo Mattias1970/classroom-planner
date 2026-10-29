@@ -30,6 +30,8 @@ export interface VagLektion {
   /** Avklarat-kryss i lektionsplanen. */
   kryss: boolean;
   sidor: string;
+  /** Del 209 · Bokens sammanfattning och exempel på djup/bredd/labb för delkapitlet (biologiboken). */
+  bok?: { sammanfattning?: string; djup?: string; bredd?: string; labb?: string };
   /** Uppgifter per nivå med lärarens egna intervall om de finns. '—' = saknas. */
   uppgifter: { niva1: string; niva2: string; niva3: string };
   mal: string[];
@@ -190,6 +192,7 @@ export function vagTillProvet(s: Struktur, amneId: string, kapitelNr?: number, i
       sidor: har(lp?.sidorTeori) ? lp.sidorTeori : r.lektion.sidorTeori,
       uppgifter: effektivaNivaer(r.lektion, lp),
       mal: rader(r.lektion.mal), begrepp, genomgang: r.lektion.genomgang, exempel: r.lektion.ex, laxa: r.lektion.laxa,
+      bok: { sammanfattning: r.lektion.sammanfattning, djup: r.lektion.djup, bredd: r.lektion.bredd, labb: r.lektion.labb },
     });
   }
   for (const b of boxar) {

@@ -151,3 +151,38 @@ describe('Del 206 · Provlappen visar djup och bredd med bild, E-krav och lärar
     expect(Object.keys(zip.files).some((f) => f.startsWith('word/media/'))).toBe(true);
   });
 });
+
+describe('Del 209 · bokens exempel, labb och filmer på skärm och i Word', () => {
+  const BOK209: Bok = {
+    ...BOK, id: 'ma-209',
+    kapitel: [{ ...BOK.kapitel[0], delkapitel: BOK.kapitel[0].delkapitel.map((d) => ({ ...d, lektioner: d.lektioner.map((l) => ({ ...l, sammanfattning: 'Bråk är delar av en helhet.', djup: 'Förklara i flera led varför 1/2 = 2/4.', bredd: 'Ge tre bråk som är lika med en halv.', labb: 'Labb: vad söker vi, hur ser vi, koppling.' })) })), resurser: { ...BOK.kapitel[0].resurser, filmer: [{ titel: '1.1 · Bråk på Binogi', url: 'https://app.binogi.se/l/brak' }] } }],
+  };
+  function bygg209(): Struktur {
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '26/27', start: '2026-09-14', slut: '2027-06-11', dagar: [] });
+    s = sparaBok(s, BOK209);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'am', klassId: 'k', namn: 'Matematik', bokId: BOK209.id, schema: [{ dag: 1, start: '08:10', slut: '09:10' }] });
+    s = registreraPlanering(s, { id: 'pl', amneId: 'am', bokId: BOK209.id, skapad: '2026-09-10' });
+    return laggTillEgenRad(s, 'am', { id: 'er1', position: 2, rubrik: 'Kapiteltest 1', typ: 'prov' }, '2026-09-14');
+  }
+  it('skärm: bokens sammanfattning, djup/bredd, labb och filmlänk', async () => {
+    const s = bygg209(); sparaStruktur(s);
+    const div = document.createElement('div'); document.body.appendChild(div);
+    await act(async () => createRoot(div).render(<ProvlappPanel s={s} amneId="am" lektionsIndex={2} farg="#b5532c" notis="" sattNotis={() => {}} />));
+    await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Generera provlapp'))!.click(); });
+    const vy = div.querySelector('[role="document"]')!;
+    expect(vy.textContent).toContain('Sammanfattning: Bråk är delar av en helhet.');
+    expect(vy.textContent).toContain('Djup: Förklara i flera led varför 1/2 = 2/4.');
+    expect(vy.textContent).toContain('Labb (E): Labb: vad söker vi');
+    expect(vy.querySelector('a[href="https://app.binogi.se/l/brak"]')!.textContent).toBe('Bråk på Binogi');
+  });
+  it('Word: labb och filmlänk som hyperlänk', async () => {
+    const p = provlapp(bygg209(), 'am', 2, '2026-09-14')!;
+    const zip = await JSZip.loadAsync(await Packer.toBuffer(provlappDokument(p, '#b5532c')));
+    const text = (await zip.file('word/document.xml')!.async('string')).replace(/<[^>]+>/g, '');
+    expect(text).toContain('Labb (E): Labb: vad söker vi');
+    expect(text).toContain('Bråk på Binogi');
+    expect(await zip.file('word/_rels/document.xml.rels')!.async('string')).toContain('https://app.binogi.se/l/brak');
+  });
+});

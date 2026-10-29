@@ -4,7 +4,7 @@
  * import) från provets lektionskort.
  */
 import {
-  AlignmentType, BorderStyle, Document, Footer, Header, HeadingLevel, ImageRun, LevelFormat, Packer, PageNumber,
+  AlignmentType, BorderStyle, Document, ExternalHyperlink, Footer, Header, HeadingLevel, ImageRun, LevelFormat, Packer, PageNumber,
   Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType,
 } from 'docx';
 import { labMall, type Betygsniva, type Provlapp } from '@planner/kernel';
@@ -88,7 +88,14 @@ export function provlappDokument(pl: Provlapp, farg: string, figur: Uint8Array |
     a.exempel.forEach((e) => ut.push(p([t('Exempel från lektionerna: ', { italics: true, color: '555555' }), t(e, { italics: true, color: '555555' })], 50)));
     if (a.djupBredd !== null) {
       ut.push(p([t('Djup: ', { bold: true, color: F }), t(a.djupBredd.djup)], 40));
-      ut.push(p([t('Bredd: ', { bold: true, color: F }), t(a.djupBredd.bredd)], 80));
+      ut.push(p([t('Bredd: ', { bold: true, color: F }), t(a.djupBredd.bredd)], a.labb !== null ? 40 : 80));
+      if (a.labb !== null) ut.push(p([t('Labb (E): ', { bold: true, color: F }), t(a.labb)], 80));
+    }
+    if (a.filmer.length > 0) {
+      ut.push(new Paragraph({ spacing: { after: 80 }, children: [t('Filmer: ', { bold: true }), ...a.filmer.flatMap((f, i) => [
+        ...(i > 0 ? [t(' · ')] : []),
+        new ExternalHyperlink({ link: f.url, children: [new TextRun({ text: f.titel, font: FONT, size: 22, style: 'Hyperlink' })] }),
+      ])] }));
     }
   }
 

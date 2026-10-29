@@ -93,8 +93,10 @@ function ProvlappVisning({ p, farg }: { p: ProvlappData; farg: string }) {
             <div className="provlapp-djupbredd small">
               <div><b>Djup:</b> {a.djupBredd.djup}</div>
               <div><b>Bredd:</b> {a.djupBredd.bredd}</div>
+              {a.labb !== null && <div><b>Labb (E):</b> {a.labb}</div>}
             </div>
           )}
+          {a.filmer.length > 0 && <p className="small provlapp-filmer"><b>Filmer:</b> {a.filmer.map((f, i) => <span key={f.url}>{i > 0 && ' · '}<a href={f.url} target="_blank" rel="noreferrer">{f.titel}</a></span>)}</p>}
         </div>
       ))}
 

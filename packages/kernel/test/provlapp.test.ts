@@ -203,3 +203,43 @@ describe('Del 206 · Provlappen: sammanfattning, djup och bredd, E-krav och labo
     expect(text).toContain('Vad söker vi? Frågan: Hur påverkar ljuset fotosyntesen?');
   });
 });
+
+describe('Del 209 · bokens sammanfattning, djup/bredd/labb-exempel och filmer per delkapitel; tolerant omfång', () => {
+  const BIO = bokFromValfriImport(JSON.stringify({
+    id: 'bio-209', titel: 'Spektrum Biologi', forlag: 'Liber', amne: 'Biologi', arskurs: 8,
+    kapitel: [{ nummer: 7, titel: 'Nervsystemet', sidor: '272–303', mal: ['hur nervsystemet fungerar'], delkapitel: [
+      { nummer: '7.1', titel: 'Så fungerar ditt nervsystem', sidor: '274–278', begrepp: ['nervimpuls', 'synaps', 'reflex'], extraBegrepp: [], testaDigSjalv: { sida: 278, fragor: ['Vad är en nervimpuls?'] },
+        sammanfattning: 'Nervceller leder impulser över synapser.', djup: 'Förklara reflexen i flera led: känselkropp → ryggmärg → muskel.', bredd: 'Ge tre exempel på det självständiga nervsystemet.', labb: 'Reaktionstid: vad söker vi, hur ser vi resultatet, koppling.',
+        filmer: [{ titel: 'Nervsystemet', url: 'https://app.binogi.se/l/nervsystemet' }, { titel: 'Nervreflexer', url: 'https://app.binogi.se/l/nervreflexer' }] },
+      { nummer: '7.2', titel: 'Vår hjärnbark gör oss unika', sidor: '279–283', begrepp: ['hjärncentra', 'hippocampus'], extraBegrepp: [], testaDigSjalv: { sida: 283, fragor: [] } },
+    ] }],
+  }));
+
+  it('tolkaOmfang tål "och", "till", decimalkomma och slarvfelet 6-5', () => {
+    expect(tolkaOmfang('6.1 - 6-5 och 7.1 - 7.5').spann).toEqual([{ fran: '6.1', till: '6.5' }, { fran: '7.1', till: '7.5' }]);
+    expect(tolkaOmfang('6,1 till 6,5 samt 7.1–7.5').spann).toEqual([{ fran: '6.1', till: '6.5' }, { fran: '7.1', till: '7.5' }]);
+    expect(tolkaOmfang('6.1 & 7.3').spann).toEqual([{ fran: '6.1', till: '6.1' }, { fran: '7.3', till: '7.3' }]);
+    expect(tolkaOmfang('kap 6').fel).not.toBeNull();
+  });
+
+  it('bokens fält hamnar på lappen: sammanfattning som fallback, bokens djup/bredd före ramen, labb och filmer per avsnitt', () => {
+    const s = bygg(BIO, 'Biologi');
+    const p = provlapp(s, 'am', 2, '2026-09-14')!;   // PROV efter 7.1–7.2 (+ PERSPEKTIV/FINALEN? – provet är sista raden)
+    const a71 = p.avsnitt.find((a) => a.rubrik.startsWith('7.1'))!;
+    expect(a71.sammanfattning).toEqual(['Nervceller leder impulser över synapser.']);
+    expect(a71.djupBredd).toEqual({ kedja: ['nervimpuls', 'synaps', 'reflex'], djup: 'Förklara reflexen i flera led: känselkropp → ryggmärg → muskel.', bredd: 'Ge tre exempel på det självständiga nervsystemet.' });
+    expect(a71.labb).toBe('Reaktionstid: vad söker vi, hur ser vi resultatet, koppling.');
+    expect(a71.filmer).toEqual([{ titel: 'Nervsystemet', url: 'https://app.binogi.se/l/nervsystemet' }, { titel: 'Nervreflexer', url: 'https://app.binogi.se/l/nervreflexer' }]);
+    const a72 = p.avsnitt.find((a) => a.rubrik.startsWith('7.2'))!;
+    expect(a72.sammanfattning).toEqual([]);
+    expect(a72.djupBredd?.djup).toContain('Förklara i flera led hur hjärncentra hänger ihop med hippocampus');   // ramen
+    expect(a72.labb).toBeNull(); expect(a72.filmer).toEqual([]);
+    // Lärarens egen sammanfattning går före bokens
+    const s2 = sattLektionsplan(s, { id: 'lp0', amneId: 'am', lektionsIndex: 0, sammanfattning: 'Min egen.' });
+    expect(provlapp(s2, 'am', 2, '2026-09-14')!.avsnitt[0].sammanfattning).toEqual(['Min egen.']);
+    const text = provlappText(p);
+    expect(text).toContain('Labb (E): Reaktionstid');
+    expect(text).toContain('FILMER');
+    expect(text).toContain('• Nervreflexer – https://app.binogi.se/l/nervreflexer');
+  });
+});
