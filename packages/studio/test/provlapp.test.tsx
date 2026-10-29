@@ -6,8 +6,8 @@ import { createRoot } from 'react-dom/client';
 import JSZip from 'jszip';
 import { Packer } from 'docx';
 import {
-  byggKapitel, laggTillAmne, laggTillEgenRad, laggTillKlass, laggTillSkolar, laggTillTjanst, provlapp, registreraPlanering,
-  resetIdRaknare, sparaBok, tomStruktur, type Bok, type Lektion, type Struktur,
+  byggKapitel, laggTillAmne, laggTillEgenRad, laggTillKlass, laggTillSkolar, laggTillTjanst, provlapp, provlappForOmfang, registreraPlanering,
+  resetIdRaknare, sattLektionsplan, sparaBok, tomStruktur, type Bok, type Lektion, type Struktur,
 } from '@planner/kernel';
 import { ProvlappPanel } from '../src/Provlapp';
 import { provlappDokument, provlappFilnamn } from '../src/provlappWord';
@@ -71,5 +71,49 @@ describe('Del 151 · Provlapp på provets lektionskort', () => {
       'Begrepp du ska kunna förklara', 'Talet ovanför bråkstrecket.', 'Övningsförslag för varje nivå', 'ETT 1–10 (s. 8–10)', 'TVÅ 11–20 (s. 8–10)', 'TRE 21–30 (s. 8–10)', 'Checklista inför provet']) {
       expect(text).toContain(del);
     }
+  });
+
+  it('Del 199: omfånget skrivs in på kortet, sparas på lektionsplanen och styr lappen; Word-filen får omfånget i namn och huvud', async () => {
+    const BOK2: Bok = { ...BOK, id: 'ma-y2', kapitel: [BOK.kapitel[0], byggKapitel(2, 'Geometri', '#2f5aa8', [
+      lekt(1, 'regular', '2.1 Vinklar', 1, { niva1: '1–10', sidorTeori: 's. 30–33', mal: 'mäta vinklar', begrepp: 'vinkel' }),
+      lekt(2, 'regular', '2.2 Area', 1, { niva1: '11–20', sidorTeori: 's. 34–37', mal: 'räkna area' }),
+    ])] };
+    BOK2.kapitel[0].mal = ['bråk']; BOK2.kapitel[1].mal = ['vinklar och area'];
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '26/27', start: '2026-09-14', slut: '2027-06-11', dagar: [] });
+    s = sparaBok(s, BOK2);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'am', klassId: 'k', namn: 'Matematik', bokId: BOK2.id, schema: [{ dag: 1, start: '08:10', slut: '09:10' }] });
+    s = registreraPlanering(s, { id: 'pl', amneId: 'am', bokId: BOK2.id, skapad: '2026-09-10' });
+    s = laggTillEgenRad(s, 'am', { id: 'er1', position: 4, rubrik: 'Prov kapitel 1–2', typ: 'prov' }, '2026-09-14');
+    sparaStruktur(s);
+    let omfang = '';
+    const div = document.createElement('div'); document.body.appendChild(div);
+    const root = createRoot(div);
+    const rendera = () => act(() => root.render(<ProvlappPanel s={s} amneId="am" lektionsIndex={4} farg="#b5532c" notis="" sattNotis={() => {}} omfang={omfang} sattOmfang={(v) => { omfang = v; s = sattLektionsplan(s, { id: 'lp', amneId: 'am', lektionsIndex: 4, provlappOmfang: v }); sparaStruktur(s); rendera(); }} />));
+    rendera();
+    const falt = div.querySelector('input[aria-label="Provlappens omfång"]') as HTMLInputElement;
+    expect(falt).not.toBeNull();
+    // Felaktigt omfång visas som varning
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(falt, '1.1-2.2'); falt.dispatchEvent(new Event('input', { bubbles: true })); });
+    expect(div.textContent).toContain('inom ett kapitel');
+    await act(async () => { const f = div.querySelector('input[aria-label="Provlappens omfång"]') as HTMLInputElement; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(f, '1.1, 2.1-2.2'); f.dispatchEvent(new Event('input', { bubbles: true })); });
+    expect(div.textContent).not.toContain('inom ett kapitel');
+    await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Generera provlapp'))!.click(); });
+    const vy = div.querySelector('[role="document"]')!;
+    expect(vy.textContent).toContain('KAPITEL 1 OCH 2');
+    expect(vy.textContent).toContain('Omfattar: 1.1 · 2.1–2.2');
+    expect(vy.textContent).toContain('Det här får du lära dig i kapitlen');
+    expect(vy.textContent).toContain('2.2 Area');
+    // Word
+    const p = provlapp(s, 'am', 4, '2026-09-14')!;
+    expect(p.omfang).toBe('1.1 · 2.1–2.2');
+    expect(provlappFilnamn(p)).toBe('Provlapp Matematik 8B 1.1 2.1-2.2');
+    const buf = await Packer.toBuffer(provlappDokument(p, '#b5532c'));
+    const xml = await (await JSZip.loadAsync(buf)).file('word/document.xml')!.async('string');
+    const text = xml.replace(/<[^>]+>/g, '');
+    for (const del of ['PROVLAPP · MATEMATIK Y · KAPITEL 1 OCH 2', 'Omfattar', '1.1 · 2.1–2.2', 'Kapitlens mål', 'Kapitel 2 Geometri', '2.1 Vinklar', 'ETT 11–20 (s. 34–37)']) expect(text).toContain(del);
+    // Fristående: samma lapp utan provlektion
+    expect(provlappForOmfang(s, 'am', [{ fran: '2.1', till: '2.2' }], { namn: 'Geometriprov', datum: null, vecka: null, notis: null })!.avsnitt.map((a) => a.rubrik)).toEqual(['2.1 Vinklar', '2.2 Area']);
   });
 });

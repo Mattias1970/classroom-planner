@@ -11,6 +11,8 @@
  * Kapitlets repetitionsdelar (Blandade uppgifter, Träna, Utveckla, Förmågorna i
  * fokus, Perspektiv, Finalen …) sorteras in på nivåerna efter sin typ.
  * Lärarens egen text på provlektionen (LektionsPlan.provlappNotis) tas med.
+ * Del 199: ett omfång av delkapitel (LektionsPlan.provlappOmfang, '6.1-6.5, 7.1-7.5')
+ * ger en lapp över just de delkapitlen, även över flera kapitel.
  */
 import type { Bok, NivaEtiketter, Struktur } from './typer.js';
 import { amnesPlanFor, hamtaLektionsplan, lektionsNamn } from './struktur.js';
@@ -44,6 +46,10 @@ export interface Provlapp {
   bok: string;
   kapitelNr: number;
   kapitelNamn: string;
+  /** Del 199 · Omfånget som text när lappen täcker ett urval av delkapitel ('6.1–6.5 · 7.1–7.5'); null = hela kapitlet. */
+  omfang: string | null;
+  /** Del 199 · Kapitlen lappen täcker, i ordning (ett vid helt kapitel). */
+  kapitel: Array<{ nr: number; namn: string; mal: string[] }>;
   provNamn: string;
   /** Provets datum (YYYY-MM-DD) eller null när provet inte har fått ett datum. */
   provDatum: string | null;
@@ -121,36 +127,22 @@ const REPETITION_NIVA: Partial<Record<VagTyp, Betygsniva[]>> = {
   formagor: ['C', 'A'], utveckla: ['A'], perspektiv: ['C', 'A'], finalen: ['A'], annat: ['E', 'C'],
 };
 
-/**
- * Provlappen för provlektionen på position `lektionsIndex` i ämnets planering.
- * null när raden inte är ett prov, ämnet saknar bok/planering eller kapitlet saknas.
- */
-export function provlapp(s: Struktur, amneId: string, lektionsIndex: number, idag?: string): Provlapp | null {
-  const amne = s.amnen.find((a) => a.id === amneId);
-  const bok: Bok | undefined = s.bocker.find((b) => b.id === amne?.bokId);
-  const ap = amnesPlanFor(s, amneId, idag);
-  if (amne === undefined || bok === undefined || ap === null) return null;
-  const rad = ap.a[lektionsIndex];
-  if (rad === undefined || vagTyp(rad.lektion) !== 'prov') return null;
-  const vag = vagTillProvet(s, amneId, rad.kapitel, idag);
-  const kap = bok.kapitel.find((k) => k.nr === rad.kapitel);
-  if (vag === null || kap === undefined) return null;
-  const lp = hamtaLektionsplan(s, amneId, lektionsIndex);
+/** Lappens innehåll ur ett antal avsnittsboxar — delas av hela-kapitlet-lappen och omfångslappen. */
+function byggLapp(s: Struktur, amneId: string, bok: Bok, boxar: VagBox[], kapitel: Array<{ nr: number; namn: string; mal: string[]; forklaringar: Record<string, string>; begreppslista: string[] }>, prov: { namn: string; datum: string | null; vecka: number | null; notis: string | null }, omfang: string | null): Provlapp {
+  const amne = s.amnen.find((a) => a.id === amneId)!;
   const klass = s.klasser.find((k) => k.id === amne.klassId);
   const n = bok.nivaer;
   const { karta, text } = nivaKarta(n);
-
-  // Avsnitten före provet: boxar med minst en lektion före provlektionen (eller odaterade delkapitel ur boken)
-  const provDatum = rad.datum;
-  const fore = vag.boxar.filter((b) => b.typ !== 'prov' && b.typ !== 'laboration' && (b.lektioner.length === 0 || b.lektioner.some((l) => l.index < lektionsIndex || l.datum === null || (provDatum !== null && l.datum < provDatum))));
-  const avsnitt = fore.map(avsnittUrBox);
-
-  const forklaringar = kap.resurser.forklaringar ?? {};
+  const avsnitt = boxar.map(avsnittUrBox);
   const hitta = (b: string): string | null => {
-    const nyckel = Object.keys(forklaringar).find((k) => k.toLowerCase().trim() === b.toLowerCase().trim());
-    return nyckel === undefined ? null : forklaringar[nyckel];
+    for (const k of kapitel) {
+      const nyckel = Object.keys(k.forklaringar).find((x) => x.toLowerCase().trim() === b.toLowerCase().trim());
+      if (nyckel !== undefined) return k.forklaringar[nyckel];
+    }
+    return null;
   };
-  const begreppOrdning = [...kap.begreppslista, ...avsnitt.flatMap((a) => a.begrepp)];
+  // Hela kapitlet: bokens begreppslista först; ett omfång: bara avsnittens begrepp
+  const begreppOrdning = [...(omfang === null ? kapitel.flatMap((k) => k.begreppslista) : []), ...avsnitt.flatMap((a) => a.begrepp)];
   const begrepp = [...new Set(begreppOrdning.map((b) => b.trim()).filter((b) => b !== ''))].map((b) => ({ begrepp: b, forklaring: hitta(b) }));
 
   const ovningar: Record<Betygsniva, ProvlappOvning[]> = { E: [], C: [], A: [] };
@@ -168,27 +160,123 @@ export function provlapp(s: Struktur, amneId: string, lektionsIndex: number, ida
       }
     }
   }
-
+  const forsta = kapitel[0];
   return {
     amne: amne.namn, klass: klass?.namn ?? '', bok: bok.titel,
-    kapitelNr: kap.nr, kapitelNamn: kap.namn,
-    provNamn: lektionsNamn(rad.lektion, lp), provDatum, provVecka: rad.vecka,
+    kapitelNr: forsta.nr, kapitelNamn: kapitel.length === 1 ? forsta.namn : kapitel.map((k) => `${k.nr} ${k.namn}`).join(' · '),
+    omfang, kapitel: kapitel.map(({ nr, namn, mal }) => ({ nr, namn, mal })),
+    provNamn: prov.namn, provDatum: prov.datum, provVecka: prov.vecka,
     nivaer: n, nivaKarta: text,
-    kapitelMal: kap.mal ?? [],
+    kapitelMal: kapitel.flatMap((k) => k.mal),
     avsnitt, begrepp, ovningar,
-    notis: har(lp?.provlappNotis) ? lp.provlappNotis.trim() : null,
+    notis: prov.notis,
     repetitionSidor: avsnitt.filter((a) => a.typ === 'sammanfattning' && har(a.sidor)).map((a) => `${a.rubrik} ${a.sidor}`),
   };
+}
+
+const kapInfo = (bok: Bok, nr: number) => {
+  const kap = bok.kapitel.find((k) => k.nr === nr);
+  return kap === undefined ? null : { nr: kap.nr, namn: kap.namn, mal: kap.mal ?? [], forklaringar: kap.resurser.forklaringar ?? {}, begreppslista: kap.begreppslista };
+};
+
+/**
+ * Provlappen för provlektionen på position `lektionsIndex` i ämnets planering.
+ * null när raden inte är ett prov, ämnet saknar bok/planering eller kapitlet saknas.
+ * Del 199: har lektionsplanen ett omfång (provlappOmfang, t.ex. '6.1-6.5, 7.1-7.5') byggs lappen för det.
+ */
+export function provlapp(s: Struktur, amneId: string, lektionsIndex: number, idag?: string): Provlapp | null {
+  const amne = s.amnen.find((a) => a.id === amneId);
+  const bok: Bok | undefined = s.bocker.find((b) => b.id === amne?.bokId);
+  const ap = amnesPlanFor(s, amneId, idag);
+  if (amne === undefined || bok === undefined || ap === null) return null;
+  const rad = ap.a[lektionsIndex];
+  if (rad === undefined || vagTyp(rad.lektion) !== 'prov') return null;
+  const lp = hamtaLektionsplan(s, amneId, lektionsIndex);
+  const prov = { namn: lektionsNamn(rad.lektion, lp), datum: rad.datum, vecka: rad.vecka, notis: har(lp?.provlappNotis) ? lp.provlappNotis.trim() : null };
+  if (har(lp?.provlappOmfang)) {
+    const omf = tolkaOmfang(lp.provlappOmfang);
+    if (omf.fel === null && omf.spann.length > 0) return provlappForOmfang(s, amneId, omf.spann, prov, idag);
+  }
+  const vag = vagTillProvet(s, amneId, rad.kapitel, idag);
+  const kap = kapInfo(bok, rad.kapitel);
+  if (vag === null || kap === null) return null;
+  // Avsnitten före provet: boxar med minst en lektion före provlektionen (eller odaterade delkapitel ur boken)
+  const provDatum = rad.datum;
+  const fore = vag.boxar.filter((b) => b.typ !== 'prov' && b.typ !== 'laboration' && (b.lektioner.length === 0 || b.lektioner.some((l) => l.index < lektionsIndex || l.datum === null || (provDatum !== null && l.datum < provDatum))));
+  return byggLapp(s, amneId, bok, fore, [kap], prov, null);
+}
+
+// ── Del 199 · Provlapp för ett omfång av delkapitel (6.1–6.5, 7.1–7.5) ──────────
+
+export interface DelkapitelSpann { fran: string; till: string }
+
+const KOD = /^(\d+)\.(\d+)$/;
+const kodDelar = (kod: string): [number, number] | null => { const m = KOD.exec(kod.trim()); return m === null ? null : [Number(m[1]), Number(m[2])]; };
+
+/**
+ * Tolkar ett omfång som läraren skriver: '6.1-6.5, 7.1-7.5' (även '6.1–6.5; 7.1 – 7.5', eller '7.3' för ett
+ * enda delkapitel). Varje spann måste ligga i ett kapitel med början före slutet.
+ */
+export function tolkaOmfang(text: string): { spann: DelkapitelSpann[]; fel: string | null } {
+  const delar = text.split(/[,;\n]+/).map((x) => x.trim()).filter((x) => x !== '');
+  const spann: DelkapitelSpann[] = [];
+  for (const d of delar) {
+    const m = /^(\d+\.\d+)\s*(?:[-–—]\s*(\d+\.\d+))?$/.exec(d);
+    if (m === null) return { spann: [], fel: `"${d}" — skriv som 6.1-6.5 (eller bara 7.3).` };
+    const fran = m[1]; const till = m[2] ?? m[1];
+    const a = kodDelar(fran)!; const b = kodDelar(till)!;
+    if (a[0] !== b[0]) return { spann: [], fel: `"${d}" — ett spann måste ligga inom ett kapitel (skriv t.ex. 6.6-6.8, 7.1-7.2).` };
+    if (a[1] > b[1]) return { spann: [], fel: `"${d}" — slutet ligger före början.` };
+    spann.push({ fran, till });
+  }
+  return { spann, fel: null };
+}
+
+export function omfangText(spann: DelkapitelSpann[]): string {
+  return spann.map((x) => (x.fran === x.till ? x.fran : `${x.fran}–${x.till}`)).join(' · ');
+}
+
+/**
+ * Provlappen för ett omfång av delkapitel, över ett eller flera kapitel. Delkapitlen i varje spann tas med
+ * (alla deras lektioner, oavsett datum) tillsammans med kapitlets sammanfattning; begreppen är avsnittens.
+ * `prov` är provets namn/datum (från provlektionen, eller ett valfritt namn när lappen görs fristående).
+ * null när ämnet saknar bok/planering eller inget delkapitel i omfånget finns i boken.
+ */
+export function provlappForOmfang(s: Struktur, amneId: string, spann: DelkapitelSpann[], prov: { namn: string; datum: string | null; vecka: number | null; notis: string | null }, idag?: string): Provlapp | null {
+  const amne = s.amnen.find((a) => a.id === amneId);
+  const bok: Bok | undefined = s.bocker.find((b) => b.id === amne?.bokId);
+  if (amne === undefined || bok === undefined) return null;
+  const boxar: VagBox[] = []; const kapitel: NonNullable<ReturnType<typeof kapInfo>>[] = [];
+  for (const sp of spann) {
+    const a = kodDelar(sp.fran); const b = kodDelar(sp.till);
+    if (a === null || b === null) continue;
+    const nr = a[0];
+    const vag = vagTillProvet(s, amneId, nr, idag);
+    const kap = kapInfo(bok, nr);
+    if (vag === null || kap === null) continue;
+    const inom = (kod: string | null) => { const k = kod === null ? null : kodDelar(kod); return k !== null && k[0] === nr && k[1] >= a[1] && k[1] <= b[1]; };
+    const valda = vag.boxar.filter((x) => x.typ === 'delkapitel' && inom(x.kod));
+    if (valda.length === 0) continue;
+    boxar.push(...valda);
+    const samman = vag.boxar.find((x) => x.typ === 'sammanfattning');
+    if (samman !== undefined && !boxar.includes(samman)) boxar.push(samman);
+    if (!kapitel.some((k) => k.nr === nr)) kapitel.push(kap);
+  }
+  if (boxar.length === 0 || kapitel.length === 0) return null;
+  return byggLapp(s, amneId, bok, boxar, kapitel, prov, omfangText(spann));
 }
 
 /** Provlappen som ren text (förhandsvisning, urklipp, Classroom-inlägg). */
 export function provlappText(p: Provlapp): string {
   const r: string[] = [];
   r.push(`PROVLAPP · ${p.amne} ${p.klass} · ${p.bok}`);
-  r.push(`Kapitel ${p.kapitelNr}: ${p.kapitelNamn}`);
+  r.push(p.omfang === null ? `Kapitel ${p.kapitelNr}: ${p.kapitelNamn}` : `Omfattar: ${p.omfang} (${p.kapitel.map((k) => `kapitel ${k.nr} ${k.namn}`).join(', ')})`);
   r.push(`Prov: ${p.provNamn}${p.provDatum !== null ? ` · ${p.provDatum}${p.provVecka !== null ? ` (v. ${p.provVecka})` : ''}` : ' · datum ej satt'}`);
   if (p.notis !== null) { r.push(''); r.push(p.notis); }
-  if (p.kapitelMal.length > 0) { r.push(''); r.push('DET HÄR FÅR DU LÄRA DIG I KAPITLET'); p.kapitelMal.forEach((m) => r.push(`• ${m}`)); }
+  if (p.kapitelMal.length > 0) {
+    r.push(''); r.push(p.kapitel.length > 1 ? 'DET HÄR FÅR DU LÄRA DIG I KAPITLEN' : 'DET HÄR FÅR DU LÄRA DIG I KAPITLET');
+    for (const k of p.kapitel) { if (p.kapitel.length > 1 && k.mal.length > 0) r.push(`Kapitel ${k.nr} ${k.namn}`); k.mal.forEach((m) => r.push(`• ${m}`)); }
+  }
   r.push(''); r.push('DET HÄR SKA DU KUNNA');
   for (const a of p.avsnitt.filter((x) => x.typ === 'delkapitel' || x.mal.length > 0)) {
     r.push(`${a.rubrik}${har(a.sidor) ? ` (${a.sidor})` : ''}`);

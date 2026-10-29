@@ -424,6 +424,8 @@ export interface LektionsPlan {
   avsnittText?: string;
   /** Del 151: lärarens egen text på provlappen (hjälpmedel, tid, extra råd) — bara på provlektioner. */
   provlappNotis?: string;
+  /** Del 199: provlappens omfång som läraren skrivit ('6.1-6.5, 7.1-7.5') — tomt = hela kapitlet. */
+  provlappOmfang?: string;
 }
 
 export interface Struktur {

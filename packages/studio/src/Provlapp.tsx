@@ -6,15 +6,19 @@
  * (hjälpmedel, tider) sparas på lektionsplanen och tas med på lappen.
  */
 import { useState } from 'react';
-import { provlapp, provlappText, type Betygsniva, type Provlapp as ProvlappData, type Struktur } from '@planner/kernel';
+import { provlapp, provlappText, tolkaOmfang, type Betygsniva, type Provlapp as ProvlappData, type Struktur } from '@planner/kernel';
 import { lasStruktur } from './store.js';
 
 const NIVAER: Betygsniva[] = ['E', 'C', 'A'];
 
-export function ProvlappPanel({ s, amneId, lektionsIndex, farg, notis, sattNotis, meddela }: {
+export function ProvlappPanel({ s, amneId, lektionsIndex, farg, notis, sattNotis, omfang = '', sattOmfang, meddela }: {
   s: Struktur; amneId: string; lektionsIndex: number; farg: string;
-  notis: string; sattNotis: (v: string) => void; meddela?: (m: string) => void;
+  notis: string; sattNotis: (v: string) => void;
+  /** Del 199: omfång som text ('6.1-6.5, 7.1-7.5'); tomt = hela kapitlet. */
+  omfang?: string; sattOmfang?: (v: string) => void;
+  meddela?: (m: string) => void;
 }) {
+  const omf = tolkaOmfang(omfang);
   const [lapp, setLapp] = useState<ProvlappData | null>(null);
   const [fel, setFel] = useState<string | null>(null);
   const idag = new Date().toISOString().slice(0, 10);
@@ -38,6 +42,12 @@ export function ProvlappPanel({ s, amneId, lektionsIndex, farg, notis, sattNotis
     <section className="ls-sektion ls-provlapp" style={{ borderLeftColor: farg }}>
       <div className="ls-sek-rubrik">📄 PROVLAPP</div>
       <p className="small muted" style={{ margin: '0 0 6px' }}>Genereras ur planeringen: avsnitten före provet med mål, begrepp (med bokens förklaringar), uppgifter per nivå och övningsförslag för E-, C- och A-nivå. Ändras planeringen genereras lappen om.</p>
+      {sattOmfang !== undefined && (
+        <label className="small" style={{ display: 'block', marginBottom: 6 }}>Omfång — vilka delkapitel lappen täcker (tomt = hela kapitlet; t.ex. <code>6.1-6.5, 7.1-7.5</code> för två kapitel)
+          <input aria-label="Provlappens omfång" value={omfang} placeholder="6.1-6.5, 7.1-7.5" onChange={(e) => sattOmfang(e.target.value)} style={{ width: '100%' }} />
+          {omf.fel !== null && <span className="status warn small" style={{ display: 'block' }}>⚠ {omf.fel}</span>}
+        </label>
+      )}
       <label className="small" style={{ display: 'block' }}>Från läraren (hjälpmedel, tid, extra råd — tas med på lappen)
         <textarea aria-label="Provlappens lärartext" rows={2} value={notis} placeholder="T.ex. Miniräknare tillåten på del 2. Provet är 60 minuter." onChange={(e) => sattNotis(e.target.value)} style={{ width: '100%' }} />
       </label>
@@ -59,13 +69,16 @@ function ProvlappVisning({ p, farg }: { p: ProvlappData; farg: string }) {
   return (
     <div className="provlapp-vy" role="document" aria-label={`Provlapp ${p.provNamn}`}>
       <div className="provlapp-huvud" style={{ borderBottomColor: farg }}>
-        <div className="small" style={{ color: farg, fontWeight: 800, letterSpacing: '.08em' }}>PROVLAPP · {p.amne.toUpperCase()} {p.klass} · {p.bok.toUpperCase()} · KAPITEL {p.kapitelNr}</div>
+        <div className="small" style={{ color: farg, fontWeight: 800, letterSpacing: '.08em' }}>PROVLAPP · {p.amne.toUpperCase()} {p.klass} · {p.bok.toUpperCase()} · {p.kapitel.length > 1 ? `KAPITEL ${p.kapitel.map((k) => k.nr).join(' OCH ')}` : `KAPITEL ${p.kapitelNr}`}</div>
         <h3 style={{ margin: '2px 0 4px' }}>{p.kapitelNamn}</h3>
-        <div className="small"><b>Prov:</b> {p.provNamn} · <b>Datum:</b> {p.provDatum !== null ? `${p.provDatum}${p.provVecka !== null ? ` (v. ${p.provVecka})` : ''}` : <span className="muted">ej satt</span>} · <b>Omfattar:</b> {p.avsnitt.filter((a) => a.typ === 'delkapitel').map((a) => a.rubrik).join(' · ') || `kapitel ${p.kapitelNr}`}</div>
+        <div className="small"><b>Prov:</b> {p.provNamn} · <b>Datum:</b> {p.provDatum !== null ? `${p.provDatum}${p.provVecka !== null ? ` (v. ${p.provVecka})` : ''}` : <span className="muted">ej satt</span>} · <b>Omfattar:</b> {p.omfang ?? (p.avsnitt.filter((a) => a.typ === 'delkapitel').map((a) => a.rubrik).join(' · ') || `kapitel ${p.kapitelNr}`)}</div>
         {p.notis !== null && <p className="small" style={{ margin: '4px 0 0' }}><b>Från läraren:</b> {p.notis}</p>}
       </div>
 
-      {p.kapitelMal.length > 0 && (<><h4>Det här får du lära dig i kapitlet</h4><ul>{p.kapitelMal.map((m, i) => <li key={i}>{m}</li>)}</ul></>)}
+      {p.kapitelMal.length > 0 && (<>
+        <h4>{p.kapitel.length > 1 ? 'Det här får du lära dig i kapitlen' : 'Det här får du lära dig i kapitlet'}</h4>
+        {p.kapitel.map((k) => k.mal.length === 0 ? null : <div key={k.nr}>{p.kapitel.length > 1 && <b className="small">Kapitel {k.nr} {k.namn}</b>}<ul>{k.mal.map((m, i) => <li key={i}>{m}</li>)}</ul></div>)}
+      </>)}
 
       <h4>1. Det här ska du kunna</h4>
       {delkap.map((a) => (

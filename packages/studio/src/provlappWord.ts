@@ -51,7 +51,8 @@ export function provlappDokument(pl: Provlapp, farg: string): Document {
   const h2 = (text: string) => new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 180, after: 70 }, children: [t(text, { bold: true, size: 24, color: '333333' })] });
   const ut: Array<Paragraph | Table> = [];
 
-  ut.push(p([t(`PROVLAPP · ${pl.bok.toUpperCase()} · KAPITEL ${pl.kapitelNr}`, { bold: true, size: 20, color: F })], 40));
+  const kapRubrik = pl.kapitel.length > 1 ? `KAPITEL ${pl.kapitel.map((k) => k.nr).join(' OCH ')}` : `KAPITEL ${pl.kapitelNr}`;
+  ut.push(p([t(`PROVLAPP · ${pl.bok.toUpperCase()} · ${kapRubrik}`, { bold: true, size: 20, color: F })], 40));
   ut.push(new Paragraph({
     spacing: { after: 120 }, border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: F, space: 6 } },
     children: [t(pl.kapitelNamn, { bold: true, size: 40 })],
@@ -59,6 +60,7 @@ export function provlappDokument(pl: Provlapp, farg: string): Document {
   ut.push(tabell([2000, 2819, 2000, 2819], [
     ['Ämne', `${pl.amne} ${pl.klass}`, 'Prov', pl.provNamn],
     ['Provdatum', pl.provDatum !== null ? `${datumText(pl.provDatum)}${pl.provVecka !== null ? ` (v. ${pl.provVecka})` : ''}` : 'meddelas', 'Bok', pl.bok],
+    ...(pl.omfang !== null ? [['Omfattar', pl.omfang, '', '']] : []),
   ], F));
   ut.push(p(''));
   if (pl.notis !== null) {
@@ -67,8 +69,11 @@ export function provlappDokument(pl: Provlapp, farg: string): Document {
   ut.push(p([t('Så läser du provlappen. ', { bold: true }), t(`Del 1 är det du ska kunna, avsnitt för avsnitt. Del 2 är begreppen. Del 3 ger förslag på uppgifter i boken för varje nivå — E-nivån tränas med ${pl.nivaKarta.E}, C-nivån med ${pl.nivaKarta.C} och A-nivån med ${pl.nivaKarta.A}.`)]));
 
   if (pl.kapitelMal.length > 0) {
-    ut.push(h1('Kapitlets mål'));
-    pl.kapitelMal.forEach((m) => ut.push(punkt(m)));
+    ut.push(h1(pl.kapitel.length > 1 ? 'Kapitlens mål' : 'Kapitlets mål'));
+    for (const k of pl.kapitel) {
+      if (pl.kapitel.length > 1 && k.mal.length > 0) ut.push(h2(`Kapitel ${k.nr} ${k.namn}`));
+      k.mal.forEach((m) => ut.push(punkt(m)));
+    }
   }
 
   ut.push(h1('1. Det här ska du kunna'));
@@ -110,21 +115,22 @@ export function provlappDokument(pl: Provlapp, farg: string): Document {
   ].forEach((c) => ut.push(kryss(c)));
 
   return new Document({
-    creator: 'Classroom Planner', title: `Provlapp ${pl.amne} ${pl.klass} kapitel ${pl.kapitelNr}`,
+    creator: 'Classroom Planner', title: `Provlapp ${pl.amne} ${pl.klass} ${pl.omfang ?? `kapitel ${pl.kapitelNr}`}`,
     styles: { default: { document: { run: { font: FONT, size: 22 } } } },
     numbering: { config: [{ reference: 'punkt', levels: [{ level: 0, format: LevelFormat.BULLET, text: '•', alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 480, hanging: 280 } } } }] }] },
     sections: [{
       properties: { page: { margin: { top: 1134, right: 1134, bottom: 1134, left: 1134 } } },
-      headers: { default: new Header({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [t(`${pl.amne} ${pl.klass} · Kapitel ${pl.kapitelNr} · Provlapp`, { size: 18, color: '808080' })] })] }) },
+      headers: { default: new Header({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [t(`${pl.amne} ${pl.klass} · ${pl.omfang ?? `Kapitel ${pl.kapitelNr}`} · Provlapp`, { size: 18, color: '808080' })] })] }) },
       footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [t('Sida ', { size: 18, color: '808080' }), new TextRun({ children: [PageNumber.CURRENT], font: FONT, size: 18, color: '808080' })] })] }) },
       children: ut,
     }],
   });
 }
 
-/** Filnamn: 'Provlapp Matematik 8B kap 1.docx'. */
+/** Filnamn: 'Provlapp Matematik 8B kap 1.docx' eller 'Provlapp Biologi 8B 6.1-6.5 7.1-7.5.docx'. */
 export function provlappFilnamn(pl: Provlapp): string {
-  return `Provlapp ${pl.amne} ${pl.klass} kap ${pl.kapitelNr}`.replace(/[\\/:*?"<>|]/g, '').trim();
+  const del = pl.omfang === null ? `kap ${pl.kapitelNr}` : pl.omfang.replace(/–/g, '-').replace(/ · /g, ' ');
+  return `Provlapp ${pl.amne} ${pl.klass} ${del}`.replace(/[\\/:*?"<>|]/g, '').trim();
 }
 
 /** Bygger och laddar ner provlappen. */

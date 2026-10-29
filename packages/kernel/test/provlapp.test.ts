@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { bokFromValfriImport } from '../src/domain/biologibok.js';
 import { byggKapitel } from '../src/domain/bok.js';
-import { nivaKarta, provlapp, provlappText } from '../src/domain/provlapp.js';
+import { nivaKarta, omfangText, provlapp, provlappForOmfang, provlappText, tolkaOmfang } from '../src/domain/provlapp.js';
 import { laggTillAmne, laggTillEgenRad, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering, sattLektionsplan, sparaBok } from '../src/domain/struktur.js';
 import { tomStruktur, type Bok, type Lektion, type Struktur } from '../src/domain/typer.js';
 
@@ -97,5 +97,57 @@ describe('Del 151 · Provlappen ur planeringen', () => {
     // Utan nivåuppgifter i boken finns inga uppgiftsintervall — övningslistorna är tomma, exemplen (Testa dig själv) står under avsnitten
     expect(p.ovningar.E).toEqual([]);
     expect(provlappText(p)).toContain('DET HÄR SKA DU KUNNA');
+  });
+});
+
+describe('Del 199 · provlapp för ett omfång av delkapitel (6.1–6.5, 7.1–7.5)', () => {
+  it('tolkar omfånget', () => {
+    expect(tolkaOmfang('6.1-6.5, 7.1-7.5')).toEqual({ spann: [{ fran: '6.1', till: '6.5' }, { fran: '7.1', till: '7.5' }], fel: null });
+    expect(tolkaOmfang('6.1 – 6.5; 7.3')).toEqual({ spann: [{ fran: '6.1', till: '6.5' }, { fran: '7.3', till: '7.3' }], fel: null });
+    expect(tolkaOmfang('6.6-7.2').fel).toMatch(/inom ett kapitel/);
+    expect(tolkaOmfang('6.5-6.1').fel).toMatch(/före början/);
+    expect(tolkaOmfang('kap 6').fel).toMatch(/6\.1-6\.5/);
+    expect(tolkaOmfang('')).toEqual({ spann: [], fel: null });
+    expect(omfangText([{ fran: '6.1', till: '6.5' }, { fran: '7.3', till: '7.3' }])).toBe('6.1–6.5 · 7.3');
+  });
+
+  it('Spektrum: bara 6.1–6.5 tas med, sammanfattningen följer med, begreppen är avsnittens', () => {
+    const s = bygg(SPEKTRUM, 'Biologi');
+    const p = provlappForOmfang(s, 'am', [{ fran: '6.1', till: '6.5' }], { namn: 'Prov kroppen', datum: '2026-11-06', vecka: 45, notis: null }, '2026-09-14')!;
+    expect(p).not.toBeNull();
+    expect(p.omfang).toBe('6.1–6.5');
+    expect(p.kapitel).toEqual([{ nr: 6, namn: p.kapitelNamn, mal: p.kapitelMal }]);
+    expect(p.avsnitt.filter((a) => a.typ === 'delkapitel').map((a) => a.rubrik.slice(0, 3))).toEqual(['6.1', '6.2', '6.3', '6.4', '6.5']);
+    expect(p.avsnitt.some((a) => a.rubrik.startsWith('6.6'))).toBe(false);
+    expect(p.begrepp.map((b) => b.begrepp)).toContain('cellteorin');
+    expect(p.begrepp.map((b) => b.begrepp)).not.toContain('rörben');   // 6.6
+    expect(provlappText(p)).toContain('Omfattar: 6.1–6.5 (kapitel 6');
+    // Okänt omfång → null
+    expect(provlappForOmfang(s, 'am', [{ fran: '9.1', till: '9.2' }], { namn: 'x', datum: null, vecka: null, notis: null })).toBeNull();
+  });
+
+  it('Matematik: två kapitel i ett omfång ger båda kapitlens mål; provlektionens omfång styr provlapp()', () => {
+    const BOK: Bok = { ...MATTE, id: 'ma-y2', kapitel: [MATTE.kapitel[0], byggKapitel(2, 'Geometri', '#654321', [
+      lekt(1, 'regular', '2.1 Vinklar', 1, { niva1: '1–10', niva2: '11–20', sidorTeori: 's. 30–33', mal: 'mäta vinklar', begrepp: 'vinkel, grader' }),
+      lekt(2, 'regular', '2.2 Area', 1, { niva1: '21–30', niva3: '31–40', sidorTeori: 's. 34–37', mal: 'räkna area' }),
+      lekt(3, 'regular', '2.3 Volym', 1, { niva1: '41–50', sidorTeori: 's. 38–40' }),
+    ])] };
+    BOK.kapitel[1].mal = ['vinklar och area'];
+    let s = laggTillEgenRad(bygg(BOK, 'Matematik'), 'am', { id: 'er1', position: 10, rubrik: 'Prov kapitel 1–2', typ: 'prov' }, '2026-09-14');
+    const idx = 10;
+    s = sattLektionsplan(s, { id: 'lp', amneId: 'am', lektionsIndex: idx, provlappOmfang: '1.2, 2.1-2.2' });
+    const p = provlapp(s, 'am', idx, '2026-09-14')!;
+    expect(p.omfang).toBe('1.2 · 2.1–2.2');
+    expect(p.provNamn).toBe('Prov kapitel 1–2');
+    expect(p.kapitel.map((k) => k.nr)).toEqual([1, 2]);
+    expect(p.kapitelMal).toEqual(['räkna med bråk', 'potenser och tiopotenser', 'vinklar och area']);
+    expect(p.avsnitt.map((a) => a.rubrik)).toEqual(['1.2 Potenser', 'Sammanfattning', '2.1 Vinklar', '2.2 Area']);
+    expect(p.ovningar.E.map((o) => o.avsnitt)).toEqual(['1.2 Potenser', 'Sammanfattning', '2.1 Vinklar', '2.2 Area']);
+    expect(p.ovningar.E[0].uppgifter).toBe('ETT 31–36 (s. 14–18)');
+    expect(p.begrepp.map((b) => b.begrepp)).toEqual(['potens', 'bas', 'exponent', 'vinkel', 'grader']);
+    expect(provlappText(p)).toContain('DET HÄR FÅR DU LÄRA DIG I KAPITLEN');
+    // Felaktigt omfång → hela kapitlet som förut
+    const s2 = sattLektionsplan(s, { id: 'lp', amneId: 'am', lektionsIndex: idx, provlappOmfang: 'kap 1' });
+    expect(provlapp(s2, 'am', idx, '2026-09-14')!.omfang).toBeNull();
   });
 });

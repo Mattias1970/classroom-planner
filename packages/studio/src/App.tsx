@@ -1927,7 +1927,7 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx, meddela
       {/* ── PROVLAPP (Del 151) — bara på provlektioner: genereras ur planeringen, läses här, laddas ner som Word ── */}
       {vagTyp(rad.lektion) === 'prov' && syns('provlapp') && (<>
         <div className="ls-dolj-rad no-print">{dolj('provlapp')}</div>
-        <ProvlappPanel key={`${amneId}-${i}`} s={s} amneId={amneId} lektionsIndex={i} farg={kapFarg} notis={lp?.provlappNotis ?? ''} sattNotis={(v) => satt('provlappNotis', v)} meddela={meddela} />
+        <ProvlappPanel key={`${amneId}-${i}`} s={s} amneId={amneId} lektionsIndex={i} farg={kapFarg} notis={lp?.provlappNotis ?? ''} sattNotis={(v) => satt('provlappNotis', v)} omfang={lp?.provlappOmfang ?? ''} sattOmfang={(v) => satt('provlappOmfang', v)} meddela={meddela} />
       </>)}
 
       {/* ── TAVLAN ── */}
