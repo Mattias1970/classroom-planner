@@ -41,3 +41,4 @@ export * from './domain/utvecklingssamtal.js';
 export * from './domain/samtalskapitel.js';
 export * from './domain/samtalsperiod.js';
 export * from './domain/veckorapport.js';
+export * from './domain/resultatarkiv.js';

@@ -170,6 +170,48 @@ export async function sparaFilTillGitHub(cfg: GitHubConfig, sokvag: string, inne
   if (!r.ok) throw new Error(`GitHub ${r.status}: ${(await r.text()).slice(0, 120)}`);
 }
 
+/** Del 203 · Laddar upp en binär fil (xlsx, pdf …) till datarepot. */
+export async function sparaBinarFilTillGitHub(cfg: GitHubConfig, sokvag: string, bytes: ArrayBuffer): Promise<void> {
+  if (!konfigKomplett(cfg)) throw new Error('GitHub-konfigurationen är ofullständig.');
+  const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${sokvag.split('/').map(encodeURIComponent).join('/')}`;
+  const info = await fetch(`${url}?ref=${encodeURIComponent(cfg.branch)}`, { headers: headers(cfg) });
+  const sha = info.status === 404 ? null : ((await info.json()) as { sha?: string }).sha ?? null;
+  const u8 = new Uint8Array(bytes);
+  let bin = '';
+  for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode(...u8.subarray(i, i + 0x8000));
+  const body = { message: `Resultatfil: ${sokvag} (${new Date().toISOString()})`, content: btoa(bin), branch: cfg.branch, ...(sha !== null ? { sha } : {}) };
+  const r = await fetch(url, { method: 'PUT', headers: headers(cfg), body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(`GitHub ${r.status}: ${(await r.text()).slice(0, 120)}`);
+}
+
+/** Del 203 · Hämtar en binär fil ur datarepot. */
+export async function hamtaBinarFilFranGitHub(cfg: GitHubConfig, sokvag: string): Promise<Uint8Array> {
+  if (!konfigKomplett(cfg)) throw new Error('GitHub-konfigurationen är ofullständig.');
+  const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${sokvag.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(cfg.branch)}`;
+  const r = await fetch(url, { headers: headers(cfg) });
+  if (!r.ok) throw new Error(`GitHub ${r.status}: kunde inte hämta ${sokvag}`);
+  const data = (await r.json()) as { content?: string; encoding?: string; sha?: string };
+  let b64 = data.content !== undefined && data.content !== '' && data.encoding !== 'none' ? data.content : null;
+  if (b64 === null && data.sha !== undefined) {
+    const rb = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/git/blobs/${data.sha}`, { headers: headers(cfg) });
+    if (!rb.ok) throw new Error(`GitHub ${rb.status}: kunde inte hämta filinnehållet (blob).`);
+    b64 = ((await rb.json()) as { content?: string }).content ?? null;
+  }
+  if (b64 === null) throw new Error(`GitHub lämnade tomt innehåll för ${sokvag}.`);
+  const bin = atob(b64.replace(/\n/g, ''));
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+}
+
+/** Del 203 · Sökvägarna i datarepot som matchar mönstret (utan att hämta innehållet). */
+export async function listaFilerIGitHub(cfg: GitHubConfig, monster: RegExp): Promise<string[]> {
+  if (!konfigKomplett(cfg)) throw new Error('GitHub-konfigurationen är ofullständig — fyll i ☁ GitHub först.');
+  const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/git/trees/${encodeURIComponent(cfg.branch)}?recursive=1`;
+  const r = await fetch(url, { headers: headers(cfg) });
+  if (!r.ok) throw new Error(`GitHub ${r.status}: kunde inte läsa repots filträd.`);
+  const trad = (await r.json()) as { tree?: Array<{ path: string; type: string }> };
+  return (trad.tree ?? []).filter((x) => x.type === 'blob' && monster.test(x.path)).map((x) => x.path);
+}
+
 /** Hämtar alla filer i datarepot vars sökväg matchar mönstret. */
 export async function hamtaFilerFranGitHub(cfg: GitHubConfig, monster: RegExp): Promise<Array<{ sokvag: string; json: string }>> {
   if (!konfigKomplett(cfg)) throw new Error('GitHub-konfigurationen är ofullständig — fyll i ☁ GitHub först.');

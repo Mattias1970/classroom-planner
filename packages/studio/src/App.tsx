@@ -60,6 +60,7 @@ import { ProvlappPanel } from './Provlapp.js';
 import { BamRedigering } from './BamRedigering.js';
 import { PlaneringsTavla } from './PlaneringsTavla.js';
 import { Kortrad } from './Kortrad.js';
+import { arkiveraFiler, tagVantandeFiler, uppladdningsText, useVantandeFiler } from './resultatarkiv.js';
 import { Skal, Kort, type Filter, type V3Vy } from './v3/Skal.js';
 import { Oversikt } from './v3/Oversikt.js';
 import { Amnessida } from './v3/Amnessida.js';
@@ -5895,16 +5896,22 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, o
     typAndrad?: boolean;
   }
   const [filRader, setFilRader] = useState<FilRad[]>([]);
+  // Del 203: filerna själva behålls för uppladdning till resultatarkivet; filer hämtade därifrån laddas inte upp igen
+  const filObjekt = useRef<Map<string, File>>(new Map());
+  const franArkiv = useRef<Set<string>>(new Set());
+  const vantandeFiler = useVantandeFiler();
   // Del 181: namn som passar flera elever → frågor efter importen (filer och inklistrade rader)
   const [vantande, setVantande] = useState<VantandeImport[]>([]);
   const [importeraOm, setImporteraOm] = useState(false);
   // Del 155: elever i rapportens roster som saknas i klassen läggs till vid import (som standard)
   const [kompletteraKlass, setKompletteraKlass] = useState(true);
   const [importApp, setImportApp] = useState<ImportApp>('socrative');
-  const lasFiler = async (filer: FileList | null) => {
+  const lasFiler = async (filer: FileList | File[] | null, arkiv = false) => {
     if (filer === null) return;
     const ut: FilRad[] = [];
     for (const fil of Array.from(filer)) {
+      filObjekt.current.set(fil.name, fil);
+      if (arkiv) franArkiv.current.add(fil.name); else franArkiv.current.delete(fil.name);
       try {
         const wb = XLSX.read(await fil.arrayBuffer(), { type: 'array' });
         const matris = XLSX.utils.sheet_to_json<Array<string | number | null>>(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: null });
@@ -5977,7 +5984,26 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, o
     kor(() => klar, `${importerbara.length} filer importerade (${resultat} resultat)${nyaElever.length > 0 ? ` · ${nyaElever.length} elever tillagda i ${klass.namn} ur Socrative-rostern: ${nyaElever.join(', ')}` : ''}${nyaVantande.length > 0 ? ` · ${nyaVantande.reduce((a, v) => a + v.fragor.length, 0)} namn behöver ett svar` : ''}.`);
     setFilRader([]);
     setVantande(nyaVantande);
+    // Del 203: filerna läggs i resultatarkivet (datarepot) per ämne
+    const perAmne = new Map<string, File[]>();
+    for (const f of importerbara) { const fil = filObjekt.current.get(f.filnamn); if (fil !== undefined && f.amneId !== null) perAmne.set(f.amneId, [...(perAmne.get(f.amneId) ?? []), fil]); }
+    void (async () => {
+      let text = '';
+      for (const [aId, filer] of perAmne) {
+        const egna = filer.filter((f) => !franArkiv.current.has(f.name)); const ur = filer.filter((f) => franArkiv.current.has(f.name));
+        if (ur.length > 0) await arkiveraFiler(aId, 'socrative', ur, true);
+        if (egna.length > 0) text += uppladdningsText(await arkiveraFiler(aId, 'socrative', egna));
+      }
+      if (text !== '') kor(() => lasStruktur(), `Importen klar.${text}`);
+    })();
   };
+  // Del 203: filer hämtade från datarepot (Datarepo → Resultatarkiv) läggs fram för granskning här
+  useEffect(() => {
+    const mina = vantandeFiler.filter((v) => v.klassId === klass.id && v.kalla === 'socrative');
+    if (mina.length === 0) return;
+    const filer = mina.flatMap((v) => tagVantandeFiler(v.amneId, 'socrative'));
+    if (filer.length > 0) { setImportApp('socrative'); void lasFiler(filer, true); }
+  }, [vantandeFiler]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const idag = new Date().toISOString().slice(0, 10);
   const omf = omfangFilter(s, klass.id, amne?.id ?? '', omfang, idag);

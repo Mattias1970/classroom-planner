@@ -461,6 +461,8 @@ export interface Struktur {
   veckorapporter?: import('./veckorapport.js').Veckorapport[];
   /** Del 190 · Elevpar med snarlika namn som läraren sagt är olika personer ('idA|idB', sorterat) — appen frågar inte igen. */
   olikaElever?: string[];
+  /** Del 203: resultatarkivet — resultatfiler uppladdade till datarepot (resultat/ak8/8B/Biologi/socrative/…) och vilka som importerats här. */
+  resultatArkiv?: import('./resultatarkiv.js').ArkivFil[];
   /** Del 163: inlämningar ur Teams tilldelningsdata (elev × uppgift). */
   inlamningar?: import('./inlamningar.js').Inlamning[];
   /** Del 153: Magma-testens uppgifter ur testens PDF (en post per test). */

@@ -4,13 +4,14 @@
  * Tilldelningar för samma delkapitel och typ slås ihop till en uppgift. Exporten
  * säger inget om bifogade filer; läraren kan underkänna en inlämning som saknar bild.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
   importeraInlamningar, inlamningsOversikt, sattInlamningUnderkand, tolkaTeamsTilldelningar, TYP_NAMN, arInlamnad,
   type Amne, type Inlamning, type Klass, type Struktur, type TeamsRad, type UppgiftsRad,
 } from '@planner/kernel';
 import { lasStruktur } from './store.js';
+import { arkiveraFiler, tagVantandeFiler, uppladdningsText, useVantandeFiler } from './resultatarkiv.js';
 
 const kort = (d: string) => (d === '' ? '—' : `${Number(d.slice(8, 10))}/${Number(d.slice(5, 7))}`);
 const kortUppgift = (u: UppgiftsRad) => u.delkapitel !== undefined && u.typ !== 'laboration' ? `${u.delkapitel} ${u.typ === 'begrepp' ? 'B' : u.typ === 'testa' ? 'T' : 'U'}` : u.uppgift.replace(/^\S+\s+/, '').replace(/^Laboration\s*[-:–]\s*/i, 'Lab ').slice(0, 14);
@@ -46,6 +47,10 @@ export function TeamsImport({ s, klass, amne, kor, idag }: {
 }) {
   const [rader, setRader] = useState<TeamsRad[] | null>(null);
   const [filnamn, setFilnamn] = useState('');
+  // Del 203: filen behålls för uppladdning till resultatarkivet
+  const filObjekt = useRef<File | null>(null);
+  const franArkiv = useRef(false);
+  const vantandeFiler = useVantandeFiler();
   const [fel, setFel] = useState<string | null>(null);
   const [vy, setVy] = useState<'uppgifter' | 'elever'>('uppgifter');
   const [oppenUppgift, setOppenUppgift] = useState<string | null>(null);
@@ -53,8 +58,9 @@ export function TeamsImport({ s, klass, amne, kor, idag }: {
   const o = useMemo(() => inlamningsOversikt(s, klass.id, amne?.id, idag), [s, klass.id, amne?.id, idag]);
   const amnesNamn = (id: string | undefined) => s.amnen.find((a) => a.id === id)?.namn ?? 'utan ämne';
 
-  const lasFil = async (filer: FileList | null) => {
+  const lasFil = async (filer: FileList | File[] | null, arkiv = false) => {
     const fil = filer?.[0]; if (fil === undefined) return;
+    filObjekt.current = fil; franArkiv.current = arkiv;
     try {
       const wb = XLSX.read(await fil.arrayBuffer(), { type: 'array', cellDates: true });
       const blad = wb.SheetNames.find((n) => /tilldelning/i.test(n)) ?? wb.SheetNames[0];
@@ -63,6 +69,15 @@ export function TeamsImport({ s, klass, amne, kor, idag }: {
     } catch (e) { setFel(e instanceof Error ? e.message : 'Kunde inte läsa filen.'); setRader(null); }
   };
   const forhands = rader === null ? null : { elever: new Set(rader.map((r) => r.namn)).size, tilldelningar: new Set(rader.map((r) => r.uppgift.trim())).size };
+
+  useEffect(() => {
+    const aId = amne?.id ?? s.amnen.find((a) => a.klassId === klass.id)?.id;
+    if (aId === undefined) return;
+    const mina = vantandeFiler.filter((v) => v.amneId === aId && v.kalla === 'teams');
+    if (mina.length === 0) return;
+    const f = tagVantandeFiler(aId, 'teams');
+    if (f.length > 0) void lasFil(f, true);
+  }, [vantandeFiler]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="uppg-kort st-teams">
@@ -79,6 +94,12 @@ export function TeamsImport({ s, klass, amne, kor, idag }: {
               const r = importeraInlamningar(lasStruktur(), klass.id, rader);
               kor(() => r.s, `Inlämningar importerade för ${klass.namn}: ${r.uppgifter} uppgifter, ${r.antal} inlämningsposter.${r.sammanslagna.length > 0 ? ` Sammanslagna: ${r.sammanslagna.join(', ')}.` : ''}${r.omatchade.length > 0 ? ` ⚠ ${r.omatchade.length} elever i filen finns inte i klassen: ${r.omatchade.join(', ')}.` : ''}`);
               setRader(null); setFilnamn('');
+              // Del 203: filen läggs i resultatarkivet (datarepot) under ämnet, eller under klassens första ämne när inget är valt
+              const fil = filObjekt.current; const aId = amne?.id ?? s.amnen.find((a) => a.klassId === klass.id)?.id;
+              if (fil !== null && aId !== undefined) void (async () => {
+                const text = franArkiv.current ? (await arkiveraFiler(aId, 'teams', [fil], true), '') : uppladdningsText(await arkiveraFiler(aId, 'teams', [fil]));
+                if (text !== '') kor(() => lasStruktur(), `Importen klar.${text}`);
+              })();
             } catch (e) { setFel(e instanceof Error ? e.message : 'Importen misslyckades.'); }
           }}>💾 Importera inlämningar</button>
         )}

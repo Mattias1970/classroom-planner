@@ -5,8 +5,8 @@
  * under rapportmallar/. Anslutningstestet säger exakt vad som saknas när
  * något inte går.
  */
-import { useState } from 'react';
-import { bokFromValfriImport, sparaBok, sparaRapportmall, tolkaRapportmall, type Struktur } from '@planner/kernel';
+import { useMemo, useState } from 'react';
+import { amneForArkivSokvag, arArkivFilImporterad, ARKIV_KALLA_NAMN, arkivStatus, bokFromValfriImport, sparaBok, sparaRapportmall, tolkaArkivSokvag, tolkaRapportmall, type ArkivKalla, type Struktur } from '@planner/kernel';
 import { Ikon } from './ikoner.js';
 import { DataSaknas, Kort, Kpi } from './Skal.js';
 import {
@@ -14,6 +14,7 @@ import {
   type GitHubConfig,
 } from '../github.js';
 import { exportJson, importJson, lasStruktur } from '../store.js';
+import { hamtaArkivFil, laggVantandeFiler, listaArkiv } from '../resultatarkiv.js';
 
 type Test = Awaited<ReturnType<typeof testaAnslutning>>;
 
@@ -136,7 +137,83 @@ export function Datarepo({ s, spara, kor, meddela }: {
           </div>
           {logg.length === 0 ? <DataSaknas text="Inget har hänt än." /> : <ul className="v3-lista v3-kompakt">{logg.map((r, i) => <li key={i}>{r}</li>)}</ul>}
         </Kort>
+        <Resultatarkiv s={s} klar={klar} meddela={meddela} />
       </div>
     </div>
+  );
+}
+
+/**
+ * Del 203 · Resultatarkivet: varje importerad resultatfil (Socrative, Magma, DigiExam, Teams) laddas upp
+ * till datarepot under resultat/ak8/8B/Biologi/<källa>/. Här syns vad som är uppladdat, vad som saknar
+ * kopia, och arkivets filer kan hämtas till en annan dator och läggas fram för import.
+ */
+function Resultatarkiv({ s, klar, meddela }: { s: Struktur; klar: boolean; meddela: (m: string) => void }) {
+  const status = useMemo(() => arkivStatus(s), [s]);
+  const [lista, setLista] = useState<string[] | null>(null);
+  const [arbetar, setArbetar] = useState<'' | 'lista' | 'hamta'>('');
+  const [fel, setFel] = useState<string | null>(null);
+  const amneNamn = (id: string) => { const a = s.amnen.find((x) => x.id === id); const k = s.klasser.find((x) => x.id === a?.klassId); return `${k?.namn ?? ''} ${a?.namn ?? '?'}`.trim(); };
+  const rader = (lista ?? []).map((sokvag) => {
+    const tolk = tolkaArkivSokvag(sokvag); const amneId = amneForArkivSokvag(s, sokvag);
+    return { sokvag, tolk, amneId, importerad: tolk !== null && amneId !== null && arArkivFilImporterad(s, amneId, tolk.kalla, tolk.filnamn) };
+  });
+  const nya = rader.filter((r) => r.tolk !== null && r.amneId !== null && !r.importerad);
+  const okanda = rader.filter((r) => r.tolk === null || r.amneId === null);
+  const uppdateraLista = () => {
+    setArbetar('lista'); setFel(null);
+    listaArkiv().then((l) => setLista(l)).catch((e) => setFel(e instanceof Error ? e.message : 'Kunde inte läsa arkivet.')).finally(() => setArbetar(''));
+  };
+  const hamtaNya = () => {
+    setArbetar('hamta'); setFel(null);
+    void (async () => {
+      const grupper = new Map<string, { amneId: string; klassId: string; kalla: ArkivKalla; filer: File[] }>();
+      let antal = 0;
+      for (const r of nya) {
+        try {
+          const fil = await hamtaArkivFil(r.sokvag);
+          const amne = s.amnen.find((a) => a.id === r.amneId)!;
+          const nyckel = `${r.amneId}|${r.tolk!.kalla}`;
+          const g = grupper.get(nyckel) ?? { amneId: r.amneId!, klassId: amne.klassId, kalla: r.tolk!.kalla, filer: [] };
+          g.filer.push(fil); grupper.set(nyckel, g); antal += 1;
+        } catch (e) { setFel(`${r.sokvag}: ${e instanceof Error ? e.message : 'kunde inte hämtas'}`); }
+      }
+      for (const g of grupper.values()) laggVantandeFiler(g);
+      const var_ = [...grupper.values()].map((g) => `${amneNamn(g.amneId)} · ${ARKIV_KALLA_NAMN[g.kalla]} (${g.filer.length})`).join(', ');
+      meddela(antal === 0 ? 'Inga nya filer att hämta.' : `${antal} filer hämtade från datarepot: ${var_}. Öppna Resultat → 📥 Importera för rätt klass och ämne — filerna ligger framme för granskning och import.`);
+      setArbetar('');
+    })();
+  };
+  return (
+    <Kort rubrik="Resultatarkiv" under="varje importerad resultatfil (Socrative, Magma, DigiExam, Teams) laddas upp till datarepot under resultat/årskurs/klass/ämne/källa — så att filerna följer med till alla datorer">
+      <div className="v3-kpi-rad" style={{ marginBottom: 8 }}>
+        <Kpi ikon={Ikon.klassrum} rubrik="I datarepot" varde={status.uppladdade} under="importerade filer med kopia i arkivet" ton="gron" />
+        <Kpi ikon={Ikon.varning} rubrik="Saknar kopia" varde={status.saknarKopia.length} under={status.saknarKopia.length === 0 ? 'allt är uppladdat' : 'importerade före arkivet, eller när GitHub saknades — importera om filen så laddas den upp'} ton={status.saknarKopia.length === 0 ? 'gron' : 'orange'} />
+      </div>
+      {status.saknarKopia.length > 0 && (
+        <details><summary className="small">Filer utan kopia ({status.saknarKopia.length})</summary>
+          <ul className="v3-lista v3-kompakt">{status.saknarKopia.slice(0, 40).map((f) => <li key={`${f.amneId}|${f.filnamn}`}>{amneNamn(f.amneId)} · {ARKIV_KALLA_NAMN[f.kalla]} · {f.filnamn}</li>)}</ul>
+        </details>
+      )}
+      <div className="v3-knapprad" style={{ marginTop: 8 }}>
+        <button className="v3-knapp sek" disabled={arbetar !== '' || !klar} onClick={uppdateraLista}>{arbetar === 'lista' ? '⏳ Läser…' : '🔎 Visa arkivet i datarepot'}</button>
+        {lista !== null && <button className="v3-knapp" disabled={arbetar !== '' || nya.length === 0} onClick={hamtaNya}>{arbetar === 'hamta' ? '⏳ Hämtar…' : `⬇ Hämta ${nya.length} nya till import`}</button>}
+      </div>
+      {fel !== null && <p className="status warn small">{fel}</p>}
+      {lista !== null && (
+        <div style={{ marginTop: 6 }}>
+          <p className="small muted">{lista.length} filer i arkivet · {rader.filter((r) => r.importerad).length} importerade här · {nya.length} nya{okanda.length > 0 ? ` · ${okanda.length} utanför konventionen eller för klasser/ämnen som inte finns här` : ''}</p>
+          <table className="tbl small"><thead><tr><th>Klass · ämne</th><th>Källa</th><th>Fil</th><th>Här</th></tr></thead>
+            <tbody>{rader.slice(0, 200).map((r) => (
+              <tr key={r.sokvag} className={r.importerad ? 'muted' : ''}>
+                <td>{r.tolk === null ? <span className="muted">{r.sokvag}</span> : r.amneId === null ? <span className="muted">{r.tolk.klass} {r.tolk.amne} (finns inte här)</span> : amneNamn(r.amneId)}</td>
+                <td>{r.tolk === null ? '' : ARKIV_KALLA_NAMN[r.tolk.kalla]}</td>
+                <td>{r.tolk?.filnamn ?? ''}</td>
+                <td>{r.importerad ? '✓ importerad' : r.amneId === null || r.tolk === null ? '—' : <b>ny</b>}</td>
+              </tr>
+            ))}</tbody></table>
+        </div>
+      )}
+    </Kort>
   );
 }

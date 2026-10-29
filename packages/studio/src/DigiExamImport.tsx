@@ -6,7 +6,7 @@
  * Eleven kopplas via e-posten i filen (Elev.epost) och annars via namnet;
  * här sker bara xlsx-avläsning, förhandsvisning och sparande.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
   arFilImporterad, digiexamAnalys, digiexamProvForFil, tolkaDigiExamProvlista, type DigiExamProvPost, digiexamDatumUrFilnamn, digiexamFrageStatistik, digiexamProvInfo, digiexamSvar, eProvGrans, godkantGransFor, importeraResultat,
@@ -14,6 +14,7 @@ import {
   type Amne, type DigiExamElevRad, type DigiExamRapport, type Klass, type Resultat, type Struktur,
 } from '@planner/kernel';
 import { lasInstallning, lasStruktur, sparaInstallning } from './store.js';
+import { arkiveraFiler, tagVantandeFiler, uppladdningsText, useVantandeFiler } from './resultatarkiv.js';
 import { UppgiftsStaplar } from './MagmaImport.js';
 import { DigiExamLarmPanel } from './ProvLarm.js';
 
@@ -54,6 +55,10 @@ export function DigiExamImport({ s, klass, amne, kor }: {
   s: Struktur; klass: Klass; amne: Amne | undefined; kor: (fn: () => Struktur, m: string) => void;
 }) {
   const [filer, setFiler] = useState<DigiExamFil[]>([]);
+  // Del 203: filerna behålls för uppladdning till resultatarkivet; filer hämtade därifrån laddas inte upp igen
+  const filObjekt = useRef<Map<string, File>>(new Map());
+  const franArkiv = useRef<Set<string>>(new Set());
+  const vantandeFiler = useVantandeFiler();
   // Del 154: DigiExams provlista (inklistrad) — ger provens riktiga datum; sparas mellan importerna
   const [provlistaText, setProvlistaText] = useState<string>(() => lasInstallning<string>(PROVLISTA_NYCKEL, ''));
   const provlista = tolkaDigiExamProvlista(provlistaText);
@@ -71,10 +76,12 @@ export function DigiExamImport({ s, klass, amne, kor }: {
   const [skapaElever, setSkapaElever] = useState(antalElever === 0);
   const idag = new Date().toISOString().slice(0, 10);
 
-  const lasFiler = async (lista: FileList | null) => {
+  const lasFiler = async (lista: FileList | File[] | null, arkiv = false) => {
     if (lista === null) return;
     const ut: DigiExamFil[] = [];
     for (const fil of Array.from(lista)) {
+      filObjekt.current.set(fil.name, fil);
+      if (arkiv) franArkiv.current.add(fil.name); else franArkiv.current.delete(fil.name);
       const info = digiexamProvInfo(fil.name);
       const roll = info.omprov ? 'omprov' as const : 'ordinarie' as const;
       const prov = roll === 'omprov' ? omprovNamn(info.namn) : info.namn;
@@ -168,7 +175,25 @@ export function DigiExamImport({ s, klass, amne, kor }: {
       return st;
     }, `${importerbara.length} DigiExam-prov importerade — ${sparade} elevresultat sparade på ${amne.namn}${nyaElever > 0 ? ` · ${nyaElever} nya elever tillagda i ${klass.namn}` : ''}${eposter > 0 ? ` · e-post sparad på ${eposter} elever` : ''}${tveksamma.length > 0 ? ` · ⚠ namn som passar flera elever hoppades över — lägg in e-posten på rätt elev och importera om: ${tveksamma.join(', ')}` : ''}.`);
     setFiler([]);
+    arkivera(amne.id, importerbara.map((f) => f.filnamn));
   };
+
+  // Del 203: uppladdning till resultatarkivet efter importen
+  const arkivera = (amneId: string, namn: string[]) => {
+    const alla = namn.map((n) => filObjekt.current.get(n)).filter((f): f is File => f !== undefined);
+    const egna = alla.filter((f) => !franArkiv.current.has(f.name)); const ur = alla.filter((f) => franArkiv.current.has(f.name));
+    void (async () => {
+      if (ur.length > 0) await arkiveraFiler(amneId, 'digiexam', ur, true);
+      if (egna.length > 0) { const text = uppladdningsText(await arkiveraFiler(amneId, 'digiexam', egna)); if (text !== '') kor(() => lasStruktur(), `Importen klar.${text}`); }
+    })();
+  };
+  useEffect(() => {
+    if (amne === undefined) return;
+    const mina = vantandeFiler.filter((v) => v.amneId === amne.id && v.kalla === 'digiexam');
+    if (mina.length === 0) return;
+    const f = tagVantandeFiler(amne.id, 'digiexam');
+    if (f.length > 0) void lasFiler(f, true);
+  }, [vantandeFiler]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="uppg-kort st-magma-import st-de-import">
