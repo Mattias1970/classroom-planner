@@ -1170,12 +1170,14 @@ export function andraPlanering(s: Struktur, amneId: string, patch: Partial<PlanI
 /**
  * Tar bort (bort: true), ersätter (ersatt) eller återställer (null) en lektion.
  * Del 188: en genomförd lektion (före idag) kan få nytt innehåll (ersätt/återställ) — den behåller
- * sitt pass och inget annat flyttas — men kan aldrig tas bort, eftersom det skulle flytta historiken.
+ * sitt pass och inget annat flyttas.
+ * Del 197: en genomförd lektion kan tas bort bara när läraren uttryckligen tillåter det
+ * (`tillatGenomford`) — de följande lektionerna, även genomförda, flyttas då ett pass tidigare.
  */
-export function sattLektionsVal(s: Struktur, amneId: string, nyckel: string, val: LektionsVal | null, idag?: string): Struktur {
+export function sattLektionsVal(s: Struktur, amneId: string, nyckel: string, val: LektionsVal | null, idag?: string, tillatGenomford = false): Struktur {
   const amne = s.amnen.find((a) => a.id === amneId);
   if (amne === undefined) throw new Error('Okänt ämne.');
-  if (val?.bort === true && idag !== undefined) {
+  if (val?.bort === true && idag !== undefined && !tillatGenomford) {
     const rad = (amnesPlanFor(s, amneId, idag, false)?.a ?? []).find((r) => r.nyckel === nyckel);
     if (rad?.datum !== null && rad?.datum !== undefined && rad.datum < idag) {
       throw new Error('Lektionen har varit och kan inte tas bort — då skulle alla genomförda lektioner efter den flyttas. Ersätt innehållet i stället.');

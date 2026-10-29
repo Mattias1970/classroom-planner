@@ -921,29 +921,209 @@ export interface BorttagenLektion {
   hadeKort: boolean;
 }
 
+export interface BorttagnaLektioner {
+  s: Struktur;
+  /** Lektioner som togs bort, och hur många av dem som hade varit. */
+  borttagna: number;
+  genomforda: number;
+  /** Första borttagna lektionens datum — härifrån läggs passen om. */
+  fran: string;
+  /** Lektioner efter som flyttades tidigare. */
+  framflyttade: number;
+  /** Fasta kort som ligger kvar på sina datum. */
+  fasta: number;
+  /** Lektionskort som försvann med lektionerna. */
+  kort: number;
+}
+
 /**
- * Tar bort en kommande lektion ur planeringen: de följande flyttas ett pass tidigare, lärarens
- * fasta kort ligger kvar på sina datum. Egna kort tas bort ur utkastet. Genomförda lektioner
- * kan inte tas bort. Ångra = den vanliga ångra-funktionen (strukturen före).
+ * Del 197 · Tar bort flera lektioner på en gång: passen från den första borttagna läggs om så att de
+ * följande lektionerna flyttas tidigare medan lärarens fasta kort (prov, diagnoser, laborationer,
+ * egna rader) ligger kvar på sina datum. Lektioner som har varit tas bara bort med `tillatGenomford`
+ * — då skrivs passen om från det datumet (som ⏩ Kapitlet börjar), bara på lärarens uttryckliga val.
+ * Nycklarna märks dessutom bort i lektionsVal så att ↺ Återställ kapitlet och 📥 Ladda kapitel hittar dem.
  */
-export function taBortLektion(s: Struktur, amneId: string, nyckel: string, idag?: string): BorttagenLektion {
+export function taBortLektioner(s: Struktur, amneId: string, nycklar: string[], idag?: string, tillatGenomford = false): BorttagnaLektioner {
+  const a = hittaAmne(s, amneId);
+  const plan = amnesPlanFor(s, amneId, idag, false)?.a ?? [];
+  const valda = new Set(nycklar);
+  const rader = plan.filter((r) => r.nyckel !== undefined && valda.has(r.nyckel) && r.datum !== null);
+  if (rader.length === 0) throw new Error('Lektionen finns inte i planeringen.');
+  for (const r of rader) if (arLab(r.nyckel!) || arPass(r.nyckel!)) throw new Error('Laborationer och passlektioner ändras under 🧪 Laborationer.');
+  const genomforda = idag === undefined ? 0 : rader.filter((r) => r.datum! < idag).length;
+  if (genomforda > 0 && !tillatGenomford) throw new Error('Lektionen har varit och kan inte tas bort — då skulle alla genomförda lektioner efter den flyttas. Ersätt innehållet i stället.');
+  const fran = rader.map((r) => r.datum!).sort()[0];
+  // Skrivs det förflutna om läggs passen från det datumet — då får hjälpfunktionerna inget "idag"
+  const dag = idag !== undefined && fran < idag ? undefined : idag;
+  const u0 = utkastFranPlan(s, amneId, fran, dag, `Utan ${rader.length === 1 ? rader[0].lektion.avsnitt : `${rader.length} lektioner`} ${fran}`);
+  const fasta = fastaKortFran(s, amneId, fran, dag);
+  for (const [k, n] of [...fasta]) if (valda.has(n)) fasta.delete(k);
+  const fastaNycklar = new Set(fasta.values());
+  const ko = u0.teori.filter((n) => !valda.has(n) && !fastaNycklar.has(n));
+  const teori = laggUtTeori(s, amneId, fran, ko, fasta, dag);
+  const u: PlanFranUtkast = { ...u0, teori, egna: u0.egna.filter((k) => !valda.has(`u:${k.id}`)) };
+  const kort = rader.filter((r) => hamtaLektionsplan(s, amneId, plan.indexOf(r)) !== null).length;
+  let ut = tillampaUtkast(s, amneId, u, dag);
+  const lv = { ...(a.lektionsVal ?? {}) };
+  for (const r of rader) if (!r.nyckel!.startsWith('u:') && !r.nyckel!.startsWith('er:')) lv[r.nyckel!] = { ...(lv[r.nyckel!] ?? {}), bort: true };
+  ut = andraPlanering(ut, amneId, { lektionsVal: lv }, dag);
+  return { s: ut, borttagna: rader.length, genomforda, fran, framflyttade: ko.length, fasta: fasta.size, kort };
+}
+
+/**
+ * Tar bort en lektion ur planeringen: de följande flyttas ett pass tidigare, lärarens fasta kort
+ * ligger kvar på sina datum. Egna kort tas bort ur utkastet. Genomförda lektioner tas bara bort
+ * med `tillatGenomford` (Del 197). Ångra = den vanliga ångra-funktionen (strukturen före).
+ */
+export function taBortLektion(s: Struktur, amneId: string, nyckel: string, idag?: string, tillatGenomford = false): BorttagenLektion {
   hittaAmne(s, amneId);
   const plan = amnesPlanFor(s, amneId, idag, false)?.a ?? [];
-  const i = plan.findIndex((r) => r.nyckel === nyckel);
-  const rad = plan[i];
+  const rad = plan.find((r) => r.nyckel === nyckel);
   if (rad === undefined || rad.datum === null) throw new Error('Lektionen finns inte i planeringen.');
-  if (idag !== undefined && rad.datum < idag) throw new Error('Lektionen är genomförd — genomförda lektioner ändras aldrig.');
-  if (arLab(nyckel) || arPass(nyckel)) throw new Error('Laborationer och passlektioner ändras under 🧪 Laborationer.');
-  const fran = rad.datum;
-  const u0 = utkastFranPlan(s, amneId, fran, idag, `Utan ${rad.lektion.avsnitt} ${fran}`);
-  const fasta = fastaKortFran(s, amneId, fran, idag);
-  for (const [k, n] of fasta) if (n === nyckel) fasta.delete(k);
+  const b = taBortLektioner(s, amneId, [nyckel], idag, tillatGenomford);
+  return { s: b.s, rubrik: rad.lektion.avsnitt, datum: b.fran, framflyttade: b.framflyttade, fasta: b.fasta, hadeKort: b.kort > 0 };
+}
+
+// ── Del 197 · Avsluta ett kapitel efter ett visst delkapitel ─────────────────
+
+const kodTal = (kod: string): number => Number(kod.split('.')[1]);
+
+/** Bokens lektioner (inklusive extra lektioner) i kapitlet som ligger efter delkapitlet `efterKod`, i bokens ordning. */
+function lektionerEfterDelkapitel(s: Struktur, amneId: string, efterKod: string): Array<{ nyckel: string; kod: string }> {
+  const a = hittaAmne(s, amneId);
+  const bok = s.bocker.find((b) => b.id === a.bokId);
+  if (bok === undefined) throw new Error('Ämnet saknar bok.');
+  const kap = Number(efterKod.split('.')[0]);
+  const grans = kodTal(efterKod);
+  return planeringsRader(bok, { ...a, lektionsVal: undefined, planFranUtkast: undefined })
+    .filter((r) => r.kapitel === kap && !r.nyckel.startsWith('er:'))
+    .map((r) => ({ nyckel: r.nyckel, kod: delkapitelKod(r.lektion.avsnitt) }))
+    .filter((x): x is { nyckel: string; kod: string } => x.kod !== null && Number(x.kod.split('.')[0]) === kap && kodTal(x.kod) > grans);
+}
+
+export interface KapitelSlut {
+  kapitel: number;
+  /** Sista delkapitlet som är med ('6.5'). */
+  efter: string;
+  /** Delkapitlen som tas bort ('6.6', '6.7', '6.8'). */
+  bort: string[];
+  /** Lektioner som tas bort (de som ligger i planeringen), och hur många av dem som har varit. */
+  lektioner: number;
+  genomforda: number;
+}
+
+/** Förhandsvisning: vad som tas bort om kapitlet avslutas efter `efterKod`. */
+export function kapitelSlutFor(s: Struktur, amneId: string, efterKod: string, idag?: string): KapitelSlut {
+  if (!/^\d+\.\d+$/.test(efterKod)) throw new Error('Ange ett delkapitel som 6.5.');
+  const efter = lektionerEfterDelkapitel(s, amneId, efterKod);
+  const p = amnesPlanFor(s, amneId, idag, false);
+  const datum = new Map<string, string>();
+  for (const r of [...(p?.a ?? []), ...(p?.b ?? [])]) if (r.nyckel !== undefined && r.datum !== null && (datum.get(r.nyckel) ?? '9999') > r.datum) datum.set(r.nyckel, r.datum);
+  const iPlan = efter.filter((x) => datum.has(x.nyckel));
+  const genomforda = idag === undefined ? 0 : iPlan.filter((x) => datum.get(x.nyckel)! < idag).length;
+  return { kapitel: Number(efterKod.split('.')[0]), efter: efterKod, bort: [...new Set(iPlan.map((x) => x.kod))], lektioner: iPlan.length, genomforda };
+}
+
+/**
+ * Avslutar kapitlet efter delkapitlet `efterKod` (t.ex. 6.5): alla lektioner på de följande
+ * delkapitlen i samma kapitel (6.6, 6.7, 6.8 — även extra lektioner) tas bort och nästa kapitel
+ * följer direkt; kapitlets prov, diagnoser och egna rader ligger kvar på sina datum. Har några av
+ * lektionerna varit krävs `tillatGenomford` — de följande lektionerna flyttas då tidigare.
+ */
+export function avslutaKapitelEfter(s: Struktur, amneId: string, efterKod: string, idag?: string, tillatGenomford = false): BorttagnaLektioner {
+  const info = kapitelSlutFor(s, amneId, efterKod, idag);
+  if (info.lektioner === 0) throw new Error(`Kapitel ${info.kapitel} har inga delkapitel efter ${efterKod} i planeringen.`);
+  if (info.genomforda > 0 && !tillatGenomford) throw new Error(`${info.genomforda} av lektionerna har varit — bekräfta att även genomförda lektioner får tas bort.`);
+  const nycklar = lektionerEfterDelkapitel(s, amneId, efterKod).map((x) => x.nyckel);
+  const r = taBortLektioner(s, amneId, nycklar, idag, tillatGenomford);
+  // Lektioner som inte låg i planeringen (ryms ej) märks också bort, så att delkapitlet räknas som borttaget
+  const a = hittaAmne(r.s, amneId);
+  const lv = { ...(a.lektionsVal ?? {}) };
+  let fler = false;
+  for (const n of nycklar) if (lv[n]?.bort !== true) { lv[n] = { ...(lv[n] ?? {}), bort: true }; fler = true; }
+  return fler ? { ...r, s: andraPlanering(r.s, amneId, { lektionsVal: lv }, idag) } : r;
+}
+
+/** Delkapitel i kapitlet som är borttagna ur planeringen (alla lektioner märkta bort), i ordning. */
+export function borttagnaDelkapitel(s: Struktur, amneId: string, kapitel: number): string[] {
+  const a = hittaAmne(s, amneId);
+  const bok = s.bocker.find((b) => b.id === a.bokId);
+  if (bok === undefined) return [];
+  const per = new Map<string, { alla: number; borta: number }>();
+  for (const r of planeringsRader(bok, { ...a, lektionsVal: undefined, planFranUtkast: undefined })) {
+    if (r.kapitel !== kapitel || r.nyckel.startsWith('er:')) continue;
+    const kod = delkapitelKod(r.lektion.avsnitt);
+    if (kod === null) continue;
+    const x = per.get(kod) ?? { alla: 0, borta: 0 };
+    x.alla += 1; if (a.lektionsVal?.[r.nyckel]?.bort === true) x.borta += 1;
+    per.set(kod, x);
+  }
+  return [...per.entries()].filter(([, x]) => x.alla > 0 && x.borta === x.alla).map(([k]) => k).sort((x, y) => kodTal(x) - kodTal(y));
+}
+
+export interface KapitelAterstallning {
+  kapitel: number;
+  koder: string[];
+  lektioner: number;
+  /** Passet de läggs in på (efter kapitlets sista kvarvarande lektion); null när inget ryms. */
+  fran: string | null;
+  /** Insättningspunkten ligger före idag — kräver tillatGenomford. */
+  genomford: boolean;
+  /** Datum för kapitlets sista kvarvarande delkapitel-lektion (de återställda läggs efter den). */
+  sistaDatum: string | null;
+}
+
+/** Förhandsvisning av ↺ Återställ kapitlet: vilka delkapitel som läggs in igen och var (efter kapitlets sista kvarvarande delkapitel). */
+export function kapitelAterstallningFor(s: Struktur, amneId: string, kapitel: number, idag?: string): KapitelAterstallning {
+  const a = hittaAmne(s, amneId);
+  const koder = borttagnaDelkapitel(s, amneId, kapitel);
+  const bok = s.bocker.find((b) => b.id === a.bokId);
+  const nycklar = bok === undefined ? [] : planeringsRader(bok, { ...a, lektionsVal: undefined, planFranUtkast: undefined })
+    .filter((r) => r.kapitel === kapitel && a.lektionsVal?.[r.nyckel]?.bort === true).map((r) => r.nyckel);
+  const plan = (amnesPlanFor(s, amneId, idag, false)?.a ?? []).filter((r) => r.datum !== null && r.nyckel !== undefined);
+  // Insättningspunkt: efter kapitlets sista kvarvarande delkapitel-lektion (före Finalen, prov och andra
+  // avslutande rader i kapitlet), på nästa teoripass som inte är ett fast kort
+  let sista = -1;
+  plan.forEach((r, i) => { if (r.kapitel === kapitel && !r.nyckel!.startsWith('u:') && !r.nyckel!.startsWith('er:') && delkapitelKod(r.lektion.avsnitt) !== null) sista = i; });
+  const nasta = plan.slice(sista + 1).find((r) => !arLab(r.nyckel!) && !arPass(r.nyckel!) && !arFastKort(a, r.nyckel!));
+  const sistaDatum = sista >= 0 ? plan[sista].datum : null;
+  const fran = nasta?.datum ?? sistaDatum ?? plan[plan.length - 1]?.datum ?? null;
+  return { kapitel, koder, lektioner: nycklar.length, fran, genomford: idag !== undefined && fran !== null && fran < idag, sistaDatum };
+}
+
+/**
+ * Tar tillbaka kapitlets borttagna delkapitel: bort-märkningarna hävs och lektionerna läggs in i bokens
+ * ordning direkt efter kapitlets sista kvarvarande delkapitel (före Finalen/prov); det som låg där
+ * flyttas senare, fasta kort ligger kvar. Ligger insättningspunkten före idag krävs `tillatGenomford`.
+ */
+export function aterstallKapitel(s: Struktur, amneId: string, kapitel: number, idag?: string, tillatGenomford = false): Struktur {
+  const a = hittaAmne(s, amneId);
+  const bok = s.bocker.find((b) => b.id === a.bokId);
+  if (bok === undefined) throw new Error('Ämnet saknar bok.');
+  const info = kapitelAterstallningFor(s, amneId, kapitel, idag);
+  if (info.lektioner === 0) return s;
+  if (info.genomford && !tillatGenomford) throw new Error('Delkapitlen skulle läggas in på pass som har varit — bekräfta att genomförda lektioner får skrivas om.');
+  const nycklar = planeringsRader(bok, { ...a, lektionsVal: undefined, planFranUtkast: undefined })
+    .filter((r) => r.kapitel === kapitel && a.lektionsVal?.[r.nyckel]?.bort === true).map((r) => r.nyckel);
+  const lv = { ...(a.lektionsVal ?? {}) };
+  for (const n of nycklar) { const { bort: _b, ...rest } = lv[n]; void _b; if (Object.keys(rest).length === 0) delete lv[n]; else lv[n] = rest; }
+  const st = andraPlanering(s, amneId, { lektionsVal: lv }, idag);
+  if (hittaAmne(st, amneId).planFranUtkast === undefined || info.fran === null) return st;   // ingen utkastordning: boken styr igen
+  const fran = info.fran;
+  const dag = idag !== undefined && fran < idag ? undefined : idag;
+  const u0 = utkastFranPlan(st, amneId, fran, dag, `Kapitel ${kapitel} återställt ${fran}`);
+  const fasta = fastaKortFran(st, amneId, fran, dag);
   const fastaNycklar = new Set(fasta.values());
-  const ko = u0.teori.filter((n) => n !== nyckel && !fastaNycklar.has(n));
-  const teori = laggUtTeori(s, amneId, fran, ko, fasta, idag);
-  const u: PlanFranUtkast = { ...u0, teori, egna: u0.egna.filter((k) => `u:${k.id}` !== nyckel) };
-  const hadeKort = hamtaLektionsplan(s, amneId, i) !== null;
-  return { s: tillampaUtkast(s, amneId, u, idag), rubrik: rad.lektion.avsnitt, datum: fran, framflyttade: ko.length, fasta: fasta.size, hadeKort };
+  const redan = new Set(u0.teori);
+  // Kön: det som ligger på eller före insättningspunkten först (finns inget pass efter kapitlets sista
+  // delkapitel är startpasset självt kvar i kön), sedan de återställda, sedan resten
+  const datumAv = new Map((amnesPlanFor(st, amneId, dag, false)?.a ?? []).filter((r) => r.nyckel !== undefined && r.datum !== null).map((r) => [r.nyckel!, r.datum!]));
+  const sistaDatum = info.sistaDatum ?? '';
+  const fore = u0.teori.filter((n) => !fastaNycklar.has(n) && (datumAv.get(n) ?? '9999') <= sistaDatum);
+  const efter = u0.teori.filter((n) => !fastaNycklar.has(n) && (datumAv.get(n) ?? '9999') > sistaDatum);
+  const ko = [...fore, ...nycklar.filter((n) => !redan.has(n)), ...efter];
+  const teori = laggUtTeori(st, amneId, fran, ko, fasta, dag);
+  return tillampaUtkast(st, amneId, { ...u0, teori }, dag);
 }
 
 // ── Del 187 · Schemabrytande aktiviteter ─────────────────────

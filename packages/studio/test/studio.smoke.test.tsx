@@ -2098,12 +2098,8 @@ describe('Detaljplanering som egen flik', () => {
     act(() => { knapp(host, '+ Lägg till film').click(); });
     expect(lasStruktur().lektionsplaner.find((p) => p.lektionsIndex === 1)?.filmer).toEqual(['Fotosyntes|https://binogi.se/f']);
     // Del 148: lektionen kan tas bort från lektionssidan — efterföljande flyttas fram; ämnet finns kvar
-    // Del 188: lektionen har varit (aug 2026) och kan inte tas bort — knappen finns bara för kommande lektioner
-    if (new Date().toISOString().slice(0, 10) > '2026-08-18') {
-      expect(panel.textContent).toContain('Lektionen har varit och kan inte tas bort');
-      expect([...host.querySelectorAll('button')].some((b) => b.textContent?.includes('🗑 Ta bort denna lektion'))).toBe(false);
-      return;
-    }
+    // Del 197: även en lektion som har varit kan tas bort — knappen säger då att följande flyttas tidigare
+    if (new Date().toISOString().slice(0, 10) > '2026-08-18') expect(knapp(host, '🗑 Ta bort denna lektion').textContent).toContain('har varit');
     const antalFore = lasStruktur().amnen.length;
     window.confirm = () => true;
     act(() => { knapp(host, '🗑 Ta bort denna lektion').click(); });
@@ -3554,8 +3550,44 @@ describe('Del 188: redigera genomförda lektioner — låsta tills läraren lås
     valj(select(host, 'Ändra genomförd lektion 2'), 'bok:1:3');
     expect(confirm.mock.calls[1][0]).toContain('Bara det här passet ändras');
     expect(rader(host)).toEqual(['2026-08-19 1.1 Tal', '2026-08-26 1.3 Bråk · ersatt', '2026-09-02 1.3 Bråk']);
+    // Del 197: en genomförd lektion kan tas bort när den är upplåst — de följande flyttas ett pass tidigare
+    valj(select(host, 'Ändra genomförd lektion 1'), 'bort');
+    expect(confirm.mock.calls[2][0]).toContain('flyttas ett pass tidigare');
+    expect(rader(host)).toEqual(['2026-08-19 1.3 Bråk · ersatt', '2026-08-26 1.3 Bråk']);
     act(() => { knapp(host, '🔒 Lås genomförda lektioner').click(); });
     expect(host.querySelector('select[aria-label="Ändra genomförd lektion 2"]')).toBeNull();
+    confirm.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it('Del 197: ✂ kapitlet slutar efter ett delkapitel och kan återställas', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-10T10:00:00Z'));   // före terminsstart — inget har varit
+    const host = render();
+    skapaSkolar(host, '2026/2027', '2026-08-17', '2027-06-11');
+    await importeraBok(host, BOK188);
+    skriv(input(host, 'Tjänstens namn'), 'Ma');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { treeKnapp(host, '💼 Ma').click(); });
+    skriv(input(host, 'Klassens namn'), '8A');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { treeKnapp(host, '👥 8A').click(); });
+    valj(select(host, 'Ämne'), 'Matematik');
+    valj(select(host, 'Bok för ämnet'), 'bok-188');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '📋 Planering').click(); });
+    valj(select(host, 'Sista delkapitlet'), '1.1');
+    expect(host.querySelector('.kapitel-slut')?.textContent).toContain('Tar bort 1.2, 1.3 (2 lektioner)');
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    act(() => { knapp(host, '✂ Avsluta kapitlet').click(); });
+    expect(confirm.mock.calls[0][0]).toContain('Delkapitel 1.2, 1.3 (2 lektioner) tas bort');
+    expect(rader(host)).toEqual(['2026-08-19 1.1 Tal']);
+    act(() => { knapp(host, '↺ Återställ kapitel 1').click(); });
+    expect(rader(host)).toEqual(['2026-08-19 1.1 Tal', '2026-08-26 1.2 Potenser', '2026-09-02 1.3 Bråk']);
     confirm.mockRestore();
     vi.useRealTimers();
   });

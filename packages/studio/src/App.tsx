@@ -16,7 +16,7 @@ import {
   slaIhopPlaneringsmall, tolkaPlaneringsmall,
   handelserPerDatum, kalenderHandelser, klassFarg, noBudget, noOverBudget, sattLektionsplan,
   doldaOmraden, sattOmradeDolt, visaAllaOmraden, LEKTIONSOMRADEN, type LektionsOmrade,
-  foljbaraAmnen, foljPlanering, kapitelBorjar, laddaKapitel, taBortLektion, laggTillSchemaAktivitet, taBortSchemaAktivitet,
+  foljbaraAmnen, foljPlanering, kapitelBorjar, laddaKapitel, taBortLektion, kapitelSlutFor, avslutaKapitelEfter, aterstallKapitel, borttagnaDelkapitel, kapitelAterstallningFor, laggTillSchemaAktivitet, taBortSchemaAktivitet,
   kapitelKort, manadsRutor, skolarManader, veckaRutor, viktigaDatum, bamTidslinje, begreppForLektion, bokBegrepp,
   tavelTidslinje, standardBamDelar, bamAvvikelse, exitStartFor, type BamDel,
   bokFromValfriImport, bokSidregister, bokSidregisterCsv, elevSchema, exitStart, giltigtPass,
@@ -2090,23 +2090,24 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx, meddela
         kor(() => laggTillEgenRad(lasStruktur(), amneId, { id: nyttId('er'), position, rubrik: rubrik.trim(), typ }, new Date().toISOString().slice(0, 10)),
           `\"${rubrik.trim()}\" infogad efter lektion ${i + 1} — bokens lektioner skjuts framåt.`);
       }}>➕ Lägg till lektion efter denna</button>
-      {rad.nyckel !== undefined && rad.datum !== null && rad.datum < new Date().toISOString().slice(0, 10) && (
-        <p className="note no-print">Lektionen har varit och kan inte tas bort. Vill du ändra vad som gjordes: 🔓 Redigera genomförda lektioner i planeringstabellen.</p>
-      )}
-      {rad.nyckel !== undefined && !(rad.datum !== null && rad.datum < new Date().toISOString().slice(0, 10)) && (
+      {rad.nyckel !== undefined && !rad.nyckel.startsWith('lab:') && !rad.nyckel.startsWith('pass:') && (() => {
+        const idagIso = new Date().toISOString().slice(0, 10);
+        const harVarit = rad.datum !== null && rad.datum < idagIso;
+        return (
         <button className="btn sec ls-nyrad ls-bortrad no-print" onClick={() => {
           const namn = lektionsNamn(rad.lektion, lp);
           const harPlan = lp !== null;
-          if (!window.confirm(`Ta bort lektion ${i + 1} (${namn}) ur planeringen?${harPlan ? ' Lektionens detaljplanering försvinner.' : ''} Efterföljande lektioner flyttas fram ett pass. Ämnet och övriga lektioner påverkas inte.`)) return;
+          const varning = harVarit ? `\n\n⚠ Lektionen har varit (${rad.datum}). De följande lektionerna flyttas ett pass tidigare — även genomförda pass får nytt innehåll. Gör det bara om lektionen inte blev av.` : '';
+          if (!window.confirm(`Ta bort lektion ${i + 1} (${namn}) ur planeringen?${harPlan ? ' Lektionens detaljplanering försvinner.' : ''} Efterföljande lektioner flyttas fram ett pass. Ämnet och övriga lektioner påverkas inte.${varning}\n\nDet går att ångra med ↩ Ångra.`)) return;
           const nyckel = rad.nyckel!;
-          const idagIso = new Date().toISOString().slice(0, 10);
-          kor(() => (nyckel.startsWith('er:')
-            ? taBortEgenRad(lasStruktur(), amneId, nyckel.slice(3), idagIso)
-            : sattLektionsVal(lasStruktur(), amneId, nyckel, { bort: true }, idagIso)),
-          `Lektion ${i + 1} (${namn}) borttagen — efterföljande lektioner flyttade fram ett pass.`);
+          try {
+            if (nyckel.startsWith('er:')) kor(() => taBortEgenRad(lasStruktur(), amneId, nyckel.slice(3), idagIso), `Lektion ${i + 1} (${namn}) borttagen — efterföljande lektioner flyttade fram ett pass.`);
+            else { const b = taBortLektion(lasStruktur(), amneId, nyckel, idagIso, harVarit); kor(() => b.s, `Lektion ${i + 1} (${namn}) borttagen — ${b.framflyttade} lektioner flyttade fram ett pass${b.fasta > 0 ? `, ${b.fasta} fasta kort ligger kvar` : ''}.`); }
+          } catch (e) { kor(() => { throw e; }, ''); return; }
           setIdx(Math.max(0, i - (i >= plan.length - 1 ? 1 : 0)));
-        }}>🗑 Ta bort denna lektion (efterföljande flyttas fram)</button>
-      )}
+        }}>🗑 Ta bort denna lektion{harVarit ? ' (har varit — följande flyttas tidigare)' : ' (efterföljande flyttas fram)'}</button>
+        );
+      })()}
       {arHalvklass(amnesNamn) && syns('detaljerad') && (
         <NoPlanering key={`${amneId}-${i}`} dolj={dolj('detaljerad')} s={s} amneId={amneId} lektionsIndex={i} kor={kor}
           amnesNamn={amnesNamn} rad={rad} bok={bok} alltidOppen />
@@ -2717,6 +2718,71 @@ function KapitelBorjar({ plan, amneId, kor, idag }: { plan: PlaneradLektion[]; a
 }
 
 /**
+ * Del 197 · ✂ Kapitlet slutar efter ett delkapitel: de följande delkapitlen i kapitlet tas bort
+ * (även extra lektioner) och nästa kapitel följer direkt; prov, diagnoser och egna rader ligger kvar.
+ * Har några av lektionerna varit krävs en extra bekräftelse — de följande flyttas då tidigare.
+ */
+function KapitelSlut({ s, bok, plan, amneId, kor, idag }: { s: Struktur; bok: Bok; plan: PlaneradLektion[]; amneId: string; kor: (fn: () => Struktur, m: string) => void; idag: string }) {
+  const borta = useMemo(() => bok.kapitel.map((k) => ({ nr: k.nr, koder: borttagnaDelkapitel(s, amneId, k.nr) })).filter((x) => x.koder.length > 0), [s, bok, amneId]);
+  const iPlan = useMemo(() => new Set(plan.map((r) => r.kapitel)), [plan]);
+  const kapitel = bok.kapitel.filter((k) => k.delkapitel.length > 1 && (iPlan.has(k.nr) || borta.some((x) => x.nr === k.nr)));
+  const [kap, setKap] = useState<number>(() => {
+    const nu = plan.find((r) => r.datum !== null && r.datum >= idag)?.kapitel;
+    return kapitel.find((k) => k.nr === nu)?.nr ?? kapitel[0]?.nr ?? 0;
+  });
+  const valt = kapitel.find((k) => k.nr === kap) ?? kapitel[0];
+  const koder = valt?.delkapitel.map((d) => d.kod) ?? [];
+  const [efter, setEfter] = useState<string>('');
+  const efterKod = koder.includes(efter) ? efter : koder[koder.length - 2] ?? '';
+  const info = useMemo(() => { if (efterKod === '') return null; try { return kapitelSlutFor(s, amneId, efterKod, idag); } catch { return null; } }, [s, amneId, efterKod, idag]);
+  if (valt === undefined || efterKod === '') return null;
+  const n = (x: number) => `${x} lektion${x === 1 ? '' : 'er'}`;
+  return (
+    <div className="uppg-kort no-print kapitel-slut">
+      <div className="rad" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <b>✂ Kapitlet slutar efter</b>
+        <select aria-label="Kapitel som ska sluta" value={valt.nr} onChange={(e) => { setKap(Number(e.target.value)); setEfter(''); }}>
+          {kapitel.map((k) => <option key={k.nr} value={k.nr}>Kapitel {k.nr}</option>)}
+        </select>
+        <select aria-label="Sista delkapitlet" value={efterKod} onChange={(e) => setEfter(e.target.value)}>
+          {koder.slice(0, -1).map((k) => <option key={k} value={k}>{k} {valt.delkapitel.find((d) => d.kod === k)?.namn ?? ''}</option>)}
+        </select>
+        <button className="btn sm" disabled={info === null || info.lektioner === 0} onClick={() => {
+          if (info === null) return;
+          const hist = info.genomforda > 0
+            ? `\n\n⚠ ${info.genomforda} av lektionerna har redan varit. Tar du bort dem flyttas de följande lektionerna tidigare — även genomförda pass får nytt innehåll. Gör det bara om ni inte gjorde de delkapitlen.`
+            : '';
+          if (!window.confirm(`Avsluta kapitel ${info.kapitel} efter ${efterKod}?\n\nDelkapitel ${info.bort.join(', ')} (${n(info.lektioner)}) tas bort ur planeringen och nästa kapitel följer direkt. Prov, diagnoser, laborationer och egna rader ligger kvar på sina datum.${hist}\n\nDet går att ångra med ↩ Ångra eller ↺ Återställ kapitlet.`)) return;
+          try {
+            const r = avslutaKapitelEfter(lasStruktur(), amneId, efterKod, idag, info.genomforda > 0);
+            kor(() => r.s, `Kapitel ${info.kapitel} slutar efter ${efterKod} — ${info.bort.join(', ')} borttagna, ${r.framflyttade} lektioner flyttade tidigare${r.fasta > 0 ? `, ${r.fasta} fasta kort ligger kvar` : ''}.`);
+          } catch (e) { kor(() => { throw e; }, ''); }
+        }}>✂ Avsluta kapitlet</button>
+        <small className="muted">{info === null || info.lektioner === 0
+          ? `Inget efter ${efterKod} i kapitel ${valt.nr} ligger i planeringen.`
+          : `Tar bort ${info.bort.join(', ')} (${n(info.lektioner)}${info.genomforda > 0 ? `, varav ${info.genomforda} har varit` : ''}).`}</small>
+      </div>
+      {borta.length > 0 && (
+        <div className="rad small" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 4 }}>
+          {borta.map((x) => (
+            <span key={x.nr} className="rad" style={{ gap: 4, alignItems: 'center' }}>
+              <span className="muted">Kapitel {x.nr}: {x.koder.join(', ')} borttagna</span>
+              <button className="btn sec sm" onClick={() => {
+                const a = kapitelAterstallningFor(lasStruktur(), amneId, x.nr, idag);
+                const hist = a.genomford ? `\n\n⚠ De läggs in från ${a.fran}, som har varit — passen därifrån skrivs om.` : '';
+                if (!window.confirm(`Lägg in ${a.koder.join(', ')} (${n(a.lektioner)}) i kapitel ${x.nr} igen?\n\nDe läggs efter kapitlets sista lektion${a.fran !== null ? ` (från ${a.fran})` : ''}; det som låg där flyttas senare, fasta kort ligger kvar.${hist}`)) return;
+                try { kor(() => aterstallKapitel(lasStruktur(), amneId, x.nr, idag, a.genomford), `Kapitel ${x.nr}: ${a.koder.join(', ')} med igen.`); }
+                catch (e) { kor(() => { throw e; }, ''); }
+              }}>↺ Återställ kapitel {x.nr}</button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * Del 149 · Kurserna (delkapitlen) i lärarens ordning. ▲ flyttar kursen tidigare, ▼ senare;
  * hela kursens lektioner följer med och kalendern visar den nya följden. Genomförda kurser låses.
  */
@@ -2783,7 +2849,16 @@ function GruppPlanering(props: {
     const namn = lektionsNamn(r.lektion, hamtaLektionsplan(s, amneId, i));
     if (genomford(r)) {
       // Del 188: bara innehållet på det här passet ändras — inget annat flyttas
-      if (!upplast || kod === 'bort') return;
+      if (!upplast) return;
+      if (kod === 'bort') {
+        const harPlan = hamtaLektionsplan(s, amneId, i) !== null;
+        if (!window.confirm(`Ta bort lektion ${i + 1} (${namn}, ${r.datum}) som har varit?\n\nDe följande lektionerna flyttas ett pass tidigare — även genomförda pass får nytt innehåll. Gör det bara om lektionen inte blev av.${harPlan ? '\nLektionens detaljplanering försvinner.' : ''}\n\nDet går att ångra med ↩ Ångra.`)) return;
+        try {
+          const b = taBortLektion(lasStruktur(), amneId, nyckel, idag, true);
+          kor(() => b.s, `Lektion ${i + 1} (${namn}, ${r.datum}) borttagen — ${b.framflyttade} lektioner flyttade ett pass tidigare${b.fasta > 0 ? `, ${b.fasta} fasta kort ligger kvar` : ''}.`);
+        } catch (e) { kor(() => { throw e; }, ''); }
+        return;
+      }
       const vad = kod === 'egen' ? 'en egen lektion' : kod === 'aterstall' ? 'bokens lektion igen' : (() => { const [, k, id] = kod.split(':'); return bokensLektioner.find((x) => x.kapitel === Number(k) && x.lektion.id === Number(id))?.lektion.avsnitt ?? 'en annan lektion'; })();
       if (!window.confirm(`Lektion ${i + 1} (${namn}, ${r.datum}) har varit.\n\nÄndra vad som gjordes på passet till ${vad}?\n\nBara det här passet ändras — inga andra lektioner flyttas. Det går att ångra med ↩ Ångra.`)) return;
     }
@@ -2834,7 +2909,7 @@ function GruppPlanering(props: {
   return (
     <>
       {rubrik !== undefined && <h3 className="grupp-h">{rubrik}</h3>}
-      {kanAndra && <p className="note no-print">Lektioner som ligger framåt i tiden kan tas bort, ersättas eller få fler lektioner på delkapitlet. Genomförda lektioner ändras aldrig. Lektionsplanerna följer sina lektioner när följden ändras.</p>}
+      {kanAndra && <p className="note no-print">Lektioner som ligger framåt i tiden kan tas bort, ersättas eller få fler lektioner på delkapitlet. Genomförda lektioner ändras bara när du låser upp dem (🔓). Lektionsplanerna följer sina lektioner när följden ändras.</p>}
       {kanAndra && <KursOrdning plan={plan} amneId={amneId!} kor={kor!} idag={idag!} />}
       {kanAndra && <LaddaKapitel s={s!} bok={bok} amneId={amneId!} kor={kor!} idag={idag!} />}
       {kanAndra && <SchemaAktiviteter s={s!} amneId={amneId!} kor={kor!} idag={idag!} />}
@@ -2845,12 +2920,13 @@ function GruppPlanering(props: {
               {upplast ? '🔒 Lås genomförda lektioner' : '🔓 Redigera genomförda lektioner'}
             </button>
             <small className="muted">{upplast
-              ? 'Upplåst: välj i … på en genomförd rad vad som faktiskt gjordes. Varje ändring bekräftas, gäller bara det passet och flyttar inga andra lektioner.'
+              ? 'Upplåst: välj i ✏ ändra… på en genomförd rad vad som faktiskt gjordes, eller ta bort lektionen. Varje ändring bekräftas; att ersätta flyttar inget, att ta bort flyttar de följande lektionerna ett pass tidigare.'
               : 'Genomförda lektioner är låsta och ändras aldrig av sig själva.'}</small>
           </div>
         </div>
       )}
       {kanAndra && <KapitelBorjar plan={plan} amneId={amneId!} kor={kor!} idag={idag!} />}
+      {kanAndra && <KapitelSlut s={s!} bok={bok} plan={plan} amneId={amneId!} kor={kor!} idag={idag!} />}
       <table className="tbl plan clickable">
         <thead><tr><th title="Avklarad">✓</th><th>Nr</th><th>Datum</th><th>Dag</th><th>V.</th><th>Tid</th>{halvklassAmne && <th>Klass</th>}<th>Kap</th><th>Avsnitt</th>{bokHarNivaer(bok) && <><th>{bok.nivaer.niva1}</th><th>{bok.nivaer.niva2}</th><th>{bok.nivaer.niva3}</th></>}{kanAndra && <><th title="Antal lektioner på delkapitlet">Lekt.</th><th></th></>}</tr></thead>
         <tbody>{rader.map(({ r, index: i, klassTyp }, radNr) => {
@@ -2903,6 +2979,7 @@ function GruppPlanering(props: {
                       <select aria-label={`Ändra genomförd lektion ${i + 1}`} value="" onChange={(e) => atgard(r, i, e.target.value)} title="Ändra vad som gjordes på passet — inga andra lektioner flyttas">
                         <option value="">✏ ändra…</option>
                         <option value="egen">✏ Ersätt med egen lektion (t.ex. Övning)…</option>
+                        <option value="bort">🗑 Ta bort lektionen (följande flyttas tidigare)…</option>
                         {ersatt && <option value="aterstall">↺ Bokens lektion igen</option>}
                         <optgroup label="Det vi gjorde var lektionen ur boken">
                           {bokensLektioner.map((x) => <option key={`${x.kapitel}:${x.lektion.id}`} value={`bok:${x.kapitel}:${x.lektion.id}`}>{x.lektion.avsnitt}{x.lektion.del > 1 ? ` (lektion ${x.lektion.del})` : ''}</option>)}
