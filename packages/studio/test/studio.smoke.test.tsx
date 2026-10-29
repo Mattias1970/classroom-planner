@@ -2489,9 +2489,10 @@ describe('✨ Studio v3', () => {
       expect([...host.querySelectorAll('.v3-nav')].some((b) => b.textContent?.trim() === t), t).toBe(true);
     }
     expect(host.querySelector('.v3-nav.act')!.textContent).toContain('Översikt');
-    // Toppradens filter
+    // Toppradens filter — Del 201: bara fälten sidan använder (Översikt: klass, läsår, period — inte sök)
     expect(host.querySelector('select[aria-label="Filter klass"]')).not.toBeNull();
-    expect(host.querySelector('input[aria-label="Filter sök"]')).not.toBeNull();
+    expect(host.querySelector('input[aria-label="Filter period"]')).not.toBeNull();
+    expect(host.querySelector('input[aria-label="Filter sök"]')).toBeNull();
     // Översikt visar KPI-kort och "Data saknas" när inget finns, och strukturen (v2:s träd) ligger under
     expect(host.querySelectorAll('.v3-kpi').length).toBeGreaterThanOrEqual(4);
     expect(host.textContent).toContain('Data saknas');
@@ -2556,6 +2557,10 @@ describe('Del 138: ämnesikoner i v3-Planering', () => {
     act(() => { ([...host.querySelectorAll('.v3-nav')].find((b) => b.textContent?.trim() === 'Planering') as HTMLButtonElement).click(); });
     const flik = (namn: string) => [...host.querySelectorAll<HTMLButtonElement>('[aria-label="Planera ämne"] [role="tab"]')].find((f) => f.textContent?.startsWith(namn))!;
     expect(flik('Biologi').getAttribute('aria-selected')).toBe('true');
+    // Del 201: det öppna ämnet syns direkt i topplisten (inte "alla"), och Planering saknar "alla"-valen
+    expect(select(host, 'Filter ämne').value).toBe(bio.id);
+    expect([...select(host, 'Filter ämne').querySelectorAll('option')].some((o) => o.value === '')).toBe(false);
+    expect(select(host, 'Filter klass').value).toBe(bio.klassId);
     expect(flik('Kemi').className).toContain('utan-plan');
     // Klick på Kemi-ikonen: fliken blir aktiv OCH toppradens ämnesfilter pekar på Kemi
     act(() => { flik('Kemi').click(); });

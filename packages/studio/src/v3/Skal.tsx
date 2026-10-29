@@ -62,6 +62,17 @@ export function Skal({ s, vy, setVy, filter, setFilter, notiser, larareNamn, ver
   const amnenIKlass = s.amnen.filter((a) => a.klassId === filter.klassId);
   const skolaNamn = s.tjanster[0]?.namn ?? 'Skolan';
   const ar = (v: V3Vy) => vyNyckel(v) === vyNyckel(vy);
+  // Del 201 · Topplisten visar bara de fält som den öppna sidan använder — klass/ämne följer det som arbetas med
+  const falt = new Set<'klass' | 'skolar' | 'amne' | 'period' | 'sok'>(
+    vy.typ === 'oversikt' ? ['klass', 'skolar', 'period']
+      : vy.typ === 'planering' ? ['klass', 'skolar', 'amne']
+        : vy.typ === 'amne' ? ['klass', 'skolar']
+          : vy.typ === 'kalender' ? ['klass', 'skolar', 'amne']
+            : vy.typ === 'classroom' ? ['klass', 'amne']
+              : vy.typ === 'resultat' ? ['klass', 'amne', 'period', 'sok']
+                : vy.typ === 'elever' ? ['klass', 'amne', 'period', 'sok']
+                  : vy.typ === 'foraldrakontakt' ? ['klass', 'amne', 'period', 'sok']
+                    : []);
 
   const Nav = ({ v, ikon: I, text }: { v: V3Vy; ikon: (p: { storlek?: number }) => React.JSX.Element; text: string }) => (
     <button className={`v3-nav${ar(v) ? ' act' : ''}`} onClick={() => setVy(v)} aria-current={ar(v) ? 'page' : undefined}>
@@ -88,22 +99,22 @@ export function Skal({ s, vy, setVy, filter, setFilter, notiser, larareNamn, ver
 
       <div className="v3-huvud">
         <header className="v3-topp">
-          <label className="v3-filter"><span className="v3-filter-ikon"><Ikon.elever storlek={16} /></span>Klass:
-            <select aria-label="Filter klass" value={filter.klassId} onChange={(e) => setFilter({ ...filter, klassId: e.target.value, amneId: '' })}>
-              <option value="">alla</option>{klasser.map((k) => <option key={k.id} value={k.id}>{k.namn}</option>)}
-            </select></label>
-          <label className="v3-filter"><span className="v3-filter-ikon"><Ikon.kalender storlek={16} /></span>Läsår:
+          {falt.has('klass') && <label className="v3-filter"><span className="v3-filter-ikon"><Ikon.elever storlek={16} /></span>Klass:
+            <select aria-label="Filter klass" value={filter.klassId} onChange={(e) => { const kid = e.target.value; const behall = s.amnen.some((a) => a.id === filter.amneId && a.klassId === kid); setFilter({ ...filter, klassId: kid, amneId: behall ? filter.amneId : '' }); }}>
+              {vy.typ !== 'planering' && <option value="">alla</option>}{klasser.map((k) => <option key={k.id} value={k.id}>{k.namn}</option>)}
+            </select></label>}
+          {falt.has('skolar') && <label className="v3-filter"><span className="v3-filter-ikon"><Ikon.kalender storlek={16} /></span>Läsår:
             <select aria-label="Filter läsår" value={filter.skolarId} onChange={(e) => setFilter({ ...filter, skolarId: e.target.value })}>
               {skolar.length === 0 && <option value="">—</option>}{skolar.map((x) => <option key={x.id} value={x.id}>{x.namn.replace(/^Läsåret\s+/i, '')}</option>)}
-            </select></label>
-          <label className="v3-filter"><span className="v3-filter-ikon"><Ikon.bok storlek={16} /></span>Ämne:
-            <select aria-label="Filter ämne" value={filter.amneId} onChange={(e) => setFilter({ ...filter, amneId: e.target.value })}>
-              <option value="">alla</option>{(filter.klassId === '' ? s.amnen : amnenIKlass).map((a) => <option key={a.id} value={a.id}>{a.namn}</option>)}
-            </select></label>
-          <label className="v3-filter"><span className="v3-filter-ikon"><Ikon.kalender storlek={16} /></span>Period:
-            <input aria-label="Filter period" placeholder="v.34–42" value={filter.periodText} onChange={(e) => setFilter({ ...filter, periodText: e.target.value })} /></label>
+            </select></label>}
+          {falt.has('amne') && <label className="v3-filter"><span className="v3-filter-ikon"><Ikon.bok storlek={16} /></span>Ämne:
+            <select aria-label="Filter ämne" value={filter.amneId} onChange={(e) => { const a = s.amnen.find((x) => x.id === e.target.value); setFilter({ ...filter, amneId: e.target.value, klassId: a?.klassId ?? filter.klassId }); }}>
+              {vy.typ !== 'planering' && <option value="">alla</option>}{(filter.klassId === '' ? s.amnen : amnenIKlass).map((a) => <option key={a.id} value={a.id}>{filter.klassId === '' ? `${klasser.find((k) => k.id === a.klassId)?.namn ?? ''} ${a.namn}`.trim() : a.namn}</option>)}
+            </select></label>}
+          {falt.has('period') && <label className="v3-filter" title="Veckor som resultat och rapporter avgränsas till, t.ex. v.35–43 — tomt = allt"><span className="v3-filter-ikon"><Ikon.kalender storlek={16} /></span>Period:
+            <input aria-label="Filter period" placeholder="v.34–42 (tomt = allt)" value={filter.periodText} onChange={(e) => setFilter({ ...filter, periodText: e.target.value })} /></label>}
           <span className="spacer" />
-          <label className="v3-sok"><Ikon.sok storlek={16} /><input aria-label="Filter sök" placeholder="Sök elev, delkapitel, moment…" value={filter.sok} onChange={(e) => setFilter({ ...filter, sok: e.target.value })} /></label>
+          {falt.has('sok') && <label className="v3-sok"><Ikon.sok storlek={16} /><input aria-label="Filter sök" placeholder="Sök elev…" value={filter.sok} onChange={(e) => setFilter({ ...filter, sok: e.target.value })} /></label>}
           {angra !== undefined && <button className="v3-ikonknapp" aria-label="Ångra" title="Ångra senaste ändring (upp till 20 steg)" onClick={angra}>↩</button>}
           <div className="v3-meny-anker">
             <button className="v3-ikonknapp" aria-label={`Notiser (${notiser.length})`} onClick={() => setMeny(meny === 'notiser' ? 'ingen' : 'notiser')}>

@@ -214,18 +214,18 @@ export function App() {
           {vy.typ === 'planering' && (
             <div className="v3-sida-innehall">
               <Kort rubrik="Planering" under="årsplanering, veckoplanering, lektionskort och begrepp — samma verktyg som förut" hoger={<button className="v3-lank" onClick={() => setVy({ typ: 'kalender' })}>Kalender →</button>}>
-                <PlaneringVy s={s} kor={kor} setVald={setVald} hopp={lektionsHopp} amneIdIn={filter.amneId} meddela={setMsg}
-                  onAmneVald={(id) => { const a = s.amnen.find((x) => x.id === id); setFilter({ ...filter, amneId: id, klassId: a?.klassId ?? filter.klassId }); }} />
+                <PlaneringVy s={s} kor={kor} setVald={setVald} hopp={lektionsHopp} amneIdIn={filter.amneId} klassIdIn={filter.klassId} meddela={setMsg}
+                  onAmneVald={(id) => { const a = s.amnen.find((x) => x.id === id); setFilter((f) => (id === f.amneId && (a === undefined || a.klassId === f.klassId) ? f : { ...f, amneId: id, klassId: a?.klassId ?? f.klassId })); }} />
               </Kort>
             </div>
           )}
           {vy.typ === 'amne' && <Amnessida s={s} amneNamn={vy.amneNamn} filter={filter} setVy={setVy}
             oppnaLektion={(amneId, i) => setLektionsHopp({ amneId, i, n: Date.now() })}
             planering={(amneId) => <Kort rubrik="Planering och lektioner" under="lektionsplan, detaljplanering, begrepp, filmer, Word"><PlaneringVy s={s} kor={kor} setVald={setVald} hopp={lektionsHopp} amneIdIn={amneId} dolAmnesval meddela={setMsg} /></Kort>} />}
-          {vy.typ === 'kalender' && <Kort rubrik="Kalender" hoger={<button className="v3-lank" onClick={() => setVy({ typ: 'planering' })}>Planering →</button>}><KalenderVy s={s} kor={kor} onOppnaLektion={(amneId, i) => { setLektionsHopp({ amneId, i, n: Date.now() }); setVy({ typ: 'planering' }); }} /></Kort>}
+          {vy.typ === 'kalender' && <Kort rubrik="Kalender" hoger={<button className="v3-lank" onClick={() => setVy({ typ: 'planering' })}>Planering →</button>}><KalenderVy s={s} kor={kor} kontext={filter} onKontext={(k) => setFilter((f) => ({ ...f, ...k }))} onOppnaLektion={(amneId, i) => { setLektionsHopp({ amneId, i, n: Date.now() }); setVy({ typ: 'planering' }); }} /></Kort>}
           {vy.typ === 'classroom' && <Classroom s={s} filter={filter} setVy={setVy} />}
-          {vy.typ === 'resultat' && <SuperTeachVy s={s} kor={kor} meddela={setMsg} klassIdIn={filter.klassId} amneIdIn={filter.amneId} />}
-          {vy.typ === 'elever' && <RapportVy s={s} kor={kor} meddela={setMsg} />}
+          {vy.typ === 'resultat' && <SuperTeachVy s={s} kor={kor} meddela={setMsg} klassIdIn={filter.klassId} amneIdIn={filter.amneId} periodIn={filter.periodText} sokIn={filter.sok} onKontext={(k) => setFilter((f) => ({ ...f, ...k }))} />}
+          {vy.typ === 'elever' && <RapportVy s={s} kor={kor} meddela={setMsg} kontext={filter} onKontext={(k) => setFilter((f) => ({ ...f, ...k }))} />}
           {vy.typ === 'foraldrakontakt' && <Foraldrakontakt s={s} filter={filter} setVy={setVy} />}
           {vy.typ === 'datarepo' && <Datarepo s={s} spara={spara} kor={kor} meddela={setMsg} />}
         </Skal>
@@ -4013,14 +4013,19 @@ function SittplatsWidget({ s, f, klassId, klassNamn, kor, onElev }: {
 }
 
 /** Dashboarden: frågekort → klassens utveckling → elev × prov-heatmap → elevvy. */
-function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfang, onVisaProv, kor }: {
+function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfang, onVisaProv, kor, periodIn, sokIn, onKontext }: {
   s: Struktur; klassId: string; klassNamn: string; amneId: string; kallor: ResultatKalla[] | undefined;
   /** Omfångets filterfält (kapitel, amneIds, datum) och etikett — från omfangFilter. */
   omfang?: OmfangResultat;
   onVisaProv: (prov: string) => void; kor: (fn: () => Struktur, m: string) => void;
+  periodIn?: string; sokIn?: string; onKontext?: (k: KontextPatch) => void;
 }) {
-  const [periodText, setPeriodText] = useState('');
-  const [sok, setSok] = useState('');
+  const [periodText, setPeriodTextRaw] = useState(periodIn ?? '');
+  const [sok, setSokRaw] = useState(sokIn ?? '');
+  useEffect(() => { if (periodIn !== undefined) setPeriodTextRaw(periodIn); }, [periodIn]);
+  useEffect(() => { if (sokIn !== undefined) setSokRaw(sokIn); }, [sokIn]);
+  const setPeriodText = (v: string) => { setPeriodTextRaw(v); onKontext?.({ periodText: v }); };
+  const setSok = (v: string) => { setSokRaw(v); onKontext?.({ sok: v }); };
   // Övningar som kör samma quiz som ett läxförhör/exit ticket räknas in i huvudsviten
   const [inkluderaOvn, setInkluderaOvn] = useState(true);
   // Del 141: alla rutor är fällbara widgets med miniatyr; öppet/stängt sparas per webbläsare.
@@ -5316,24 +5321,34 @@ function EnkelRapportVy({ s, elev, f, periodText, onTillbaka, onFull, onStudie, 
  * 📄 Rapporter — en elev i taget: hur det går, vad eleven kan göra, och
  * hela underlaget. Samma analys som Word-filen, fast på skärmen.
  */
-function RapportVy({ s, kor, meddela }: { s: Struktur; kor: (fn: () => Struktur, m: string) => void; meddela: (m: string) => void }) {
+function RapportVy({ s, kor, meddela, kontext, onKontext }: {
+  s: Struktur; kor: (fn: () => Struktur, m: string) => void; meddela: (m: string) => void;
+  /** Del 201: topplistens klass/ämne/period/sök styr vyn, och vyns egna val rapporteras tillbaka. */
+  kontext?: Filter; onKontext?: (k: KontextPatch) => void;
+}) {
   const [design, setDesign] = useState(false);
   const [vecko, setVecko] = useState(false);
   const [mallAlla, setMallAlla] = useState<string | null>(null);
   const [valAlla, setValAlla] = useState(false);
   const klasser = [...s.klasser].sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
-  const [klassId, setKlassId] = useState(klasser[0]?.id ?? '');
+  const [klassId, setKlassIdRaw] = useState(kontext?.klassId !== undefined && kontext.klassId !== '' ? kontext.klassId : klasser[0]?.id ?? '');
   const klass = klasser.find((k) => k.id === klassId) ?? klasser[0];
   const amnen = s.amnen.filter((a) => a.klassId === klass?.id);
-  const [amneId, setAmneId] = useState('');
-  const [periodText, setPeriodText] = useState('');
+  const [amneId, setAmneIdRaw] = useState(kontext?.amneId ?? '');
+  const [periodText, setPeriodTextRaw] = useState(kontext?.periodText ?? '');
+  const setKlassId = (v: string) => { setKlassIdRaw(v); onKontext?.({ klassId: v, amneId: '' }); };
+  const setAmneId = (v: string) => { setAmneIdRaw(v); onKontext?.({ amneId: v }); };
+  const setPeriodText = (v: string) => { setPeriodTextRaw(v); onKontext?.({ periodText: v }); };
+  useEffect(() => { if (kontext === undefined) return; if (kontext.klassId !== '' && kontext.klassId !== klassId) setKlassIdRaw(kontext.klassId); if (kontext.amneId !== amneId) setAmneIdRaw(kontext.amneId); if (kontext.periodText !== periodText) setPeriodTextRaw(kontext.periodText); }, [kontext?.klassId, kontext?.amneId, kontext?.periodText]); // eslint-disable-line react-hooks/exhaustive-deps
   const [elevId, setElevId] = useState('');
   const [lage, setLage] = useState<'enkel' | 'full' | 'studie'>('enkel');
   // Del 154: elevkortet — eget läge, öppnas från listan (även för elever som inte ingår i klassen)
   const [kortElev, setKortElev] = useState('');
   const [samtal, setSamtal] = useState(false);   // Del 164
   const [visaSlutade, setVisaSlutade] = useState(false);
-  const [sok, setSok] = useState('');
+  const [sok, setSokRaw] = useState(kontext?.sok ?? '');
+  const setSok = (v: string) => { setSokRaw(v); onKontext?.({ sok: v }); };
+  useEffect(() => { if (kontext !== undefined && kontext.sok !== sok) setSokRaw(kontext.sok); }, [kontext?.sok]); // eslint-disable-line react-hooks/exhaustive-deps
   const [skriver, setSkriver] = useState('');
   const [forlopp, setForlopp] = useState('');
 
@@ -5802,10 +5817,12 @@ const IMPORT_APPAR: Array<{ id: ImportApp; bokstav: string; namn: string; under:
   { id: 'elever', bokstav: '👥', namn: 'Elever', under: 'Socrative-lista · grupper A/B' },
 ];
 
-function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn }: {
+function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, onKontext }: {
   s: Struktur; kor: (fn: () => Struktur, m: string) => void; meddela?: (m: string) => void;
   /** v3: toppradens klass-/ämnesfilter styr vilken klass och vilket ämne som visas (Del 147). */
   klassIdIn?: string; amneIdIn?: string;
+  /** Del 201: period och sök ur topplisten; egna val rapporteras tillbaka. */
+  periodIn?: string; sokIn?: string; onKontext?: (k: KontextPatch) => void;
 }) {
   const klasser = [...s.klasser].sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
   const [klassId, setKlassId] = useState(klassIdIn !== undefined && klassIdIn !== '' ? klassIdIn : klasser[0]?.id ?? '');
@@ -5977,11 +5994,11 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn }: {
       {vantande.length > 0 && <ImportFragor vantande={vantande} kor={kor} onKlar={() => setVantande([])} />}
       <div className="rad" style={{ flexWrap: 'wrap', gap: 8 }}>
         <label>Klass:{' '}
-          <select aria-label="SuperTeach klass" value={klass.id} onChange={(e) => { setKlassId(e.target.value); setAmneId(''); }}>
+          <select aria-label="SuperTeach klass" value={klass.id} onChange={(e) => { setKlassId(e.target.value); setAmneId(''); onKontext?.({ klassId: e.target.value, amneId: '' }); }}>
             {klasser.map((k) => <option key={k.id} value={k.id}>{k.namn}</option>)}
           </select></label>
         <label>Ämne:{' '}
-          <select aria-label="SuperTeach ämne" value={amneId} onChange={(e) => setAmneId(e.target.value)}>
+          <select aria-label="SuperTeach ämne" value={amneId} onChange={(e) => { setAmneId(e.target.value); onKontext?.({ amneId: e.target.value }); }}>
             <option value="">— alla ämnen (aggregerat) —</option>
             {amnen.map((a) => <option key={a.id} value={a.id}>{a.namn}</option>)}
           </select></label>
@@ -6168,7 +6185,7 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn }: {
 
       </details>
 
-      <SuperTeachDashboard s={s} klassId={klass.id} klassNamn={klass.namn} amneId={amne?.id ?? ''} kallor={kallor} omfang={omf}
+      <SuperTeachDashboard s={s} klassId={klass.id} klassNamn={klass.namn} amneId={amne?.id ?? ''} kallor={kallor} omfang={omf} periodIn={periodIn} sokIn={sokIn} onKontext={onKontext}
         onVisaProv={(p) => setVisaProv(p)} kor={kor} />
 
       {/* ── Översikt ── */}
@@ -6222,11 +6239,13 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn }: {
   );
 }
 
-function PlaneringVy({ s, kor, setVald, hopp, amneIdIn, dolAmnesval, meddela, onAmneVald }: {
+function PlaneringVy({ s, kor, setVald, hopp, amneIdIn, klassIdIn, dolAmnesval, meddela, onAmneVald }: {
   s: Struktur; kor: (fn: () => Struktur, m: string) => void; setVald: (v: Vald) => void;
   hopp?: { amneId: string; i: number; n: number } | null;
   /** v3: ämnessidan styr vilket ämne som visas. */
   amneIdIn?: string;
+  /** Del 201: byts klassen i topplisten utan ämne öppnas klassens första ämne. */
+  klassIdIn?: string;
   dolAmnesval?: boolean;
   meddela?: (m: string) => void;
   /** Del 138: ämnesikonerna håller toppradens ämnesfilter i synk. */
@@ -6245,6 +6264,14 @@ function PlaneringVy({ s, kor, setVald, hopp, amneIdIn, dolAmnesval, meddela, on
   useEffect(() => { if (hopp != null) setAmneId(hopp.amneId); }, [hopp?.n]);   // kalenderklick → rätt ämne
   useEffect(() => { if (amneIdIn !== undefined && amneIdIn !== '') setAmneId(amneIdIn); }, [amneIdIn]); // v3: ämnessidan
   const valt = alternativ.some((x) => x.a.id === amneId) ? amneId : alternativ[0]?.a.id ?? '';
+  // Del 201: klassen i topplisten styr — ligger det öppna ämnet i en annan klass byts till klassens första ämne
+  useEffect(() => {
+    if (klassIdIn === undefined || klassIdIn === '' || (amneIdIn !== undefined && amneIdIn !== '')) return;
+    const nu = alternativ.find((x) => x.a.id === valt);
+    if (nu !== undefined && nu.klass.id !== klassIdIn) { const forsta = alternativ.find((x) => x.klass.id === klassIdIn); if (forsta !== undefined) setAmneId(forsta.a.id); }
+  }, [klassIdIn]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Del 201: det öppna ämnet rapporteras till topplisten så att Klass/Ämne alltid visar det som planeras
+  useEffect(() => { if (valt !== '') onAmneVald?.(valt); }, [valt]); // eslint-disable-line react-hooks/exhaustive-deps
   if (alternativ.length === 0) {
     return <div className="card"><h2>📋 Planering</h2><p className="muted">Skapa skolår, tjänst, klass och ämne under 🗂 Struktur först.</p></div>;
   }
@@ -6284,8 +6311,14 @@ function startAnkare(la?: Skolar): string {
   return la && idag >= la.start && idag <= la.slut ? idag : la?.start ?? '2026-08-17';
 }
 
-function KalenderVy({ s, onOppnaLektion, kor }: { s: Struktur; onOppnaLektion?: (amneId: string, i: number) => void; kor?: (fn: () => Struktur, m: string) => void }) {
-  const [skolarId, setSkolarId] = useState(s.skolar[0]?.id ?? '');
+function KalenderVy({ s, onOppnaLektion, kor, kontext, onKontext }: {
+  s: Struktur; onOppnaLektion?: (amneId: string, i: number) => void; kor?: (fn: () => Struktur, m: string) => void;
+  /** Del 201: läsår, klass och ämne ur topplisten; chippar i kalendern rapporterar tillbaka. */
+  kontext?: Filter; onKontext?: (k: KontextPatch) => void;
+}) {
+  const [skolarId, setSkolarIdRaw] = useState(kontext?.skolarId !== undefined && kontext.skolarId !== '' && s.skolar.some((x) => x.id === kontext.skolarId) ? kontext.skolarId : s.skolar[0]?.id ?? '');
+  const setSkolarId = (v: string) => { setSkolarIdRaw(v); onKontext?.({ skolarId: v }); };
+  useEffect(() => { if (kontext !== undefined && kontext.skolarId !== '' && kontext.skolarId !== skolarId && s.skolar.some((x) => x.id === kontext.skolarId)) setSkolarIdRaw(kontext.skolarId); }, [kontext?.skolarId]); // eslint-disable-line react-hooks/exhaustive-deps
   const klassNamnKal = useMemo(() => new Map(s.klasser.map((k) => [k.id, k.namn])), [s]);
   // Del 149: kursernas första lektion får ▲/▼ i kalendern
   const idagIso = new Date().toISOString().slice(0, 10);
@@ -6307,8 +6340,16 @@ function KalenderVy({ s, onOppnaLektion, kor }: { s: Struktur; onOppnaLektion?: 
     };
   }, [s, kor, idagIso]);
   const [lage, setLage] = useState<'lasar' | 'termin' | 'manad' | 'vecka'>('vecka');
-  const [klassFilter, setKlassFilter] = useState<string>('__alla__');
-  const [amnesFilter, setAmnesFilter] = useState<string>('__alla__');
+  const amnesNamnAv = (id: string) => s.amnen.find((a) => a.id === id)?.namn ?? '__alla__';
+  const [klassFilter, setKlassFilterRaw] = useState<string>(kontext?.klassId !== undefined && kontext.klassId !== '' ? kontext.klassId : '__alla__');
+  const [amnesFilter, setAmnesFilterRaw] = useState<string>(kontext?.amneId !== undefined && kontext.amneId !== '' ? amnesNamnAv(kontext.amneId) : '__alla__');
+  const setKlassFilter = (v: string) => { setKlassFilterRaw(v); setAmnesFilterRaw('__alla__'); onKontext?.({ klassId: v === '__alla__' ? '' : v, amneId: '' }); };
+  const setAmnesFilter = (v: string) => { setAmnesFilterRaw(v); const a = v === '__alla__' ? undefined : s.amnen.find((x) => x.namn === v && (klassFilter === '__alla__' || x.klassId === klassFilter)); onKontext?.({ amneId: a?.id ?? '' }); };
+  useEffect(() => {
+    if (kontext === undefined) return;
+    const k = kontext.klassId === '' ? '__alla__' : kontext.klassId; if (k !== klassFilter) setKlassFilterRaw(k);
+    const a = kontext.amneId === '' ? '__alla__' : amnesNamnAv(kontext.amneId); if (a !== amnesFilter) setAmnesFilterRaw(a);
+  }, [kontext?.klassId, kontext?.amneId]); // eslint-disable-line react-hooks/exhaustive-deps
   const [termin, setTermin] = useState<'HT' | 'VT'>('HT');
   const skolar = s.skolar.find((x) => x.id === skolarId) ?? s.skolar[0];
   const [utskrift, setUtskrift] = useState(false);
@@ -6445,6 +6486,8 @@ function KalenderVy({ s, onOppnaLektion, kor }: { s: Struktur; onOppnaLektion?: 
 interface KursFlytt { kurs: Kurs; kanUpp: boolean; kanNer: boolean; flytta: (steg: -1 | 1) => void; }
 /** Del 200 · ↩ Ångra når tabeller och lektionssidor utan att skickas som prop genom alla lager. */
 const AngraContext = createContext<(() => void) | null>(null);
+/** Del 201 · Arbetskontexten i topplisten (klass, läsår, ämne, period, sök) — vyerna läser den och rapporterar tillbaka sina val. */
+type KontextPatch = Partial<Pick<Filter, 'klassId' | 'skolarId' | 'amneId' | 'periodText' | 'sok'>>;
 const KursFlyttContext = createContext<((amneId: string, lektionsIndex: number) => KursFlytt | null) | null>(null);
 
 function KursPilar({ h }: { h: KalenderHandelse }) {
