@@ -7,7 +7,7 @@ import {
   AlignmentType, BorderStyle, Document, ExternalHyperlink, Footer, Header, HeadingLevel, ImageRun, LevelFormat, Packer, PageNumber,
   Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType,
 } from 'docx';
-import { labMall, type Betygsniva, type Provlapp } from '@planner/kernel';
+import { labMall, PROVLAPP_OVA_GRANS, type Betygsniva, type Provlapp } from '@planner/kernel';
 import { djupBreddSvg, svgTillPng } from './provlappFigur.js';
 
 const FONT = 'Calibri';
@@ -91,6 +91,12 @@ export function provlappDokument(pl: Provlapp, farg: string, figur: Uint8Array |
       ut.push(p([t('Bredd: ', { bold: true, color: F }), t(a.djupBredd.bredd)], a.labb !== null ? 40 : 80));
       if (a.labb !== null) ut.push(p([t('Labb (E): ', { bold: true, color: F }), t(a.labb)], 80));
     }
+    if (a.fragor.length > 0) {
+      ut.push(new Paragraph({ spacing: { after: 60 }, children: [t('Begrepp från läxförhör och exit tickets: ', { bold: true }), ...a.fragor.flatMap((f, i) => {
+        const ova = f.procent !== null && f.procent < PROVLAPP_OVA_GRANS;
+        return [...(i > 0 ? [t(' · ')] : []), t(f.begrepp ?? f.fraga, ova ? { bold: true, color: 'B00020' } : {}), ...(f.procent !== null ? [t(` ${f.procent} %${ova ? ' ⚠' : ''}`, { color: ova ? 'B00020' : '777777', size: 18 })] : [])];
+      })] }));
+    }
     if (a.filmer.length > 0) {
       ut.push(new Paragraph({ spacing: { after: 80 }, children: [t('Filmer: ', { bold: true }), ...a.filmer.flatMap((f, i) => [
         ...(i > 0 ? [t(' · ')] : []),
@@ -98,6 +104,8 @@ export function provlappDokument(pl: Provlapp, farg: string, figur: Uint8Array |
       ])] }));
     }
   }
+
+  if (pl.avsnitt.some((a) => a.fragor.length > 0)) ut.push(p([t(`Procenten efter ett begrepp är klassens andel rätt senast det var med i ett läxförhör eller en exit ticket. ⚠ = under ${PROVLAPP_OVA_GRANS} % — öva extra på det.`, { italics: true, color: '555555' })]));
 
   ut.push(h1('Så visar du djup och bredd'));
   ut.push(p([t('Djup', { bold: true }), t(' = orsakssamband i flera led: A → B → C, där varje pil svarar på '), t('varför', { italics: true }), t('. '), t('Bredd', { bold: true }), t(' = flera exempel i ett led: A — exempel 1, 2, 3 — och vad de har gemensamt. Under varje avsnitt finns en djup- och en breddfråga byggd på avsnittets begrepp.')]));

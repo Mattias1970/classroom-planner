@@ -6,7 +6,7 @@
  * (hjälpmedel, tider) sparas på lektionsplanen och tas med på lappen.
  */
 import { useState } from 'react';
-import { labMall, provlapp, provlappText, tolkaOmfang, type Betygsniva, type Provlapp as ProvlappData, type Struktur } from '@planner/kernel';
+import { labMall, provlapp, provlappText, PROVLAPP_OVA_GRANS, tolkaOmfang, type Betygsniva, type Provlapp as ProvlappData, type Struktur } from '@planner/kernel';
 import { lasStruktur } from './store.js';
 import { djupBreddDataUrl } from './provlappFigur.js';
 
@@ -96,9 +96,16 @@ function ProvlappVisning({ p, farg }: { p: ProvlappData; farg: string }) {
               {a.labb !== null && <div><b>Labb (E):</b> {a.labb}</div>}
             </div>
           )}
+          {a.fragor.length > 0 && (
+            <p className="small provlapp-fragor"><b>Begrepp från läxförhör och exit tickets:</b> {a.fragor.map((f, i) => (
+              <span key={i} className={f.procent !== null && f.procent < PROVLAPP_OVA_GRANS ? 'provlapp-ova' : ''} title={`${f.fraga} · senast ${f.senast}`}>{i > 0 && ' · '}{f.begrepp ?? f.fraga}{f.procent !== null && <small className="muted"> {f.procent} %{f.procent < PROVLAPP_OVA_GRANS ? ' ⚠' : ''}</small>}</span>
+            ))}</p>
+          )}
           {a.filmer.length > 0 && <p className="small provlapp-filmer"><b>Filmer:</b> {a.filmer.map((f, i) => <span key={f.url}>{i > 0 && ' · '}<a href={f.url} target="_blank" rel="noreferrer">{f.titel}</a></span>)}</p>}
         </div>
       ))}
+
+      {delkap.some((a) => a.fragor.length > 0) && <p className="small muted">Procenten är klassens andel rätt senast begreppet var med i ett läxförhör eller en exit ticket. ⚠ = under {PROVLAPP_OVA_GRANS} % — öva extra på det.</p>}
 
       <h4>Så visar du djup och bredd</h4>
       <p className="small"><b>Djup</b> = orsakssamband i flera led: A → B → C, där varje pil svarar på <i>varför</i>. <b>Bredd</b> = flera exempel i ett led: A — exempel 1, 2, 3 — och vad de har gemensamt. Under varje avsnitt ovan finns en djup- och en breddfråga byggd på avsnittets begrepp.</p>

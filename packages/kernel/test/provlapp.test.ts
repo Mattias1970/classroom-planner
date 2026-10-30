@@ -4,8 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { bokFromValfriImport } from '../src/domain/biologibok.js';
 import { byggKapitel } from '../src/domain/bok.js';
-import { djupBreddFor, labMall, nivaKarta, omfangText, provlapp, provlappForOmfang, provlappText, tolkaOmfang } from '../src/domain/provlapp.js';
-import { laggTillAmne, laggTillEgenRad, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering, sattLektionsplan, sparaBok } from '../src/domain/struktur.js';
+import { djupBreddFor, fragorPerDelkapitel, labMall, nivaKarta, omfangText, provlapp, provlappForOmfang, provlappText, tolkaOmfang } from '../src/domain/provlapp.js';
+import { importeraResultat } from '../src/domain/resultat.js';
+import { laggTillAmne, laggTillEgenRad, laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering, sattLektionsplan, sparaBok } from '../src/domain/struktur.js';
 import { tomStruktur, type Bok, type Lektion, type Struktur } from '../src/domain/typer.js';
 
 const HAR = dirname(fileURLToPath(import.meta.url));
@@ -241,5 +242,37 @@ describe('Del 209 · bokens sammanfattning, djup/bredd/labb-exempel och filmer p
     expect(text).toContain('Labb (E): Reaktionstid');
     expect(text).toContain('FILMER');
     expect(text).toContain('• Nervreflexer – https://app.binogi.se/l/nervreflexer');
+  });
+});
+
+describe('Del 210 · begrepp från klassens läxförhör och exit tickets per delkapitel', () => {
+  it('frågorna hamnar under sitt delkapitel med senaste andel rätt; under 60 % flaggas i texten', () => {
+    let s = bygg(SPEKTRUM, 'Biologi');
+    s = laggTillElev(s, { id: 'e1', klassId: 'k', namn: 'Anna Berg' });
+    s = laggTillElev(s, { id: 'e2', klassId: 'k', namn: 'Omar Ali' });
+    const sv = (par: Array<[string, string, boolean]>) => par.map(([fraga, facit, ratt]) => ({ fraga, svar: ratt ? 'A' : 'B', ratt, facit }));
+    // Läxförhör 6.1 (rum Biologi61): två frågor — cellteorin alla rätt, cellandning hälften
+    s = importeraResultat(s, { klassId: 'k', amneId: 'am', kalla: 'socrative-laxforhor', prov: 'Bi 6.1 begrepp', rum: 'Biologi61', datum: '2026-09-21', rader: [
+      { namn: 'Anna Berg', poang: 2, maxPoang: 2, svar: sv([['Vilket begrepp? 1', 'A • cellteorin', true], ['Vilket begrepp? 2', 'B • cellandning', true]]) },
+      { namn: 'Omar Ali', poang: 1, maxPoang: 2, svar: sv([['Vilket begrepp? 1', 'A • cellteorin', true], ['Vilket begrepp? 2', 'B • cellandning', false]]) },
+    ] }).s;
+    // Kumulativt förhör 6.1–6.2 en vecka senare: cellandning nu alla rätt, enzym 0 %
+    s = importeraResultat(s, { klassId: 'k', amneId: 'am', kalla: 'socrative-laxforhor', prov: 'Bi 6.1-6.2 begrepp', rum: 'Biologi612', datum: '2026-09-28', rader: [
+      { namn: 'Anna Berg', poang: 2, maxPoang: 3, svar: sv([['Vilket begrepp? 1', 'A • cellteorin', true], ['Vilket begrepp? 2', 'B • cellandning', true], ['Vilket begrepp? 3', 'C • enzym', false]]) },
+      { namn: 'Omar Ali', poang: 2, maxPoang: 3, svar: sv([['Vilket begrepp? 1', 'A • cellteorin', true], ['Vilket begrepp? 2', 'B • cellandning', true], ['Vilket begrepp? 3', 'C • enzym', false]]) },
+    ] }).s;
+    const per = fragorPerDelkapitel(s, 'k', 'am');
+    expect(per.get('6.1')?.map((f) => [f.begrepp, f.procent, f.senast])).toEqual([['cellteorin', 100, 'Bi 6.1-6.2 begrepp'], ['cellandning', 100, 'Bi 6.1-6.2 begrepp']]);
+    expect(per.get('6.2')?.map((f) => [f.begrepp, f.procent])).toEqual([['enzym', 0]]);
+    const p = provlapp(s, 'am', 8, '2026-09-14')!;
+    expect(p.avsnitt[0].fragor.map((f) => f.begrepp)).toEqual(['cellteorin', 'cellandning']);
+    expect(p.avsnitt[1].fragor).toEqual([{ fraga: 'Vilket begrepp? 3', begrepp: 'enzym', procent: 0, senast: 'Bi 6.1-6.2 begrepp' }]);
+    expect(p.avsnitt[2].fragor).toEqual([]);
+    const text = provlappText(p);
+    expect(text).toContain('BEGREPP FRÅN LÄXFÖRHÖR OCH EXIT TICKETS');
+    expect(text).toContain('• cellandning – 100 %');
+    expect(text).toContain('• enzym – 0 % ⚠');
+    // Utan resultat: tomt, ingen rubrik
+    expect(provlappText(provlapp(bygg(SPEKTRUM, 'Biologi'), 'am', 8, '2026-09-14')!)).not.toContain('BEGREPP FRÅN LÄXFÖRHÖR');
   });
 });

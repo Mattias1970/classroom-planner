@@ -18,6 +18,7 @@ import type { Bok, NivaEtiketter, Struktur } from './typer.js';
 import { NO_TK_AMNEN } from './amnen.js';
 import { amnesPlanFor, hamtaLektionsplan, lektionsNamn } from './struktur.js';
 import { vagTillProvet, vagTyp, type VagBox, type VagTyp } from './vagtillprovet.js';
+import { fragematris } from './delkapiteltrend.js';
 
 export type Betygsniva = 'E' | 'C' | 'A';
 
@@ -43,6 +44,40 @@ export interface ProvlappAvsnitt {
   labb: string | null;
   /** Del 209 · Filmer som hör till avsnittet (bokens filmresurser, t.ex. Binogi). */
   filmer: Array<{ titel: string; url: string }>;
+  /** Del 210 · Frågorna klassen haft i läxförhör och exit tickets (Socrative) för avsnittet, med senaste andel rätt. */
+  fragor: ProvlappFraga[];
+}
+
+/** Del 210 · En fråga ur klassens Socrative-resultat: begreppet (ur facit) eller frågetexten, och hur det gick senast. */
+export interface ProvlappFraga {
+  fraga: string;
+  begrepp: string | null;
+  /** Andel rätt (0–100) vid senaste tillfället frågan ställdes; null när inget bedömt svar finns. */
+  procent: number | null;
+  /** Provet/rummet frågan senast ställdes i. */
+  senast: string;
+}
+
+/** Del 210 · Gräns för "öva extra": under detta antal procent rätt markeras begreppet. */
+export const PROVLAPP_OVA_GRANS = 60;
+
+/**
+ * Del 210 · Klassens Socrative-frågor per delkapitelkod, ur frågematrisen (läxförhör + exit tickets).
+ * För varje fråga tas det senaste tillfället den ställdes.
+ */
+export function fragorPerDelkapitel(s: Struktur, klassId: string, amneId: string): Map<string, ProvlappFraga[]> {
+  const ut = new Map<string, ProvlappFraga[]>();
+  if (klassId === '') return ut;
+  const m = fragematris(s, { klassId, amneId, kallor: ['socrative-laxforhor', 'socrative-exit'] });
+  m.fragor.forEach((fr, i) => {
+    if (fr.kod === '—') return;
+    const med = m.rader.filter((r) => r.celler[i] !== null).sort((a, b) => a.datum.localeCompare(b.datum));
+    const sista = med[med.length - 1];
+    if (sista === undefined) return;
+    const cell = sista.celler[i]!;
+    ut.set(fr.kod, [...(ut.get(fr.kod) ?? []), { fraga: fr.fraga, begrepp: fr.begrepp ?? null, procent: cell.procent, senast: sista.prov }]);
+  });
+  return ut;
 }
 
 /** Del 206 · Så visar eleven djup och bredd i ett avsnitt — ramar, inte färdiga svar. */
@@ -152,7 +187,7 @@ function slaIhop(intervall: string[]): string {
   return [...new Set(delar)].join(' · ');
 }
 
-function avsnittUrBox(s: Struktur, amneId: string, bok: Bok, b: VagBox): ProvlappAvsnitt {
+function avsnittUrBox(s: Struktur, amneId: string, bok: Bok, b: VagBox, fragor: Map<string, ProvlappFraga[]>): ProvlappAvsnitt {
   const lekt = b.lektioner;
   const planer = lekt.map((l) => hamtaLektionsplan(s, amneId, l.index));
   const iBoken = lekt.map((l) => l.bok).find((x) => x !== undefined);
@@ -169,6 +204,7 @@ function avsnittUrBox(s: Struktur, amneId: string, bok: Bok, b: VagBox): Provlap
     djupBredd,
     labb: iBoken?.labb ?? null,
     filmer,
+    fragor: b.kod !== null ? (fragor.get(b.kod) ?? []) : [],
     rubrik: b.rubrik, typ: b.typ, sidor: b.sidor,
     mal: b.mal, begrepp: b.begrepp,
     uppgifter: {
@@ -202,7 +238,8 @@ function byggLapp(s: Struktur, amneId: string, bok: Bok, boxar: VagBox[], kapite
   const klass = s.klasser.find((k) => k.id === amne.klassId);
   const n = bok.nivaer;
   const { karta, text } = nivaKarta(n);
-  const avsnitt = boxar.map((b) => avsnittUrBox(s, amneId, bok, b));
+  const fragor = fragorPerDelkapitel(s, amne.klassId, amneId);
+  const avsnitt = boxar.map((b) => avsnittUrBox(s, amneId, bok, b, fragor));
   const noAmne = (NO_TK_AMNEN as readonly string[]).includes(amne.namn);
   const hitta = (b: string): string | null => {
     for (const k of kapitel) {
@@ -370,6 +407,12 @@ export function provlappText(p: Provlapp): string {
     r.push(`  Djup: ${a.djupBredd!.djup}`);
     r.push(`  Bredd: ${a.djupBredd!.bredd}`);
     if (a.labb !== null) r.push(`  Labb (E): ${a.labb}`);
+  }
+  const medFragor = p.avsnitt.filter((a) => a.fragor.length > 0);
+  if (medFragor.length > 0) {
+    r.push(''); r.push('BEGREPP FRÅN LÄXFÖRHÖR OCH EXIT TICKETS');
+    r.push(`(andel rätt i klassen senast · ⚠ = under ${PROVLAPP_OVA_GRANS} % — öva extra)`);
+    for (const a of medFragor) { r.push(a.rubrik); a.fragor.forEach((f) => r.push(`  • ${f.begrepp ?? f.fraga}${f.procent !== null ? ` – ${f.procent} %${f.procent < PROVLAPP_OVA_GRANS ? ' ⚠' : ''}` : ''}`)); }
   }
   const medFilm = p.avsnitt.filter((a) => a.filmer.length > 0);
   if (medFilm.length > 0) {
