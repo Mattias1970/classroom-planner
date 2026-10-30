@@ -6,7 +6,7 @@
  * (hjälpmedel, tider) sparas på lektionsplanen och tas med på lappen.
  */
 import { useState } from 'react';
-import { labMall, noOvningPunkter, provlapp, provlappText, PROVLAPP_OVA_GRANS, tolkaOmfang, type Betygsniva, type Provlapp as ProvlappData, type Struktur } from '@planner/kernel';
+import { labMall, noOvningPunkter, omfangUrKoder, provlapp, provlappDiagnos, provlappText, PROVLAPP_OVA_GRANS, tolkaOmfang, valbaraDelkapitel, type Betygsniva, type Provlapp as ProvlappData, type Struktur } from '@planner/kernel';
 import { lasStruktur } from './store.js';
 import { djupBreddDataUrl } from './provlappFigur.js';
 
@@ -26,9 +26,19 @@ export function ProvlappPanel({ s, amneId, lektionsIndex, farg, notis, sattNotis
 
   const generera = () => {
     const p = provlapp(lasStruktur(), amneId, lektionsIndex, idag);
-    if (p === null) { setFel('Provlappen kunde inte byggas — lektionen är inte ett prov eller ämnet saknar bok och planering.'); setLapp(null); return; }
+    if (p === null) {
+      // Del 214: säg varför — omfånget, boken eller planeringen
+      const skal = provlappDiagnos(lasStruktur(), amneId, omfang, idag);
+      setFel(skal.length > 0 ? `Provlappen kunde inte byggas: ${skal.join(' ')}` : 'Provlappen kunde inte byggas — lektionen är inte ett prov.');
+      setLapp(null); return;
+    }
     setFel(null); setLapp(p);
   };
+  // Del 214: välj delkapitel med kryssrutor — texten i omfångsfältet följer
+  const kapitel = valbaraDelkapitel(s, amneId, omfang, idag);
+  const valda = kapitel.flatMap((k) => k.delkapitel.filter((d) => d.vald).map((d) => d.kod));
+  const vaxla = (kod: string) => sattOmfang?.(omfangUrKoder(valda.includes(kod) ? valda.filter((x) => x !== kod) : [...valda, kod]));
+  const diagnos = sattOmfang !== undefined && omf.fel === null && omfang.trim() !== '' ? provlappDiagnos(s, amneId, omfang, idag) : [];
   const laddaNer = () => {
     const p = lapp ?? provlapp(lasStruktur(), amneId, lektionsIndex, idag);
     if (p === null) { generera(); return; }
@@ -47,7 +57,25 @@ export function ProvlappPanel({ s, amneId, lektionsIndex, farg, notis, sattNotis
         <label className="small" style={{ display: 'block', marginBottom: 6 }}>Omfång — vilka delkapitel lappen täcker (tomt = hela kapitlet; t.ex. <code>6.1-6.5, 7.1-7.5</code> för två kapitel)
           <input aria-label="Provlappens omfång" value={omfang} placeholder="6.1-6.5, 7.1-7.5" onChange={(e) => sattOmfang(e.target.value)} style={{ width: '100%' }} />
           {omf.fel !== null && <span className="status warn small" style={{ display: 'block' }}>⚠ {omf.fel}</span>}
+          {diagnos.map((d, i) => <span key={i} className="status warn small" style={{ display: 'block' }}>⚠ {d}</span>)}
         </label>
+      )}
+      {sattOmfang !== undefined && kapitel.length > 0 && (
+        <div className="provlapp-valj small" aria-label="Välj delkapitel">
+          <b>Välj delkapitel</b> <span className="muted">— kryssa i de som ska vara med; omfånget ovan skrivs av sig självt</span>
+          {kapitel.map((k) => (
+            <div key={k.nr} className="rad" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center', margin: '4px 0' }}>
+              <span className="muted" style={{ minWidth: 150 }}>Kap {k.nr} {k.namn}</span>
+              <button type="button" className="chipbtn" onClick={() => sattOmfang(omfangUrKoder([...new Set([...valda, ...k.delkapitel.map((d) => d.kod)])]))}>alla</button>
+              <button type="button" className="chipbtn" onClick={() => sattOmfang(omfangUrKoder(valda.filter((v) => !k.delkapitel.some((d) => d.kod === v))))}>inga</button>
+              {k.delkapitel.map((d) => (
+                <label key={d.kod} className={`chipbtn provlapp-dk${d.vald ? ' act' : ''}${d.iPlanen ? '' : ' muted'}`} title={`${d.kod} ${d.namn}${d.iPlanen ? '' : ' — inte i planeringen (bortklippt)'}`}>
+                  <input type="checkbox" aria-label={`Delkapitel ${d.kod}`} checked={d.vald} onChange={() => vaxla(d.kod)} /> {d.kod}
+                </label>
+              ))}
+            </div>
+          ))}
+        </div>
       )}
       <label className="small" style={{ display: 'block' }}>Från läraren (hjälpmedel, tid, extra råd — tas med på lappen)
         <textarea aria-label="Provlappens lärartext" rows={2} value={notis} placeholder="T.ex. Miniräknare tillåten på del 2. Provet är 60 minuter." onChange={(e) => sattNotis(e.target.value)} style={{ width: '100%' }} />

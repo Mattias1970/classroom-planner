@@ -18,6 +18,7 @@ import type { Bok, NivaEtiketter, Struktur } from './typer.js';
 import { NO_TK_AMNEN } from './amnen.js';
 import { amnesPlanFor, hamtaLektionsplan, lektionsNamn } from './struktur.js';
 import { vagTillProvet, vagTyp, type VagBox, type VagTyp } from './vagtillprovet.js';
+import { delkapitelKod } from './bok.js';
 import { fragematris } from './delkapiteltrend.js';
 
 export type Betygsniva = 'E' | 'C' | 'A';
@@ -413,6 +414,58 @@ export function tolkaOmfang(text: string): { spann: DelkapitelSpann[]; fel: stri
     spann.push({ fran, till });
   }
   return { spann, fel: null };
+}
+
+/**
+ * Del 214 · Delkapitlen som kan väljas till lappen, per kapitel ur boken, med markering av vilka som ligger i omfånget.
+ * `iPlanen` = delkapitlet har minst en lektion kvar i planeringen (inte bortklippt).
+ */
+export function valbaraDelkapitel(s: Struktur, amneId: string, omfang: string, idag?: string): Array<{ nr: number; namn: string; delkapitel: Array<{ kod: string; namn: string; vald: boolean; iPlanen: boolean }> }> {
+  const amne = s.amnen.find((a) => a.id === amneId);
+  const bok: Bok | undefined = s.bocker.find((b) => b.id === amne?.bokId);
+  if (amne === undefined || bok === undefined) return [];
+  const omf = tolkaOmfang(omfang);
+  const inom = (kod: string): boolean => {
+    const k = kodDelar(kod); if (k === null) return false;
+    return omf.spann.some((sp) => { const a = kodDelar(sp.fran); const b = kodDelar(sp.till); return a !== null && b !== null && a[0] === k[0] && k[1] >= a[1] && k[1] <= b[1]; });
+  };
+  const ap = amnesPlanFor(s, amneId, idag);
+  const iPlan = new Set((ap?.a ?? []).map((r) => delkapitelKod(r.lektion.avsnitt)).filter((k): k is string => k !== null));
+  return bok.kapitel.map((k) => ({ nr: k.nr, namn: k.namn, delkapitel: k.delkapitel.map((d) => ({ kod: d.kod, namn: d.namn, vald: inom(d.kod), iPlanen: iPlan.has(d.kod) })) }));
+}
+
+/** Del 214 · Omfångstext ur valda koder: ['6.1','6.2','6.3','7.1'] → '6.1-6.3, 7.1'. */
+export function omfangUrKoder(koder: string[]): string {
+  const delar = koder.map(kodDelar).filter((k): k is [number, number] => k !== null).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const spann: Array<[number, number, number]> = [];   // kap, från, till
+  for (const [kap, nr] of delar) {
+    const sista = spann[spann.length - 1];
+    if (sista !== undefined && sista[0] === kap && sista[2] === nr - 1) sista[2] = nr; else if (!(sista !== undefined && sista[0] === kap && sista[2] === nr)) spann.push([kap, nr, nr]);
+  }
+  return spann.map(([kap, a, b]) => (a === b ? `${kap}.${a}` : `${kap}.${a}-${kap}.${b}`)).join(', ');
+}
+
+/** Del 214 · Varför lappen inte kan byggas för ett omfång — en rad per problem, tom lista = allt finns. */
+export function provlappDiagnos(s: Struktur, amneId: string, omfang: string, idag?: string): string[] {
+  const amne = s.amnen.find((a) => a.id === amneId);
+  if (amne === undefined) return ['Ämnet finns inte.'];
+  const bok: Bok | undefined = s.bocker.find((b) => b.id === amne.bokId);
+  if (bok === undefined) return ['Ämnet saknar bok — koppla en bok under Struktur.'];
+  if (amnesPlanFor(s, amneId, idag) === null) return ['Ämnet saknar planering — skapa en under Planering.'];
+  const omf = tolkaOmfang(omfang);
+  if (omf.fel !== null) return [omf.fel];
+  const ut: string[] = [];
+  for (const sp of omf.spann) {
+    const a = kodDelar(sp.fran)!; const b = kodDelar(sp.till)!;
+    const kap = bok.kapitel.find((k) => k.nr === a[0]);
+    if (kap === undefined) { ut.push(`Kapitel ${a[0]} finns inte i ${bok.titel} (boken har kapitel ${bok.kapitel.map((k) => k.nr).join(', ')}).`); continue; }
+    const finns = kap.delkapitel.map((d) => kodDelar(d.kod)).filter((k): k is [number, number] => k !== null).map((k) => k[1]);
+    const saknas: string[] = [];
+    for (let n = a[1]; n <= b[1]; n++) if (!finns.includes(n)) saknas.push(`${a[0]}.${n}`);
+    if (saknas.length === finns.length || saknas.length > b[1] - a[1]) ut.push(`Inget av delkapitlen ${sp.fran}–${sp.till} finns i boken (kapitel ${a[0]} har ${kap.delkapitel.map((d) => d.kod).join(', ')}).`);
+    else if (saknas.length > 0) ut.push(`Delkapitel ${saknas.join(', ')} finns inte i boken — lappen byggs utan dem.`);
+  }
+  return ut;
 }
 
 export function omfangText(spann: DelkapitelSpann[]): string {

@@ -227,3 +227,33 @@ describe('Del 213 · NO-lappen på skärm och i Word: Så övar du för E / C oc
     expect(text).not.toContain('Övningsförslag för varje nivå');
   });
 });
+
+describe('Del 214 · kryssrutor för delkapitel skriver omfånget; felet säger varför', () => {
+  it('kryss i 6.1–6.2 ger "6.1-6.2"; "alla" tar hela kapitlet; fel omfång förklaras', async () => {
+    const BIO2 = bokFromValfriImport(JSON.stringify({ id: 'bio-214', titel: 'Spektrum Biologi', forlag: 'Liber', amne: 'Biologi', arskurs: 8, kapitel: [{ nummer: 6, titel: 'Kroppen', sidor: '1–9', delkapitel: [1, 2, 3].map((n) => ({ nummer: `6.${n}`, titel: `Del ${n}`, sidor: `${n}`, begrepp: [`b${n}`], extraBegrepp: [], testaDigSjalv: { sida: n, fragor: [] } })) }] }));
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '26/27', start: '2026-09-14', slut: '2027-06-11', dagar: [] });
+    s = sparaBok(s, BIO2);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'am', klassId: 'k', namn: 'Biologi', bokId: BIO2.id, schema: [{ dag: 1, start: '08:10', slut: '09:10' }] });
+    s = registreraPlanering(s, { id: 'pl', amneId: 'am', bokId: BIO2.id, skapad: '2026-09-10' });
+    sparaStruktur(s);
+    const idx = amnesPlanFor(s, 'am', '2026-09-14')!.a.findIndex((r) => /prov/i.test(r.lektion.avsnitt));
+    let omfang = '';
+    const div = document.createElement('div'); document.body.appendChild(div);
+    const root = createRoot(div);
+    const rita = () => act(async () => root.render(<ProvlappPanel s={s} amneId="am" lektionsIndex={idx} farg="#2e7d32" notis="" sattNotis={() => {}} omfang={omfang} sattOmfang={(v) => { omfang = v; void rita(); }} />));
+    await rita();
+    const kryss = (kod: string) => div.querySelector(`input[aria-label="Delkapitel ${kod}"]`) as HTMLInputElement;
+    expect(kryss('6.1').checked).toBe(false);
+    await act(async () => { kryss('6.1').click(); });
+    await act(async () => { kryss('6.2').click(); });
+    expect(omfang).toBe('6.1-6.2');
+    expect(kryss('6.2').checked).toBe(true); expect(kryss('6.3').checked).toBe(false);
+    await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent === 'alla')!.click(); });
+    expect(omfang).toBe('6.1-6.3');
+    // Ett omfång med kapitel som inte finns → diagnos vid fältet och i felet
+    omfang = '6.1-6.3, 7.1-7.5'; await rita();
+    expect(div.textContent).toContain('Kapitel 7 finns inte i Spektrum Biologi');
+  });
+});

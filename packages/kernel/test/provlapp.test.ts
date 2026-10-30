@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { bokFromValfriImport } from '../src/domain/biologibok.js';
 import { byggKapitel } from '../src/domain/bok.js';
-import { djupBreddFor, fragorPerDelkapitel, labMall, nivaKarta, noOvningPunkter, omfangText, provlapp, provlappForOmfang, provlappText, tolkaOmfang } from '../src/domain/provlapp.js';
+import { djupBreddFor, fragorPerDelkapitel, labMall, nivaKarta, noOvningPunkter, omfangText, omfangUrKoder, provlapp, provlappDiagnos, provlappForOmfang, provlappText, tolkaOmfang, valbaraDelkapitel } from '../src/domain/provlapp.js';
+import { sattLektionsVal } from '../src/domain/struktur.js';
 import { importeraResultat } from '../src/domain/resultat.js';
 import { amnesPlanFor, laggTillAmne, laggTillEgenRad, laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering, sattLektionsplan, sparaBok } from '../src/domain/struktur.js';
 import { tomStruktur, type Bok, type Lektion, type Struktur } from '../src/domain/typer.js';
@@ -344,5 +345,25 @@ describe('Del 213 · NO-lappen: beskrivningar ur Socrative, Så övar du för E 
     const pm = provlapp(ma, 'am', 7, '2026-09-14')!;
     expect(pm.noOvning).toBeNull(); expect(pm.begreppKalla).toBe('bok');
     expect(provlappText(pm)).not.toContain('SÅ ÖVAR DU FÖR E');
+  });
+});
+
+describe('Del 214 · välj delkapitel med kryssrutor; omfång ur koder; diagnos när lappen inte kan byggas', () => {
+  it('omfangUrKoder slår ihop sammanhängande koder per kapitel', () => {
+    expect(omfangUrKoder(['6.1', '6.2', '6.3', '7.1', '6.5'])).toBe('6.1-6.3, 6.5, 7.1');
+    expect(omfangUrKoder(['7.3', '7.2', '7.1'])).toBe('7.1-7.3');
+    expect(omfangUrKoder([])).toBe('');
+  });
+  it('valbaraDelkapitel markerar valda och bortklippta; diagnosen pekar på kapitel som saknas i boken', () => {
+    let s = bygg(SPEKTRUM, 'Biologi');
+    s = sattLektionsVal(s, 'am', '6:7', { bort: true }, '2026-09-14');   // 6.7 bortklippt
+    const v = valbaraDelkapitel(s, 'am', '6.1-6.5', '2026-09-14');
+    expect(v.map((k) => k.nr)).toEqual([6]);
+    expect(v[0].delkapitel.map((d) => `${d.kod}${d.vald ? '✓' : ''}${d.iPlanen ? '' : '✗'}`)).toEqual(['6.1✓', '6.2✓', '6.3✓', '6.4✓', '6.5✓', '6.6', '6.7✗', '6.8']);
+    expect(provlappDiagnos(s, 'am', '6.1-6.5', '2026-09-14')).toEqual([]);
+    expect(provlappDiagnos(s, 'am', '6.1-6.5, 7.1-7.5', '2026-09-14')).toEqual(['Kapitel 7 finns inte i Spektrum Biologi – kapitel 6 (boken har kapitel 6).']);
+    expect(provlappDiagnos(s, 'am', '6.7-6.9', '2026-09-14')).toEqual(['Delkapitel 6.9 finns inte i boken — lappen byggs utan dem.']);
+    expect(provlappDiagnos(s, 'am', 'kap 6', '2026-09-14')[0]).toContain('skriv som 6.1-6.5');
+    expect(provlappDiagnos({ ...s, bocker: [] }, 'am', '6.1', '2026-09-14')).toEqual(['Ämnet saknar bok — koppla en bok under Struktur.']);
   });
 });
