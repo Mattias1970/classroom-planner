@@ -7,7 +7,7 @@ import {
   AlignmentType, BorderStyle, Document, ExternalHyperlink, Footer, Header, HeadingLevel, ImageRun, LevelFormat, Packer, PageNumber,
   Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType,
 } from 'docx';
-import { labMall, PROVLAPP_OVA_GRANS, type Betygsniva, type Provlapp } from '@planner/kernel';
+import { labMall, noOvningPunkter, PROVLAPP_OVA_GRANS, type Betygsniva, type Provlapp } from '@planner/kernel';
 import { djupBreddSvg, svgTillPng } from './provlappFigur.js';
 
 const FONT = 'Calibri';
@@ -67,7 +67,9 @@ export function provlappDokument(pl: Provlapp, farg: string, figur: Uint8Array |
   if (pl.notis !== null) {
     ut.push(p([t('Från din lärare: ', { bold: true }), t(pl.notis)]));
   }
-  ut.push(p([t('Så läser du provlappen. ', { bold: true }), t(`Del 1 är det du ska kunna, avsnitt för avsnitt. Del 2 är begreppen. Del 3 ger förslag på uppgifter i boken för varje nivå — E-nivån tränas med ${pl.nivaKarta.E}, C-nivån med ${pl.nivaKarta.C} och A-nivån med ${pl.nivaKarta.A}.`)]));
+  ut.push(p([t('Så läser du provlappen. ', { bold: true }), t(pl.noOvning !== null
+    ? 'Del 1 är det du ska kunna, avsnitt för avsnitt, med djup- och breddfrågor. Del 2 är begreppen med sina beskrivningar. Del 3 är hur du övar för E, del 4 hur du övar för C och A — med Testa dig själv-frågorna och alla filmer.'
+    : `Del 1 är det du ska kunna, avsnitt för avsnitt. Del 2 är begreppen. Del 3 ger förslag på uppgifter i boken för varje nivå — E-nivån tränas med ${pl.nivaKarta.E}, C-nivån med ${pl.nivaKarta.C} och A-nivån med ${pl.nivaKarta.A}.`)]));
 
   if (pl.kapitelMal.length > 0) {
     ut.push(h1(pl.kapitel.length > 1 ? 'Kapitlens mål' : 'Kapitlets mål'));
@@ -122,10 +124,35 @@ export function provlappDokument(pl: Provlapp, farg: string, figur: Uint8Array |
 
   if (pl.begrepp.length > 0) {
     ut.push(h1('2. Begrepp du ska kunna förklara'));
-    ut.push(p('Förklara med egna ord och ge ett exempel.'));
-    ut.push(tabell([2900, 6738], [['Begrepp', 'Förklaring'], ...pl.begrepp.map((b) => [b.begrepp, b.forklaring ?? ''])], F));
+    ut.push(p(pl.noAmne && pl.begreppKalla !== 'bok' ? 'Beskrivningarna är de från läxförhören i Socrative (senaste versionen). Förklara med egna ord och ge ett exempel.' : 'Förklara med egna ord och ge ett exempel.'));
+    ut.push(tabell([2900, 6738], [['Begrepp', pl.noAmne ? 'Beskrivning' : 'Förklaring'], ...pl.begrepp.map((b) => [b.begrepp, b.forklaring ?? ''])], F));
   }
 
+  if (pl.noOvning !== null) {
+    const { E, CA } = noOvningPunkter(pl);
+    const o = pl.noOvning;
+    ut.push(h1('3. Så övar du för E'));
+    E.forEach((x) => ut.push(punkt(x)));
+    if (o.rum.length > 0) ut.push(p([t('Socrative-rum: ', { bold: true }), t(o.rum.join(' · '))]));
+    ut.push(h1('4. Så övar du för C och A'));
+    CA.forEach((x) => ut.push(punkt(x)));
+    const tds = pl.avsnitt.filter((a) => a.testaFragor.length > 0);
+    if (tds.length > 0) {
+      ut.push(h2('Testa dig själv-frågorna'));
+      for (const a of tds) { ut.push(p([t(a.rubrik, { bold: true })], 40)); a.testaFragor.forEach((f, i) => ut.push(p(`${i + 1}. ${f}`, 30))); }
+    }
+    if (o.filmer.length > 0) {
+      ut.push(h2('Filmer på Binogi'));
+      for (const f of o.filmer) ut.push(new Paragraph({ spacing: { after: 40 }, children: [t(`${f.avsnitt.split(' ')[0]} `, { color: '777777' }), new ExternalHyperlink({ link: f.url, children: [new TextRun({ text: f.titel, font: FONT, size: 22, style: 'Hyperlink' })] }), t(`  ${f.url}`, { color: '777777', size: 18 })] }));
+    }
+    ut.push(h1('5. Checklista inför provet'));
+    [
+      'Jag kan förklara alla begreppen i del 2 med egna ord och ge ett exempel.',
+      'Jag kan berätta sammanfattningen för varje avsnitt.',
+      'Jag kan beskriva laborationerna: vad vi testade, hur vi testade och hur vi såg resultatet.',
+      'För C och A: jag kan förklara orsak och samband i flera led och har gjort Testa dig själv-frågorna och Finalen.',
+    ].forEach((c) => ut.push(kryss(c)));
+  } else {
   ut.push(h1('3. Övningsförslag för varje nivå'));
   ut.push(p('Börja med nivån under din målnivå och rätta mot facit i boken.'));
   const NIVATEXT: Record<Betygsniva, string> = {
@@ -147,6 +174,7 @@ export function provlappDokument(pl: Provlapp, farg: string, figur: Uint8Array |
     ...pl.repetitionSidor.map((r) => `Jag har läst igenom ${r}.`),
     `För C och A: jag har gjort ${pl.nivaKarta.C}-uppgifter och förklarat med ord hur jag tänkte.`,
   ].forEach((c) => ut.push(kryss(c)));
+  }
 
   return new Document({
     creator: 'Classroom Planner', title: `Provlapp ${pl.amne} ${pl.klass} ${pl.omfang ?? `kapitel ${pl.kapitelNr}`}`,

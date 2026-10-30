@@ -4,9 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { bokFromValfriImport } from '../src/domain/biologibok.js';
 import { byggKapitel } from '../src/domain/bok.js';
-import { djupBreddFor, fragorPerDelkapitel, labMall, nivaKarta, omfangText, provlapp, provlappForOmfang, provlappText, tolkaOmfang } from '../src/domain/provlapp.js';
+import { djupBreddFor, fragorPerDelkapitel, labMall, nivaKarta, noOvningPunkter, omfangText, provlapp, provlappForOmfang, provlappText, tolkaOmfang } from '../src/domain/provlapp.js';
 import { importeraResultat } from '../src/domain/resultat.js';
-import { laggTillAmne, laggTillEgenRad, laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering, sattLektionsplan, sparaBok } from '../src/domain/struktur.js';
+import { amnesPlanFor, laggTillAmne, laggTillEgenRad, laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering, sattLektionsplan, sparaBok } from '../src/domain/struktur.js';
 import { tomStruktur, type Bok, type Lektion, type Struktur } from '../src/domain/typer.js';
 
 const HAR = dirname(fileURLToPath(import.meta.url));
@@ -274,5 +274,75 @@ describe('Del 210 · begrepp från klassens läxförhör och exit tickets per de
     expect(text).toContain('• enzym – 0 % ⚠');
     // Utan resultat: tomt, ingen rubrik
     expect(provlappText(provlapp(bygg(SPEKTRUM, 'Biologi'), 'am', 8, '2026-09-14')!)).not.toContain('BEGREPP FRÅN LÄXFÖRHÖR');
+  });
+});
+
+describe('Del 213 · NO-lappen: beskrivningar ur Socrative, Så övar du för E / C och A, Testa dig själv, filmer', () => {
+  const BIO = bokFromValfriImport(JSON.stringify({
+    id: 'bio-213', titel: 'Spektrum Biologi', forlag: 'Liber', amne: 'Biologi', arskurs: 8,
+    kapitel: [{ nummer: 7, titel: 'Nervsystemet', sidor: '272–303', mal: ['hur nervsystemet fungerar'], finalen: { sidor: '302–303' }, delkapitel: [
+      { nummer: '7.1', titel: 'Så fungerar ditt nervsystem', sidor: '274–278', begrepp: ['nervimpuls', 'synaps'], extraBegrepp: [], forklaringar: { nervimpuls: 'Bokens: svag elektrisk signal.', synaps: 'Bokens: koppling mellan nervceller.' },
+        testaDigSjalv: { sida: 278, fragor: ['Vad är en nervimpuls?', 'Förklara hur nervimpulserna överförs.'] },
+        filmer: [{ titel: 'Nervsystemet', url: 'https://app.binogi.se/l/nervsystemet' }] },
+      { nummer: '7.2', titel: 'Vår hjärnbark', sidor: '279–283', begrepp: ['hippocampus'], extraBegrepp: [], testaDigSjalv: { sida: 283, fragor: ['Hur skapas minnen?'] }, filmer: [{ titel: 'Hjärnan', url: 'https://app.binogi.se/l/hjaernan' }] },
+    ] }],
+  }));
+  function no(): Struktur {
+    let s = bygg(BIO, 'Biologi');
+    s = laggTillElev(s, { id: 'e1', klassId: 'k', namn: 'Anna Berg' });
+    s = laggTillElev(s, { id: 'e2', klassId: 'k', namn: 'Omar Ali' });
+    const sv = (par: Array<[string, string, boolean]>) => par.map(([fraga, facit, ratt]) => ({ fraga, svar: ratt ? 'A' : 'B', ratt, facit }));
+    // Två versioner av förhöret — den senare har en omskriven beskrivning av nervimpuls
+    s = importeraResultat(s, { klassId: 'k', amneId: 'am', kalla: 'socrative-laxforhor', prov: 'Bi 7.1 begrepp', rum: 'Biologi71', datum: '2026-09-21', rader: [
+      { namn: 'Anna Berg', poang: 2, maxPoang: 2, svar: sv([['Gammal beskrivning av nervimpuls', 'A • nervimpuls', true], ['Koppling där signalen hoppar mellan nervceller', 'B • synaps', true]]) },
+    ] }).s;
+    s = importeraResultat(s, { klassId: 'k', amneId: 'am', kalla: 'socrative-laxforhor', prov: 'Bi 7.1 begrepp v2', rum: 'Biologi71', datum: '2026-09-28', rader: [
+      { namn: 'Anna Berg', poang: 1, maxPoang: 2, svar: sv([['Svag elektrisk signal som skickas mellan nervceller', 'A • nervimpuls', true], ['Koppling där signalen hoppar mellan nervceller', 'B • synaps', false]]) },
+      { namn: 'Omar Ali', poang: 1, maxPoang: 2, svar: sv([['Svag elektrisk signal som skickas mellan nervceller', 'A • nervimpuls', true], ['Koppling där signalen hoppar mellan nervceller', 'B • synaps', false]]) },
+    ] }).s;
+    return s;
+  }
+  const provIdx = (s: Struktur) => amnesPlanFor(s, 'am', '2026-09-14')!.a.findIndex((r) => /prov/i.test(r.lektion.avsnitt));
+
+  it('begreppens beskrivning är frågetexten i senaste förhöret; begrepp utan förhör får bokens; Testa dig själv och filmer följer med', () => {
+    const s = no();
+    const p = provlapp(s, 'am', provIdx(s), '2026-09-14')!;
+    expect(p.noAmne).toBe(true);
+    expect(p.begreppKalla).toBe('blandat');
+    const b = Object.fromEntries(p.begrepp.map((x) => [x.begrepp, x.forklaring]));
+    expect(b.nervimpuls).toBe('Svag elektrisk signal som skickas mellan nervceller');   // senaste versionen, inte bokens
+    expect(b.synaps).toBe('Koppling där signalen hoppar mellan nervceller');
+    expect(b.hippocampus).toBeNull();   // inte i förhör, ingen bokförklaring
+    expect(p.avsnitt[0].testaFragor).toEqual(['Vad är en nervimpuls?', 'Förklara hur nervimpulserna överförs.']);
+    const o = p.noOvning!;
+    expect(o.rum).toEqual(['Biologi71', 'Biologi72', 'Biologi712']);   // exit 7.1, exit 7.2, läxförhör hela kapitlet — ur bokens lektioner
+    expect(o.filmer).toEqual([{ avsnitt: '7.1 Så fungerar ditt nervsystem', titel: 'Nervsystemet', url: 'https://app.binogi.se/l/nervsystemet' }, { avsnitt: '7.2 Vår hjärnbark', titel: 'Hjärnan', url: 'https://app.binogi.se/l/hjaernan' }]);
+    expect(o.finalen).toEqual(['Finalen kapitel 7 (s. 302–303)']);
+    const { E, CA } = noOvningPunkter(p);
+    expect(E[0]).toContain('socrative.com — rum');
+    expect(E[2]).toContain('vad vi testade, hur vi testade och hur vi såg resultatet');
+    expect(E[3]).toContain('flashcards i PowerPoint');
+    expect(CA[3]).toBe('Öva på Testa dig själv-frågorna (7.1: 2 frågor, 7.2: 1 frågor).');
+    expect(CA[4]).toBe('Öva på Finalen kapitel 7 (s. 302–303).');
+    expect(CA[5]).toContain('2 filmer');
+    const text = provlappText(p);
+    expect(text).toContain('SÅ ÖVAR DU FÖR E');
+    expect(text).toContain('SÅ ÖVAR DU FÖR C OCH A');
+    expect(text).toContain('TESTA DIG SJÄLV-FRÅGOR');
+    expect(text).toContain('  1. Vad är en nervimpuls?');
+  });
+
+  it('laborationer och presentationer ur lektionsplanerna; matematik får ingen NO-övning', () => {
+    let s = no();
+    s = sattLektionsplan(s, { id: 'lp0', amneId: 'am', lektionsIndex: 0, labFraga: 'Hur snabb är din reaktionstid?', presentation: 'Nervsystemet.pptx', laxforhorRum: 'Biologi8BB' });
+    const p = provlapp(s, 'am', provIdx(s), '2026-09-14')!;
+    expect(p.noOvning!.laborationer).toEqual([{ namn: '7.1 Så fungerar ditt nervsystem', fraga: 'Hur snabb är din reaktionstid?' }]);
+    expect(p.noOvning!.presentationer).toEqual(['Nervsystemet.pptx']);
+    expect(p.noOvning!.rum[0]).toBe('Biologi8BB');
+    expect(noOvningPunkter(p).E[2]).toContain('7.1 Så fungerar ditt nervsystem (Hur snabb är din reaktionstid?)');
+    const ma = laggTillEgenRad(bygg(MATTE, 'Matematik'), 'am', { id: 'er1', position: 7, rubrik: 'Prov', typ: 'prov' }, '2026-09-14');
+    const pm = provlapp(ma, 'am', 7, '2026-09-14')!;
+    expect(pm.noOvning).toBeNull(); expect(pm.begreppKalla).toBe('bok');
+    expect(provlappText(pm)).not.toContain('SÅ ÖVAR DU FÖR E');
   });
 });

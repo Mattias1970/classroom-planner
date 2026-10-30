@@ -60,6 +60,8 @@ interface RawDelkapitel {
   egenGenomgangLank: boolean;
   /** Del 209 · bokens sammanfattning av delkapitlet och exempel på djup, bredd och labb. */
   sammanfattning?: string; djup?: string; bredd?: string; labb?: string;
+  /** Del 213 · Testa dig själv-frågornas texter. */
+  testaFragorText: string[];
 }
 
 function lasFilmer(raw: unknown): Array<{ titel: string; url: string }> {
@@ -95,6 +97,7 @@ function lasDelkapitel(raw: unknown, kapNr: number, index: number): RawDelkapite
     nummer, titel: kravStrang(r.titel, `delkapitel ${nummer}: titel`), sidor: txt(r.sidor),
     begrepp: strangLista(r.begrepp), extraBegrepp: strangLista(r.extraBegrepp),
     testaFragor: tds && typeof tds === 'object' ? strangLista(tds.fragor).length : 0,
+    testaFragorText: tds && typeof tds === 'object' ? strangLista(tds.fragor) : [],
     ...(genomgangLank !== undefined ? { genomgangLank } : {}),
     forklaringar,
     mal: strangLista(r.mal),
@@ -128,6 +131,7 @@ function delkapitelLektion(d: RawDelkapitel, index1: number, prefix: string, kap
     ...(d.djup !== undefined ? { djup: d.djup } : {}),
     ...(d.bredd !== undefined ? { bredd: d.bredd } : {}),
     ...(d.labb !== undefined ? { labb: d.labb } : {}),
+    ...(d.testaFragorText.length > 0 ? { testaFragor: d.testaFragorText } : {}),
   };
 }
 

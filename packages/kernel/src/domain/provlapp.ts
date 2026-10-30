@@ -46,10 +46,27 @@ export interface ProvlappAvsnitt {
   filmer: Array<{ titel: string; url: string }>;
   /** Del 210 · Frågorna klassen haft i läxförhör och exit tickets (Socrative) för avsnittet, med senaste andel rätt. */
   fragor: ProvlappFraga[];
+  /** Del 213 · Bokens Testa dig själv-frågor för avsnittet. */
+  testaFragor: string[];
+}
+
+/** Del 213 · Så övar du i NO: E-nivån (begrepp, sammanfattning, laborationer, flashcards) och C/A (samband, exempel, Testa dig själv, Finalen, filmer). */
+export interface NoOvning {
+  /** Socrative-rum för läxförhör och exit tickets i omfånget, i planeringsordning. */
+  rum: string[];
+  /** Laborationerna i omfångets kapitel: namn och lärarens frågeställning. */
+  laborationer: Array<{ namn: string; fraga: string | null }>;
+  /** Presentationer (PowerPoint) som använts på lektionerna — flashcards på sammanfattningen. */
+  presentationer: string[];
+  /** Finalen per kapitel ('Finalen s. 269–270'). */
+  finalen: string[];
+  /** Alla filmer i omfånget, per avsnitt. */
+  filmer: Array<{ avsnitt: string; titel: string; url: string }>;
 }
 
 /** Del 210 · En fråga ur klassens Socrative-resultat: begreppet (ur facit) eller frågetexten, och hur det gick senast. */
 export interface ProvlappFraga {
+  /** Frågetexten — i begreppsförhören är det begreppets beskrivning. */
   fraga: string;
   begrepp: string | null;
   /** Andel rätt (0–100) vid senaste tillfället frågan ställdes; null när inget bedömt svar finns. */
@@ -128,6 +145,10 @@ export interface Provlapp {
   noAmne: boolean;
   /** Del 206 · E-nivåns tre krav i ord (begrepp, sammanfattning, enkel laborationsbeskrivning för NO). */
   kravE: string[];
+  /** Del 213 · NO: så övar du för E och för C/A. null för andra ämnen. */
+  noOvning: NoOvning | null;
+  /** Del 213 · Varifrån begreppens beskrivningar kommer: Socrative (senaste versionen av läxförhören) eller boken. */
+  begreppKalla: 'socrative' | 'bok' | 'blandat';
 }
 
 /** Del 206 · Ramar för djup och bredd ur avsnittets begrepp (minst två) eller mål. null när inget finns att bygga på. */
@@ -205,6 +226,7 @@ function avsnittUrBox(s: Struktur, amneId: string, bok: Bok, b: VagBox, fragor: 
     labb: iBoken?.labb ?? null,
     filmer,
     fragor: b.kod !== null ? (fragor.get(b.kod) ?? []) : [],
+    testaFragor: iBoken?.testaFragor ?? [],
     rubrik: b.rubrik, typ: b.typ, sidor: b.sidor,
     mal: b.mal, begrepp: b.begrepp,
     uppgifter: {
@@ -250,7 +272,15 @@ function byggLapp(s: Struktur, amneId: string, bok: Bok, boxar: VagBox[], kapite
   };
   // Hela kapitlet: bokens begreppslista först; ett omfång: bara avsnittens begrepp
   const begreppOrdning = [...(omfang === null ? kapitel.flatMap((k) => k.begreppslista) : []), ...avsnitt.flatMap((a) => a.begrepp)];
-  const begrepp = [...new Set(begreppOrdning.map((b) => b.trim()).filter((b) => b !== ''))].map((b) => ({ begrepp: b, forklaring: hitta(b) }));
+  // Del 213 (NO): beskrivningen ur Socrative — begreppsförhörens frågetext är beskrivningen, facit är begreppet; senaste versionen vinner
+  const socBeskrivning = new Map<string, string>();
+  if (noAmne) for (const a of avsnitt) for (const f of a.fragor) if (f.begrepp !== null && f.fraga.trim() !== '') socBeskrivning.set(f.begrepp.toLowerCase().trim(), f.fraga.trim());
+  const socExtra = noAmne ? [...new Set(avsnitt.flatMap((a) => a.fragor).map((f) => f.begrepp).filter((b): b is string => b !== null))] : [];
+  const begrepp = [...new Set([...begreppOrdning, ...socExtra].map((b) => b.trim()).filter((b) => b !== ''))]
+    .filter((b, i, arr) => arr.findIndex((x) => x.toLowerCase() === b.toLowerCase()) === i)
+    .map((b) => ({ begrepp: b, forklaring: socBeskrivning.get(b.toLowerCase()) ?? hitta(b) }));
+  const antalSoc = begrepp.filter((b) => socBeskrivning.has(b.begrepp.toLowerCase())).length;
+  const begreppKalla: Provlapp['begreppKalla'] = antalSoc === 0 ? 'bok' : antalSoc === begrepp.length ? 'socrative' : 'blandat';
 
   const ovningar: Record<Betygsniva, ProvlappOvning[]> = { E: [], C: [], A: [] };
   for (const a of avsnitt) {
@@ -268,6 +298,7 @@ function byggLapp(s: Struktur, amneId: string, bok: Bok, boxar: VagBox[], kapite
     }
   }
   const forsta = kapitel[0];
+  const noOvning = noAmne ? byggNoOvning(s, amneId, bok, kapitel.map((k) => k.nr), avsnitt) : null;
   return {
     amne: amne.namn, klass: klass?.namn ?? '', bok: bok.titel,
     kapitelNr: forsta.nr, kapitelNamn: kapitel.length === 1 ? forsta.namn : kapitel.map((k) => `${k.nr} ${k.namn}`).join(' · '),
@@ -284,7 +315,42 @@ function byggLapp(s: Struktur, amneId: string, bok: Bok, boxar: VagBox[], kapite
       'Kunna sammanfattningen: berätta det viktigaste i varje avsnitt.',
       ...(noAmne ? ['Göra en enkel laborationsbeskrivning: vad vi söker, hur vi ser resultatet och hur resultatet kopplas till det vi söker.'] : []),
     ],
+    noOvning,
+    begreppKalla,
   };
+}
+
+/** Rumsnamnet ur ett fält som 'Biologi612 (läxförhör)' eller 'Biologi61 (exit ticket)'. */
+function rumUr(text: string | undefined): string | null {
+  if (!har(text)) return null;
+  const m = /^([A-Za-zÅÄÖåäö]+\d+)/.exec(text.trim());
+  return m === null ? null : m[1];
+}
+
+/** Del 213 · Underlaget för "Så övar du" i NO ur planeringen: rum, laborationer, presentationer, Finalen och filmer. */
+function byggNoOvning(s: Struktur, amneId: string, bok: Bok, kapitelNr: number[], avsnitt: ProvlappAvsnitt[]): NoOvning {
+  const ap = amnesPlanFor(s, amneId);
+  const rader = ap === null ? [] : ap.a.map((r, index) => ({ r, index })).filter(({ r }) => kapitelNr.includes(r.kapitel));
+  const rum: string[] = []; const presentationer: string[] = []; const laborationer: NoOvning['laborationer'] = [];
+  for (const { r, index } of rader) {
+    const lp = hamtaLektionsplan(s, amneId, index);
+    for (const x of [lp?.laxforhorRum, rumUr(r.lektion.socStart), rumUr(r.lektion.exit)]) if (har(x) && !rum.includes(x)) rum.push(x);
+    if (har(lp?.presentation) && !presentationer.includes(lp.presentation.trim())) presentationer.push(lp.presentation.trim());
+    if (r.lektion.typ === 'laboration' || (r.nyckel?.startsWith('lab:') ?? false)) {
+      const namn = lektionsNamn(r.lektion, lp);
+      if (!laborationer.some((l) => l.namn === namn)) laborationer.push({ namn, fraga: har(lp?.labFraga) ? lp.labFraga.trim() : null });
+    } else if (har(lp?.labFraga)) {
+      const fraga = lp.labFraga.trim();
+      if (!laborationer.some((l) => l.fraga === fraga)) laborationer.push({ namn: lektionsNamn(r.lektion, lp), fraga });
+    }
+  }
+  const finalen = kapitelNr.flatMap((nr) => {
+    const kap = bok.kapitel.find((k) => k.nr === nr);
+    const f = kap?.extraLektioner.find((l) => /finalen/i.test(l.avsnitt));
+    return f === undefined ? [] : [`Finalen kapitel ${nr}${har(f.sidorTeori) ? ` (s. ${f.sidorTeori.replace(/^s\.\s*/i, '')})` : ''}`];
+  });
+  const filmer = avsnitt.flatMap((a) => a.filmer.map((f) => ({ avsnitt: a.rubrik, titel: f.titel, url: f.url })));
+  return { rum, laborationer, presentationer, finalen, filmer };
 }
 
 const kapInfo = (bok: Bok, nr: number) => {
@@ -383,6 +449,43 @@ export function provlappForOmfang(s: Struktur, amneId: string, spann: Delkapitel
   return byggLapp(s, amneId, bok, boxar, kapitel, prov, omfangText(spann));
 }
 
+/** Del 213 · "Så övar du" för NO som textrader — delas av textversionen, vyn och Word. */
+export function noOvningPunkter(p: Provlapp): { E: string[]; CA: string[] } {
+  const o = p.noOvning;
+  if (o === null) return { E: [], CA: [] };
+  const E = [
+    `Träna på begreppen: begreppslistan ovan och socrative.com${o.rum.length > 0 ? ` — rum ${o.rum.join(', ')}` : ''}.`,
+    'Träna på sammanfattningen: läs den för varje avsnitt och berätta den med egna ord.',
+    `Gå igenom det viktigaste från laborationerna — vad vi testade, hur vi testade och hur vi såg resultatet${o.laborationer.length > 0 ? `: ${o.laborationer.map((l) => (l.fraga !== null ? `${l.namn} (${l.fraga})` : l.namn)).join(' · ')}` : ''}.`,
+    `Öva sammanfattningen som flashcards i PowerPoint${o.presentationer.length > 0 ? ` (${o.presentationer.join(', ')})` : ''}.`,
+  ];
+  const tds = p.avsnitt.filter((a) => a.testaFragor.length > 0);
+  const CA = [
+    'Använd begreppen när du förklarar — inte bara rabbla dem.',
+    'Öva orsak och samband i flera led: A → B → C, där varje pil svarar på varför (se djup-frågorna ovan).',
+    'Lär dig exemplen och detaljerna i varje avsnitt.',
+    `Öva på Testa dig själv-frågorna${tds.length > 0 ? ` (${tds.map((a) => `${a.rubrik.split(' ')[0]}: ${a.testaFragor.length} frågor`).join(', ')})` : ''}.`,
+    o.finalen.length > 0 ? `Öva på ${o.finalen.join(' och ')}.` : 'Öva på Finalen i slutet av kapitlet.',
+    `Se filmerna på Binogi${o.filmer.length > 0 ? ` — alla länkar nedan (${o.filmer.length} filmer)` : ''}.`,
+  ];
+  return { E, CA };
+}
+
+function noOvningText(p: Provlapp): string[] {
+  const { E, CA } = noOvningPunkter(p);
+  const r: string[] = [];
+  r.push(''); r.push('SÅ ÖVAR DU FÖR E');
+  E.forEach((x) => r.push(`• ${x}`));
+  r.push(''); r.push('SÅ ÖVAR DU FÖR C OCH A');
+  CA.forEach((x) => r.push(`• ${x}`));
+  const tds = p.avsnitt.filter((a) => a.testaFragor.length > 0);
+  if (tds.length > 0) {
+    r.push(''); r.push('TESTA DIG SJÄLV-FRÅGOR');
+    for (const a of tds) { r.push(a.rubrik); a.testaFragor.forEach((f, i) => r.push(`  ${i + 1}. ${f}`)); }
+  }
+  return r;
+}
+
 /** Provlappen som ren text (förhandsvisning, urklipp, Classroom-inlägg). */
 export function provlappText(p: Provlapp): string {
   const r: string[] = [];
@@ -425,6 +528,9 @@ export function provlappText(p: Provlapp): string {
     r.push('Laborationsbeskrivning i tre steg:');
     const fragor = p.avsnitt.flatMap((a) => a.labFragor);
     labMall(fragor[0] ?? null).forEach((m) => r.push(`  ${m.steg} ${m.text}`));
+  }
+  if (p.noOvning !== null) {
+    noOvningText(p).forEach((rad) => r.push(rad));
   }
   if (p.begrepp.length > 0) {
     r.push(''); r.push('BEGREPP DU SKA KUNNA FÖRKLARA');

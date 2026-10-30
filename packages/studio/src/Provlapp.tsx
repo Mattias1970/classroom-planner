@@ -6,7 +6,7 @@
  * (hjälpmedel, tider) sparas på lektionsplanen och tas med på lappen.
  */
 import { useState } from 'react';
-import { labMall, provlapp, provlappText, PROVLAPP_OVA_GRANS, tolkaOmfang, type Betygsniva, type Provlapp as ProvlappData, type Struktur } from '@planner/kernel';
+import { labMall, noOvningPunkter, provlapp, provlappText, PROVLAPP_OVA_GRANS, tolkaOmfang, type Betygsniva, type Provlapp as ProvlappData, type Struktur } from '@planner/kernel';
 import { lasStruktur } from './store.js';
 import { djupBreddDataUrl } from './provlappFigur.js';
 
@@ -123,20 +123,47 @@ function ProvlappVisning({ p, farg }: { p: ProvlappData; farg: string }) {
 
       {p.begrepp.length > 0 && (<>
         <h4>2. Begrepp du ska kunna förklara</h4>
-        <table className="tbl small"><thead><tr><th>Begrepp</th><th>Förklaring</th></tr></thead>
+        {p.noAmne && <p className="small muted">{p.begreppKalla === 'socrative' ? 'Beskrivningarna är de från läxförhören i Socrative (senaste versionen).' : p.begreppKalla === 'blandat' ? 'Beskrivningarna är de från läxförhören i Socrative (senaste versionen); begrepp som inte varit med i ett förhör har bokens förklaring.' : 'Beskrivningarna är bokens — inga läxförhör med facit finns än för de här begreppen.'}</p>}
+        <table className="tbl small"><thead><tr><th>Begrepp</th><th>{p.noAmne ? 'Beskrivning' : 'Förklaring'}</th></tr></thead>
           <tbody>{p.begrepp.map((b) => <tr key={b.begrepp}><td><b>{b.begrepp}</b></td><td>{b.forklaring ?? <span className="muted">—</span>}</td></tr>)}</tbody></table>
       </>)}
 
-      <h4>3. Vad krävs för E, C och A?</h4>
-      <p className="small">E tränas med <b>{p.nivaKarta.E}</b>, C med <b>{p.nivaKarta.C}</b>, A med <b>{p.nivaKarta.A}</b>. E: metoderna rätt på grundläggande uppgifter. C: flera steg, förklara varför, bedöma rimlighet. A: egen strategi, generalisera och motivera.</p>
+      {p.noOvning !== null ? <NoOvningVy p={p} /> : (<>
+        <h4>3. Vad krävs för E, C och A?</h4>
+        <p className="small">E tränas med <b>{p.nivaKarta.E}</b>, C med <b>{p.nivaKarta.C}</b>, A med <b>{p.nivaKarta.A}</b>. E: metoderna rätt på grundläggande uppgifter. C: flera steg, förklara varför, bedöma rimlighet. A: egen strategi, generalisera och motivera.</p>
 
-      <h4>4. Övningsförslag för varje nivå</h4>
-      <table className="tbl small provlapp-ovningar"><thead><tr><th>Nivå</th><th>Uppgifter i boken</th></tr></thead>
-        <tbody>{NIVAER.map((n) => (
-          <tr key={n}><td><b>{n}</b> <span className="muted">({p.nivaKarta[n]})</span></td>
-            <td>{p.ovningar[n].length === 0 ? <span className="muted">—</span> : <ul style={{ margin: 0, paddingLeft: 18 }}>{p.ovningar[n].map((o, i) => <li key={i}><b>{o.avsnitt}:</b> {o.uppgifter}</li>)}</ul>}</td></tr>
-        ))}</tbody></table>
-      {p.repetitionSidor.length > 0 && <p className="small"><b>Läs igenom:</b> {p.repetitionSidor.join(' · ')}</p>}
+        <h4>4. Övningsförslag för varje nivå</h4>
+        <table className="tbl small provlapp-ovningar"><thead><tr><th>Nivå</th><th>Uppgifter i boken</th></tr></thead>
+          <tbody>{NIVAER.map((n) => (
+            <tr key={n}><td><b>{n}</b> <span className="muted">({p.nivaKarta[n]})</span></td>
+              <td>{p.ovningar[n].length === 0 ? <span className="muted">—</span> : <ul style={{ margin: 0, paddingLeft: 18 }}>{p.ovningar[n].map((o, i) => <li key={i}><b>{o.avsnitt}:</b> {o.uppgifter}</li>)}</ul>}</td></tr>
+          ))}</tbody></table>
+        {p.repetitionSidor.length > 0 && <p className="small"><b>Läs igenom:</b> {p.repetitionSidor.join(' · ')}</p>}
+      </>)}
+    </div>
+  );
+}
+
+/** Del 213 · NO: Så övar du för E, så övar du för C och A, Testa dig själv-frågorna och alla filmer. */
+function NoOvningVy({ p }: { p: ProvlappData }) {
+  const { E, CA } = noOvningPunkter(p);
+  const o = p.noOvning!;
+  const tds = p.avsnitt.filter((a) => a.testaFragor.length > 0);
+  return (
+    <div className="provlapp-no-ovning">
+      <h4>3. Så övar du för E</h4>
+      <ul>{E.map((x, i) => <li key={i}>{x}</li>)}</ul>
+      {o.rum.length > 0 && <p className="small"><b>Socrative-rum:</b> {o.rum.map((r) => <code key={r} style={{ marginRight: 6 }}>{r}</code>)}</p>}
+      <h4>4. Så övar du för C och A</h4>
+      <ul>{CA.map((x, i) => <li key={i}>{x}</li>)}</ul>
+      {tds.length > 0 && (<>
+        <h4>Testa dig själv-frågorna</h4>
+        {tds.map((a) => <div key={a.rubrik} className="provlapp-tds"><b className="small">{a.rubrik}</b><ol className="small">{a.testaFragor.map((f, i) => <li key={i}>{f}</li>)}</ol></div>)}
+      </>)}
+      {o.filmer.length > 0 && (<>
+        <h4>Filmer på Binogi</h4>
+        <ul className="small">{o.filmer.map((f, i) => <li key={i}><span className="muted">{f.avsnitt.split(' ')[0]}</span> <a href={f.url} target="_blank" rel="noreferrer">{f.titel}</a> <small className="muted">{f.url}</small></li>)}</ul>
+      </>)}
     </div>
   );
 }

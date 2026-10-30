@@ -6,7 +6,7 @@ import { createRoot } from 'react-dom/client';
 import JSZip from 'jszip';
 import { Packer } from 'docx';
 import {
-  byggKapitel, laggTillAmne, laggTillEgenRad, laggTillKlass, laggTillSkolar, laggTillTjanst, provlapp, provlappForOmfang, registreraPlanering,
+  amnesPlanFor, bokFromValfriImport, byggKapitel, laggTillAmne, laggTillEgenRad, laggTillKlass, laggTillSkolar, laggTillTjanst, provlapp, provlappForOmfang, registreraPlanering,
   resetIdRaknare, sattLektionsplan, sparaBok, tomStruktur, type Bok, type Lektion, type Struktur,
 } from '@planner/kernel';
 import { ProvlappPanel } from '../src/Provlapp';
@@ -184,5 +184,46 @@ describe('Del 209 · bokens exempel, labb och filmer på skärm och i Word', () 
     expect(text).toContain('Labb (E): Labb: vad söker vi');
     expect(text).toContain('Bråk på Binogi');
     expect(await zip.file('word/_rels/document.xml.rels')!.async('string')).toContain('https://app.binogi.se/l/brak');
+  });
+});
+
+describe('Del 213 · NO-lappen på skärm och i Word: Så övar du för E / C och A, Testa dig själv, filmer', () => {
+  const BIO = bokFromValfriImport(JSON.stringify({
+    id: 'bio-213', titel: 'Spektrum Biologi', forlag: 'Liber', amne: 'Biologi', arskurs: 8,
+    kapitel: [{ nummer: 7, titel: 'Nervsystemet', sidor: '272–303', delkapitel: [
+      { nummer: '7.1', titel: 'Så fungerar ditt nervsystem', sidor: '274–278', begrepp: ['nervimpuls'], extraBegrepp: [], forklaringar: { nervimpuls: 'Svag elektrisk signal.' }, testaDigSjalv: { sida: 278, fragor: ['Vad är en nervimpuls?'] }, filmer: [{ titel: 'Nervsystemet', url: 'https://app.binogi.se/l/nervsystemet' }] },
+    ] }],
+  }));
+  function bio(): Struktur {
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '26/27', start: '2026-09-14', slut: '2027-06-11', dagar: [] });
+    s = sparaBok(s, BIO);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'am', klassId: 'k', namn: 'Biologi', bokId: BIO.id, schema: [{ dag: 1, start: '08:10', slut: '09:10' }] });
+    return registreraPlanering(s, { id: 'pl', amneId: 'am', bokId: BIO.id, skapad: '2026-09-10' });
+  }
+  const provIdx = (s: Struktur) => amnesPlanFor(s, 'am', '2026-09-14')!.a.findIndex((r) => /prov/i.test(r.lektion.avsnitt));
+  it('skärm', async () => {
+    const s = bio(); sparaStruktur(s);
+    const div = document.createElement('div'); document.body.appendChild(div);
+    await act(async () => createRoot(div).render(<ProvlappPanel s={s} amneId="am" lektionsIndex={provIdx(s)} farg="#2e7d32" notis="" sattNotis={() => {}} />));
+    await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Generera provlapp'))!.click(); });
+    const vy = div.querySelector('[role="document"]')!;
+    expect(vy.textContent).toContain('3. Så övar du för E');
+    expect(vy.textContent).toContain('socrative.com — rum Biologi71');
+    expect(vy.textContent).toContain('4. Så övar du för C och A');
+    expect(vy.textContent).toContain('Testa dig själv-frågorna');
+    expect(vy.textContent).toContain('Vad är en nervimpuls?');
+    expect(vy.textContent).toContain('Filmer på Binogi');
+    expect(vy.textContent).not.toContain('Övningsförslag för varje nivå');
+    expect(vy.querySelectorAll('a[href="https://app.binogi.se/l/nervsystemet"]').length).toBeGreaterThanOrEqual(2);   // under avsnittet och i filmlistan
+  });
+  it('Word', async () => {
+    const s = bio();
+    const p = provlapp(s, 'am', provIdx(s), '2026-09-14')!;
+    const zip = await JSZip.loadAsync(await Packer.toBuffer(provlappDokument(p, '#2e7d32')));
+    const text = (await zip.file('word/document.xml')!.async('string')).replace(/<[^>]+>/g, '');
+    for (const del of ['3. Så övar du för E', 'Socrative-rum: Biologi71', '4. Så övar du för C och A', 'Testa dig själv-frågorna', '1. Vad är en nervimpuls?', 'Filmer på Binogi', '5. Checklista inför provet', 'vad vi testade, hur vi testade och hur vi såg resultatet']) expect(text).toContain(del);
+    expect(text).not.toContain('Övningsförslag för varje nivå');
   });
 });

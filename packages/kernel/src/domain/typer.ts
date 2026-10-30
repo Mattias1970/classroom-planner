@@ -276,6 +276,8 @@ export interface Lektion {
   bredd?: string;
   /** Del 209 · Exempel på enkel laborationsbeskrivning på E-nivå (vad vi söker, hur vi ser resultatet, koppling). */
   labb?: string;
+  /** Del 213 · Bokens "Testa dig själv"-frågor för delkapitlet (frågetexterna). */
+  testaFragor?: string[];
   socStart: string;
   /** Exit ticket-uppgift om boken anger en. */
   exit: string;
