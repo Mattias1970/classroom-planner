@@ -13,6 +13,7 @@
 import type { DashboardFilter } from './dashboard.js';
 import { koderForProv } from './delkapitelkoder.js';
 import { planForAmne } from './studieguide.js';
+import { amnesPlanFor } from './struktur.js';
 import type { Struktur } from './typer.js';
 
 export type Omfang = 'kapitel' | 'termin' | 'no-termin' | 'no-lasar' | 'allt';
@@ -88,4 +89,38 @@ export function omfangFilter(s: Struktur, klassId: string, amneId: string, omfan
   const namn = s.amnen.filter((a) => ids.includes(a.id)).map((a) => a.namn).join(', ') || 'inga NO-ämnen';
   const t = omfang === 'no-termin' ? terminIntervall(idag) : lasarIntervall(s, idag);
   return { filter: { amneIds: ids, fran: t.fran, till: t.till }, etikett: `${t.namn} · ${namn}`, kapitel: null };
+}
+
+// ── Del 212 · Period som veckor eller kapitel ───────────────────────────────────
+
+export interface KapitelVeckor {
+  nr: number;
+  namn: string;
+  /** Första och sista ISO-veckan med en planerad lektion i kapitlet (prov inräknat). */
+  veckaFran: number;
+  veckaTill: number;
+  lektioner: number;
+}
+
+/** Ämnets kapitel med veckospann ur planeringen — underlag för att välja period per kapitel. Tomt utan bok/planering. */
+export function kapitelVeckor(s: Struktur, amneId: string, idag?: string): KapitelVeckor[] {
+  const amne = s.amnen.find((a) => a.id === amneId);
+  const bok = s.bocker.find((b) => b.id === amne?.bokId);
+  const ap = amnesPlanFor(s, amneId, idag);
+  if (amne === undefined || bok === undefined || ap === null) return [];
+  const ut: KapitelVeckor[] = [];
+  for (const r of ap.a) {
+    if (r.vecka === null || r.datum === null) continue;
+    let k = ut.find((x) => x.nr === r.kapitel);
+    if (k === undefined) { k = { nr: r.kapitel, namn: bok.kapitel.find((x) => x.nr === r.kapitel)?.namn ?? `Kapitel ${r.kapitel}`, veckaFran: r.vecka, veckaTill: r.vecka, lektioner: 0 }; ut.push(k); }
+    k.lektioner += 1; k.veckaTill = r.vecka;   // raderna ligger i datumordning — sista blir sista veckan
+  }
+  return ut;
+}
+
+/** 'v.38–44' för ett eller flera (sammanhängande i planeringen) kapitel; null när inget valts. */
+export function periodTextForKapitel(kap: KapitelVeckor[], nr: number[]): string | null {
+  const valda = kap.filter((k) => nr.includes(k.nr));
+  if (valda.length === 0) return null;
+  return `v.${valda[0].veckaFran}–${valda[valda.length - 1].veckaTill}`;
 }

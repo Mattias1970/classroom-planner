@@ -29,7 +29,7 @@ import {
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   arFilImporterad, arRatt, andraKalla, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
   delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, enkelRapport, studieguide, rapportOversikt, forklaring, niva, type ForklaringId,
-  omfangFilter, OMFANG_NAMN, type Omfang, type OmfangResultat, begreppForFraga, harmoniseraOvningar, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
+  omfangFilter, kapitelVeckor, OMFANG_NAMN, type Omfang, type OmfangResultat, begreppForFraga, harmoniseraOvningar, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, laggTillSaknadeElever, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
@@ -64,6 +64,7 @@ import { arkiveraFiler, tagVantandeFiler, uppladdningsText, useVantandeFiler } f
 import { Skal, Kort, type Filter, type V3Vy } from './v3/Skal.js';
 import { Oversikt } from './v3/Oversikt.js';
 import { Lasaret } from './Lasaret.js';
+import { PeriodFilter } from './PeriodFilter.js';
 import { Amnessida } from './v3/Amnessida.js';
 import { Classroom } from './v3/Classroom.js';
 import { Foraldrakontakt } from './v3/Foraldrakontakt.js';
@@ -4230,6 +4231,8 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
   const [klassLage, setKlassLage] = useState<'normerad' | 'spridning' | 'kurva'>('normerad');
   const [klusterPa, setKlusterPa] = useState<Kluster[]>(['stigande', 'stabil', 'riskzon', 'ojamn']);
   const period = tolkaVeckor(periodText);
+  const idagP = new Date().toISOString().slice(0, 10);
+  const kapVeckor = useMemo(() => (amneId !== '' ? kapitelVeckor(sIn, amneId, idagP) : []), [sIn, amneId, idagP]);
   const [dag, setDag] = useState('');
   // Omfånget (kapitel / termin / alla NO) läggs under periodfältet: skriver man en period gäller den
   const omfF = omfang?.filter ?? {};
@@ -4333,9 +4336,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
   return (
     <div className="st-dash">
       <div className="rad" style={{ flexWrap: 'wrap', gap: 8 }}>
-        <label>Period:{' '}
-          <input aria-label="Period (veckor)" placeholder="v.35–43" value={periodText} size={8}
-            onChange={(e) => setPeriodText(e.target.value)} className={periodText !== '' && period === null ? 'fel' : undefined} /></label>
+        <PeriodFilter periodText={periodText} setPeriodText={setPeriodText} kapitel={kapVeckor} idag={idagP} />
         <label>Dag:{' '}
           <select aria-label="Lektionsdag" value={dag} onChange={(e) => setDag(e.target.value)}>
             <option value="">alla</option>

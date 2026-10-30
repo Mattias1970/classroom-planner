@@ -2970,7 +2970,7 @@ describe('Del 141: elevfilter för hela dashboarden, fällbara widgets, fråga +
 
   it('elevfiltret ligger i filterraden, kluster/närvaro/bocklista väljer elever och alla grafer följer urvalet', async () => {
     const host = await fixtur();
-    const filter = host.querySelector('.st-elevfilter')!;
+    const filter = host.querySelector('.st-elevfilter:not(.st-periodfilter)')!;
     expect(filter.querySelector('summary')!.textContent).toContain('Alla elever');
     expect(filter.querySelector('summary')!.textContent).toContain('(3)');
     // Frågematris och Elev × prov visar tre elever
@@ -3978,7 +3978,7 @@ describe('Del 211: elevfiltret stängs när man valt, klickar utanför eller try
     const host = render();
     act(() => { knapp(host, '📊 SuperTeach').click(); });
     valj(select(host, 'SuperTeach ämne'), 'bi');
-    const filter = () => host.querySelector<HTMLDetailsElement>('.st-elevfilter')!;
+    const filter = () => host.querySelector<HTMLDetailsElement>('.st-elevfilter:not(.st-periodfilter)')!;
     const oppna = () => act(() => { filter().querySelector('summary')!.dispatchEvent(new Event('click', { bubbles: true })); filter().open = true; filter().dispatchEvent(new Event('toggle')); });
     oppna();
     expect(filter().open).toBe(true);
@@ -4001,5 +4001,46 @@ describe('Del 211: elevfiltret stängs när man valt, klickar utanför eller try
     oppna();
     act(() => { (filter().querySelector('button[aria-label="Stäng elevfiltret"]') as HTMLButtonElement).click(); });
     expect(filter().open).toBe(false);
+  });
+});
+
+describe('Del 212: perioden i SuperTeach väljs som veckor eller kapitel', () => {
+  it('kapitelchip sätter veckorna ur planeringen och stänger menyn; chippen lyser när veckorna matchar; ✕ nollställer', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-10-30T10:00:00Z'));
+    localStorage.setItem('cp.layout', JSON.stringify('v2'));
+    const { bokFromValfriImport, laggTillAmne, laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering, sparaBok, tomStruktur } = await import('@planner/kernel');
+    const bok = bokFromValfriImport(JSON.stringify({ id: 'bio', titel: 'Biologi', forlag: 'L', amne: 'Biologi', arskurs: 8, kapitel: [
+      { nummer: 6, titel: 'Kroppen', sidor: '1–2', delkapitel: [{ nummer: '6.1', titel: 'Celler', sidor: '1', begrepp: ['cell'], extraBegrepp: [], testaDigSjalv: { sida: 1, fragor: [] } }, { nummer: '6.2', titel: 'Maten', sidor: '2', begrepp: ['enzym'], extraBegrepp: [], testaDigSjalv: { sida: 2, fragor: [] } }] },
+      { nummer: 7, titel: 'Nerver', sidor: '3–4', delkapitel: [{ nummer: '7.1', titel: 'Nervsystemet', sidor: '3', begrepp: ['synaps'], extraBegrepp: [], testaDigSjalv: { sida: 3, fragor: [] } }] },
+    ] }));
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = sparaBok(s, bok);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', bokId: bok.id, schema: [{ dag: 2, start: '10:00', slut: '11:00' }] });
+    s = registreraPlanering(s, { id: 'p', amneId: 'bi', bokId: bok.id, skapad: '2026-08-10' });
+    s = laggTillElev(s, { id: 'a', klassId: 'k', namn: 'Anna Testsson' });
+    window.localStorage.setItem('classroom-planner.studio.v2', JSON.stringify(s));
+    const host = render();
+    act(() => { knapp(host, '📊 SuperTeach').click(); });
+    valj(select(host, 'SuperTeach ämne'), 'bi');
+    const pf = () => host.querySelector<HTMLDetailsElement>('.st-periodfilter')!;
+    expect(pf().querySelector('summary')!.textContent).toContain('Alla veckor');
+    act(() => { pf().open = true; pf().dispatchEvent(new Event('toggle')); });
+    const chips = [...pf().querySelectorAll<HTMLButtonElement>('.chipbtn')].filter((b) => /^Kap \d/.test(b.textContent ?? ''));
+    expect(chips.map((b) => b.textContent)).toEqual(['Kap 6 v.34–36', 'Kap 7 v.37–38']);
+    act(() => { chips[0].click(); });
+    expect(pf().open).toBe(false);
+    expect(pf().querySelector('summary')!.textContent).toContain('v.34–36 · Kap 6');
+    expect(input(host, 'Period (veckor)').value).toBe('v.34–36');
+    // Två kapitel i rad → ett spann
+    act(() => { pf().open = true; pf().dispatchEvent(new Event('toggle')); });
+    act(() => { [...pf().querySelectorAll<HTMLButtonElement>('.chipbtn')].find((b) => b.textContent?.startsWith('Kap 7'))!.click(); });
+    expect(pf().querySelector('summary')!.textContent).toContain('v.34–38 · Kap 6, 7');
+    // ✕ i rubriken nollställer
+    act(() => { (pf().querySelector('button[aria-label="Visa alla veckor"]') as HTMLButtonElement).click(); });
+    expect(pf().querySelector('summary')!.textContent).toContain('Alla veckor');
+    vi.useRealTimers();
   });
 });

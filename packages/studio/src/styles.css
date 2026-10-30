@@ -1362,3 +1362,5 @@ input.fel { border-color: #B71C1C; }
 .provlapp-lab ol { margin: 4px 0 0; padding-left: 20px; }
 .provlapp-sammanfattning { margin: 2px 0; }
 .provlapp-ova { color: #b00020; font-weight: 700; }
+/* Del 212 · periodfiltret delar utseende med elevfiltret */
+.st-periodfilter .st-elevfilter-panel { min-width: 420px; }
