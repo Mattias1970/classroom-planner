@@ -3959,3 +3959,47 @@ describe('Del 207: Planering hoppar inte mellan ämnen när samma ämnesnamn fin
     vi.useRealTimers();
   });
 });
+
+describe('Del 211: elevfiltret stängs när man valt, klickar utanför eller trycker Esc', () => {
+  it('kluster-klick stänger menyn; klick utanför och Esc stänger; elevbock håller den öppen; ✕ stänger', async () => {
+    localStorage.setItem('cp.layout', JSON.stringify('v2'));
+    const { bokFromValfriImport, importeraResultat, laggTillAmne, laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering, sparaBok, tomStruktur } = await import('@planner/kernel');
+    const bok = bokFromValfriImport(JSON.stringify({ id: 'bio', titel: 'Biologi', forlag: 'L', amne: 'Biologi', arskurs: 8, kapitel: [{ nummer: 6, titel: 'Kroppen', sidor: '1–2', delkapitel: [{ nummer: '6.1', titel: 'Celler', sidor: '1', begrepp: ['cell'], extraBegrepp: [], testaDigSjalv: { sida: 1, fragor: [] } }] }] }));
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = sparaBok(s, bok);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', bokId: bok.id, schema: [{ dag: 2, start: '10:00', slut: '11:00' }] });
+    s = registreraPlanering(s, { id: 'p', amneId: 'bi', bokId: bok.id, skapad: '2026-08-10' });
+    s = laggTillElev(s, { id: 'a', klassId: 'k', namn: 'Anna Testsson' });
+    s = laggTillElev(s, { id: 'b', klassId: 'k', namn: 'Omar Provlund' });
+    for (let i = 0; i < 3; i++) s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-laxforhor', prov: `L${i}`, rum: 'Biologi61', datum: `2026-09-0${i + 1}`, rader: [{ namn: 'Anna Testsson', poang: 9, maxPoang: 10 }, { namn: 'Omar Provlund', poang: 3, maxPoang: 10 }] }).s;
+    window.localStorage.setItem('classroom-planner.studio.v2', JSON.stringify(s));
+    const host = render();
+    act(() => { knapp(host, '📊 SuperTeach').click(); });
+    valj(select(host, 'SuperTeach ämne'), 'bi');
+    const filter = () => host.querySelector<HTMLDetailsElement>('.st-elevfilter')!;
+    const oppna = () => act(() => { filter().querySelector('summary')!.dispatchEvent(new Event('click', { bubbles: true })); filter().open = true; filter().dispatchEvent(new Event('toggle')); });
+    oppna();
+    expect(filter().open).toBe(true);
+    // Klusterval stänger
+    const chip = [...filter().querySelectorAll<HTMLButtonElement>('.st-klusterchip')].find((b) => !b.disabled)!;
+    act(() => { chip.click(); });
+    expect(filter().open).toBe(false);
+    expect(filter().querySelector('summary')!.textContent).toContain('av 2 elever');
+    // Klick utanför stänger
+    oppna(); expect(filter().open).toBe(true);
+    act(() => { document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); });
+    expect(filter().open).toBe(false);
+    // Elevbock håller öppen; Esc stänger
+    oppna();
+    act(() => { (filter().querySelector('input[aria-label="Elev Anna Testsson"]') as HTMLInputElement).click(); });
+    expect(filter().open).toBe(true);
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+    expect(filter().open).toBe(false);
+    // ✕-knappen i panelen stänger
+    oppna();
+    act(() => { (filter().querySelector('button[aria-label="Stäng elevfiltret"]') as HTMLButtonElement).click(); });
+    expect(filter().open).toBe(false);
+  });
+});

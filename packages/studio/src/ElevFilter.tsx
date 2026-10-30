@@ -6,7 +6,7 @@
  * räknas i kernel (`elevUrval`) på den ofiltrerade klassen och begränsar sedan
  * alla grafer via `begransaTillElever`.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { KLUSTER_NAMN, type Elev, type ElevNarvaro, type ElevUrvalVal, type Kluster, type KlusterGrupp } from '@planner/kernel';
 
 const KLUSTER_ORDNING: Kluster[] = ['stigande', 'stabil', 'riskzon', 'ojamn'];
@@ -25,6 +25,18 @@ export function ElevFilter({ elever, kluster, narvaro, val, valda, etikett, onVa
 }) {
   const [sok, setSok] = useState('');
   const [oppen, setOppen] = useState(false);
+  // Del 211: menyn stängs när man klickar utanför, trycker Esc eller väljer ett kluster/närvaroval —
+  // rubriken visar redan urvalet. Elevlistan hålls öppen (flera bockar) tills man stänger.
+  const ref = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    if (!oppen) return;
+    const klick = (ev: MouseEvent) => { if (ref.current !== null && !ref.current.contains(ev.target as Node)) setOppen(false); };
+    const tangent = (ev: KeyboardEvent) => { if (ev.key === 'Escape') setOppen(false); };
+    document.addEventListener('mousedown', klick);
+    document.addEventListener('keydown', tangent);
+    return () => { document.removeEventListener('mousedown', klick); document.removeEventListener('keydown', tangent); };
+  }, [oppen]);
+  const valjOchStang = (v: ElevUrvalVal) => { onVal(v); setOppen(false); };
   const narvGrans = val.typ === 'narvaro' ? val.grans : 80;
   const narvRiktning = val.typ === 'narvaro' ? val.riktning : 'under';
   const aktivaKluster = val.typ === 'kluster' ? val.kluster : [];
@@ -39,7 +51,7 @@ export function ElevFilter({ elever, kluster, narvaro, val, valda, etikett, onVa
   };
   const traff = elever.filter((e) => sok.trim() === '' || e.namn.toLowerCase().includes(sok.trim().toLowerCase()));
   return (
-    <details className={`st-elevfilter${filtrerat ? ' aktiv' : ''}`} open={oppen} onToggle={(e) => setOppen((e.target as HTMLDetailsElement).open)}>
+    <details ref={ref} className={`st-elevfilter${filtrerat ? ' aktiv' : ''}`} open={oppen} onToggle={(e) => setOppen((e.target as HTMLDetailsElement).open)}>
       <summary aria-label="Elevfilter" title="Välj vilka elever alla grafer ska räknas på">
         <span className="st-elevfilter-ikon" aria-hidden="true">👥</span>
         <span className="st-elevfilter-text">{filtrerat ? <><b>{antal}</b> av {elever.length} elever · {etikett}</> : <>Alla elever <small className="muted">({elever.length})</small></>}</span>
@@ -47,7 +59,10 @@ export function ElevFilter({ elever, kluster, narvaro, val, valda, etikett, onVa
           onClick={(ev) => { ev.preventDefault(); ev.stopPropagation(); onVal({ typ: 'alla' }); }}>✕</button>}
       </summary>
       <div className="st-elevfilter-panel">
-        <p className="small muted st-elevfilter-hjalp">Urvalet gäller alla grafer och tabeller på sidan — kort, frågematris, trendkoll, kluster och närvaro.</p>
+        <div className="rad" style={{ gap: 8, alignItems: 'flex-start' }}>
+          <p className="small muted st-elevfilter-hjalp" style={{ flex: 1 }}>Urvalet gäller alla grafer och tabeller på sidan — kort, frågematris, trendkoll, kluster och närvaro. Menyn stängs när du valt, klickar utanför eller trycker Esc.</p>
+          <button type="button" className="icon-btn" aria-label="Stäng elevfiltret" title="Stäng (Esc)" onClick={() => setOppen(false)}>✕</button>
+        </div>
 
         <div className="st-elevfilter-rad">
           <span className="st-elevfilter-etikett">✨ Trendkluster</span>
@@ -60,7 +75,7 @@ export function ElevFilter({ elever, kluster, narvaro, val, valda, etikett, onVa
                 <button key={k} type="button" className={`chipbtn st-klusterchip${pa ? ' act' : ''}`} aria-pressed={pa} disabled={n === 0}
                   style={{ '--kluster': KLUSTER_FARG[k] } as React.CSSProperties}
                   title={n === 0 ? 'Inga elever i klustret' : `${n} elever — klicka för att välja dem`}
-                  onClick={() => onVal({ typ: 'kluster', kluster: pa ? aktivaKluster.filter((x) => x !== k) : [...aktivaKluster, k] })}>
+                  onClick={() => valjOchStang({ typ: 'kluster', kluster: pa ? aktivaKluster.filter((x) => x !== k) : [...aktivaKluster, k] })}>
                   <i aria-hidden="true" /> {KLUSTER_NAMN[k]} <small>{n}</small>
                 </button>
               );
@@ -82,7 +97,7 @@ export function ElevFilter({ elever, kluster, narvaro, val, valda, etikett, onVa
               onChange={(e) => onVal({ typ: 'narvaro', grans: Number(e.target.value), riktning: narvRiktning })} /> %
           </label>
           <button type="button" className={`chipbtn${val.typ === 'narvaro' ? ' act' : ''}`} aria-pressed={val.typ === 'narvaro'}
-            onClick={() => onVal({ typ: 'narvaro', grans: narvGrans, riktning: narvRiktning })}>
+            onClick={() => valjOchStang({ typ: 'narvaro', grans: narvGrans, riktning: narvRiktning })}>
             {narvRiktning === 'under' ? '⬇' : '⬆'} välj elever med närvaro {narvRiktning === 'under' ? 'under' : 'minst'} {narvGrans} %
           </button>
         </div>
@@ -94,7 +109,7 @@ export function ElevFilter({ elever, kluster, narvaro, val, valda, etikett, onVa
               <input aria-label="Sök elev i filtret" placeholder="sök…" value={sok} onChange={(e) => setSok(e.target.value)} />
               <button type="button" className="chipbtn" onClick={() => onVal({ typ: 'elever', elevIds: traff.map((e) => e.id), etikett: sok.trim() === '' ? undefined : `"${sok.trim()}"` })}>alla {traff.length}</button>
               <button type="button" className="chipbtn" onClick={() => onVal({ typ: 'elever', elevIds: [] })}>inga</button>
-              <button type="button" className={`chipbtn${!filtrerat ? ' act' : ''}`} onClick={() => onVal({ typ: 'alla' })}>✕ visa alla elever</button>
+              <button type="button" className={`chipbtn${!filtrerat ? ' act' : ''}`} onClick={() => valjOchStang({ typ: 'alla' })}>✕ visa alla elever</button>
             </div>
             <div className="st-elevfilter-elever">
               {traff.map((e) => {
