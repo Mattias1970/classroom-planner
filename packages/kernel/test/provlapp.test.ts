@@ -234,7 +234,7 @@ describe('Del 209 · bokens sammanfattning, djup/bredd/labb-exempel och filmer p
     expect(a71.filmer).toEqual([{ titel: 'Nervsystemet', url: 'https://app.binogi.se/l/nervsystemet' }, { titel: 'Nervreflexer', url: 'https://app.binogi.se/l/nervreflexer' }]);
     const a72 = p.avsnitt.find((a) => a.rubrik.startsWith('7.2'))!;
     expect(a72.sammanfattning).toEqual([]);
-    expect(a72.djupBredd?.djup).toContain('Förklara i flera led hur hjärncentra hänger ihop med hippocampus');   // ramen
+    expect(a72.djupBredd).toBeNull();   // Del 216: ingen hopsatt ram i NO — bara bokens exempel
     expect(a72.labb).toBeNull(); expect(a72.filmer).toEqual([]);
     // Lärarens egen sammanfattning går före bokens
     const s2 = sattLektionsplan(s, { id: 'lp0', amneId: 'am', lektionsIndex: 0, sammanfattning: 'Min egen.' });

@@ -219,12 +219,13 @@ function slaIhop(intervall: string[]): string {
   return [...new Set(delar)].join(' · ');
 }
 
-function avsnittUrBox(s: Struktur, amneId: string, bok: Bok, b: VagBox, fragor: Map<string, ProvlappFraga[]>): ProvlappAvsnitt {
+function avsnittUrBox(s: Struktur, amneId: string, bok: Bok, b: VagBox, fragor: Map<string, ProvlappFraga[]>, noAmne: boolean): ProvlappAvsnitt {
   const lekt = b.lektioner;
   const planer = lekt.map((l) => hamtaLektionsplan(s, amneId, l.index));
   const iBoken = lekt.map((l) => l.bok).find((x) => x !== undefined);
   const egenSamm = planer.map((lp) => lp?.sammanfattning).filter(har).map((x) => x.trim());
-  const ram = djupBreddFor(b.begrepp, b.mal);
+  // Del 216 (NO): ingen hopsatt ram ur första och sista begreppet — bara bokens egna exempel visas
+  const ram = noAmne ? null : djupBreddFor(b.begrepp, b.mal);
   const djupBredd: DjupBredd | null = iBoken?.djup !== undefined || iBoken?.bredd !== undefined
     ? { kedja: ram?.kedja ?? b.begrepp.slice(0, 4), djup: iBoken.djup ?? ram?.djup ?? '', bredd: iBoken.bredd ?? ram?.bredd ?? '' }
     : ram;
@@ -272,8 +273,8 @@ function byggLapp(s: Struktur, amneId: string, bok: Bok, boxar: VagBox[], kapite
   const n = bok.nivaer;
   const { karta, text } = nivaKarta(n);
   const fragor = fragorPerDelkapitel(s, amne.klassId, amneId);
-  const avsnitt = boxar.map((b) => avsnittUrBox(s, amneId, bok, b, fragor));
   const noAmne = (NO_TK_AMNEN as readonly string[]).includes(amne.namn);
+  const avsnitt = boxar.map((b) => avsnittUrBox(s, amneId, bok, b, fragor, noAmne));
   const hitta = (b: string): string | null => {
     for (const k of kapitel) {
       const nyckel = Object.keys(k.forklaringar).find((x) => x.toLowerCase().trim() === b.toLowerCase().trim());
