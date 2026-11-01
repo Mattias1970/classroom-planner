@@ -152,6 +152,16 @@ export interface Provlapp {
   begreppKalla: 'socrative' | 'bok' | 'blandat';
 }
 
+/**
+ * Del 215 · Bindeord som visar orsak och samband i flera led — det eleven skriver i stället för pilar.
+ * Står på lappen under "Så visar du djup och bredd".
+ */
+export const BINDEORD: string[] = [
+  'eftersom', 'därför att', 'det beror på att', 'på grund av att',
+  'därför', 'så att', 'det gör att', 'vilket leder till att', 'det medför att', 'det resulterar i att',
+  'som i sin tur', 'följden blir att', 'tack vare att', 'när … så …', 'om … så …', 'ju … desto …',
+];
+
 /** Del 206 · Ramar för djup och bredd ur avsnittets begrepp (minst två) eller mål. null när inget finns att bygga på. */
 export function djupBreddFor(begrepp: string[], mal: string[]): DjupBredd | null {
   const b = begrepp.map((x) => x.trim()).filter((x) => x !== '');
@@ -558,6 +568,7 @@ export function provlappText(p: Provlapp): string {
   }
   r.push(''); r.push('SÅ VISAR DU DJUP OCH BREDD');
   r.push('Djup = orsakssamband i flera led (A → B → C, varje pil svarar på varför). Bredd = flera exempel i ett led (A: exempel 1, 2, 3).');
+  r.push(`Bindeord i stället för pilar: ${BINDEORD.join(' · ')}`);
   for (const a of p.avsnitt.filter((x) => x.typ === 'delkapitel' && x.djupBredd !== null)) {
     r.push(a.rubrik);
     r.push(`  Djup: ${a.djupBredd!.djup}`);

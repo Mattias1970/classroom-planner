@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { bokFromValfriImport } from '../src/domain/biologibok.js';
 import { byggKapitel } from '../src/domain/bok.js';
-import { djupBreddFor, fragorPerDelkapitel, labMall, nivaKarta, noOvningPunkter, omfangText, omfangUrKoder, provlapp, provlappDiagnos, provlappForOmfang, provlappText, tolkaOmfang, valbaraDelkapitel } from '../src/domain/provlapp.js';
+import { BINDEORD, djupBreddFor, fragorPerDelkapitel, labMall, nivaKarta, noOvningPunkter, omfangText, omfangUrKoder, provlapp, provlappDiagnos, provlappForOmfang, provlappText, tolkaOmfang, valbaraDelkapitel } from '../src/domain/provlapp.js';
 import { sattLektionsVal } from '../src/domain/struktur.js';
 import { importeraResultat } from '../src/domain/resultat.js';
 import { amnesPlanFor, laggTillAmne, laggTillEgenRad, laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering, sattLektionsplan, sparaBok } from '../src/domain/struktur.js';
@@ -365,5 +365,14 @@ describe('Del 214 · välj delkapitel med kryssrutor; omfång ur koder; diagnos 
     expect(provlappDiagnos(s, 'am', '6.7-6.9', '2026-09-14')).toEqual(['Delkapitel 6.9 finns inte i boken — lappen byggs utan dem.']);
     expect(provlappDiagnos(s, 'am', 'kap 6', '2026-09-14')[0]).toContain('skriv som 6.1-6.5');
     expect(provlappDiagnos({ ...s, bocker: [] }, 'am', '6.1', '2026-09-14')).toEqual(['Ämnet saknar bok — koppla en bok under Struktur.']);
+  });
+});
+
+describe('Del 215 · bindeord i stället för pilar på lappen', () => {
+  it('listan finns i textversionen', () => {
+    const s = laggTillEgenRad(bygg(MATTE, 'Matematik'), 'am', { id: 'er1', position: 7, rubrik: 'Prov', typ: 'prov' }, '2026-09-14');
+    const text = provlappText(provlapp(s, 'am', 7, '2026-09-14')!);
+    expect(text).toContain('Bindeord i stället för pilar: eftersom · därför att');
+    expect(BINDEORD).toContain('vilket leder till att');
   });
 });

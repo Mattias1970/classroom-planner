@@ -7,7 +7,7 @@ import {
   AlignmentType, BorderStyle, Document, ExternalHyperlink, Footer, Header, HeadingLevel, ImageRun, LevelFormat, Packer, PageNumber,
   Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType,
 } from 'docx';
-import { labMall, noOvningPunkter, PROVLAPP_OVA_GRANS, type Betygsniva, type Provlapp } from '@planner/kernel';
+import { BINDEORD, labMall, noOvningPunkter, PROVLAPP_OVA_GRANS, type Betygsniva, type Provlapp } from '@planner/kernel';
 import { djupBreddSvg, svgTillPng } from './provlappFigur.js';
 
 const FONT = 'Calibri';
@@ -111,6 +111,7 @@ export function provlappDokument(pl: Provlapp, farg: string, figur: Uint8Array |
 
   ut.push(h1('Så visar du djup och bredd'));
   ut.push(p([t('Djup', { bold: true }), t(' = orsakssamband i flera led: A → B → C, där varje pil svarar på '), t('varför', { italics: true }), t('. '), t('Bredd', { bold: true }), t(' = flera exempel i ett led: A — exempel 1, 2, 3 — och vad de har gemensamt. Under varje avsnitt finns en djup- och en breddfråga byggd på avsnittets begrepp.')]));
+  ut.push(p([t('Bindeord i stället för pilar: ', { bold: true }), t(BINDEORD.join(' · '))]));
   if (figur !== null) ut.push(new Paragraph({ spacing: { after: 120 }, children: [new ImageRun({ type: 'png', data: figur, transformation: { width: 600, height: 208 }, altText: { title: 'Djup och bredd', description: 'Djup: kedja av orsak och följd. Bredd: ett begrepp med tre exempel.', name: 'djupbredd' } })] }));
 
   ut.push(h1('För E-nivå krävs'));

@@ -6,7 +6,7 @@
  * (hjälpmedel, tider) sparas på lektionsplanen och tas med på lappen.
  */
 import { useState } from 'react';
-import { labMall, noOvningPunkter, omfangUrKoder, provlapp, provlappDiagnos, provlappText, PROVLAPP_OVA_GRANS, tolkaOmfang, valbaraDelkapitel, type Betygsniva, type Provlapp as ProvlappData, type Struktur } from '@planner/kernel';
+import { BINDEORD, labMall, noOvningPunkter, omfangUrKoder, provlapp, provlappDiagnos, provlappText, PROVLAPP_OVA_GRANS, tolkaOmfang, valbaraDelkapitel, type Betygsniva, type Provlapp as ProvlappData, type Struktur } from '@planner/kernel';
 import { lasStruktur } from './store.js';
 import { djupBreddDataUrl } from './provlappFigur.js';
 
@@ -137,6 +137,7 @@ function ProvlappVisning({ p, farg }: { p: ProvlappData; farg: string }) {
 
       <h4>Så visar du djup och bredd</h4>
       <p className="small"><b>Djup</b> = orsakssamband i flera led: A → B → C, där varje pil svarar på <i>varför</i>. <b>Bredd</b> = flera exempel i ett led: A — exempel 1, 2, 3 — och vad de har gemensamt. Under varje avsnitt ovan finns en djup- och en breddfråga byggd på avsnittets begrepp.</p>
+      <p className="small provlapp-bindeord"><b>Bindeord i stället för pilar:</b> {BINDEORD.map((b, i) => <span key={b}>{i > 0 && ' · '}<code>{b}</code></span>)}</p>
       {(() => { const f = delkap.find((a) => a.djupBredd !== null)?.djupBredd; return f === undefined || f === null ? null : <img className="provlapp-figur" alt="Djup: kedja av orsak och följd. Bredd: ett begrepp med tre exempel." src={djupBreddDataUrl(f.kedja, farg)} />; })()}
 
       <h4>För E-nivå krävs</h4>
