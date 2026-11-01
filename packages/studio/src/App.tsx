@@ -40,7 +40,7 @@ import {
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
   resultatProcent, saknadeResultat, veckorapportLarm, veckaText, tolkaResultatRader, digiexamProvInfo, digiexamProvTyp, eProvGrans, ordinarieProvFor, planForAmne, harLaborationsstandard, kursLista, flyttaKurs, amnesPlanFor, type Kurs, amnesPlan, amnesOffset, sattLaborationsstandard, sattPlanFrystTill, sparaLaborationer, sattPassVal, type HalvklassSession, type Laboration, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type Elev, type KalenderDagRuta, type KalenderHandelse, type SchemaAktivitet,
-  pedagogiskPlanering, gruppNyckel, grundRader, planeringsRader, antalIBoken, lektionerPerDelkapitel, sattLektionerPerDelkapitel, sattAntalLektioner, sattLektionsVal, laggTillEgenRad, taBortEgenRad, bokLektioner, type LektionsVal,
+  gruppNyckel, grundRader, planeringsRader, antalIBoken, lektionerPerDelkapitel, sattLektionerPerDelkapitel, sattAntalLektioner, sattLektionsVal, laggTillEgenRad, taBortEgenRad, bokLektioner, type LektionsVal,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
   vagTyp,
@@ -57,6 +57,7 @@ import { VeckorapportLarm, Veckorapporter, nuSvensk } from './Veckorapporter.js'
 import { DigiExamLarmPanel } from './ProvLarm.js';
 import { Elevkort } from './Elevkort.js';
 import { ProvlappPanel } from './Provlapp.js';
+import { PedagogiskPlaneringKnapp } from './PedagogiskPlaneringKnapp.js';
 import { BamRedigering } from './BamRedigering.js';
 import { PlaneringsTavla } from './PlaneringsTavla.js';
 import { Kortrad } from './Kortrad.js';
@@ -1619,12 +1620,8 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
                 `${a.namn}-${klass.namn}-planering`,
                 plan.map((rad, index) => ({ rad, index }))));
           }}>📄 Kapitel → Word</button>
-        <button className="flik" disabled={!bok || plan.length === 0} title={!bok ? 'Koppla en bok först' : 'Pedagogisk planering och provlapp för elever och vårdnadshavare — aktuellt kapitel'}
-          onClick={() => {
-            const pl = pedagogiskPlanering(s, a.id, undefined, idag);
-            if (pl === null) { window.alert('Kunde inte bygga planeringen — ämnet behöver bok och planering.'); return; }
-            void import('./pedagogiskWord.js').then(({ exporteraPedagogiskPlanering }) => exporteraPedagogiskPlanering(pl));
-          }}>👨‍👩‍👧 Elev/vårdnadshavare → Word</button>
+        <PedagogiskPlaneringKnapp s={s} amneId={a.id} disabled={!bok || plan.length === 0} meddela={(m) => kor(() => lasStruktur(), m)}
+          aktivtKapitel={(plan.find((r) => r.datum !== null && r.datum >= idag) ?? plan[plan.length - 1])?.kapitel ?? null} />
         <label className="flik file-btn no-print" title="Del 140: slå ihop en planeringsmall (lektionsantal + lektionsplaner per rad) med planeringen — räknar om från terminsstart">📥 Planeringsmall
           <input type="file" accept="application/json" hidden aria-label="Planeringsmall" onChange={(e) => {
             const f = e.target.files?.[0]; e.currentTarget.value = '';

@@ -1369,3 +1369,5 @@ input.fel { border-color: #B71C1C; }
 .provlapp-valj { margin: 6px 0; }
 .provlapp-dk input { margin: 0 2px 0 0; }
 .provlapp-dk.muted { opacity: .6; }
+/* Del 217 · Pedagogisk planering — välj delkapitel */
+.pp-modal { max-width: 720px; width: 100%; }

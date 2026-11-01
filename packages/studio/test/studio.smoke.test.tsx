@@ -4044,3 +4044,39 @@ describe('Del 212: perioden i SuperTeach väljs som veckor eller kapitel', () =>
     vi.useRealTimers();
   });
 });
+
+describe('Del 217: 👨‍👩‍👧 Pedagogisk planering — välj delkapitel i en ruta', () => {
+  it('knappen öppnar rutan med kapitlets delkapitel förkryssade; kryss skriver omfånget; valet sparas per ämne', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-24T10:00:00Z'));
+    const { bokFromValfriImport, laggTillAmne, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering, sparaBok, tomStruktur } = await import('@planner/kernel');
+    const bok = bokFromValfriImport(JSON.stringify({ id: 'bio', titel: 'Biologi', forlag: 'L', amne: 'Biologi', arskurs: 8, kapitel: [
+      { nummer: 6, titel: 'Kroppen', sidor: '1–2', delkapitel: [1, 2, 3].map((n) => ({ nummer: `6.${n}`, titel: `Del ${n}`, sidor: `${n}`, begrepp: [`b${n}`], extraBegrepp: [], testaDigSjalv: { sida: n, fragor: [] } })) },
+      { nummer: 7, titel: 'Nerver', sidor: '3–4', delkapitel: [1, 2].map((n) => ({ nummer: `7.${n}`, titel: `N ${n}`, sidor: `${n}`, begrepp: [`n${n}`], extraBegrepp: [], testaDigSjalv: { sida: n, fragor: [] } })) },
+    ] }));
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = sparaBok(s, bok);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', bokId: bok.id, schema: [{ dag: 2, start: '10:00', slut: '11:00' }] });
+    s = registreraPlanering(s, { id: 'p', amneId: 'bi', bokId: bok.id, skapad: '2026-08-10' });
+    window.localStorage.setItem('classroom-planner.studio.v2', JSON.stringify(s));
+    const host = render();
+    act(() => { treeKnapp(host, '💼 NO').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    act(() => { treeKnapp(host, '📖 Biologi').click(); });
+    act(() => { knapp(host, '👨‍👩‍👧 Pedagogisk planering').click(); });
+    const dialog = host.querySelector('[role="dialog"][aria-label="Pedagogisk planering"]')!;
+    expect(dialog).not.toBeNull();
+    const omf = () => (dialog.querySelector('input[aria-label="Planeringens omfång"]') as HTMLInputElement).value;
+    expect(omf()).toBe('6.1-6.3');   // pågående kapitel förkryssat
+    act(() => { (dialog.querySelector('input[aria-label="Planering delkapitel 6.3"]') as HTMLInputElement).click(); });
+    act(() => { (dialog.querySelector('input[aria-label="Planering delkapitel 7.1"]') as HTMLInputElement).click(); });
+    expect(omf()).toBe('6.1-6.2, 7.1');
+    expect(JSON.parse(localStorage.getItem('pp.omfang.bi') ?? '""')).toBe('6.1-6.2, 7.1');
+    expect((knapp(host, '📄 Ladda ner Word') as HTMLButtonElement).disabled).toBe(false);
+    act(() => { knapp(host, 'Avbryt').click(); });
+    expect(host.querySelector('[role="dialog"][aria-label="Pedagogisk planering"]')).toBeNull();
+    vi.useRealTimers();
+  });
+});

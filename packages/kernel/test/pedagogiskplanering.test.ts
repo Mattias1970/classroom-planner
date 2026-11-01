@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { bokFromValfriImport } from '../src/domain/biologibok.js';
-import { pedagogiskPlanering } from '../src/domain/pedagogiskplanering.js';
+import { pedagogiskPlanering, pedagogiskPlaneringForOmfang } from '../src/domain/pedagogiskplanering.js';
 import { laggTillAmne, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering, sattLektionsplan, sparaBok, sattLaborationsstandard } from '../src/domain/struktur.js';
 import { tomStruktur, type Struktur } from '../src/domain/typer.js';
 
@@ -114,5 +114,27 @@ describe('Del 134: pedagogisk planering och provlapp ur planeringen', () => {
     expect(pedagogiskPlanering({ ...s, planeringar: [] }, 'bi')).toBeNull();
     expect(pedagogiskPlanering(s, 'bi', 9)).toBeNull();
     expect(pedagogiskPlanering(s, 'saknas')).toBeNull();
+  });
+});
+
+describe('Del 217 · pedagogisk planering för ett omfång över flera kapitel', () => {
+  it('bara valda delkapitel: innehåll, begrepp, filmer och veckoplanering; kapitel utan träff hoppas', () => {
+    const s = bygg();
+    const pl = pedagogiskPlaneringForOmfang(s, 'bi', [{ fran: '6.1', till: '6.2' }], '2026-09-14')!;
+    expect(pl).not.toBeNull();
+    expect(pl.omfang).toBe('6.1–6.2');
+    expect(pl.kapitelLista.map((k) => k.nr)).toEqual([6]);
+    expect(pl.innehall.map((d) => d.kod)).toEqual(['6.1', '6.2']);
+    expect(pl.filmer.map((d) => d.kod)).toEqual(['6.1', '6.2']);
+    const koder = pl.veckor.flatMap((v) => v.dagar).map((d) => d.kod ?? d.typ);
+    expect(koder.filter((k) => /^6\./.test(k))).toEqual(['6.1', '6.2']);
+    expect(koder).not.toContain('6.3');
+    // Hela kapitlet via omfång = samma delkapitel som utan omfång
+    const hela = pedagogiskPlanering(s, 'bi', 6, '2026-09-14')!;
+    const viaOmfang = pedagogiskPlaneringForOmfang(s, 'bi', [{ fran: '6.1', till: '6.9' }], '2026-09-14')!;
+    expect(viaOmfang.innehall.map((d) => d.kod)).toEqual(hela.innehall.map((d) => d.kod));
+    expect(viaOmfang.veckor.flatMap((v) => v.dagar).length).toBe(hela.veckor.flatMap((v) => v.dagar).length);
+    expect(pedagogiskPlaneringForOmfang(s, 'bi', [{ fran: '9.1', till: '9.2' }], '2026-09-14')).toBeNull();
+    expect(hela.omfang).toBeNull();
   });
 });

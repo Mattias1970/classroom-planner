@@ -197,14 +197,17 @@ function planeringsTabell(pl: PedagogiskPlanering): Table {
 export function byggPedagogiskPlanering(pl: PedagogiskPlanering): Document {
   const barn: Array<Paragraph | Table> = [
     h1('Pedagogisk planering och provlapp'),
-    h1(`${pl.amne} ${pl.klass} · Kap ${pl.kapitel.nr} – ${pl.kapitel.namn}${pl.kapitel.sidor !== '—' ? ` (${pl.kapitel.sidor})` : ''}`),
+    h1(pl.omfang !== null
+      ? `${pl.amne} ${pl.klass} · ${pl.kapitelLista.map((k) => `Kap ${k.nr} – ${k.namn}`).join(' · ')} (${pl.omfang})`
+      : `${pl.amne} ${pl.klass} · Kap ${pl.kapitel.nr} – ${pl.kapitel.namn}${pl.kapitel.sidor !== '—' ? ` (${pl.kapitel.sidor})` : ''}`),
     h2('Syfte'),
-    p(`Här får du lära dig följande${pl.syfteSidor !== null ? ` (${pl.syfteSidor})` : ''}.`),
     // Kapitlets "Här får du lära dig" saknas i bokfilen — då visas delkapitlens mål, tydligt märkt
     ...(pl.syfteFranDelkapitel
       ? [p('⚠ kontrollera: kapitlets "Här får du lära dig" saknas i bokfilen — nedan står delkapitlens mål.', { italics: true })]
       : []),
-    ...pl.syfte.map((m) => punkt(m)),
+    ...(pl.kapitelLista.length > 1
+      ? pl.kapitelLista.flatMap((k) => [h3(`Kap ${k.nr} ${k.namn} — här får du lära dig${k.syfteSidor !== null ? ` (${k.syfteSidor})` : ''}`), ...k.syfte.map((m) => punkt(m))])
+      : [p(`Här får du lära dig följande${pl.syfteSidor !== null ? ` (${pl.syfteSidor})` : ''}.`), ...pl.syfte.map((m) => punkt(m))]),
     h2('Viktiga begrepp'),
     ...(() => { const ut: Paragraph[] = []; for (let i = 0; i < pl.begrepp.length; i += 3) ut.push(p(pl.begrepp.slice(i, i + 3).join(' – '))); return ut; })(),
     h2('Innehåll'),
@@ -230,6 +233,6 @@ export function byggPedagogiskPlanering(pl: PedagogiskPlanering): Document {
 
 export async function exporteraPedagogiskPlanering(pl: PedagogiskPlanering): Promise<void> {
   const doc = byggPedagogiskPlanering(pl);
-  ladda(`Planering ${pl.amne} ${pl.klass} kap ${pl.kapitel.nr}`, await Packer.toBlob(doc));
+  ladda(`Planering ${pl.amne} ${pl.klass} ${pl.omfang !== null ? pl.omfang.replace(/–/g, '-').replace(/ · /g, ' ') : `kap ${pl.kapitel.nr}`}`, await Packer.toBlob(doc));
 }
 

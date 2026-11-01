@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { Packer } from 'docx';
 import {
-  bokFromValfriImport, laggTillAmne, laggTillKlass, laggTillSkolar, laggTillTjanst, pedagogiskPlanering, registreraPlanering, sparaBok, tomStruktur,
+  bokFromValfriImport, laggTillAmne, laggTillKlass, laggTillSkolar, laggTillTjanst, pedagogiskPlanering, pedagogiskPlaneringForOmfang, registreraPlanering, sparaBok, tomStruktur,
 } from '@planner/kernel';
 import { byggPedagogiskPlanering } from '../src/pedagogiskWord.js';
 
@@ -36,5 +36,24 @@ describe('Del 134: Word-dokumentet Pedagogisk planering och provlapp', () => {
     expect(xml).toContain('Torsdag');                          // första lektionen ligger på torsdagen i v38
     expect(rels).toContain('https://app.binogi.se/l/cellens-specialisering');
     expect((rels.match(/app\.binogi\.se/g) ?? []).length).toBeGreaterThanOrEqual(19);
+  });
+});
+
+describe('Del 217: Word-dokumentet för ett omfång av delkapitel', () => {
+  it('rubriken bär omfånget, syftet per kapitel, bara valda delkapitel under Innehåll', async () => {
+    const BOK = bokFromValfriImport(readFileSync(new URL('../../kernel/test/fixtures/spektrum-biologi-kap6.json', import.meta.url), 'utf8'));
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-09-14', slut: '2027-06-11', dagar: [] });
+    s = sparaBok(s, BOK);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', bokId: BOK.id, schema: [{ dag: 4, start: '09:45', slut: '10:55' }] });
+    s = registreraPlanering(s, { id: 'pl', amneId: 'bi', bokId: BOK.id, skapad: '2026-09-10' });
+    const pl = pedagogiskPlaneringForOmfang(s, 'bi', [{ fran: '6.1', till: '6.2' }], '2026-09-14')!;
+    const buf = await Packer.toBuffer(byggPedagogiskPlanering(pl));
+    const { default: JSZip } = await import('jszip');
+    const xml = (await (await JSZip.loadAsync(buf)).file('word/document.xml')!.async('string')).replace(/<[^>]+>/g, '');
+    expect(xml).toContain('(6.1–6.2)');
+    expect(xml).toContain('6.2 Matspjälkningen');
+    expect(xml).not.toContain('6.3 ');
   });
 });
