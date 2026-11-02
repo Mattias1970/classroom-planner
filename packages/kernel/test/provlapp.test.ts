@@ -235,7 +235,8 @@ describe('Del 209 · bokens sammanfattning, djup/bredd/labb-exempel och filmer p
     const a72 = p.avsnitt.find((a) => a.rubrik.startsWith('7.2'))!;
     expect(a72.sammanfattning).toEqual([]);
     expect(a72.djupBredd).toBeNull();   // Del 216: ingen hopsatt ram i NO — bara bokens exempel
-    expect(a72.labb).toBeNull(); expect(a72.filmer).toEqual([]);
+    expect(a72.labb).toBeNull();
+    expect(a72.filmer.map((f) => f.titel)).toEqual(['Hjärnan', 'Hur minnet fungerar', 'Känslornas biologi']);   // Del 226 · inbyggd Binogi-lista (Liber Biologi) när boken saknar filmer
     // Lärarens egen sammanfattning går före bokens
     const s2 = sattLektionsplan(s, { id: 'lp0', amneId: 'am', lektionsIndex: 0, sammanfattning: 'Min egen.' });
     expect(provlapp(s2, 'am', 2, '2026-09-14')!.avsnitt[0].sammanfattning).toEqual(['Min egen.']);

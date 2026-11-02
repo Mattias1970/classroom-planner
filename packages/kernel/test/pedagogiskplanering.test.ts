@@ -220,3 +220,61 @@ describe('Del 224 · laborationerna i planeringen med frågeställning och genom
     expect([...o.laborationer].sort((a, b) => (a.datum ?? '').localeCompare(b.datum ?? ''))).toEqual(o.laborationer);
   });
 });
+
+describe('Del 226 · två kapitel i omfånget: inbyggda filmer, kapitlets omfång, slutförhöret över alla valda delkapitel, provets upplägg', () => {
+  const TVA = bokFromValfriImport(JSON.stringify({
+    id: 'spektrum-biologi', titel: 'Spektrum Biologi', forlag: 'Liber', amne: 'Biologi', arskurs: 8,
+    kapitel: [
+      { nummer: 6, titel: 'Vår fantastiska kropp', sidor: '228–271', finalen: { sidor: '269–271' }, delkapitel: [1, 2, 3].map((n) => ({ nummer: `6.${n}`, titel: `Del ${n}`, sidor: `${n}`, begrepp: [`b${n}`], extraBegrepp: [], testaDigSjalv: { sida: n, fragor: [] } })) },
+      { nummer: 7, titel: 'Nervsystemet styr din kropp', sidor: '272–303', finalen: { sidor: '302–303' }, delkapitel: [1, 2, 3].map((n) => ({ nummer: `7.${n}`, titel: `N ${n}`, sidor: `${n}`, begrepp: [`n${n}`], extraBegrepp: [], testaDigSjalv: { sida: n, fragor: [] } })) },
+    ],
+  }));
+  function byggTva(): Struktur {
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-09-14', slut: '2027-06-11', dagar: [] });
+    s = sparaBok(s, TVA);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', bokId: TVA.id, schema: [{ dag: 1, start: '08:10', slut: '09:10' }, { dag: 4, start: '09:45', slut: '10:55' }] });
+    s = registreraPlanering(s, { id: 'pl', amneId: 'bi', bokId: TVA.id, skapad: '2026-09-10' });
+    return s;
+  }
+  it('bokfilen utan filmer → den inbyggda Binogi-listan för Spektrum; annan bok får inga', () => {
+    const s = byggTva();
+    const p = pedagogiskPlaneringForOmfang(s, 'bi', [{ fran: '6.1', till: '6.2' }, { fran: '7.1', till: '7.2' }], '2026-09-14')!;
+    expect(p.filmer.find((d) => d.kod === '6.1')!.filmer.map((f) => f.titel)).toContain('Livets domäner');
+    expect(p.filmer.find((d) => d.kod === '6.2')!.filmer.map((f) => f.url)).toContain('https://app.binogi.se/l/naeringsaemnen');
+    expect(p.filmer.find((d) => d.kod === '7.1')!.filmer.map((f) => f.titel)).toEqual(['Nervsystemet', 'Nervreflexer', 'Hjärnans anatomi']);
+    const annan = { ...TVA, id: 'gleerups-biologi', forlag: 'Gleerups' };
+    let s2 = sparaBok(byggTva(), annan);
+    s2 = { ...s2, amnen: s2.amnen.map((a) => ({ ...a, bokId: annan.id })), planeringar: s2.planeringar.map((x) => ({ ...x, bokId: annan.id })) };
+    const p2 = pedagogiskPlanering(s2, 'bi', 6, '2026-09-14')!;
+    expect(p2.filmer.every((d) => d.filmer.length === 0)).toBe(true);
+  });
+  it('kapitelLista bär kapitlets eget omfång; slutförhöret och läxan inför repetition/prov täcker alla valda delkapitel', () => {
+    const s = byggTva();
+    const p = pedagogiskPlaneringForOmfang(s, 'bi', [{ fran: '6.1', till: '6.2' }, { fran: '7.1', till: '7.3' }], '2026-09-14')!;
+    expect(p.kapitelLista.map((k) => [k.nr, k.omfang])).toEqual([[6, '6.1–6.2'], [7, '7.1–7.3']]);
+    expect(p.ovaRumAlla).toEqual(['Biologi612', 'Biologi7123']);
+    const dagar = p.veckor.flatMap((v) => v.dagar);
+    const slut = dagar.filter((d) => d.datum >= dagar.find((x) => x.kod === '7.1')!.datum && d.typ !== 'lektion' && d.laxforhor !== null);
+    expect(slut.length).toBeGreaterThan(0);
+    for (const d of slut) expect(d.laxforhor).toEqual({ begrepp: 'Begrepp 6.1–6.2, 7.1–7.3', rum: 'Biologi8BB', ovaRum: 'Biologi612, Biologi7123' });
+    const sista73 = dagar.filter((d) => d.kod === '7.3').pop()!;
+    expect(sista73.laxa).toMatchObject({ text: 'Begrepp 6.1–6.2, 7.1–7.3', ovaRum: 'Biologi612, Biologi7123' });
+    // kapitel 6:s eget slutförhör (inför kapitel 7) rör inte
+    const for7 = dagar.filter((d) => d.typ !== 'lektion' && d.laxforhor !== null && d.datum < dagar.find((x) => x.kod === '7.1')!.datum);
+    for (const d of for7) expect(d.laxforhor!.begrepp).toBe('Begrepp 6.1–6.2');
+    // ett kapitel: hela kapitlet → omfang null
+    expect(pedagogiskPlanering(s, 'bi', 6, '2026-09-14')!.kapitelLista[0].omfang).toBeNull();
+  });
+  it('provdagen: NO-standardupplägget, eller lärarens egen text från provlektionen', () => {
+    let s = byggTva();
+    const p = pedagogiskPlanering(s, 'bi', 6, '2026-09-14')!;
+    const prov = p.veckor.flatMap((v) => v.dagar).find((d) => d.typ === 'prov')!;
+    expect(prov.provText).toEqual(['Lektion 1 (NO-lektion): E-prov (begrepp och modeller), ECA Undersökningsprov', 'Lektion 2 (Ma-lektion): CA-prov (begrepp och modeller)']);
+    expect(p.veckor.flatMap((v) => v.dagar).filter((d) => d.typ !== 'prov').every((d) => d.provText.length === 0)).toBe(true);
+    s = sattLektionsplan(s, { id: 'lpP', amneId: 'bi', lektionsIndex: prov.nr - 1, genomgang: 'Provet skrivs på en lektion.\nHjälpmedel: begreppslistan.' });
+    const egen = pedagogiskPlanering(s, 'bi', 6, '2026-09-14')!.veckor.flatMap((v) => v.dagar).find((d) => d.typ === 'prov')!;
+    expect(egen.provText).toEqual(['Provet skrivs på en lektion.', 'Hjälpmedel: begreppslistan.']);
+  });
+});

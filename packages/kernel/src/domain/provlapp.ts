@@ -15,6 +15,7 @@
  * ger en lapp över just de delkapitlen, även över flera kapitel.
  */
 import type { Bok, NivaEtiketter, Struktur } from './typer.js';
+import { binogiFilmerFor } from './binogifilmer.js';
 import { NO_TK_AMNEN } from './amnen.js';
 import { amnesPlanFor, hamtaLektionsplan, lektionsNamn } from './struktur.js';
 import { vagTillProvet, vagTyp, type VagBox, type VagTyp } from './vagtillprovet.js';
@@ -232,7 +233,9 @@ function avsnittUrBox(s: Struktur, amneId: string, bok: Bok, b: VagBox, noAmne: 
     ? { kedja: ram?.kedja ?? b.begrepp.slice(0, 4), djup: iBoken.djup ?? ram?.djup ?? '', bredd: iBoken.bredd ?? ram?.bredd ?? '' }
     : ram;
   const prefix = b.kod !== null ? `${b.kod} · ` : null;
-  const filmer = prefix === null ? [] : bok.kapitel.flatMap((k) => k.resurser.filmer).filter((f) => f.titel.startsWith(prefix)).map((f) => ({ titel: f.titel.slice(prefix.length), url: f.url }));
+  const bokFilmer = prefix === null ? [] : bok.kapitel.flatMap((k) => k.resurser.filmer).filter((f) => f.titel.startsWith(prefix)).map((f) => ({ titel: f.titel.slice(prefix.length), url: f.url }));
+  // Del 226 · inbyggd Binogi-lista när bokfilen saknar filmer för delkapitlet
+  const filmer = bokFilmer.length > 0 ? bokFilmer : binogiFilmerFor(bok, b.kod).map((f) => ({ titel: f.titel, url: f.url }));
   return {
     sammanfattning: [...new Set(egenSamm.length > 0 ? egenSamm : (iBoken?.sammanfattning !== undefined ? [iBoken.sammanfattning] : []))],
     labFragor: [...new Set(planer.map((lp) => lp?.labFraga).filter(har).map((x) => x.trim()))],

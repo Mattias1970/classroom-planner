@@ -4,16 +4,18 @@
  * t.ex. 6.1–6.5 och 7.1–7.3) och laddar ner Word-dokumentet. Valet sparas per ämne.
  * Innehållet byggs av kernel (pedagogiskPlaneringForOmfang) och Word-filen av pedagogiskWord.ts.
  */
-import { useState } from 'react';
-import { omfangUrKoder, pedagogiskPlanering, pedagogiskPlaneringForOmfang, tolkaOmfang, valbaraDelkapitel, type Struktur } from '@planner/kernel';
+import { useEffect, useState } from 'react';
+import { omfangUrKoder, pedagogiskPlanering, pedagogiskPlaneringForOmfang, tolkaOmfang, valbaraDelkapitel, type PlanLaboration, type Struktur } from '@planner/kernel';
 import { lasInstallning, sparaInstallning } from './store.js';
 
-export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, meddela }: {
+export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, meddela, sparaLabb }: {
   s: Struktur; amneId: string;
   /** Kapitlet som pågår — förvalet när inget sparats. */
   aktivtKapitel: number | null;
   disabled?: boolean;
   meddela?: (m: string) => void;
+  /** Del 226 · Sparar laborationens namn och frågeställning i lektionsplanen (avsnittText + labFraga). */
+  sparaLabb?: (lektionsIndex: number, namn: string, fraga: string) => void;
 }) {
   const [oppen, setOppen] = useState(false);
   const [omfang, setOmfangRaw] = useState<string>(() => lasInstallning<string>(`pp.omfang.${amneId}`, ''));
@@ -73,12 +75,9 @@ export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, m
             {labbar.length > 0 && (
               <div className="pp-labbar" style={{ margin: '10px 0 4px' }}>
                 <b className="small">Vilka laborationer har genomförts?</b>
-                <p className="small muted" style={{ margin: '2px 0 4px' }}>De ikryssade tas med i planeringen med sin frågeställning (under "Studera inför prov"). Förval: laborationer med datum före idag.</p>
+                <p className="small muted" style={{ margin: '2px 0 4px' }}>De ikryssade tas med i planeringen med namn och frågeställning (under "Studera inför prov"). Förval: laborationer med datum före idag. Namn och frågeställning sparas i lektionsplanen.</p>
                 {labbar.map((l) => (
-                  <label key={l.nyckel} className="small" style={{ display: 'block' }} title={l.fraga ?? 'ingen frågeställning i lektionsplanen'}>
-                    <input type="checkbox" aria-label={`Laboration genomförd ${l.namn}`} checked={l.genomford} onChange={() => setLabbVal({ ...labbVal, [l.nyckel]: !l.genomford })} />
-                    {' '}{l.datum ?? '—'} · {l.namn}{l.fraga !== null ? <span className="muted"> – {l.fraga}</span> : <span className="status warn"> – frågeställning saknas i lektionsplanen</span>}
-                  </label>
+                  <LabbRad key={l.nyckel} l={l} vaxla={() => setLabbVal({ ...labbVal, [l.nyckel]: !l.genomford })} spara={sparaLabb} />
                 ))}
               </div>
             )}
@@ -90,5 +89,24 @@ export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, m
         </div>
       )}
     </>
+  );
+}
+
+/** Del 226 · En laboration i rutan: kryss (genomförd), datum, namn och frågeställning — namn och fråga sparas i lektionsplanen när fältet lämnas. */
+function LabbRad({ l, vaxla, spara }: { l: PlanLaboration; vaxla: () => void; spara?: (lektionsIndex: number, namn: string, fraga: string) => void }) {
+  const [namn, setNamn] = useState(l.namn);
+  const [fraga, setFraga] = useState(l.fraga ?? '');
+  useEffect(() => { setNamn(l.namn); setFraga(l.fraga ?? ''); }, [l.namn, l.fraga]);
+  const sparaNu = () => { if (spara !== undefined && (namn.trim() !== l.namn || fraga.trim() !== (l.fraga ?? ''))) spara(l.lektionsIndex, namn.trim(), fraga.trim()); };
+  return (
+    <div className="rad small pp-labb" style={{ gap: 6, alignItems: 'center', margin: '3px 0', flexWrap: 'wrap' }}>
+      <input type="checkbox" aria-label={`Laboration genomförd ${l.namn}`} checked={l.genomford} onChange={vaxla} />
+      <span className="muted" style={{ minWidth: 80 }}>{l.datum ?? '—'}</span>
+      <input aria-label={`Laborationens namn ${l.nyckel}`} value={namn} placeholder="Laborationens namn" style={{ width: 200 }} disabled={spara === undefined}
+        onChange={(e) => setNamn(e.target.value)} onBlur={sparaNu} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
+      <input aria-label={`Frågeställning ${l.nyckel}`} value={fraga} placeholder="Frågeställning (vad undersökte vi?)" style={{ flex: 1, minWidth: 220 }} disabled={spara === undefined}
+        className={fraga.trim() === '' ? 'fel' : undefined} title={fraga.trim() === '' ? 'Frågeställning saknas — skriv vad laborationen undersökte' : undefined}
+        onChange={(e) => setFraga(e.target.value)} onBlur={sparaNu} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
+    </div>
   );
 }

@@ -4107,7 +4107,10 @@ describe('Del 224: 👨‍👩‍👧 Pedagogisk planering — vilka laboratione
     act(() => { knapp(host, '👨‍👩‍👧 Pedagogisk planering').click(); });
     const dialog = host.querySelector('[role="dialog"][aria-label="Pedagogisk planering"]')!;
     expect(dialog.textContent).toContain('Vilka laborationer har genomförts?');
-    expect(dialog.textContent).toContain('Hur påverkar temperaturen enzymets aktivitet?');
+    const fragor = [...dialog.querySelectorAll('input[aria-label^="Frågeställning"]')] as HTMLInputElement[];
+    expect(fragor[0].value).toBe('Hur påverkar temperaturen enzymets aktivitet?');
+    expect(fragor[1].value).toBe('');
+    expect(fragor[1].className).toContain('fel');   // saknad frågeställning markeras
     const kryss = [...dialog.querySelectorAll('input[aria-label^="Laboration genomförd"]')] as HTMLInputElement[];
     expect(kryss.length).toBeGreaterThan(1);
     // första labben (augusti) ligger före idag → förkryssad; en senare inte
@@ -4117,6 +4120,17 @@ describe('Del 224: 👨‍👩‍👧 Pedagogisk planering — vilka laboratione
     expect((dialog.querySelectorAll('input[aria-label^="Laboration genomförd"]')[0] as HTMLInputElement).checked).toBe(false);
     const sparat = JSON.parse(localStorage.getItem('pp.labbar.bi') ?? '{}') as Record<string, boolean>;
     expect(Object.values(sparat)).toEqual([false]);
+    // Del 226 · namn och frågeställning skrivs i rutan och sparas i lektionsplanen när fältet lämnas
+    const namn = dialog.querySelectorAll('input[aria-label^="Laborationens namn"]')[1] as HTMLInputElement;
+    skriv(namn, 'Enzym i saliv');
+    act(() => { namn.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); });
+    const fraga2 = dialog.querySelectorAll('input[aria-label^="Frågeställning"]')[1] as HTMLInputElement;
+    skriv(fraga2, 'Bryter saliv ner stärkelse?');
+    act(() => { fraga2.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); });
+    const { hamtaLektionsplan } = await import('@planner/kernel');
+    const lagrad = JSON.parse(localStorage.getItem('classroom-planner.studio.v2')!) as Parameters<typeof hamtaLektionsplan>[0];
+    const planen = lagrad.lektionsplaner.find((p) => p.avsnittText === 'Enzym i saliv');
+    expect(planen?.labFraga).toBe('Bryter saliv ner stärkelse?');
     act(() => { knapp(host, 'Avbryt').click(); });
     vi.useRealTimers();
   });

@@ -166,6 +166,6 @@ describe('Del 225: klassen nämns inte i dokumentet', () => {
     expect(alltXml).not.toMatch(/(^|[^\d])8B\b/);   // klassnamnet (inte '…678Binogifilm')
     expect(alltXml).not.toContain('Biologi8BB');
     expect(alltXml).toContain('Socrative: klassens rum');
-    expect(alltXml).toContain('Biologi · Kap 6');
+    expect(alltXml).toContain('BiologiKap 6 – Kroppen');   // ämnet på en rad, kapitlet på nästa
   });
 });

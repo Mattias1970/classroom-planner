@@ -10,7 +10,8 @@
  */
 import { delkapitelKod } from './bok.js';
 import { begreppForLektion } from './lektionskort.js';
-import { socrativeRum } from './amnen.js';
+import { NO_TK_AMNEN, socrativeRum } from './amnen.js';
+import { binogiFilmerFor } from './binogifilmer.js';
 import { amnesPlanFor, hamtaLektionsplan, lektionsNamn } from './struktur.js';
 import { isoVecka } from './skolar.js';
 import type { Bok, PlaneradLektion, Struktur } from './typer.js';
@@ -42,7 +43,15 @@ export interface PlanDag {
   /** Läxa till nästa lektion: text + rummet att öva i. */
   laxa: { till: string; text: string; ovaRum: string | null } | null;
   filmer: PlanFilm[];
+  /** Del 226 · Provdagen: hur provet är upplagt — lärarens egen text (lektionsplanens genomgång), annars NO-standarden. */
+  provText: string[];
 }
+
+/** Del 226 · Standardupplägg för NO-prov när läraren inte skrivit eget på provlektionen. */
+export const PROV_UPPLAGG_NO: readonly string[] = [
+  'Lektion 1 (NO-lektion): E-prov (begrepp och modeller), ECA Undersökningsprov',
+  'Lektion 2 (Ma-lektion): CA-prov (begrepp och modeller)',
+];
 
 export interface PlanVecka { vecka: number; dagar: PlanDag[] }
 
@@ -52,7 +61,7 @@ export interface PedagogiskPlanering {
   /** Första (eller enda) kapitlet. */
   kapitel: { nr: number; namn: string; sidor: string };
   /** Del 217 · Alla kapitel i omfånget, med varje kapitels eget syfte ("Här får du lära dig"). */
-  kapitelLista: Array<{ nr: number; namn: string; sidor: string; syfte: string[]; syfteSidor: string | null; /** Del 218 · bokens "Några viktiga begrepp" på öppningsuppslaget. */ viktigaBegrepp: string[] }>;
+  kapitelLista: Array<{ nr: number; namn: string; sidor: string; syfte: string[]; syfteSidor: string | null; /** Del 218 · bokens "Några viktiga begrepp" på öppningsuppslaget. */ viktigaBegrepp: string[]; /** Del 226 · kapitlets eget omfång ('6.1–6.5'); null = hela kapitlet. */ omfang: string | null }>;
   /** Del 217 · Omfånget som text ('6.1–6.5 · 7.1–7.3'); null = hela kapitlet. */
   omfang: string | null;
   /** Syftet: kapitlets "Här får du lära dig" (öppningsuppslaget). Saknas det i boken används delkapitlens mål. */
@@ -95,6 +104,8 @@ export interface PedagogiskPlanering {
 /** Del 224 · En laboration i planeringen. */
 export interface PlanLaboration {
   nyckel: string;
+  /** Radens index i planeringen — för att spara namn och frågeställning i lektionsplanen. */
+  lektionsIndex: number;
   namn: string;
   fraga: string | null;
   datum: string | null;
@@ -125,6 +136,19 @@ function rumTillKoder(rum: string): string | null {
   return delar.length === 1 ? `${m[1]}.${delar[0]}` : `${m[1]}.${delar[0]}–${m[1]}.${delar[delar.length - 1]}`;
 }
 
+/** Del 226 · '6.1–6.5' för sammanhängande koder, annars '6.1, 6.3' / '6.1–6.3, 6.5'. */
+function omfangText(koder: string[]): string {
+  const nr = koder.map((k) => Number(k.split('.')[1])).sort((a, b) => a - b);
+  const kap = koder[0]?.split('.')[0] ?? '';
+  const delar: string[] = [];
+  for (let i = 0; i < nr.length;) {
+    let j = i; while (j + 1 < nr.length && nr[j + 1] === nr[j] + 1) j++;
+    delar.push(j > i ? `${kap}.${nr[i]}–${kap}.${nr[j]}` : `${kap}.${nr[i]}`);
+    i = j + 1;
+  }
+  return delar.join(', ');
+}
+
 function typFor(r: PlaneradLektion): PlanDag['typ'] {
   if (r.lektion.typ === 'laboration') return 'laboration';
   if (r.lektion.typ === 'exam' || /\bprov\b/i.test(r.lektion.avsnitt)) return 'prov';
@@ -145,6 +169,8 @@ function filmerFor(bok: Bok, kapitelNr: number, kod: string | null, lpFilmer: st
       lagg(titel === '' ? f.titel : titel, f.url);
     }
   }
+  // Del 226 · inbyggd Binogi-lista när bokfilen saknar filmer för delkapitlet
+  if (ut.length === 0) for (const f of binogiFilmerFor(bok, kod)) lagg(f.titel, f.url);
   for (const f of lpFilmer) {
     const [titel, ...rest] = f.split('|'); const url = rest.join('|').trim();
     if (url === '') lagg(titel.trim(), titel.trim()); else lagg(titel.trim(), url);
@@ -192,6 +218,20 @@ export function pedagogiskPlaneringForOmfang(s: Struktur, amneId: string, spann:
     if (v !== undefined && v.vecka === d.vecka) v.dagar.push(d); else veckor.push({ vecka: d.vecka, dagar: [d] });
   }
   const provDelar = delar.map((pl) => pl.prov).filter((x): x is NonNullable<PedagogiskPlanering['prov']> => x !== null);
+  // Del 226 · Flera kapitel: läxförhör och läxa inför repetition/prov i sista kapitlet täcker alla valda delkapitel
+  if (delar.length > 1) {
+    const sista = delar[delar.length - 1];
+    const allaKoder = delar.map((pl) => pl.kapitelLista[0].omfang ?? `kap ${pl.kapitel.nr}`).join(', ');
+    const allaRum = delar.flatMap((pl) => pl.ovaRumAlla).join(', ');
+    const sistaRum = sista.ovaRumAlla[0];
+    for (const d of sista.veckor.flatMap((v) => v.dagar)) {
+      if (d.typ === 'lektion' || d.typ === 'laboration') continue;
+      if (d.laxforhor !== null && sistaRum !== undefined && d.laxforhor.ovaRum === sistaRum) d.laxforhor = { ...d.laxforhor, begrepp: `Begrepp ${allaKoder}`, ovaRum: allaRum };
+    }
+    for (const d of sista.veckor.flatMap((v) => v.dagar)) {
+      if (d.laxa !== null && sistaRum !== undefined && d.laxa.ovaRum === sistaRum && d.laxa.text === `Begrepp ${sista.kapitelLista[0].omfang ?? ''}`) d.laxa = { ...d.laxa, text: `Begrepp ${allaKoder}`, ovaRum: allaRum };
+    }
+  }
   return {
     amne: forsta.amne, klass: forsta.klass, kapitel: forsta.kapitel,
     kapitelLista: delar.flatMap((pl) => pl.kapitelLista),
@@ -293,6 +333,8 @@ function pedagogiskPlaneringKapitel(s: Struktur, amneId: string, kapitelNr: numb
     const genomgang = har(lp?.genomgang) ? lp!.genomgang! : (har(r.lektion.genomgang) && r.lektion.genomgang !== r.lektion.avsnitt ? r.lektion.genomgang : null);
     const genomgangKalla = genomgang === null ? null : (har(lp?.genomgang) ? 'lektionsplan' as const : 'bok' as const);
     const arbete = har(lp?.uppgNiva1) ? lp!.uppgNiva1! : (har(r.lektion.ex) ? r.lektion.ex : (har(r.lektion.niva1) ? `Uppgifter ${r.lektion.niva1}` : null));
+    const provText = typ !== 'prov' ? [] : (har(lp?.genomgang) ? lp!.genomgang!.split('\n').map((x) => x.trim()).filter((x) => x !== '')
+      : ((NO_TK_AMNEN as readonly string[]).includes(amne.namn) ? [...PROV_UPPLAGG_NO] : []));
     if (typ === 'lektion') laggRum(exitRum, kod, 'exit');
     laggRum(laxforhor?.ovaRum, null, 'lax');
     laggRum(laxa?.ovaRum, null, 'lax');
@@ -303,6 +345,7 @@ function pedagogiskPlaneringKapitel(s: Struktur, amneId: string, kapitelNr: numb
       sidor: har(lp?.sidorTeori) ? lp!.sidorTeori! : (har(r.lektion.sidorTeori) ? r.lektion.sidorTeori : null),
       laxforhor, genomgang, genomgangKalla, arbete: typ === 'lektion' || typ === 'repetition' ? arbete : null, exit, begrepp, laxa,
       filmer: filmerFor(bok, nr, kod, lp?.filmer ?? []),
+      provText,
     };
   });
   const veckor: PlanVecka[] = [];
@@ -321,7 +364,7 @@ function pedagogiskPlaneringKapitel(s: Struktur, amneId: string, kapitelNr: numb
     if (laborationer.some((l) => l.nyckel === nyckel)) continue;   // halvklass: samma labb för grupp A och B
     const egen = r.nyckel?.startsWith('lab:') === true ? (amne.laborationer ?? []).find((l) => l.id === r.nyckel!.slice(4)) : undefined;
     const fraga = har(lp?.labFraga) ? lp!.labFraga!.trim() : (egen?.syfte !== undefined && har(egen.syfte) ? egen.syfte.trim() : null);
-    laborationer.push({ nyckel, namn: lektionsNamn(r.lektion, lp), fraga, datum: r.datum,
+    laborationer.push({ nyckel, lektionsIndex: index, namn: lektionsNamn(r.lektion, lp), fraga, datum: r.datum,
       genomford: genomforda !== null ? genomforda.has(nyckel) : (r.datum !== null && r.datum < dagensIdag) });
   }
   const alla = [...kap.delkapitel.flatMap((d) => d.lektioner), ...kap.extraLektioner];
@@ -363,7 +406,7 @@ function pedagogiskPlaneringKapitel(s: Struktur, amneId: string, kapitelNr: numb
   const sammanfattningSidor = provLektion !== undefined && har(provLektion.sidorTeori) ? provLektion.sidorTeori : (kap.sidor !== '—' ? kap.sidor : null);
   return {
     amne: amne.namn, klass: klass.namn, kapitel: { nr, namn: kap.namn, sidor: kap.sidor },
-    kapitelLista: [{ nr, namn: kap.namn, sidor: kap.sidor, syfte, syfteSidor: kap.malSidor ?? null, viktigaBegrepp: kap.viktigaBegrepp ?? [] }],
+    kapitelLista: [{ nr, namn: kap.namn, sidor: kap.sidor, syfte, syfteSidor: kap.malSidor ?? null, viktigaBegrepp: kap.viktigaBegrepp ?? [], omfang: inom === null ? null : omfangText(valdaNr.map((n) => `${nr}.${n}`)) }],
     omfang: null,
     syfte, syfteSidor: kap.malSidor ?? null, syfteFranDelkapitel, begrepp: begreppslista, begreppPerDelkapitel, innehall, socrativeRum: rumLista, filmer, ovaRum, ovaRumAlla, klassRum, prov, sammanfattningSidor, veckor, laborationer,
   };

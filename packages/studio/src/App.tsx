@@ -1621,6 +1621,10 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
                 plan.map((rad, index) => ({ rad, index }))));
           }}>📄 Kapitel → Word</button>
         <PedagogiskPlaneringKnapp s={s} amneId={a.id} disabled={!bok || plan.length === 0} meddela={(m) => kor(() => lasStruktur(), m)}
+          sparaLabb={(i, namn, fraga) => kor(() => {
+            const bas = hamtaLektionsplan(lasStruktur(), a.id, i) ?? { id: `lp-${a.id}-${i}`, amneId: a.id, lektionsIndex: i };
+            return sattLektionsplan(lasStruktur(), { ...bas, ...(namn !== '' ? { avsnittText: namn } : {}), labFraga: fraga });
+          }, `Laboration ${i + 1}: namn och frågeställning sparade.`)}
           aktivtKapitel={(plan.find((r) => r.datum !== null && r.datum >= idag) ?? plan[plan.length - 1])?.kapitel ?? null} />
         <label className="flik file-btn no-print" title="Del 140: slå ihop en planeringsmall (lektionsantal + lektionsplaner per rad) med planeringen — räknar om från terminsstart">📥 Planeringsmall
           <input type="file" accept="application/json" hidden aria-label="Planeringsmall" onChange={(e) => {

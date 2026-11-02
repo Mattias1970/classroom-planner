@@ -204,9 +204,10 @@ function dagRad(d: PlanDag, pl: PlanDag[]): TableRow {
     d.sidor !== null ? [p(`Bok ${d.sidor}`)] : [],
   ]);
   const kol3 = medLuft([
-    d.typ === 'prov' ? [p(`Prov – ${d.avsnitt}`, { bold: true })] : [],
+    // Del 226 · provdagen: upplägget (lärarens text, annars NO-standarden)
+    d.typ === 'prov' ? [p(`Prov – ${d.avsnitt}`, { bold: true }), ...d.provText.map((x) => p(x, { italics: true }))] : [],
     d.laxforhor !== null
-      ? [p('Läxförhör:', { bold: true }), p(`${d.laxforhor.begrepp} · Socrative: klassens rum`),
+      ? [p('Läxförhör:', { bold: true }), p(d.laxforhor.begrepp), p('Socrative: klassens rum'),
         p('(börja med frågorna när du är klar med förhöret)', { italics: true })]
       : [],
     [
@@ -250,9 +251,10 @@ function planeringsTabell(pl: PedagogiskPlanering): Table {
 export function byggPedagogiskPlanering(pl: PedagogiskPlanering): Document {
   const barn: Array<Paragraph | Table> = [
     h1('Pedagogisk planering och provlapp'),
-    new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: pl.omfang !== null
-      ? `${pl.amne} · ${pl.kapitelLista.map((k) => `Kap ${k.nr} – ${k.namn}`).join(' · ')} (${pl.omfang})`
-      : `${pl.amne} · Kap ${pl.kapitel.nr} – ${pl.kapitel.namn}${pl.kapitel.sidor !== '—' ? ` (${pl.kapitel.sidor})` : ''}`, size: 28, color: ACCENT })] }),
+    // Del 226 · ämnet på en rad, sedan ett kapitel per rad med sitt eget omfång
+    new Paragraph({ spacing: { after: 40 }, children: [new TextRun({ text: pl.amne, size: 28, color: ACCENT })] }),
+    ...pl.kapitelLista.map((k) => new Paragraph({ spacing: { after: 40 }, children: [new TextRun({
+      text: `Kap ${k.nr} – ${k.namn}${k.omfang !== null ? ` (${k.omfang})` : (k.sidor !== '—' ? ` (${k.sidor})` : '')}`, size: 28, color: ACCENT })] })),
     new Paragraph({ spacing: { after: 200 }, border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: ACCENT, space: 1 } }, children: [new TextRun({ text: '' })] }),
     h2('Syfte'),
     // Kapitlets "Här får du lära dig" saknas i bokfilen — då visas delkapitlens mål, tydligt märkt
