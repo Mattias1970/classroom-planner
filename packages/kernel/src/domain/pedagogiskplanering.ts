@@ -52,7 +52,7 @@ export interface PedagogiskPlanering {
   /** Första (eller enda) kapitlet. */
   kapitel: { nr: number; namn: string; sidor: string };
   /** Del 217 · Alla kapitel i omfånget, med varje kapitels eget syfte ("Här får du lära dig"). */
-  kapitelLista: Array<{ nr: number; namn: string; sidor: string; syfte: string[]; syfteSidor: string | null }>;
+  kapitelLista: Array<{ nr: number; namn: string; sidor: string; syfte: string[]; syfteSidor: string | null; /** Del 218 · bokens "Några viktiga begrepp" på öppningsuppslaget. */ viktigaBegrepp: string[] }>;
   /** Del 217 · Omfånget som text ('6.1–6.5 · 7.1–7.3'); null = hela kapitlet. */
   omfang: string | null;
   /** Syftet: kapitlets "Här får du lära dig" (öppningsuppslaget). Saknas det i boken används delkapitlens mål. */
@@ -289,7 +289,7 @@ function pedagogiskPlaneringKapitel(s: Struktur, amneId: string, kapitelNr: numb
   const sammanfattningSidor = provLektion !== undefined && har(provLektion.sidorTeori) ? provLektion.sidorTeori : (kap.sidor !== '—' ? kap.sidor : null);
   return {
     amne: amne.namn, klass: klass.namn, kapitel: { nr, namn: kap.namn, sidor: kap.sidor },
-    kapitelLista: [{ nr, namn: kap.namn, sidor: kap.sidor, syfte, syfteSidor: kap.malSidor ?? null }],
+    kapitelLista: [{ nr, namn: kap.namn, sidor: kap.sidor, syfte, syfteSidor: kap.malSidor ?? null, viktigaBegrepp: kap.viktigaBegrepp ?? [] }],
     omfang: null,
     syfte, syfteSidor: kap.malSidor ?? null, syfteFranDelkapitel, begrepp: begreppslista, innehall, filmer, ovaRum, klassRum, prov, sammanfattningSidor, veckor,
   };

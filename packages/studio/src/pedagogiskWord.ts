@@ -206,8 +206,10 @@ export function byggPedagogiskPlanering(pl: PedagogiskPlanering): Document {
       ? [p('⚠ kontrollera: kapitlets "Här får du lära dig" saknas i bokfilen — nedan står delkapitlens mål.', { italics: true })]
       : []),
     ...(pl.kapitelLista.length > 1
-      ? pl.kapitelLista.flatMap((k) => [h3(`Kap ${k.nr} ${k.namn} — här får du lära dig${k.syfteSidor !== null ? ` (${k.syfteSidor})` : ''}`), ...k.syfte.map((m) => punkt(m))])
-      : [p(`Här får du lära dig följande${pl.syfteSidor !== null ? ` (${pl.syfteSidor})` : ''}.`), ...pl.syfte.map((m) => punkt(m))]),
+      ? pl.kapitelLista.flatMap((k) => [h3(`Kap ${k.nr} ${k.namn} — här får du lära dig${k.syfteSidor !== null ? ` (${k.syfteSidor})` : ''}`), ...k.syfte.map((m) => punkt(m)),
+        ...(k.viktigaBegrepp.length > 0 ? [p(`Några viktiga begrepp: ${k.viktigaBegrepp.join(', ')}`)] : [])])
+      : [p(`Här får du lära dig följande${pl.syfteSidor !== null ? ` (${pl.syfteSidor})` : ''}.`), ...pl.syfte.map((m) => punkt(m)),
+        ...pl.kapitelLista.flatMap((k) => (k.viktigaBegrepp.length > 0 ? [p(`Några viktiga begrepp: ${k.viktigaBegrepp.join(', ')}`)] : []))]),
     h2('Viktiga begrepp'),
     ...(() => { const ut: Paragraph[] = []; for (let i = 0; i < pl.begrepp.length; i += 3) ut.push(p(pl.begrepp.slice(i, i + 3).join(' – '))); return ut; })(),
     h2('Innehåll'),

@@ -123,7 +123,7 @@ export interface Provlapp {
   /** Del 199 · Omfånget som text när lappen täcker ett urval av delkapitel ('6.1–6.5 · 7.1–7.5'); null = hela kapitlet. */
   omfang: string | null;
   /** Del 199 · Kapitlen lappen täcker, i ordning (ett vid helt kapitel). */
-  kapitel: Array<{ nr: number; namn: string; mal: string[] }>;
+  kapitel: Array<{ nr: number; namn: string; mal: string[]; /** Del 218 · bokens "Några viktiga begrepp" för kapitlet. */ viktigaBegrepp: string[] }>;
   provNamn: string;
   /** Provets datum (YYYY-MM-DD) eller null när provet inte har fått ett datum. */
   provDatum: string | null;
@@ -267,7 +267,7 @@ const REPETITION_NIVA: Partial<Record<VagTyp, Betygsniva[]>> = {
 };
 
 /** Lappens innehåll ur ett antal avsnittsboxar — delas av hela-kapitlet-lappen och omfångslappen. */
-function byggLapp(s: Struktur, amneId: string, bok: Bok, boxar: VagBox[], kapitel: Array<{ nr: number; namn: string; mal: string[]; forklaringar: Record<string, string>; begreppslista: string[] }>, prov: { namn: string; datum: string | null; vecka: number | null; notis: string | null }, omfang: string | null): Provlapp {
+function byggLapp(s: Struktur, amneId: string, bok: Bok, boxar: VagBox[], kapitel: Array<{ nr: number; namn: string; mal: string[]; viktigaBegrepp: string[]; forklaringar: Record<string, string>; begreppslista: string[] }>, prov: { namn: string; datum: string | null; vecka: number | null; notis: string | null }, omfang: string | null): Provlapp {
   const amne = s.amnen.find((a) => a.id === amneId)!;
   const klass = s.klasser.find((k) => k.id === amne.klassId);
   const n = bok.nivaer;
@@ -314,7 +314,7 @@ function byggLapp(s: Struktur, amneId: string, bok: Bok, boxar: VagBox[], kapite
   return {
     amne: amne.namn, klass: klass?.namn ?? '', bok: bok.titel,
     kapitelNr: forsta.nr, kapitelNamn: kapitel.length === 1 ? forsta.namn : kapitel.map((k) => `${k.nr} ${k.namn}`).join(' · '),
-    omfang, kapitel: kapitel.map(({ nr, namn, mal }) => ({ nr, namn, mal })),
+    omfang, kapitel: kapitel.map(({ nr, namn, mal, viktigaBegrepp }) => ({ nr, namn, mal, viktigaBegrepp })),
     provNamn: prov.namn, provDatum: prov.datum, provVecka: prov.vecka,
     nivaer: n, nivaKarta: text,
     kapitelMal: kapitel.flatMap((k) => k.mal),
@@ -367,7 +367,7 @@ function byggNoOvning(s: Struktur, amneId: string, bok: Bok, kapitelNr: number[]
 
 const kapInfo = (bok: Bok, nr: number) => {
   const kap = bok.kapitel.find((k) => k.nr === nr);
-  return kap === undefined ? null : { nr: kap.nr, namn: kap.namn, mal: kap.mal ?? [], forklaringar: kap.resurser.forklaringar ?? {}, begreppslista: kap.begreppslista };
+  return kap === undefined ? null : { nr: kap.nr, namn: kap.namn, mal: kap.mal ?? [], viktigaBegrepp: kap.viktigaBegrepp ?? [], forklaringar: kap.resurser.forklaringar ?? {}, begreppslista: kap.begreppslista };
 };
 
 /**
@@ -559,7 +559,11 @@ export function provlappText(p: Provlapp): string {
   if (p.notis !== null) { r.push(''); r.push(p.notis); }
   if (p.kapitelMal.length > 0) {
     r.push(''); r.push(p.kapitel.length > 1 ? 'DET HÄR FÅR DU LÄRA DIG I KAPITLEN' : 'DET HÄR FÅR DU LÄRA DIG I KAPITLET');
-    for (const k of p.kapitel) { if (p.kapitel.length > 1 && k.mal.length > 0) r.push(`Kapitel ${k.nr} ${k.namn}`); k.mal.forEach((m) => r.push(`• ${m}`)); }
+    for (const k of p.kapitel) {
+      if (p.kapitel.length > 1 && k.mal.length > 0) r.push(`Kapitel ${k.nr} ${k.namn}`);
+      k.mal.forEach((m) => r.push(`• ${m}`));
+      if (k.viktigaBegrepp.length > 0) r.push(`Några viktiga begrepp: ${k.viktigaBegrepp.join(', ')}`);
+    }
   }
   r.push(''); r.push('DET HÄR SKA DU KUNNA');
   for (const a of p.avsnitt.filter((x) => x.typ === 'delkapitel' || x.mal.length > 0)) {

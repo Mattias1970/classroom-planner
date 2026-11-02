@@ -187,6 +187,9 @@ function lasKapitel(raw: unknown, index: number, prefix: string): Kapitel {
   const kapMal = strangLista(r.mal);
   if (kapMal.length > 0) kap.mal = kapMal;
   if (har(txt(r.malSidor))) kap.malSidor = txt(r.malSidor);
+  // Del 218 · "Några viktiga begrepp" på samma uppslag
+  const viktiga = strangLista(r.viktigaBegrepp);
+  if (viktiga.length > 0) kap.viktigaBegrepp = viktiga;
   kap.resurser.forklaringar = Object.assign({}, ...delkapitel.map((d) => d.forklaringar)) as Record<string, string>;
   // Filmernas egna titlar behålls ('6.1 · Celldelning'); en uttrycklig genomgångslänk får '— genomgång'
   kap.resurser.filmer = delkapitel.flatMap((d) => [

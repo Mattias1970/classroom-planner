@@ -321,6 +321,8 @@ export interface Kapitel {
   mal?: string[];
   /** Sidan där "Här får du lära dig" står, t.ex. 's. 229'. */
   malSidor?: string;
+  /** Del 218 · Öppningsuppslagets "Några viktiga begrepp" — bokens eget urval, i bokordning. */
+  viktigaBegrepp?: string[];
   resurser: KapitelResurser;
 }
 

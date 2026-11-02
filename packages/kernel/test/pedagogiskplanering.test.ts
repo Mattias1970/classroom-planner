@@ -107,6 +107,18 @@ describe('Del 134: pedagogisk planering och provlapp ur planeringen', () => {
     expect(p.syfteSidor).toBe('s. 229');
     expect(p.syfteFranDelkapitel).toBe(false);
     expect(p.innehall[0].text).toContain('Alla organismer består av celler');   // delkapitlens mål finns kvar under Innehåll
+    expect(p.kapitelLista[0].viktigaBegrepp).toEqual([]);                       // Del 218 · fältet saknas i fixturen
+  });
+
+  it('Del 218 · kapitlets "Några viktiga begrepp" följer med i kapitelLista', async () => {
+    const { bokFromValfriImport } = await import('../src/domain/biologibok.js');
+    const rad = JSON.parse(readFileSync(join(HAR, 'fixtures', 'spektrum-biologi-kap6.json'), 'utf8')) as { kapitel: Array<Record<string, unknown>> };
+    rad.kapitel[0].mal = ['beskriva hur kroppens celler är uppbyggda och hur de fungerar'];
+    rad.kapitel[0].viktigaBegrepp = ['evolution', 'cellandning', 'stamcell'];
+    let s = bygg();
+    s = sparaBok(s, bokFromValfriImport(JSON.stringify(rad)));
+    const p = pedagogiskPlanering(s, 'bi', 6, '2026-09-14')!;
+    expect(p.kapitelLista[0].viktigaBegrepp).toEqual(['evolution', 'cellandning', 'stamcell']);
   });
 
   it('null utan bok eller planering; okänt kapitel ger null', () => {

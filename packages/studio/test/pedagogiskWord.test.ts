@@ -57,3 +57,26 @@ describe('Del 217: Word-dokumentet för ett omfång av delkapitel', () => {
     expect(xml).not.toContain('6.3 ');
   });
 });
+
+describe('Del 218: bokens "Några viktiga begrepp" i Word-dokumentet', () => {
+  it('står under syftet, före avsnittet Viktiga begrepp', async () => {
+    const rad = JSON.parse(readFileSync(new URL('../../kernel/test/fixtures/spektrum-biologi-kap6.json', import.meta.url), 'utf8')) as { kapitel: Array<Record<string, unknown>> };
+    rad.kapitel[0].mal = ['beskriva hur kroppens celler är uppbyggda och hur de fungerar'];
+    rad.kapitel[0].viktigaBegrepp = ['evolution', 'cellandning', 'stamcell', 'organsystem'];
+    const BOK = bokFromValfriImport(JSON.stringify(rad));
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-09-14', slut: '2027-06-11', dagar: [] });
+    s = sparaBok(s, BOK);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', bokId: BOK.id, schema: [{ dag: 4, start: '09:45', slut: '10:55' }] });
+    s = registreraPlanering(s, { id: 'pl', amneId: 'bi', bokId: BOK.id, skapad: '2026-09-10' });
+    const pl = pedagogiskPlanering(s, 'bi', 6, '2026-09-14')!;
+    const buf = await Packer.toBuffer(byggPedagogiskPlanering(pl));
+    const { default: JSZip } = await import('jszip');
+    const xml = (await (await JSZip.loadAsync(buf)).file('word/document.xml')!.async('string')).replace(/<[^>]+>/g, '');
+    const i = xml.indexOf('beskriva hur kroppens celler');
+    const j = xml.indexOf('Några viktiga begrepp: evolution, cellandning, stamcell, organsystem');
+    expect(i).toBeGreaterThan(-1); expect(j).toBeGreaterThan(i);
+    expect(j).toBeLessThan(xml.indexOf('Innehåll'));
+  });
+});

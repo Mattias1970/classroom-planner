@@ -106,7 +106,8 @@ function ProvlappVisning({ p, farg }: { p: ProvlappData; farg: string }) {
 
       {p.kapitelMal.length > 0 && (<>
         <h4>{p.kapitel.length > 1 ? 'Det här får du lära dig i kapitlen' : 'Det här får du lära dig i kapitlet'}</h4>
-        {p.kapitel.map((k) => k.mal.length === 0 ? null : <div key={k.nr}>{p.kapitel.length > 1 && <b className="small">Kapitel {k.nr} {k.namn}</b>}<ul>{k.mal.map((m, i) => <li key={i}>{m}</li>)}</ul></div>)}
+        {p.kapitel.map((k) => k.mal.length === 0 ? null : <div key={k.nr}>{p.kapitel.length > 1 && <b className="small">Kapitel {k.nr} {k.namn}</b>}<ul>{k.mal.map((m, i) => <li key={i}>{m}</li>)}</ul>
+          {k.viktigaBegrepp.length > 0 && <p className="small provlapp-viktiga"><b>Några viktiga begrepp:</b> {k.viktigaBegrepp.join(', ')}</p>}</div>)}
       </>)}
 
       <h4>1. Det här ska du kunna</h4>

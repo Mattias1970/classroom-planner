@@ -118,7 +118,7 @@ describe('Del 199 · provlapp för ett omfång av delkapitel (6.1–6.5, 7.1–7
     const p = provlappForOmfang(s, 'am', [{ fran: '6.1', till: '6.5' }], { namn: 'Prov kroppen', datum: '2026-11-06', vecka: 45, notis: null }, '2026-09-14')!;
     expect(p).not.toBeNull();
     expect(p.omfang).toBe('6.1–6.5');
-    expect(p.kapitel).toEqual([{ nr: 6, namn: p.kapitelNamn, mal: p.kapitelMal }]);
+    expect(p.kapitel).toEqual([{ nr: 6, namn: p.kapitelNamn, mal: p.kapitelMal, viktigaBegrepp: [] }]);
     expect(p.avsnitt.filter((a) => a.typ === 'delkapitel').map((a) => a.rubrik.slice(0, 3))).toEqual(['6.1', '6.2', '6.3', '6.4', '6.5']);
     expect(p.avsnitt.some((a) => a.rubrik.startsWith('6.6'))).toBe(false);
     expect(p.begrepp.map((b) => b.begrepp)).toContain('cellteorin');
@@ -374,5 +374,29 @@ describe('Del 215 · bindeord i stället för pilar på lappen', () => {
     const text = provlappText(provlapp(s, 'am', 7, '2026-09-14')!);
     expect(text).toContain('Bindeord i stället för pilar: eftersom · därför att');
     expect(BINDEORD).toContain('vilket leder till att');
+  });
+});
+
+describe('Del 218 · bokens "Några viktiga begrepp" från öppningsuppslaget', () => {
+  it('läses in per kapitel och står med i provlappen efter kapitelmålen', () => {
+    const rad = JSON.parse(readFileSync(join(HAR, 'fixtures', 'spektrum-biologi-kap6.json'), 'utf8')) as { kapitel: Array<Record<string, unknown>> };
+    rad.kapitel[0].mal = ['att din kropp består av många olika typer av celler som samarbetar med varandra'];
+    rad.kapitel[0].viktigaBegrepp = ['evolution', 'cellandning', 'stamcell', '', 'muskelpump'];
+    const bok = bokFromValfriImport(JSON.stringify(rad));
+    expect(bok.kapitel[0].viktigaBegrepp).toEqual(['evolution', 'cellandning', 'stamcell', 'muskelpump']);
+    const s = bygg(bok, 'Biologi');
+    const p = provlappForOmfang(s, 'am', [{ fran: '6.1', till: '6.5' }], { namn: 'Prov kroppen', datum: '2026-11-06', vecka: 45, notis: null }, '2026-09-14')!;
+    expect(p.kapitel[0].viktigaBegrepp).toEqual(['evolution', 'cellandning', 'stamcell', 'muskelpump']);
+    const text = provlappText(p);
+    const i = text.indexOf('• att din kropp består');
+    const j = text.indexOf('Några viktiga begrepp: evolution, cellandning, stamcell, muskelpump');
+    expect(i).toBeGreaterThan(-1); expect(j).toBeGreaterThan(i);
+    expect(j).toBeLessThan(text.indexOf('DET HÄR SKA DU KUNNA'));
+  });
+  it('utan fältet i bokfilen: tom lista, ingen rad i texten', () => {
+    const s = bygg(SPEKTRUM, 'Biologi');
+    const p = provlappForOmfang(s, 'am', [{ fran: '6.1', till: '6.2' }], { namn: 'Prov', datum: null, vecka: null, notis: null }, '2026-09-14')!;
+    expect(p.kapitel[0].viktigaBegrepp).toEqual([]);
+    expect(provlappText(p)).not.toContain('Några viktiga begrepp');
   });
 });

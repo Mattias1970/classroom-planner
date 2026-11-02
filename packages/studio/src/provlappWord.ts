@@ -76,6 +76,7 @@ export function provlappDokument(pl: Provlapp, farg: string, figur: Uint8Array |
     for (const k of pl.kapitel) {
       if (pl.kapitel.length > 1 && k.mal.length > 0) ut.push(h2(`Kapitel ${k.nr} ${k.namn}`));
       k.mal.forEach((m) => ut.push(punkt(m)));
+      if (k.viktigaBegrepp.length > 0) ut.push(p(`Några viktiga begrepp: ${k.viktigaBegrepp.join(', ')}`));
     }
   }
 
