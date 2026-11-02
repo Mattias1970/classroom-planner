@@ -45,8 +45,6 @@ export interface ProvlappAvsnitt {
   labb: string | null;
   /** Del 209 · Filmer som hör till avsnittet (bokens filmresurser, t.ex. Binogi). */
   filmer: Array<{ titel: string; url: string }>;
-  /** Del 210 · Frågorna klassen haft i läxförhör och exit tickets (Socrative) för avsnittet, med senaste andel rätt. */
-  fragor: ProvlappFraga[];
   /** Del 213 · Bokens Testa dig själv-frågor för avsnittet. */
   testaFragor: string[];
 }
@@ -148,8 +146,12 @@ export interface Provlapp {
   kravE: string[];
   /** Del 213 · NO: så övar du för E och för C/A. null för andra ämnen. */
   noOvning: NoOvning | null;
-  /** Del 213 · Varifrån begreppens beskrivningar kommer: Socrative (senaste versionen av läxförhören) eller boken. */
-  begreppKalla: 'socrative' | 'bok' | 'blandat';
+  /**
+   * Del 219 · Begreppen per delkapitel med bokens förklaring — i bokordning, utan koppling till
+   * läxförhör eller exit tickets. Begrepp i kapitlets lista som inte hör till ett valt avsnitt
+   * hamnar sist under "Övriga begrepp". `begrepp` är samma lista platt.
+   */
+  begreppPerAvsnitt: Array<{ rubrik: string; begrepp: Array<{ begrepp: string; forklaring: string | null }> }>;
 }
 
 /**
@@ -219,7 +221,7 @@ function slaIhop(intervall: string[]): string {
   return [...new Set(delar)].join(' · ');
 }
 
-function avsnittUrBox(s: Struktur, amneId: string, bok: Bok, b: VagBox, fragor: Map<string, ProvlappFraga[]>, noAmne: boolean): ProvlappAvsnitt {
+function avsnittUrBox(s: Struktur, amneId: string, bok: Bok, b: VagBox, noAmne: boolean): ProvlappAvsnitt {
   const lekt = b.lektioner;
   const planer = lekt.map((l) => hamtaLektionsplan(s, amneId, l.index));
   const iBoken = lekt.map((l) => l.bok).find((x) => x !== undefined);
@@ -237,7 +239,6 @@ function avsnittUrBox(s: Struktur, amneId: string, bok: Bok, b: VagBox, fragor: 
     djupBredd,
     labb: iBoken?.labb ?? null,
     filmer,
-    fragor: b.kod !== null ? (fragor.get(b.kod) ?? []) : [],
     testaFragor: iBoken?.testaFragor ?? [],
     rubrik: b.rubrik, typ: b.typ, sidor: b.sidor,
     mal: b.mal, begrepp: b.begrepp,
@@ -272,9 +273,8 @@ function byggLapp(s: Struktur, amneId: string, bok: Bok, boxar: VagBox[], kapite
   const klass = s.klasser.find((k) => k.id === amne.klassId);
   const n = bok.nivaer;
   const { karta, text } = nivaKarta(n);
-  const fragor = fragorPerDelkapitel(s, amne.klassId, amneId);
   const noAmne = (NO_TK_AMNEN as readonly string[]).includes(amne.namn);
-  const avsnitt = boxar.map((b) => avsnittUrBox(s, amneId, bok, b, fragor, noAmne));
+  const avsnitt = boxar.map((b) => avsnittUrBox(s, amneId, bok, b, noAmne));
   const hitta = (b: string): string | null => {
     for (const k of kapitel) {
       const nyckel = Object.keys(k.forklaringar).find((x) => x.toLowerCase().trim() === b.toLowerCase().trim());
@@ -282,17 +282,22 @@ function byggLapp(s: Struktur, amneId: string, bok: Bok, boxar: VagBox[], kapite
     }
     return null;
   };
-  // Hela kapitlet: bokens begreppslista först; ett omfång: bara avsnittens begrepp
-  const begreppOrdning = [...(omfang === null ? kapitel.flatMap((k) => k.begreppslista) : []), ...avsnitt.flatMap((a) => a.begrepp)];
-  // Del 213 (NO): beskrivningen ur Socrative — begreppsförhörens frågetext är beskrivningen, facit är begreppet; senaste versionen vinner
-  const socBeskrivning = new Map<string, string>();
-  if (noAmne) for (const a of avsnitt) for (const f of a.fragor) if (f.begrepp !== null && f.fraga.trim() !== '') socBeskrivning.set(f.begrepp.toLowerCase().trim(), f.fraga.trim());
-  const socExtra = noAmne ? [...new Set(avsnitt.flatMap((a) => a.fragor).map((f) => f.begrepp).filter((b): b is string => b !== null))] : [];
-  const begrepp = [...new Set([...begreppOrdning, ...socExtra].map((b) => b.trim()).filter((b) => b !== ''))]
-    .filter((b, i, arr) => arr.findIndex((x) => x.toLowerCase() === b.toLowerCase()) === i)
-    .map((b) => ({ begrepp: b, forklaring: socBeskrivning.get(b.toLowerCase()) ?? hitta(b) }));
-  const antalSoc = begrepp.filter((b) => socBeskrivning.has(b.begrepp.toLowerCase())).length;
-  const begreppKalla: Provlapp['begreppKalla'] = antalSoc === 0 ? 'bok' : antalSoc === begrepp.length ? 'socrative' : 'blandat';
+  // Del 219 · Begreppen listas per delkapitel med bokens förklaring — ingen koppling till läxförhör.
+  // Hela kapitlet: begrepp ur kapitlets lista som inte hör till ett avsnitt hamnar sist under "Övriga begrepp".
+  const setts = new Set<string>();
+  const nyaBegrepp = (lista: string[]): Array<{ begrepp: string; forklaring: string | null }> => {
+    const ut: Array<{ begrepp: string; forklaring: string | null }> = [];
+    for (const b of lista.map((x) => x.trim()).filter((x) => x !== '')) {
+      const n = b.toLowerCase();
+      if (setts.has(n)) continue;
+      setts.add(n); ut.push({ begrepp: b, forklaring: hitta(b) });
+    }
+    return ut;
+  };
+  const begreppPerAvsnitt = avsnitt.map((a) => ({ rubrik: a.rubrik, begrepp: nyaBegrepp(a.begrepp) })).filter((g) => g.begrepp.length > 0);
+  const ovriga = omfang === null ? nyaBegrepp(kapitel.flatMap((k) => k.begreppslista)) : [];
+  if (ovriga.length > 0) begreppPerAvsnitt.push({ rubrik: 'Övriga begrepp', begrepp: ovriga });
+  const begrepp = begreppPerAvsnitt.flatMap((g) => g.begrepp);
 
   const ovningar: Record<Betygsniva, ProvlappOvning[]> = { E: [], C: [], A: [] };
   for (const a of avsnitt) {
@@ -328,7 +333,7 @@ function byggLapp(s: Struktur, amneId: string, bok: Bok, boxar: VagBox[], kapite
       ...(noAmne ? ['Göra en enkel laborationsbeskrivning: vad vi söker, hur vi ser resultatet och hur resultatet kopplas till det vi söker.'] : []),
     ],
     noOvning,
-    begreppKalla,
+    begreppPerAvsnitt,
   };
 }
 
@@ -580,12 +585,6 @@ export function provlappText(p: Provlapp): string {
     r.push(`  Bredd: ${a.djupBredd!.bredd}`);
     if (a.labb !== null) r.push(`  Labb (E): ${a.labb}`);
   }
-  const medFragor = p.avsnitt.filter((a) => a.fragor.length > 0);
-  if (medFragor.length > 0) {
-    r.push(''); r.push('BEGREPP FRÅN LÄXFÖRHÖR OCH EXIT TICKETS');
-    r.push(`(andel rätt i klassen senast · ⚠ = under ${PROVLAPP_OVA_GRANS} % — öva extra)`);
-    for (const a of medFragor) { r.push(a.rubrik); a.fragor.forEach((f) => r.push(`  • ${f.begrepp ?? f.fraga}${f.procent !== null ? ` – ${f.procent} %${f.procent < PROVLAPP_OVA_GRANS ? ' ⚠' : ''}` : ''}`)); }
-  }
   const medFilm = p.avsnitt.filter((a) => a.filmer.length > 0);
   if (medFilm.length > 0) {
     r.push(''); r.push('FILMER');
@@ -603,7 +602,10 @@ export function provlappText(p: Provlapp): string {
   }
   if (p.begrepp.length > 0) {
     r.push(''); r.push('BEGREPP DU SKA KUNNA FÖRKLARA');
-    p.begrepp.forEach((b) => r.push(`• ${b.begrepp}${b.forklaring !== null ? ` – ${b.forklaring}` : ''}`));
+    for (const g of p.begreppPerAvsnitt) {
+      r.push(g.rubrik);
+      g.begrepp.forEach((b) => r.push(`  • ${b.begrepp}${b.forklaring !== null ? ` – ${b.forklaring}` : ''}`));
+    }
   }
   r.push(''); r.push('ÖVNINGSFÖRSLAG');
   r.push(`(E = ${p.nivaKarta.E} · C = ${p.nivaKarta.C} · A = ${p.nivaKarta.A})`);

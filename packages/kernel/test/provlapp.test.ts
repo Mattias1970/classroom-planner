@@ -265,16 +265,10 @@ describe('Del 210 · begrepp från klassens läxförhör och exit tickets per de
     const per = fragorPerDelkapitel(s, 'k', 'am');
     expect(per.get('6.1')?.map((f) => [f.begrepp, f.procent, f.senast])).toEqual([['cellteorin', 100, 'Bi 6.1-6.2 begrepp'], ['cellandning', 100, 'Bi 6.1-6.2 begrepp']]);
     expect(per.get('6.2')?.map((f) => [f.begrepp, f.procent])).toEqual([['enzym', 0]]);
-    const p = provlapp(s, 'am', 8, '2026-09-14')!;
-    expect(p.avsnitt[0].fragor.map((f) => f.begrepp)).toEqual(['cellteorin', 'cellandning']);
-    expect(p.avsnitt[1].fragor).toEqual([{ fraga: 'Vilket begrepp? 3', begrepp: 'enzym', procent: 0, senast: 'Bi 6.1-6.2 begrepp' }]);
-    expect(p.avsnitt[2].fragor).toEqual([]);
-    const text = provlappText(p);
-    expect(text).toContain('BEGREPP FRÅN LÄXFÖRHÖR OCH EXIT TICKETS');
-    expect(text).toContain('• cellandning – 100 %');
-    expect(text).toContain('• enzym – 0 % ⚠');
-    // Utan resultat: tomt, ingen rubrik
-    expect(provlappText(provlapp(bygg(SPEKTRUM, 'Biologi'), 'am', 8, '2026-09-14')!)).not.toContain('BEGREPP FRÅN LÄXFÖRHÖR');
+    // Del 219 · provlappen kopplar inte till läxförhören: ingen procent, ingen Socrative-rubrik
+    const text = provlappText(provlapp(s, 'am', 8, '2026-09-14')!);
+    expect(text).not.toContain('LÄXFÖRHÖR');
+    expect(text).not.toMatch(/\d+ %/);
   });
 });
 
@@ -309,11 +303,14 @@ describe('Del 213 · NO-lappen: beskrivningar ur Socrative, Så övar du för E 
     const s = no();
     const p = provlapp(s, 'am', provIdx(s), '2026-09-14')!;
     expect(p.noAmne).toBe(true);
-    expect(p.begreppKalla).toBe('blandat');
+    // Del 219 · förklaringen är bokens — läxförhörens frågetexter används inte längre
     const b = Object.fromEntries(p.begrepp.map((x) => [x.begrepp, x.forklaring]));
-    expect(b.nervimpuls).toBe('Svag elektrisk signal som skickas mellan nervceller');   // senaste versionen, inte bokens
-    expect(b.synaps).toBe('Koppling där signalen hoppar mellan nervceller');
-    expect(b.hippocampus).toBeNull();   // inte i förhör, ingen bokförklaring
+    expect(b.nervimpuls).toBe('Bokens: svag elektrisk signal.');
+    expect(b.synaps).toBe('Bokens: koppling mellan nervceller.');
+    expect(b.hippocampus).toBeNull();   // ingen bokförklaring
+    expect(p.begreppPerAvsnitt.map((g) => [g.rubrik, g.begrepp.map((x) => x.begrepp)])).toEqual([
+      ['7.1 Så fungerar ditt nervsystem', ['nervimpuls', 'synaps']], ['7.2 Vår hjärnbark', ['hippocampus']]]);
+    expect(provlappText(p)).toContain('7.1 Så fungerar ditt nervsystem\n  • nervimpuls – Bokens: svag elektrisk signal.');
     expect(p.avsnitt[0].testaFragor).toEqual(['Vad är en nervimpuls?', 'Förklara hur nervimpulserna överförs.']);
     const o = p.noOvning!;
     expect(o.rum).toEqual(['Biologi71', 'Biologi72', 'Biologi712']);   // exit 7.1, exit 7.2, läxförhör hela kapitlet — ur bokens lektioner
@@ -343,7 +340,7 @@ describe('Del 213 · NO-lappen: beskrivningar ur Socrative, Så övar du för E 
     expect(noOvningPunkter(p).E[2]).toContain('7.1 Så fungerar ditt nervsystem (Hur snabb är din reaktionstid?)');
     const ma = laggTillEgenRad(bygg(MATTE, 'Matematik'), 'am', { id: 'er1', position: 7, rubrik: 'Prov', typ: 'prov' }, '2026-09-14');
     const pm = provlapp(ma, 'am', 7, '2026-09-14')!;
-    expect(pm.noOvning).toBeNull(); expect(pm.begreppKalla).toBe('bok');
+    expect(pm.noOvning).toBeNull();
     expect(provlappText(pm)).not.toContain('SÅ ÖVAR DU FÖR E');
   });
 });
@@ -398,5 +395,27 @@ describe('Del 218 · bokens "Några viktiga begrepp" från öppningsuppslaget', 
     const p = provlappForOmfang(s, 'am', [{ fran: '6.1', till: '6.2' }], { namn: 'Prov', datum: null, vecka: null, notis: null }, '2026-09-14')!;
     expect(p.kapitel[0].viktigaBegrepp).toEqual([]);
     expect(provlappText(p)).not.toContain('Några viktiga begrepp');
+  });
+});
+
+describe('Del 219 · begreppen listas per delkapitel, utan koppling till läxförhör', () => {
+  it('ett omfång: en grupp per delkapitel i bokordning, inga dubbletter', () => {
+    const s = bygg(SPEKTRUM, 'Biologi');
+    const p = provlappForOmfang(s, 'am', [{ fran: '6.1', till: '6.2' }], { namn: 'Prov', datum: null, vecka: null, notis: null }, '2026-09-14')!;
+    expect(p.begreppPerAvsnitt.map((g) => g.rubrik.slice(0, 3))).toEqual(['6.1', '6.2']);
+    expect(p.begreppPerAvsnitt[0].begrepp.map((b) => b.begrepp)).toContain('cellteorin');
+    expect(p.begreppPerAvsnitt[1].begrepp.map((b) => b.begrepp)).toContain('enzym');
+    const alla = p.begrepp.map((b) => b.begrepp.toLowerCase());
+    expect(new Set(alla).size).toBe(alla.length);
+    expect(p.begrepp).toEqual(p.begreppPerAvsnitt.flatMap((g) => g.begrepp));
+  });
+  it('hela kapitlet: begrepp ur kapitlets lista som inte hör till ett avsnitt hamnar sist under "Övriga begrepp"', () => {
+    const s = bygg(SPEKTRUM, 'Biologi');
+    const p = provlapp(s, 'am', 8, '2026-09-14')!;
+    const sista = p.begreppPerAvsnitt[p.begreppPerAvsnitt.length - 1];
+    const iAvsnitt = new Set(p.avsnitt.flatMap((a) => a.begrepp.map((b) => b.toLowerCase())));
+    if (sista.rubrik === 'Övriga begrepp') expect(sista.begrepp.every((b) => !iAvsnitt.has(b.begrepp.toLowerCase()))).toBe(true);
+    const text = provlappText(p);
+    expect(text).toContain('BEGREPP DU SKA KUNNA FÖRKLARA\n6.1');
   });
 });

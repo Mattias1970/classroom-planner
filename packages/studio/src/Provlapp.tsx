@@ -6,7 +6,7 @@
  * (hjälpmedel, tider) sparas på lektionsplanen och tas med på lappen.
  */
 import { useState } from 'react';
-import { BINDEORD, labMall, noOvningPunkter, omfangUrKoder, provlapp, provlappDiagnos, provlappText, PROVLAPP_OVA_GRANS, tolkaOmfang, valbaraDelkapitel, type Betygsniva, type Provlapp as ProvlappData, type Struktur } from '@planner/kernel';
+import { BINDEORD, labMall, noOvningPunkter, omfangUrKoder, provlapp, provlappDiagnos, provlappText, tolkaOmfang, valbaraDelkapitel, type Betygsniva, type Provlapp as ProvlappData, type Struktur } from '@planner/kernel';
 import { lasStruktur } from './store.js';
 import { djupBreddDataUrl } from './provlappFigur.js';
 
@@ -125,16 +125,10 @@ function ProvlappVisning({ p, farg }: { p: ProvlappData; farg: string }) {
               {a.labb !== null && <div><b>Labb (E):</b> {a.labb}</div>}
             </div>
           )}
-          {a.fragor.length > 0 && (
-            <p className="small provlapp-fragor"><b>Begrepp från läxförhör och exit tickets:</b> {a.fragor.map((f, i) => (
-              <span key={i} className={f.procent !== null && f.procent < PROVLAPP_OVA_GRANS ? 'provlapp-ova' : ''} title={`${f.fraga} · senast ${f.senast}`}>{i > 0 && ' · '}{f.begrepp ?? f.fraga}{f.procent !== null && <small className="muted"> {f.procent} %{f.procent < PROVLAPP_OVA_GRANS ? ' ⚠' : ''}</small>}</span>
-            ))}</p>
-          )}
           {a.filmer.length > 0 && <p className="small provlapp-filmer"><b>Filmer:</b> {a.filmer.map((f, i) => <span key={f.url}>{i > 0 && ' · '}<a href={f.url} target="_blank" rel="noreferrer">{f.titel}</a></span>)}</p>}
         </div>
       ))}
 
-      {delkap.some((a) => a.fragor.length > 0) && <p className="small muted">Procenten är klassens andel rätt senast begreppet var med i ett läxförhör eller en exit ticket. ⚠ = under {PROVLAPP_OVA_GRANS} % — öva extra på det.</p>}
 
       <h4>Så visar du djup och bredd</h4>
       <p className="small"><b>Djup</b> = orsakssamband i flera led: A → B → C, där varje pil svarar på <i>varför</i>. <b>Bredd</b> = flera exempel i ett led: A — exempel 1, 2, 3 — och vad de har gemensamt. Under varje avsnitt ovan finns en djup- och en breddfråga byggd på avsnittets begrepp.</p>
@@ -153,9 +147,14 @@ function ProvlappVisning({ p, farg }: { p: ProvlappData; farg: string }) {
 
       {p.begrepp.length > 0 && (<>
         <h4>2. Begrepp du ska kunna förklara</h4>
-        {p.noAmne && <p className="small muted">{p.begreppKalla === 'socrative' ? 'Beskrivningarna är de från läxförhören i Socrative (senaste versionen).' : p.begreppKalla === 'blandat' ? 'Beskrivningarna är de från läxförhören i Socrative (senaste versionen); begrepp som inte varit med i ett förhör har bokens förklaring.' : 'Beskrivningarna är bokens — inga läxförhör med facit finns än för de här begreppen.'}</p>}
-        <table className="tbl small"><thead><tr><th>Begrepp</th><th>{p.noAmne ? 'Beskrivning' : 'Förklaring'}</th></tr></thead>
-          <tbody>{p.begrepp.map((b) => <tr key={b.begrepp}><td><b>{b.begrepp}</b></td><td>{b.forklaring ?? <span className="muted">—</span>}</td></tr>)}</tbody></table>
+        <p className="small muted">Bokens begrepp, delkapitel för delkapitel, med bokens förklaring. Förklara med egna ord och ge ett exempel.</p>
+        {p.begreppPerAvsnitt.map((g) => (
+          <div key={g.rubrik} className="provlapp-begrepp-grupp">
+            <b className="small">{g.rubrik}</b>
+            <table className="tbl small"><thead><tr><th>Begrepp</th><th>Förklaring</th></tr></thead>
+              <tbody>{g.begrepp.map((b) => <tr key={b.begrepp}><td><b>{b.begrepp}</b></td><td>{b.forklaring ?? <span className="muted">—</span>}</td></tr>)}</tbody></table>
+          </div>
+        ))}
       </>)}
 
       {p.noOvning !== null ? <NoOvningVy p={p} /> : (<>
