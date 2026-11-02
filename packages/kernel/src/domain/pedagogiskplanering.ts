@@ -77,6 +77,8 @@ export interface PedagogiskPlanering {
   filmer: Array<{ kod: string; namn: string; filmer: PlanFilm[] }>;
   /** Kumulativa övningsrum i ordning: Biologi61, Biologi612 … */
   ovaRum: string[];
+  /** Del 222 · Rummet som övar alla valda delkapitel i varje kapitel: Biologi612345 (6.1–6.5), Biologi7123 (7.1–7.3). */
+  ovaRumAlla: string[];
   /** Klassrummet där läxförhör och exit tickets körs. */
   klassRum: string;
   prov: { datum: string | null; rubrik: string } | null;
@@ -184,7 +186,7 @@ export function pedagogiskPlaneringForOmfang(s: Struktur, amneId: string, spann:
     begreppPerDelkapitel: delar.flatMap((pl) => pl.begreppPerDelkapitel),
     innehall: delar.flatMap((pl) => pl.innehall), filmer: delar.flatMap((pl) => pl.filmer),
     socrativeRum: delar.flatMap((pl) => pl.socrativeRum).filter((r, i, arr) => arr.findIndex((x) => x.rum === r.rum) === i),
-    ovaRum: [...new Set(delar.flatMap((pl) => pl.ovaRum))], klassRum: forsta.klassRum,
+    ovaRum: [...new Set(delar.flatMap((pl) => pl.ovaRum))], ovaRumAlla: delar.flatMap((pl) => pl.ovaRumAlla), klassRum: forsta.klassRum,
     prov: provDelar[provDelar.length - 1] ?? null,
     sammanfattningSidor: delar.map((pl) => pl.sammanfattningSidor).filter((x): x is string => x !== null).join(', ') || null,
     veckor,
@@ -225,6 +227,18 @@ function pedagogiskPlaneringKapitel(s: Struktur, amneId: string, kapitelNr: numb
     rader.splice(0, rader.length, ...kvar);
   }
 
+  // Del 222 · Ett omfång (6.1–6.5) ska inte peka på rum eller begrepp utanför urvalet: kumulativa rum
+  // klipps till de valda delkapitlen (Biologi612345678 → Biologi612345, "Begrepp 6.1–6.8" → "Begrepp 6.1–6.5").
+  const valdaNr = kap.delkapitel.filter((d) => inom === null || inom(d.kod)).map((d) => Number(d.kod.split('.')[1])).filter((n) => Number.isFinite(n));
+  const klipp = (rum: string | null): string | null => {
+    if (rum === null || inom === null) return rum;
+    const m = /^([^\d]+)(\d)(\d+)$/.exec(rum);
+    if (m === null || Number(m[2]) !== nr) return rum;
+    const nrn = m[3].split('').map(Number);
+    if (nrn.every((x) => valdaNr.includes(x))) return rum;
+    const kvar = nrn.filter((x) => valdaNr.includes(x));
+    return kvar.length === 0 ? null : `${m[1]}${m[2]}${kvar.join('')}`;
+  };
   // Del 220 · Socrative-rummen som planeringen pekar på: exit ticket-rummet övar lektionens delkapitel,
   // läxförhörs- och läxrummen de delkapitel namnet täcker (kumulativt: Biologi612 = 6.1–6.2)
   const rumKarta = new Map<string, { delkapitel: string; exit: boolean; lax: boolean }>();
@@ -240,7 +254,7 @@ function pedagogiskPlaneringKapitel(s: Struktur, amneId: string, kapitelNr: numb
     const begrepp = lp?.begreppText !== undefined && lp.begreppText.trim() !== ''
       ? lp.begreppText.split(',').map((b) => b.trim()).filter((b) => b !== '')
       : begreppForLektion(bok, r.kapitel, r.lektion);
-    const laxRum = har(r.lektion.socStart) ? rumUr(r.lektion.socStart) : null;
+    const laxRum = klipp(har(r.lektion.socStart) ? rumUr(r.lektion.socStart) : null);
     const laxforhor = laxRum !== null || har(lp?.laxforhorRum)
       ? { begrepp: `Begrepp ${rumTillKoder(lp?.laxforhorRum ?? laxRum ?? '') ?? (lp?.laxforhorRum ?? laxRum ?? '')}`, rum: klassRum, ovaRum: lp?.laxforhorRum ?? laxRum }
       : null;
@@ -251,7 +265,7 @@ function pedagogiskPlaneringKapitel(s: Struktur, amneId: string, kapitelNr: numb
     const nastaRad = rader.slice(i + 1).find((x) => x.grupp === grupp || x.grupp === undefined || grupp === undefined);
     // Läxan är ALLTID kumulativ: alla begrepp till och med det här delkapitlet, i det
     // kumulativa rummet (Biologi612) — samma begrepp och rum som nästa lektions läxförhör.
-    const laxaRum = (har(r.lektion.laxa) ? rumITexten(r.lektion.laxa) : null) ?? exitRum;
+    const laxaRum = klipp((har(r.lektion.laxa) ? rumITexten(r.lektion.laxa) : null) ?? exitRum);
     const laxaKoder = laxaRum !== null ? rumTillKoder(laxaRum) : null;
     const laxa = typ === 'lektion' && begrepp.length > 0 && nastaRad !== undefined && nastaRad.r.datum !== null
       ? {
@@ -310,6 +324,9 @@ function pedagogiskPlaneringKapitel(s: Struktur, amneId: string, kapitelNr: numb
   });
   const valdaLektioner = inom === null ? alla : [...valdaDelkapitel.flatMap((d) => d.lektioner), ...kap.extraLektioner];
   const ovaRum = [...new Set(valdaLektioner.map((l) => (har(l.exit) ? rumUr(l.exit) : null)).filter((x): x is string => x !== null))];
+  // Del 222 · rummet för alla valda delkapitel: prefixet ur första exit-rummet + kapitel + delkapitelnumren
+  const prefixM = ovaRum.length > 0 ? /^([^\d]+)\d/.exec(ovaRum[0]) : null;
+  const ovaRumAlla = prefixM !== null && valdaNr.length > 0 ? [`${prefixM[1]}${nr}${valdaNr.join('')}`] : ovaRum.slice(-1);
   const begreppslista = inom === null ? kap.begreppslista : [...new Set(valdaDelkapitel.flatMap((d) => d.begrepp))];
   const provRad = dagar.find((d) => d.typ === 'prov') ?? null;
   const provLektion = alla.find((l) => l.typ === 'exam');
@@ -319,6 +336,6 @@ function pedagogiskPlaneringKapitel(s: Struktur, amneId: string, kapitelNr: numb
     amne: amne.namn, klass: klass.namn, kapitel: { nr, namn: kap.namn, sidor: kap.sidor },
     kapitelLista: [{ nr, namn: kap.namn, sidor: kap.sidor, syfte, syfteSidor: kap.malSidor ?? null, viktigaBegrepp: kap.viktigaBegrepp ?? [] }],
     omfang: null,
-    syfte, syfteSidor: kap.malSidor ?? null, syfteFranDelkapitel, begrepp: begreppslista, begreppPerDelkapitel, innehall, socrativeRum: rumLista, filmer, ovaRum, klassRum, prov, sammanfattningSidor, veckor,
+    syfte, syfteSidor: kap.malSidor ?? null, syfteFranDelkapitel, begrepp: begreppslista, begreppPerDelkapitel, innehall, socrativeRum: rumLista, filmer, ovaRum, ovaRumAlla, klassRum, prov, sammanfattningSidor, veckor,
   };
 }

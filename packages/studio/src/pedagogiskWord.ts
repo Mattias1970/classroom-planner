@@ -55,7 +55,7 @@ function infoRuta(rader: Array<{ etikett: string; text: string }>): Table {
 
 /** Det fasta bedömningsavsnittet — med kapitlets sidor och rum ifyllda. */
 function provOchBedomning(pl: PedagogiskPlanering): Paragraph[] {
-  const rumAlla = pl.ovaRum[pl.ovaRum.length - 1];
+  const rumAlla = pl.ovaRumAlla.length > 0 ? pl.ovaRumAlla.join(', ') : undefined;
   const ovaRum = pl.ovaRum.join(', ');
   return [
     h2('Prov och bedömning'),
@@ -71,7 +71,7 @@ function provOchBedomning(pl: PedagogiskPlanering): Paragraph[] {
     p('Studera inför prov:', { bold: true }),
     p('E-nivå'),
     punkt(`Lär dig sammanfattningen${pl.sammanfattningSidor !== null ? ` (${pl.sammanfattningSidor})` : ''}.`),
-    punkt(`Lär dig vad begreppen betyder. Öva i Socrative: ${rumAlla ?? pl.klassRum} (hela kapitlet)${pl.ovaRum.length > 1 ? `, eller delkapitel för delkapitel: ${ovaRum}. Första siffran är kapitlet och de följande siffrorna vilka delkapitel som ingår i rummet.` : '.'}`),
+    punkt(`Lär dig vad begreppen betyder. Öva i Socrative: ${rumAlla ?? pl.klassRum} (${pl.omfang !== null ? 'alla valda delkapitel' : 'hela kapitlet'})${pl.ovaRum.length > 1 ? `, eller delkapitel för delkapitel: ${ovaRum}. Första siffran är kapitlet och de följande siffrorna vilka delkapitel som ingår i rummet.` : '.'}`),
     punkt('Lär dig hur man undersöker:'),
     punkt('laborationerna – hur vi gör för att undersöka vad.', 1),
     punkt('du ska kunna göra en enkel beskrivning av hur man testar en hypotes (idé, antagande) och hur man ser på resultatet av testet – vad som är svaret på hypotesen.', 1),

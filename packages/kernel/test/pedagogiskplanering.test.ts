@@ -162,16 +162,25 @@ describe('Del 220 · sammanfattning per delkapitel, begrepp per delkapitel och S
     // fixturen saknar bokens sammanfattning → bokens mål; källan märks
     expect(p.innehall.map((d) => d.kalla)).toEqual(['mal', 'mal', 'mal']);
     expect(p.innehall[0].text).toContain('Alla organismer består av celler');
-    // rummen planeringen pekar på (exit tickets, läxor, läxförhör — även provets), sorterade på vad de övar
+    // Del 222 · rummen planeringen pekar på, klippta till urvalet: provets Biologi612345678 blir Biologi6123
     expect(p.socrativeRum).toEqual([
       { rum: 'Biologi61', delkapitel: '6.1', anvands: 'exit ticket och läxförhör' },
       { rum: 'Biologi612', delkapitel: '6.1–6.2', anvands: 'läxförhör' },
       { rum: 'Biologi6123', delkapitel: '6.1–6.3', anvands: 'läxförhör' },
-      { rum: 'Biologi612345678', delkapitel: '6.1–6.8', anvands: 'läxförhör' },
       { rum: 'Biologi62', delkapitel: '6.2', anvands: 'exit ticket' },
       { rum: 'Biologi63', delkapitel: '6.3', anvands: 'exit ticket' },
     ]);
-    expect(p.socrativeRum.map((r) => r.rum)).not.toContain('Biologi64');
+    expect(p.ovaRumAlla).toEqual(['Biologi6123']);
+    // provdagen: läxförhöret pekar på urvalet, inte hela kapitlet
+    const prov = p.veckor.flatMap((v) => v.dagar).find((d) => d.typ === 'prov')!;
+    expect(prov.laxforhor).toEqual({ begrepp: 'Begrepp 6.1–6.3', rum: 'Biologi8BB', ovaRum: 'Biologi6123' });
+    const sista = p.veckor.flatMap((v) => v.dagar).filter((d) => d.kod === '6.3').pop()!;
+    expect(sista.laxa?.ovaRum).toBe('Biologi6123');
+    expect(JSON.stringify(p)).not.toMatch(/6\.[4-8]|Biologi6123[45]/);
+    // hela kapitlet: oklippt
+    const hela = pedagogiskPlanering(s, 'bi', 6, '2026-09-14')!;
+    expect(hela.socrativeRum.map((r) => r.rum)).toContain('Biologi612345678');
+    expect(hela.ovaRumAlla).toEqual(['Biologi612345678']);
   });
 
   it('bokens sammanfattning av delkapitlet går före lektionsplanens och bokens mål', async () => {
