@@ -7,7 +7,7 @@
  * dokumentet kan genereras om när planeringen ändras.
  */
 import {
-  AlignmentType, Document, ExternalHyperlink, HeadingLevel, Packer, Paragraph, ShadingType,
+  AlignmentType, Document, ExternalHyperlink, Footer, HeadingLevel, Packer, PageNumber, Paragraph, ShadingType,
   BorderStyle, Table, TableCell, TableRow, TextRun, WidthType,
 } from 'docx';
 import type { PedagogiskPlanering, PlanDag, PlanFilm } from '@planner/kernel';
@@ -20,20 +20,38 @@ function ladda(namn: string, blob: Blob): void {
   URL.revokeObjectURL(a.href);
 }
 
+/** Del 221 · Färger och luft — ett lugnt, läsbart dokument: mörkblå rubriker med linje under, grå metatext. */
+const MORK = '1F3A5F'; const ACCENT = '2E75B6'; const DAMPAD = '666666'; const LINJE = 'BFD3E6';
 const h1 = (t: string) => new Paragraph({ text: t, heading: HeadingLevel.HEADING_1 });
 const h2 = (t: string) => new Paragraph({ text: t, heading: HeadingLevel.HEADING_2 });
 const h3 = (t: string) => new Paragraph({ text: t, heading: HeadingLevel.HEADING_3 });
-const p = (t: string, opts: { bold?: boolean; italics?: boolean } = {}) => new Paragraph({ children: [new TextRun({ text: t, ...opts })] });
+const p = (t: string, opts: { bold?: boolean; italics?: boolean; color?: string } = {}) => new Paragraph({ children: [new TextRun({ text: t, ...opts })] });
 const punkt = (t: string, niva = 0) => new Paragraph({ text: t, bullet: { level: niva } });
 const numrerad = (t: string) => new Paragraph({ text: t, numbering: { reference: 'nr', level: 0 } });
 const tom = () => new Paragraph({ text: '' });
 const lank = (f: PlanFilm) => new ExternalHyperlink({ link: f.url, children: [new TextRun({ text: f.titel, style: 'Hyperlink' })] });
-const filmRad = (filmer: PlanFilm[], prefix?: string) => new Paragraph({
+/** Filmerna för ett delkapitel: fet rubrik, sedan länkarna åtskilda med · ; inga filmer → dämpad notis. */
+const filmRad = (filmer: PlanFilm[], prefix?: string, namn?: string) => new Paragraph({
+  spacing: { after: 60 },
   children: [
-    ...(prefix !== undefined ? [new TextRun({ text: `${prefix} `, bold: true })] : []),
-    ...filmer.flatMap((f, i) => [lank(f), ...(i < filmer.length - 1 ? [new TextRun('   ')] : [])]),
+    ...(prefix !== undefined ? [new TextRun({ text: `${prefix}${namn !== undefined ? ` ${namn}` : ''}`, bold: true, color: MORK }), new TextRun({ text: '   ' })] : []),
+    ...(filmer.length === 0 ? [new TextRun({ text: 'inga filmer i bokfilen', italics: true, color: DAMPAD })] : []),
+    ...filmer.flatMap((f, i) => [lank(f), ...(i < filmer.length - 1 ? [new TextRun({ text: '  ·  ', color: DAMPAD })] : [])]),
   ],
 });
+/** Del 221 · Lätt tonad ruta för prov och sammanfattningssidor. */
+function infoRuta(rader: Array<{ etikett: string; text: string }>): Table {
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [new TableRow({ cantSplit: true, children: [new TableCell({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      shading: { type: ShadingType.CLEAR, fill: 'EAF1F8' },
+      borders: { top: { style: BorderStyle.SINGLE, size: 12, color: ACCENT }, bottom: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' }, left: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' }, right: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' } },
+      margins: { top: 100, bottom: 100, left: 160, right: 160 },
+      children: rader.map((r) => new Paragraph({ spacing: { after: 40 }, children: [new TextRun({ text: `${r.etikett}  `, bold: true, color: MORK }), new TextRun({ text: r.text })] })),
+    })] })],
+  });
+}
 
 /** Det fasta bedömningsavsnittet — med kapitlets sidor och rum ifyllda. */
 function provOchBedomning(pl: PedagogiskPlanering): Paragraph[] {
@@ -93,7 +111,7 @@ function begreppTvaKolumner(begrepp: string[]): Table {
 
 /** Del 220 · Socrative-rummen: hur man hittar dit, rumsnamn och vilka delkapitel som övas. */
 function socrativeAvsnitt(pl: PedagogiskPlanering): Array<Paragraph | Table> {
-  const rad = (celler: string[], fet = false) => new TableRow({ children: celler.map((c, i) => cell([p(c, { bold: fet })], [30, 30, 40][i], fet ? GRA : undefined)) });
+  const rad = (celler: string[], fet = false) => new TableRow({ ...(fet ? { tableHeader: true } : {}), children: celler.map((c, i) => cell([p(c, { bold: fet, color: fet ? MORK : undefined })], [30, 30, 40][i], fet ? 'EAF1F8' : undefined)) });
   return [
     h2('Socrative – öva begreppen'),
     p('Så hittar du dit: gå till socrative.com, välj Student Login, skriv rumsnamnet (Room Name) och sedan ditt namn. Rummen nedan kan du öva i när som helst; svaren rättas direkt.'),
@@ -110,7 +128,8 @@ function socrativeAvsnitt(pl: PedagogiskPlanering): Array<Paragraph | Table> {
 function bindeordTabell(): Table {
   const cell = (rubrik: string, ord: string[]) => new TableCell({
     width: { size: 50, type: WidthType.PERCENTAGE },
-    children: [p(rubrik, { bold: true }), ...ord.map((o) => punkt(o))],
+    shading: { type: ShadingType.CLEAR, fill: 'F6F9FC' },
+    children: [p(rubrik, { bold: true, color: MORK }), ...ord.map((o) => punkt(o))],
   });
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
@@ -145,7 +164,7 @@ function kortOmFormagorna(): Paragraph[] {
   ];
 }
 
-const GRA = 'D9D9D9'; const GRON = 'E2EFDA';
+const GRA = 'DCE6F0'; const GRON = 'EEF5EA';
 function cell(children: Array<Paragraph | Table>, procent: number, fill?: string): TableCell {
   return new TableCell({
     width: { size: procent, type: WidthType.PERCENTAGE },
@@ -203,7 +222,8 @@ function dagRad(d: PlanDag, pl: PlanDag[]): TableRow {
       : [],
     d.filmer.length > 0 ? [p('Binogifilm', { bold: true }), ...d.filmer.map((f) => new Paragraph({ children: [lank(f)] }))] : [],
   ]);
-  return new TableRow({ children: [cell(kol1, 18), cell(kol2, 14), cell(kol3, 40), cell(kol4, 28)] });
+  // Del 221 · en dag bryts inte över två sidor
+  return new TableRow({ cantSplit: true, children: [cell(kol1, 18), cell(kol2, 14), cell(kol3, 40), cell(kol4, 28)] });
 }
 
 function planeringsTabell(pl: PedagogiskPlanering): Table {
@@ -224,9 +244,10 @@ function planeringsTabell(pl: PedagogiskPlanering): Table {
 export function byggPedagogiskPlanering(pl: PedagogiskPlanering): Document {
   const barn: Array<Paragraph | Table> = [
     h1('Pedagogisk planering och provlapp'),
-    h1(pl.omfang !== null
+    new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: pl.omfang !== null
       ? `${pl.amne} ${pl.klass} · ${pl.kapitelLista.map((k) => `Kap ${k.nr} – ${k.namn}`).join(' · ')} (${pl.omfang})`
-      : `${pl.amne} ${pl.klass} · Kap ${pl.kapitel.nr} – ${pl.kapitel.namn}${pl.kapitel.sidor !== '—' ? ` (${pl.kapitel.sidor})` : ''}`),
+      : `${pl.amne} ${pl.klass} · Kap ${pl.kapitel.nr} – ${pl.kapitel.namn}${pl.kapitel.sidor !== '—' ? ` (${pl.kapitel.sidor})` : ''}`, size: 28, color: ACCENT })] }),
+    new Paragraph({ spacing: { after: 200 }, border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: ACCENT, space: 1 } }, children: [new TextRun({ text: '' })] }),
     h2('Syfte'),
     // Kapitlets "Här får du lära dig" saknas i bokfilen — då visas delkapitlens mål, tydligt märkt
     ...(pl.syfteFranDelkapitel
@@ -241,12 +262,14 @@ export function byggPedagogiskPlanering(pl: PedagogiskPlanering): Document {
     ...pl.innehall.flatMap((d) => [h3(`${d.kod} ${d.namn}${d.sidor !== '—' ? ` ${d.sidor}` : ''}`), ...d.text.split('\n').filter((x) => x.trim() !== '').map((x) => p(x))]),
     h2('Viktiga begrepp per delkapitel'),
     ...pl.begreppPerDelkapitel.flatMap((d) => (d.begrepp.length > 0 ? [h3(`${d.kod} ${d.namn}`), begreppTvaKolumner(d.begrepp)] : [])),
-    ...(pl.prov !== null ? [p(`Prov: ${pl.prov.rubrik}${pl.prov.datum !== null ? ` – ${pl.prov.datum}` : ''}`, { bold: true })] : []),
-    ...(pl.sammanfattningSidor !== null ? [p(`Sammanfattning ${pl.sammanfattningSidor}`)] : []),
+    ...(pl.prov !== null || pl.sammanfattningSidor !== null ? [tom(), infoRuta([
+      ...(pl.prov !== null ? [{ etikett: 'Prov:', text: `${pl.prov.rubrik}${pl.prov.datum !== null ? ` – ${pl.prov.datum}` : ''}` }] : []),
+      ...(pl.sammanfattningSidor !== null ? [{ etikett: 'Sammanfattning i boken:', text: pl.sammanfattningSidor }] : []),
+    ])] : []),
     ...socrativeAvsnitt(pl),
     h2('Binogi – filmer'),
     p('Filmer om kapitlets innehåll. Man kan välja olika språk för tal och undertexter för ökad förståelse. Notera att ni behöver kunna begreppen på svenska.'),
-    ...pl.filmer.map((d) => (d.filmer.length > 0 ? filmRad(d.filmer, d.kod) : p(`${d.kod} —`))),
+    ...pl.filmer.map((d) => filmRad(d.filmer, d.kod, d.namn)),
     ...provOchBedomning(pl),
     bindeordTabell(),
     ...kortOmFormagorna(),
@@ -256,8 +279,27 @@ export function byggPedagogiskPlanering(pl: PedagogiskPlanering): Document {
   ];
   return new Document({
     numbering: { config: [{ reference: 'nr', levels: [{ level: 0, format: 'decimal', text: '%1.', alignment: AlignmentType.START }] }] },
-    styles: { default: { document: { run: { font: 'Calibri', size: 22 } } } },
-    sections: [{ children: barn }],
+    // Del 221 · luft ovanför rubrikerna, mörkblå rubriker, linje under H2, lite radavstånd
+    styles: {
+      default: { document: { run: { font: 'Calibri', size: 22 }, paragraph: { spacing: { after: 80, line: 276 } } } },
+      paragraphStyles: [
+        { id: 'Heading1', name: 'Heading 1', basedOn: 'Normal', next: 'Normal', quickFormat: true,
+          run: { size: 40, bold: true, color: MORK, font: 'Calibri Light' }, paragraph: { spacing: { before: 120, after: 120 }, outlineLevel: 0 } },
+        { id: 'Heading2', name: 'Heading 2', basedOn: 'Normal', next: 'Normal', quickFormat: true,
+          run: { size: 30, bold: true, color: ACCENT, font: 'Calibri Light' },
+          paragraph: { spacing: { before: 480, after: 140 }, outlineLevel: 1, border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: LINJE, space: 4 } } } },
+        { id: 'Heading3', name: 'Heading 3', basedOn: 'Normal', next: 'Normal', quickFormat: true,
+          run: { size: 24, bold: true, color: MORK }, paragraph: { spacing: { before: 240, after: 60 }, outlineLevel: 2 } },
+      ],
+    },
+    sections: [{
+      properties: { page: { margin: { top: 1134, bottom: 1134, left: 1247, right: 1247 } } },
+      footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [
+        new TextRun({ text: `${pl.amne} ${pl.klass} · Pedagogisk planering${pl.omfang !== null ? ` ${pl.omfang}` : ` kap ${pl.kapitel.nr}`}   ·   sida `, color: DAMPAD, size: 18 }),
+        new TextRun({ children: [PageNumber.CURRENT], color: DAMPAD, size: 18 }), new TextRun({ text: ' av ', color: DAMPAD, size: 18 }), new TextRun({ children: [PageNumber.TOTAL_PAGES], color: DAMPAD, size: 18 }),
+      ] })] }) },
+      children: barn,
+    }],
   });
 }
 
