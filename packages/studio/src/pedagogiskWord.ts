@@ -4,7 +4,8 @@
  * begrepp, Innehåll per delkapitel, Binogi-filmer med länkar, Prov och bedömning
  * (B/U/R, studera inför prov, studieteknik, kort om förmågorna) och Planering-
  * tabellen vecka för vecka. Innehållet kommer ur pedagogiskPlanering (kernel), så
- * dokumentet kan genereras om när planeringen ändras.
+ * dokumentet kan genereras om när planeringen ändras. Del 225: klassen nämns inte (varken
+ * i rubrik, sidfot, filnamn eller som Socrative-rum) så samma dokument kan användas av flera klasser.
  */
 import {
   AlignmentType, Document, ExternalHyperlink, Footer, HeadingLevel, Packer, PageNumber, Paragraph, ShadingType,
@@ -27,7 +28,7 @@ const h2 = (t: string) => new Paragraph({ text: t, heading: HeadingLevel.HEADING
 const h3 = (t: string) => new Paragraph({ text: t, heading: HeadingLevel.HEADING_3 });
 const p = (t: string, opts: { bold?: boolean; italics?: boolean; color?: string } = {}) => new Paragraph({ children: [new TextRun({ text: t, ...opts })] });
 const punkt = (t: string, niva = 0) => new Paragraph({ text: t, bullet: { level: niva } });
-const numrerad = (t: string) => new Paragraph({ text: t, numbering: { reference: 'nr', level: 0 } });
+const numrerad = (t: string) => new Paragraph({ text: t, numbering: { reference: 'nr', level: 0 }, spacing: { after: 100 } });
 const tom = () => new Paragraph({ text: '' });
 const lank = (f: PlanFilm) => new ExternalHyperlink({ link: f.url, children: [new TextRun({ text: f.titel, style: 'Hyperlink' })] });
 /** Filmerna för ett delkapitel: fet rubrik, sedan länkarna åtskilda med · ; inga filmer → dämpad notis. */
@@ -71,9 +72,14 @@ function provOchBedomning(pl: PedagogiskPlanering): Paragraph[] {
     p('Studera inför prov:', { bold: true }),
     p('E-nivå'),
     punkt(`Lär dig sammanfattningen${pl.sammanfattningSidor !== null ? ` (${pl.sammanfattningSidor})` : ''}.`),
-    punkt(`Lär dig vad begreppen betyder. Öva i Socrative: ${rumAlla ?? pl.klassRum} (${pl.omfang !== null ? 'alla valda delkapitel' : 'hela kapitlet'})${pl.ovaRum.length > 1 ? `, eller delkapitel för delkapitel: ${ovaRum}. Första siffran är kapitlet och de följande siffrorna vilka delkapitel som ingår i rummet.` : '.'}`),
+    punkt(`Lär dig vad begreppen betyder. Öva i Socrative: ${rumAlla ?? 'klassens rum'} (${pl.omfang !== null ? 'alla valda delkapitel' : 'hela kapitlet'})${pl.ovaRum.length > 1 ? `, eller delkapitel för delkapitel: ${ovaRum}. Första siffran är kapitlet och de följande siffrorna vilka delkapitel som ingår i rummet.` : '.'}`),
     punkt('Lär dig hur man undersöker:'),
     punkt('laborationerna – hur vi gör för att undersöka vad.', 1),
+    // Del 224 · de genomförda laborationerna med frågeställning
+    ...(pl.laborationer.some((l) => l.genomford)
+      ? [punkt('Laborationer vi har gjort – kunna beskriva vad vi testade, hur vi testade och hur vi såg resultatet:', 1),
+        ...pl.laborationer.filter((l) => l.genomford).map((l) => punkt(`${l.namn}${l.fraga !== null ? ` – Frågeställning: ${l.fraga}` : ''}`, 2))]
+      : [punkt('inga laborationer är genomförda än i det här omfånget.', 1)]),
     punkt('du ska kunna göra en enkel beskrivning av hur man testar en hypotes (idé, antagande) och hur man ser på resultatet av testet – vad som är svaret på hypotesen.', 1),
     punkt('Träna på att bemöta påståenden (påståenden finns ofta i frågorna i Finalen):'),
     punkt('stämmer/stämmer inte samt ett enkelt resonemang varför (en mening). Pelle säger: "Om man sätter maten högt så får djuren längre hals." – "Pelle har fel därför att varje individ får den halslängd den ska, men de som har längst hals får tillgång till mat och överlever."', 1),
@@ -115,7 +121,7 @@ function socrativeAvsnitt(pl: PedagogiskPlanering): Array<Paragraph | Table> {
   return [
     h2('Socrative – öva begreppen'),
     p('Så hittar du dit: gå till socrative.com, välj Student Login, skriv rumsnamnet (Room Name) och sedan ditt namn. Rummen nedan kan du öva i när som helst; svaren rättas direkt.'),
-    p(`På lektionen körs läxförhör och exit tickets i klassens rum ${pl.klassRum}.`),
+    p('På lektionen körs läxförhör och exit tickets i klassens eget rum — läraren säger vilket.'),
     ...(pl.socrativeRum.length === 0 ? [p('Inga övningsrum i planeringen.')] : [new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
       rows: [rad(['Rum (Room Name)', 'Övar delkapitel', 'Används som'], true), ...pl.socrativeRum.map((r) => rad([r.rum, r.delkapitel, r.anvands]))],
@@ -200,7 +206,7 @@ function dagRad(d: PlanDag, pl: PlanDag[]): TableRow {
   const kol3 = medLuft([
     d.typ === 'prov' ? [p(`Prov – ${d.avsnitt}`, { bold: true })] : [],
     d.laxforhor !== null
-      ? [p('Läxförhör:', { bold: true }), p(`${d.laxforhor.begrepp} · Socrative: ${d.laxforhor.rum}`),
+      ? [p('Läxförhör:', { bold: true }), p(`${d.laxforhor.begrepp} · Socrative: klassens rum`),
         p('(börja med frågorna när du är klar med förhöret)', { italics: true })]
       : [],
     [
@@ -212,7 +218,7 @@ function dagRad(d: PlanDag, pl: PlanDag[]): TableRow {
         ? d.genomgang.split('\n').filter((x) => x.trim() !== '').map((rad) => punkt(rad)) : []),
     ],
     d.arbete !== null ? [p('Arbete:', { bold: true }), p(d.arbete)] : [],
-    d.exit !== null ? [p('Avslut:', { bold: true }), p(`Exit ticket · Socrative: ${d.exit.rum} (${d.exit.begrepp})`)] : [],
+    d.exit !== null ? [p('Avslut:', { bold: true }), p(`Exit ticket · Socrative: klassens rum (${d.exit.begrepp})`)] : [],
   ]);
   const kol4 = medLuft([
     d.begrepp.length > 0 ? [p('Begrepp', { bold: true }), p(d.begrepp.join(', '))] : [],
@@ -245,8 +251,8 @@ export function byggPedagogiskPlanering(pl: PedagogiskPlanering): Document {
   const barn: Array<Paragraph | Table> = [
     h1('Pedagogisk planering och provlapp'),
     new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: pl.omfang !== null
-      ? `${pl.amne} ${pl.klass} · ${pl.kapitelLista.map((k) => `Kap ${k.nr} – ${k.namn}`).join(' · ')} (${pl.omfang})`
-      : `${pl.amne} ${pl.klass} · Kap ${pl.kapitel.nr} – ${pl.kapitel.namn}${pl.kapitel.sidor !== '—' ? ` (${pl.kapitel.sidor})` : ''}`, size: 28, color: ACCENT })] }),
+      ? `${pl.amne} · ${pl.kapitelLista.map((k) => `Kap ${k.nr} – ${k.namn}`).join(' · ')} (${pl.omfang})`
+      : `${pl.amne} · Kap ${pl.kapitel.nr} – ${pl.kapitel.namn}${pl.kapitel.sidor !== '—' ? ` (${pl.kapitel.sidor})` : ''}`, size: 28, color: ACCENT })] }),
     new Paragraph({ spacing: { after: 200 }, border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: ACCENT, space: 1 } }, children: [new TextRun({ text: '' })] }),
     h2('Syfte'),
     // Kapitlets "Här får du lära dig" saknas i bokfilen — då visas delkapitlens mål, tydligt märkt
@@ -278,7 +284,9 @@ export function byggPedagogiskPlanering(pl: PedagogiskPlanering): Document {
     planeringsTabell(pl),
   ];
   return new Document({
-    numbering: { config: [{ reference: 'nr', levels: [{ level: 0, format: 'decimal', text: '%1.', alignment: AlignmentType.START }] }] },
+    // Del 223 · numrerad lista med hängande indrag: texten får en jämn vänsterkant under siffran
+    numbering: { config: [{ reference: 'nr', levels: [{ level: 0, format: 'decimal', text: '%1.', alignment: AlignmentType.START,
+      style: { paragraph: { indent: { left: 567, hanging: 360 } } } }] }] },
     // Del 221 · luft ovanför rubrikerna, mörkblå rubriker, linje under H2, lite radavstånd
     styles: {
       default: { document: { run: { font: 'Calibri', size: 22 }, paragraph: { spacing: { after: 80, line: 276 } } } },
@@ -295,7 +303,7 @@ export function byggPedagogiskPlanering(pl: PedagogiskPlanering): Document {
     sections: [{
       properties: { page: { margin: { top: 1134, bottom: 1134, left: 1247, right: 1247 } } },
       footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [
-        new TextRun({ text: `${pl.amne} ${pl.klass} · Pedagogisk planering${pl.omfang !== null ? ` ${pl.omfang}` : ` kap ${pl.kapitel.nr}`}   ·   sida `, color: DAMPAD, size: 18 }),
+        new TextRun({ text: `${pl.amne} · Pedagogisk planering${pl.omfang !== null ? ` ${pl.omfang}` : ` kap ${pl.kapitel.nr}`}   ·   sida `, color: DAMPAD, size: 18 }),
         new TextRun({ children: [PageNumber.CURRENT], color: DAMPAD, size: 18 }), new TextRun({ text: ' av ', color: DAMPAD, size: 18 }), new TextRun({ children: [PageNumber.TOTAL_PAGES], color: DAMPAD, size: 18 }),
       ] })] }) },
       children: barn,
@@ -305,6 +313,6 @@ export function byggPedagogiskPlanering(pl: PedagogiskPlanering): Document {
 
 export async function exporteraPedagogiskPlanering(pl: PedagogiskPlanering): Promise<void> {
   const doc = byggPedagogiskPlanering(pl);
-  ladda(`Planering ${pl.amne} ${pl.klass} ${pl.omfang !== null ? pl.omfang.replace(/–/g, '-').replace(/ · /g, ' ') : `kap ${pl.kapitel.nr}`}`, await Packer.toBlob(doc));
+  ladda(`Planering ${pl.amne} ${pl.omfang !== null ? pl.omfang.replace(/–/g, '-').replace(/ · /g, ' ') : `kap ${pl.kapitel.nr}`}`, await Packer.toBlob(doc));
 }
 

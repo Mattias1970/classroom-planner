@@ -4080,3 +4080,44 @@ describe('Del 217: 👨‍👩‍👧 Pedagogisk planering — välj delkapitel 
     vi.useRealTimers();
   });
 });
+
+describe('Del 224: 👨‍👩‍👧 Pedagogisk planering — vilka laborationer är genomförda', () => {
+  it('rutan listar laborationerna i omfånget med frågeställning; förval efter datum; krysset sparas per ämne', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-25T10:00:00Z'));   // efter första labben (torsdag 20/8), före de senare
+    const { bokFromValfriImport, laggTillAmne, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering, sattLaborationsstandard, sattLektionsplan, sparaBok, tomStruktur, pedagogiskPlanering } = await import('@planner/kernel');
+    const bok = bokFromValfriImport(JSON.stringify({ id: 'bio', titel: 'Biologi', forlag: 'L', amne: 'Biologi', arskurs: 8, kapitel: [
+      { nummer: 6, titel: 'Kroppen', sidor: '1–2', delkapitel: [1, 2, 3].map((n) => ({ nummer: `6.${n}`, titel: `Del ${n}`, sidor: `${n}`, begrepp: [`b${n}`], extraBegrepp: [], testaDigSjalv: { sida: n, fragor: [] } })) },
+    ] }));
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = sparaBok(s, bok);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', bokId: bok.id, halvklass: true, schema: [{ dag: 1, start: '10:00', slut: '11:00' }, { dag: 4, start: '13:00', slut: '14:00' }], schemaB: [{ dag: 1, start: '10:00', slut: '11:00' }, { dag: 4, start: '14:10', slut: '15:10' }] });
+    s = registreraPlanering(s, { id: 'p', amneId: 'bi', bokId: bok.id, skapad: '2026-08-10' });
+    s = sattLaborationsstandard(s, 'bi', true, '2026-08-17');
+    const fore = pedagogiskPlanering(s, 'bi', 6, '2026-08-17')!;
+    const lab1 = fore.veckor.flatMap((v) => v.dagar).find((d) => d.typ === 'laboration')!;
+    s = sattLektionsplan(s, { id: 'lpL', amneId: 'bi', lektionsIndex: lab1.nr - 1, labFraga: 'Hur påverkar temperaturen enzymets aktivitet?' });
+    window.localStorage.setItem('classroom-planner.studio.v2', JSON.stringify(s));
+    const host = render();
+    act(() => { treeKnapp(host, '💼 NO').click(); });
+    act(() => { treeKnapp(host, '👥 8B').click(); });
+    act(() => { treeKnapp(host, '📖 Biologi').click(); });
+    act(() => { knapp(host, '👨‍👩‍👧 Pedagogisk planering').click(); });
+    const dialog = host.querySelector('[role="dialog"][aria-label="Pedagogisk planering"]')!;
+    expect(dialog.textContent).toContain('Vilka laborationer har genomförts?');
+    expect(dialog.textContent).toContain('Hur påverkar temperaturen enzymets aktivitet?');
+    const kryss = [...dialog.querySelectorAll('input[aria-label^="Laboration genomförd"]')] as HTMLInputElement[];
+    expect(kryss.length).toBeGreaterThan(1);
+    // första labben (augusti) ligger före idag → förkryssad; en senare inte
+    expect(kryss[0].checked).toBe(true);
+    expect(kryss[kryss.length - 1].checked).toBe(false);
+    act(() => { kryss[0].click(); });
+    expect((dialog.querySelectorAll('input[aria-label^="Laboration genomförd"]')[0] as HTMLInputElement).checked).toBe(false);
+    const sparat = JSON.parse(localStorage.getItem('pp.labbar.bi') ?? '{}') as Record<string, boolean>;
+    expect(Object.values(sparat)).toEqual([false]);
+    act(() => { knapp(host, 'Avbryt').click(); });
+    vi.useRealTimers();
+  });
+});

@@ -194,3 +194,29 @@ describe('Del 220 · sammanfattning per delkapitel, begrepp per delkapitel och S
     expect(p.innehall[1].kalla).toBe('mal');
   });
 });
+
+describe('Del 224 · laborationerna i planeringen med frågeställning och genomförd-status', () => {
+  it('halvklass: en post per laboration (A och B slås ihop), frågeställning ur lektionsplanen, genomförd = datum före idag', () => {
+    let s = bygg(true);
+    s = sattLaborationsstandard(s, 'bi', true, '2026-09-14');
+    const fore = pedagogiskPlanering(s, 'bi', 6, '2026-09-14')!;
+    const labRad = fore.veckor[0].dagar.find((d) => d.typ === 'laboration')!;
+    s = sattLektionsplan(s, { id: 'lpL', amneId: 'bi', lektionsIndex: labRad.nr - 1, labFraga: 'Hur påverkar temperaturen enzymets aktivitet?' });
+    const p = pedagogiskPlanering(s, 'bi', 6, '2026-09-14')!;
+    expect(p.laborationer.length).toBeGreaterThan(0);
+    expect(p.laborationer.filter((l) => l.datum === labRad.datum)).toHaveLength(1);     // inte en för A och en för B
+    expect(p.laborationer[0]).toMatchObject({ datum: labRad.datum, fraga: 'Hur påverkar temperaturen enzymets aktivitet?', genomford: false });
+    // idag efter första labben: den är genomförd, de senare inte
+    const senare = pedagogiskPlanering(s, 'bi', 6, '2026-10-01')!;
+    expect(senare.laborationer[0].genomford).toBe(true);
+    expect(senare.laborationer.filter((l) => l.datum !== null && l.datum >= '2026-10-01').every((l) => !l.genomford)).toBe(true);
+    // lärarens val vinner över datumet
+    const val = pedagogiskPlanering(s, 'bi', 6, '2026-10-01', new Set([p.laborationer[1].nyckel]))!;
+    expect(val.laborationer[0].genomford).toBe(false);
+    expect(val.laborationer[1].genomford).toBe(true);
+    // omfång: bara laborationerna i omfånget, i datumordning
+    const o = pedagogiskPlaneringForOmfang(s, 'bi', [{ fran: '6.1', till: '6.2' }], '2026-09-14')!;
+    expect(o.laborationer.every((l) => l.nyckel.length > 0)).toBe(true);
+    expect([...o.laborationer].sort((a, b) => (a.datum ?? '').localeCompare(b.datum ?? ''))).toEqual(o.laborationer);
+  });
+});

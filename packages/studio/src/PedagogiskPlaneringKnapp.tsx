@@ -22,6 +22,12 @@ export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, m
   const kapitel = valbaraDelkapitel(s, amneId, omfang, idag);
   const valda = kapitel.flatMap((k) => k.delkapitel.filter((d) => d.vald).map((d) => d.kod));
   const omf = tolkaOmfang(omfang);
+  // Del 224 · laborationerna i omfånget: läraren kryssar i vilka som är genomförda (förval: datum före idag)
+  const [labbVal, setLabbValRaw] = useState<Record<string, boolean>>(() => lasInstallning<Record<string, boolean>>(`pp.labbar.${amneId}`, {}));
+  const setLabbVal = (v: Record<string, boolean>) => { setLabbValRaw(v); sparaInstallning(`pp.labbar.${amneId}`, v); };
+  const forhand = omf.fel === null && omf.spann.length > 0 ? pedagogiskPlaneringForOmfang(s, amneId, omf.spann, idag) : pedagogiskPlanering(s, amneId, aktivtKapitel ?? undefined, idag);
+  const labbar = (forhand?.laborationer ?? []).map((l) => ({ ...l, genomford: labbVal[l.nyckel] ?? l.genomford }));
+  const genomforda = new Set(labbar.filter((l) => l.genomford).map((l) => l.nyckel));
   const vaxla = (kod: string) => setOmfang(omfangUrKoder(valda.includes(kod) ? valda.filter((x) => x !== kod) : [...valda, kod]));
   const oppna = () => {
     // Förval: pågående kapitlets alla delkapitel när inget valts än
@@ -33,8 +39,8 @@ export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, m
   };
   const exportera = () => {
     const pl = omf.fel === null && omf.spann.length > 0
-      ? pedagogiskPlaneringForOmfang(s, amneId, omf.spann, idag)
-      : pedagogiskPlanering(s, amneId, aktivtKapitel ?? undefined, idag);
+      ? pedagogiskPlaneringForOmfang(s, amneId, omf.spann, idag, genomforda)
+      : pedagogiskPlanering(s, amneId, aktivtKapitel ?? undefined, idag, genomforda);
     if (pl === null) { meddela?.('✗ Kunde inte bygga planeringen — inget valt delkapitel finns i boken, eller ämnet saknar planering.'); return; }
     void import('./pedagogiskWord.js').then(({ exporteraPedagogiskPlanering }) => exporteraPedagogiskPlanering(pl)).then(() => {
       meddela?.(`Pedagogisk planering ${pl.omfang ?? `kap ${pl.kapitel.nr}`} nedladdad som Word.`); setOppen(false);
@@ -64,6 +70,18 @@ export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, m
                 ))}
               </div>
             ))}
+            {labbar.length > 0 && (
+              <div className="pp-labbar" style={{ margin: '10px 0 4px' }}>
+                <b className="small">Vilka laborationer har genomförts?</b>
+                <p className="small muted" style={{ margin: '2px 0 4px' }}>De ikryssade tas med i planeringen med sin frågeställning (under "Studera inför prov"). Förval: laborationer med datum före idag.</p>
+                {labbar.map((l) => (
+                  <label key={l.nyckel} className="small" style={{ display: 'block' }} title={l.fraga ?? 'ingen frågeställning i lektionsplanen'}>
+                    <input type="checkbox" aria-label={`Laboration genomförd ${l.namn}`} checked={l.genomford} onChange={() => setLabbVal({ ...labbVal, [l.nyckel]: !l.genomford })} />
+                    {' '}{l.datum ?? '—'} · {l.namn}{l.fraga !== null ? <span className="muted"> – {l.fraga}</span> : <span className="status warn"> – frågeställning saknas i lektionsplanen</span>}
+                  </label>
+                ))}
+              </div>
+            )}
             <div className="modal-actions">
               <button className="btn" disabled={omf.fel !== null || valda.length === 0} onClick={exportera}>📄 Ladda ner Word</button>
               <button className="btn sec" onClick={() => setOppen(false)}>Avbryt</button>

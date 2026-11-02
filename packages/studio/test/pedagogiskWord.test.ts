@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { Packer } from 'docx';
 import {
-  bokFromValfriImport, laggTillAmne, laggTillKlass, laggTillSkolar, laggTillTjanst, pedagogiskPlanering, pedagogiskPlaneringForOmfang, registreraPlanering, sparaBok, tomStruktur,
+  bokFromValfriImport, laggTillAmne, laggTillKlass, laggTillSkolar, laggTillTjanst, pedagogiskPlanering, pedagogiskPlaneringForOmfang, registreraPlanering, sattLaborationsstandard, sattLektionsplan, sparaBok, tomStruktur,
 } from '@planner/kernel';
 import { byggPedagogiskPlanering } from '../src/pedagogiskWord.js';
 
@@ -108,5 +108,64 @@ describe('Del 220: sammanfattning, begrepp i två kolumner och Socrative-rummen 
     // Prov-raden står före Socrative-avsnittet, som står före filmerna
     expect(xml.indexOf('Prov: PROV')).toBeLessThan(xml.indexOf('Socrative – öva begreppen'));
     expect(xml.indexOf('Socrative – öva begreppen')).toBeLessThan(xml.indexOf('Binogi – filmer'));
+  });
+});
+
+describe('Del 223: den numrerade listan under Studieteknik har hängande indrag', () => {
+  it('numreringsnivån definierar indent med hanging', async () => {
+    const BOK = bokFromValfriImport(readFileSync(new URL('../../kernel/test/fixtures/spektrum-biologi-kap6.json', import.meta.url), 'utf8'));
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-09-14', slut: '2027-06-11', dagar: [] });
+    s = sparaBok(s, BOK);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', bokId: BOK.id, schema: [{ dag: 4, start: '09:45', slut: '10:55' }] });
+    s = registreraPlanering(s, { id: 'pl', amneId: 'bi', bokId: BOK.id, skapad: '2026-09-10' });
+    const buf = await Packer.toBuffer(byggPedagogiskPlanering(pedagogiskPlanering(s, 'bi', 6, '2026-09-14')!));
+    const { default: JSZip } = await import('jszip');
+    const numbering = await (await JSZip.loadAsync(buf)).file('word/numbering.xml')!.async('string');
+    expect(numbering).toMatch(/<w:lvl w:ilvl="0"[^>]*>(?:(?!<\/w:lvl>).)*<w:numFmt w:val="decimal"\/>(?:(?!<\/w:lvl>).)*<w:ind [^>]*w:hanging="360"/s);
+  });
+});
+
+describe('Del 224: genomförda laborationer med frågeställning i Word', () => {
+  it('står under "Lär dig hur man undersöker"; utan genomförda labbar en notis', async () => {
+    const BOK = bokFromValfriImport(readFileSync(new URL('../../kernel/test/fixtures/spektrum-biologi-kap6.json', import.meta.url), 'utf8'));
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-09-14', slut: '2027-06-11', dagar: [] });
+    s = sparaBok(s, BOK);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', bokId: BOK.id, halvklass: true, schema: [{ dag: 1, start: '10:00', slut: '11:00' }, { dag: 4, start: '13:00', slut: '14:00' }], schemaB: [{ dag: 1, start: '10:00', slut: '11:00' }, { dag: 4, start: '14:10', slut: '15:10' }] });
+    s = registreraPlanering(s, { id: 'pl', amneId: 'bi', bokId: BOK.id, skapad: '2026-09-10' });
+    s = sattLaborationsstandard(s, 'bi', true, '2026-09-14');
+    const fore = pedagogiskPlanering(s, 'bi', 6, '2026-09-14')!;
+    const lab1 = fore.veckor.flatMap((v) => v.dagar).find((d) => d.typ === 'laboration')!;
+    s = sattLektionsplan(s, { id: 'lpL', amneId: 'bi', lektionsIndex: lab1.nr - 1, labFraga: 'Hur påverkar temperaturen enzymets aktivitet?' });
+    const { default: JSZip } = await import('jszip');
+    const text = async (pl: ReturnType<typeof pedagogiskPlanering>) => (await (await JSZip.loadAsync(await Packer.toBuffer(byggPedagogiskPlanering(pl!)))).file('word/document.xml')!.async('string')).replace(/<[^>]+>/g, '');
+    const utan = await text(pedagogiskPlanering(s, 'bi', 6, '2026-09-14'));
+    expect(utan).toContain('inga laborationer är genomförda än');
+    const med = await text(pedagogiskPlanering(s, 'bi', 6, '2026-11-01'));
+    expect(med).toContain('Laborationer vi har gjort');
+    expect(med).toContain('Frågeställning: Hur påverkar temperaturen enzymets aktivitet?');
+  });
+});
+
+describe('Del 225: klassen nämns inte i dokumentet', () => {
+  it('varken klassnamn eller klassens Socrative-rum finns i texten', async () => {
+    const BOK = bokFromValfriImport(readFileSync(new URL('../../kernel/test/fixtures/spektrum-biologi-kap6.json', import.meta.url), 'utf8'));
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-09-14', slut: '2027-06-11', dagar: [] });
+    s = sparaBok(s, BOK);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', bokId: BOK.id, schema: [{ dag: 4, start: '09:45', slut: '10:55' }] });
+    s = registreraPlanering(s, { id: 'pl', amneId: 'bi', bokId: BOK.id, skapad: '2026-09-10' });
+    const buf = await Packer.toBuffer(byggPedagogiskPlanering(pedagogiskPlanering(s, 'bi', 6, '2026-09-14')!));
+    const { default: JSZip } = await import('jszip');
+    const zip = await JSZip.loadAsync(buf);
+    const alltXml = (await Promise.all(['word/document.xml', 'word/footer1.xml'].map(async (f) => (await zip.file(f)?.async('string')) ?? ''))).join('').replace(/<[^>]+>/g, '');
+    expect(alltXml).not.toMatch(/(^|[^\d])8B\b/);   // klassnamnet (inte '…678Binogifilm')
+    expect(alltXml).not.toContain('Biologi8BB');
+    expect(alltXml).toContain('Socrative: klassens rum');
+    expect(alltXml).toContain('Biologi · Kap 6');
   });
 });
