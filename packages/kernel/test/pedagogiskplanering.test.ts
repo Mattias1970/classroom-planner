@@ -150,3 +150,38 @@ describe('Del 217 · pedagogisk planering för ett omfång över flera kapitel',
     expect(hela.omfang).toBeNull();
   });
 });
+
+describe('Del 220 · sammanfattning per delkapitel, begrepp per delkapitel och Socrative-rummen', () => {
+  it('innehållet är bokens sammanfattning när den finns, begreppen grupperas per delkapitel, rummen listas med delkapitel', () => {
+    const s = bygg();
+    const p = pedagogiskPlaneringForOmfang(s, 'bi', [{ fran: '6.1', till: '6.3' }], '2026-09-14')!;
+    expect(p.begreppPerDelkapitel.map((d) => d.kod)).toEqual(['6.1', '6.2', '6.3']);
+    expect(p.begreppPerDelkapitel[0].begrepp).toContain('cellteorin');
+    expect(p.begreppPerDelkapitel[1].begrepp).toContain('enzym');
+    expect(p.begrepp).toEqual([...new Set(p.begreppPerDelkapitel.flatMap((d) => d.begrepp))]);
+    // fixturen saknar bokens sammanfattning → bokens mål; källan märks
+    expect(p.innehall.map((d) => d.kalla)).toEqual(['mal', 'mal', 'mal']);
+    expect(p.innehall[0].text).toContain('Alla organismer består av celler');
+    // rummen planeringen pekar på (exit tickets, läxor, läxförhör — även provets), sorterade på vad de övar
+    expect(p.socrativeRum).toEqual([
+      { rum: 'Biologi61', delkapitel: '6.1', anvands: 'exit ticket och läxförhör' },
+      { rum: 'Biologi612', delkapitel: '6.1–6.2', anvands: 'läxförhör' },
+      { rum: 'Biologi6123', delkapitel: '6.1–6.3', anvands: 'läxförhör' },
+      { rum: 'Biologi612345678', delkapitel: '6.1–6.8', anvands: 'läxförhör' },
+      { rum: 'Biologi62', delkapitel: '6.2', anvands: 'exit ticket' },
+      { rum: 'Biologi63', delkapitel: '6.3', anvands: 'exit ticket' },
+    ]);
+    expect(p.socrativeRum.map((r) => r.rum)).not.toContain('Biologi64');
+  });
+
+  it('bokens sammanfattning av delkapitlet går före lektionsplanens och bokens mål', async () => {
+    const { bokFromValfriImport } = await import('../src/domain/biologibok.js');
+    const rad = JSON.parse(readFileSync(join(HAR, 'fixtures', 'spektrum-biologi-kap6.json'), 'utf8')) as { kapitel: Array<{ delkapitel: Array<Record<string, unknown>> }> };
+    rad.kapitel[0].delkapitel[0].sammanfattning = 'Celler bildar vävnader, vävnader bildar organ och organ bildar organsystem.';
+    let s = bygg();
+    s = sparaBok(s, bokFromValfriImport(JSON.stringify(rad)));
+    const p = pedagogiskPlanering(s, 'bi', 6, '2026-09-14')!;
+    expect(p.innehall[0]).toMatchObject({ kod: '6.1', kalla: 'bok', text: 'Celler bildar vävnader, vävnader bildar organ och organ bildar organsystem.' });
+    expect(p.innehall[1].kalla).toBe('mal');
+  });
+});

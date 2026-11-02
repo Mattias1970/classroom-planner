@@ -80,3 +80,33 @@ describe('Del 218: bokens "Några viktiga begrepp" i Word-dokumentet', () => {
     expect(j).toBeLessThan(xml.indexOf('Innehåll'));
   });
 });
+
+describe('Del 220: sammanfattning, begrepp i två kolumner och Socrative-rummen i Word', () => {
+  it('innehållet är bokens sammanfattning, begreppen står per delkapitel, rumstabellen har rum + delkapitel', async () => {
+    const rad = JSON.parse(readFileSync(new URL('../../kernel/test/fixtures/spektrum-biologi-kap6.json', import.meta.url), 'utf8')) as { kapitel: Array<{ delkapitel: Array<Record<string, unknown>> }> };
+    rad.kapitel[0].delkapitel[0].sammanfattning = 'Celler bildar vävnader, vävnader bildar organ och organ bildar organsystem.';
+    const BOK = bokFromValfriImport(JSON.stringify(rad));
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-09-14', slut: '2027-06-11', dagar: [] });
+    s = sparaBok(s, BOK);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', bokId: BOK.id, schema: [{ dag: 4, start: '09:45', slut: '10:55' }] });
+    s = registreraPlanering(s, { id: 'pl', amneId: 'bi', bokId: BOK.id, skapad: '2026-09-10' });
+    const pl = pedagogiskPlaneringForOmfang(s, 'bi', [{ fran: '6.1', till: '6.2' }], '2026-09-14')!;
+    const buf = await Packer.toBuffer(byggPedagogiskPlanering(pl));
+    const { default: JSZip } = await import('jszip');
+    const xml = (await (await JSZip.loadAsync(buf)).file('word/document.xml')!.async('string')).replace(/<[^>]+>/g, '');
+    for (const t of ['Innehåll – sammanfattning av varje delkapitel', 'Celler bildar vävnader, vävnader bildar organ', 'Viktiga begrepp per delkapitel', 'Socrative – öva begreppen', 'socrative.com', 'Student Login', 'Room Name', 'Biologi612', '6.1–6.2', 'läxförhör', 'exit ticket']) {
+      expect(xml, t).toContain(t);
+    }
+    // begreppen står under sitt delkapitel: 6.1-rubriken före cellteorin, 6.2-rubriken före enzym
+    const i61 = xml.indexOf('6.1 Celler, vävnader och organ', xml.indexOf('Viktiga begrepp per delkapitel'));
+    const i62 = xml.indexOf('6.2 Matspjälkningen', i61);
+    expect(xml.indexOf('cellteorin', i61)).toBeLessThan(i62);
+    expect(xml.indexOf('enzym', i62)).toBeGreaterThan(i62);
+    expect(xml).not.toContain('Biologi63');   // 6.3 ingår inte i omfånget
+    // Prov-raden står före Socrative-avsnittet, som står före filmerna
+    expect(xml.indexOf('Prov: PROV')).toBeLessThan(xml.indexOf('Socrative – öva begreppen'));
+    expect(xml.indexOf('Socrative – öva begreppen')).toBeLessThan(xml.indexOf('Binogi – filmer'));
+  });
+});

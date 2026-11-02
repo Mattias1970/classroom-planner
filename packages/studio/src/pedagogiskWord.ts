@@ -8,7 +8,7 @@
  */
 import {
   AlignmentType, Document, ExternalHyperlink, HeadingLevel, Packer, Paragraph, ShadingType,
-  Table, TableCell, TableRow, TextRun, WidthType,
+  BorderStyle, Table, TableCell, TableRow, TextRun, WidthType,
 } from 'docx';
 import type { PedagogiskPlanering, PlanDag, PlanFilm } from '@planner/kernel';
 
@@ -77,6 +77,33 @@ function provOchBedomning(pl: PedagogiskPlanering): Paragraph[] {
     numrerad('Läs rubrikerna. De visar vad du ska kunna och vilka frågeställningar du ska kunna besvara. Tips! Skriv ner varje rubrik och sammanfatta innehållet under med korta punkter eller tankekartor. Om rubriken är en frågeställning – besvara den utifrån texten.'),
     numrerad('Läs bildtexterna. Där hittar du ofta fördjupningar och beskrivningar på högre nivå som du ska kunna redogöra för.'),
     p('Beskriv händelser och deras följder med ord som:'),
+  ];
+}
+
+/** Del 220 · Begreppen för ett delkapitel som punktlista i två kolumner (utan kantlinjer). */
+function begreppTvaKolumner(begrepp: string[]): Table {
+  const halva = Math.ceil(begrepp.length / 2);
+  const kol = (lista: string[]) => new TableCell({
+    width: { size: 50, type: WidthType.PERCENTAGE },
+    borders: { top: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' }, bottom: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' }, left: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' }, right: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' } },
+    children: lista.length > 0 ? lista.map((b) => punkt(b)) : [tom()],
+  });
+  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [new TableRow({ children: [kol(begrepp.slice(0, halva)), kol(begrepp.slice(halva))] })] });
+}
+
+/** Del 220 · Socrative-rummen: hur man hittar dit, rumsnamn och vilka delkapitel som övas. */
+function socrativeAvsnitt(pl: PedagogiskPlanering): Array<Paragraph | Table> {
+  const rad = (celler: string[], fet = false) => new TableRow({ children: celler.map((c, i) => cell([p(c, { bold: fet })], [30, 30, 40][i], fet ? GRA : undefined)) });
+  return [
+    h2('Socrative – öva begreppen'),
+    p('Så hittar du dit: gå till socrative.com, välj Student Login, skriv rumsnamnet (Room Name) och sedan ditt namn. Rummen nedan kan du öva i när som helst; svaren rättas direkt.'),
+    p(`På lektionen körs läxförhör och exit tickets i klassens rum ${pl.klassRum}.`),
+    ...(pl.socrativeRum.length === 0 ? [p('Inga övningsrum i planeringen.')] : [new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [rad(['Rum (Room Name)', 'Övar delkapitel', 'Används som'], true), ...pl.socrativeRum.map((r) => rad([r.rum, r.delkapitel, r.anvands]))],
+    })]),
+    p('Första siffran i rumsnamnet är kapitlet och de följande siffrorna vilka delkapitel som ingår — Biologi612 övar 6.1–6.2.', { italics: true }),
+    tom(),
   ];
 }
 
@@ -210,12 +237,13 @@ export function byggPedagogiskPlanering(pl: PedagogiskPlanering): Document {
         ...(k.viktigaBegrepp.length > 0 ? [p(`Några viktiga begrepp: ${k.viktigaBegrepp.join(', ')}`)] : [])])
       : [p(`Här får du lära dig följande${pl.syfteSidor !== null ? ` (${pl.syfteSidor})` : ''}.`), ...pl.syfte.map((m) => punkt(m)),
         ...pl.kapitelLista.flatMap((k) => (k.viktigaBegrepp.length > 0 ? [p(`Några viktiga begrepp: ${k.viktigaBegrepp.join(', ')}`)] : []))]),
-    h2('Viktiga begrepp'),
-    ...(() => { const ut: Paragraph[] = []; for (let i = 0; i < pl.begrepp.length; i += 3) ut.push(p(pl.begrepp.slice(i, i + 3).join(' – '))); return ut; })(),
-    h2('Innehåll'),
+    h2('Innehåll – sammanfattning av varje delkapitel'),
     ...pl.innehall.flatMap((d) => [h3(`${d.kod} ${d.namn}${d.sidor !== '—' ? ` ${d.sidor}` : ''}`), ...d.text.split('\n').filter((x) => x.trim() !== '').map((x) => p(x))]),
+    h2('Viktiga begrepp per delkapitel'),
+    ...pl.begreppPerDelkapitel.flatMap((d) => (d.begrepp.length > 0 ? [h3(`${d.kod} ${d.namn}`), begreppTvaKolumner(d.begrepp)] : [])),
     ...(pl.prov !== null ? [p(`Prov: ${pl.prov.rubrik}${pl.prov.datum !== null ? ` – ${pl.prov.datum}` : ''}`, { bold: true })] : []),
     ...(pl.sammanfattningSidor !== null ? [p(`Sammanfattning ${pl.sammanfattningSidor}`)] : []),
+    ...socrativeAvsnitt(pl),
     h2('Binogi – filmer'),
     p('Filmer om kapitlets innehåll. Man kan välja olika språk för tal och undertexter för ökad förståelse. Notera att ni behöver kunna begreppen på svenska.'),
     ...pl.filmer.map((d) => (d.filmer.length > 0 ? filmRad(d.filmer, d.kod) : p(`${d.kod} —`))),

@@ -61,10 +61,18 @@ export interface PedagogiskPlanering {
   syfteSidor: string | null;
   /** true när syftet är delkapitlens mål — kapitlets egna saknas i bokfilen. */
   syfteFranDelkapitel: boolean;
-  /** Viktiga begrepp i bokordning. */
+  /** Viktiga begrepp i bokordning (alla valda delkapitel, platt). */
   begrepp: string[];
-  /** Innehåll per delkapitel: kod, namn, sidor, sammanfattning (lektionsplanens, annars genomgångens punkter). */
-  innehall: Array<{ kod: string; namn: string; sidor: string; text: string }>;
+  /** Del 220 · Begreppen per delkapitel, i bokordning. */
+  begreppPerDelkapitel: Array<{ kod: string; namn: string; begrepp: string[] }>;
+  /** Innehåll per delkapitel: kod, namn, sidor och text — Del 220: bokens sammanfattning av delkapitlet, annars lektionsplanens, annars bokens mål/genomgång. */
+  innehall: Array<{ kod: string; namn: string; sidor: string; text: string; /** 'bok' när texten är bokens sammanfattning. */ kalla: 'bok' | 'lektionsplan' | 'mal' }>;
+  /**
+   * Del 220 · Socrative-rummen i omfånget: varje rum med vad det övar (delkapitel) och när det
+   * används. Exit ticket-rummen (Biologi61) övar ett delkapitel; läxförhörsrummen (Biologi612) är
+   * kumulativa. Klassens eget rum (klassRum) står inte här — det används bara live på lektionen.
+   */
+  socrativeRum: Array<{ rum: string; delkapitel: string; anvands: 'exit ticket' | 'läxförhör' | 'exit ticket och läxförhör' }>;
   /** Filmer per delkapitel. */
   filmer: Array<{ kod: string; namn: string; filmer: PlanFilm[] }>;
   /** Kumulativa övningsrum i ordning: Biologi61, Biologi612 … */
@@ -173,7 +181,9 @@ export function pedagogiskPlaneringForOmfang(s: Struktur, amneId: string, spann:
     omfang,
     syfte: delar.flatMap((pl) => pl.syfte), syfteSidor: forsta.syfteSidor, syfteFranDelkapitel: delar.some((pl) => pl.syfteFranDelkapitel),
     begrepp: [...new Set(delar.flatMap((pl) => pl.begrepp))],
+    begreppPerDelkapitel: delar.flatMap((pl) => pl.begreppPerDelkapitel),
     innehall: delar.flatMap((pl) => pl.innehall), filmer: delar.flatMap((pl) => pl.filmer),
+    socrativeRum: delar.flatMap((pl) => pl.socrativeRum).filter((r, i, arr) => arr.findIndex((x) => x.rum === r.rum) === i),
     ovaRum: [...new Set(delar.flatMap((pl) => pl.ovaRum))], klassRum: forsta.klassRum,
     prov: provDelar[provDelar.length - 1] ?? null,
     sammanfattningSidor: delar.map((pl) => pl.sammanfattningSidor).filter((x): x is string => x !== null).join(', ') || null,
@@ -215,6 +225,14 @@ function pedagogiskPlaneringKapitel(s: Struktur, amneId: string, kapitelNr: numb
     rader.splice(0, rader.length, ...kvar);
   }
 
+  // Del 220 · Socrative-rummen som planeringen pekar på: exit ticket-rummet övar lektionens delkapitel,
+  // läxförhörs- och läxrummen de delkapitel namnet täcker (kumulativt: Biologi612 = 6.1–6.2)
+  const rumKarta = new Map<string, { delkapitel: string; exit: boolean; lax: boolean }>();
+  const laggRum = (rum: string | null | undefined, delkapitel: string | null, slag: 'exit' | 'lax') => {
+    if (rum === null || rum === undefined) return;
+    const f = rumKarta.get(rum) ?? { delkapitel: delkapitel ?? rumTillKoder(rum) ?? '—', exit: false, lax: false };
+    f[slag] = true; rumKarta.set(rum, f);
+  };
   const dagar: PlanDag[] = rader.map(({ r, index, grupp }, i) => {
     const lp = hamtaLektionsplan(s, amneId, index);
     const kod = delkapitelKod(r.lektion.avsnitt);
@@ -245,6 +263,9 @@ function pedagogiskPlaneringKapitel(s: Struktur, amneId: string, kapitelNr: numb
     const genomgang = har(lp?.genomgang) ? lp!.genomgang! : (har(r.lektion.genomgang) && r.lektion.genomgang !== r.lektion.avsnitt ? r.lektion.genomgang : null);
     const genomgangKalla = genomgang === null ? null : (har(lp?.genomgang) ? 'lektionsplan' as const : 'bok' as const);
     const arbete = har(lp?.uppgNiva1) ? lp!.uppgNiva1! : (har(r.lektion.ex) ? r.lektion.ex : (har(r.lektion.niva1) ? `Uppgifter ${r.lektion.niva1}` : null));
+    if (typ === 'lektion') laggRum(exitRum, kod, 'exit');
+    laggRum(laxforhor?.ovaRum, null, 'lax');
+    laggRum(laxa?.ovaRum, null, 'lax');
     return {
       datum: r.datum!, dag: veckodag(r.datum!), vecka: r.vecka ?? isoVecka(r.datum!), nr: index + 1, typ,
       ...(grupp !== undefined ? { grupp } : {}),
@@ -272,10 +293,17 @@ function pedagogiskPlaneringKapitel(s: Struktur, amneId: string, kapitelNr: numb
     const forsta = d.lektioner[0];
     const idx = ap.a.findIndex((r) => r.kapitel === nr && r.lektion.id === forsta?.id);
     const lp = idx >= 0 ? hamtaLektionsplan(s, amneId, idx) : null;
-    const text = har(lp?.sammanfattning) ? lp!.sammanfattning!
-      : (forsta !== undefined && har(forsta.mal) ? forsta.mal! : (forsta !== undefined && har(forsta.genomgang) && forsta.genomgang !== forsta.avsnitt ? forsta.genomgang : ''));
-    return { kod: d.kod, namn: d.namn, sidor: d.sidor, text };
+    // Del 220 · bokens sammanfattning av delkapitlet först, sedan lärarens egen, sist bokens mål/genomgång
+    const bokSamm = d.lektioner.map((l) => l.sammanfattning).find((x): x is string => x !== undefined && har(x));
+    const [text, kalla]: [string, 'bok' | 'lektionsplan' | 'mal'] = bokSamm !== undefined ? [bokSamm.trim(), 'bok']
+      : har(lp?.sammanfattning) ? [lp!.sammanfattning!, 'lektionsplan']
+        : [forsta !== undefined && har(forsta.mal) ? forsta.mal! : (forsta !== undefined && har(forsta.genomgang) && forsta.genomgang !== forsta.avsnitt ? forsta.genomgang : ''), 'mal'];
+    return { kod: d.kod, namn: d.namn, sidor: d.sidor, text, kalla };
   });
+  const begreppPerDelkapitel = valdaDelkapitel.map((d) => ({ kod: d.kod, namn: d.namn, begrepp: [...new Set(d.begrepp.map((b) => b.trim()).filter((b) => b !== ''))] }));
+  const rumLista = [...rumKarta.entries()]
+    .map(([rum, f]) => ({ rum, delkapitel: f.delkapitel, anvands: f.exit && f.lax ? 'exit ticket och läxförhör' as const : f.exit ? 'exit ticket' as const : 'läxförhör' as const }))
+    .sort((a, b) => a.delkapitel.localeCompare(b.delkapitel, 'sv') || a.rum.localeCompare(b.rum, 'sv'));
   const filmer = valdaDelkapitel.map((d) => {
     const idx = ap.a.findIndex((r) => r.kapitel === nr && delkapitelKod(r.lektion.avsnitt) === d.kod);
     return { kod: d.kod, namn: d.namn, filmer: filmerFor(bok, nr, d.kod, idx >= 0 ? hamtaLektionsplan(s, amneId, idx)?.filmer ?? [] : []) };
@@ -291,6 +319,6 @@ function pedagogiskPlaneringKapitel(s: Struktur, amneId: string, kapitelNr: numb
     amne: amne.namn, klass: klass.namn, kapitel: { nr, namn: kap.namn, sidor: kap.sidor },
     kapitelLista: [{ nr, namn: kap.namn, sidor: kap.sidor, syfte, syfteSidor: kap.malSidor ?? null, viktigaBegrepp: kap.viktigaBegrepp ?? [] }],
     omfang: null,
-    syfte, syfteSidor: kap.malSidor ?? null, syfteFranDelkapitel, begrepp: begreppslista, innehall, filmer, ovaRum, klassRum, prov, sammanfattningSidor, veckor,
+    syfte, syfteSidor: kap.malSidor ?? null, syfteFranDelkapitel, begrepp: begreppslista, begreppPerDelkapitel, innehall, socrativeRum: rumLista, filmer, ovaRum, klassRum, prov, sammanfattningSidor, veckor,
   };
 }
