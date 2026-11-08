@@ -241,3 +241,25 @@ describe('Del 235 · halvklasspass efter kapitlets prov är tomma; dokumentet ta
     expect(rader.slice(0, 5)).toEqual(['2026-08-17 7.1 Kolatomen', '2026-08-20 Laboration 1', '2026-08-21 Prov kap 7', '2026-08-24 10.1 Former av kol', '2026-08-27 Laboration 2']);
   });
 });
+
+describe('Del 236 · laborationer har aldrig läxa eller läxförhör', () => {
+  it('måndagens läxa går till fredagens lektion, inte till torsdagens laboration; laborationsraden saknar läxförhör och läxa', () => {
+    let s = tomStruktur();
+    s = laggTillSkolar(s, LA); s = sparaBok(s, KE);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO 8' });
+    s = laggTillKlass(s, { id: 'k8b', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'ke', klassId: 'k8b', namn: 'Kemi', bokId: 'ke', halvklass: true,
+      schema: [{ dag: 1, start: '09:15', slut: '10:30' }, { dag: 5, start: '08:25', slut: '09:35' }, { dag: 4, start: '09:45', slut: '10:55' }],
+      schemaB: [{ dag: 1, start: '09:15', slut: '10:30' }, { dag: 5, start: '08:25', slut: '09:35' }, { dag: 4, start: '08:30', slut: '09:40' }] });
+    s = registreraPlanering(s, { id: 'pl', amneId: 'ke', bokId: 'ke', skapad: '2026-08-10' });
+    const pl = pedagogiskPlaneringForOmfang(s, 'ke', [{ fran: '7.1', till: '7.3' }], '2026-08-10')!;
+    const dagar = pl.veckor.flatMap((v) => v.dagar);
+    const man = dagar.find((d) => d.datum === '2026-08-17')!;      // 7.1
+    const lab = dagar.filter((d) => d.datum === '2026-08-20');      // laboration, grupp A och B
+    const fre = dagar.find((d) => d.datum === '2026-08-21')!;      // 7.2
+    expect(man.laxa?.till).toBe('fredag v34');
+    expect(lab).toHaveLength(2);
+    expect(lab.every((d) => d.typ === 'laboration' && d.laxa === null && d.laxforhor === null)).toBe(true);
+    expect(fre.typ).toBe('lektion');
+  });
+});

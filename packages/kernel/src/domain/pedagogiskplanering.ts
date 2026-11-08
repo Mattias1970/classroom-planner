@@ -341,14 +341,15 @@ function pedagogiskPlaneringKapitel(s: Struktur, amneId: string, kapitelNr: numb
       ? lp.begreppText.split(',').map((b) => b.trim()).filter((b) => b !== '')
       : begreppForLektion(bok, r.kapitel, r.lektion);
     const laxRum = klipp(har(r.lektion.socStart) ? rumUr(r.lektion.socStart) : null);
-    const laxforhor = laxRum !== null || har(lp?.laxforhorRum)
+    // Del 236 · Laborationer har aldrig läxförhör eller läxa: läxan går till nästa teorilektion i stället
+    const laxforhor = typ !== 'laboration' && (laxRum !== null || har(lp?.laxforhorRum))
       ? { begrepp: `Begrepp ${rumTillKoder(lp?.laxforhorRum ?? laxRum ?? '') ?? (lp?.laxforhorRum ?? laxRum ?? '')}`, rum: klassRum, ovaRum: lp?.laxforhorRum ?? laxRum }
       : null;
     const exitRum = har(r.lektion.exit) ? rumUr(r.lektion.exit) : null;
     const exit = typ === 'lektion' && (exitRum !== null || har(lp?.exitQuiz))
       ? { rum: klassRum, begrepp: kod !== null ? `Begrepp ${kod}` : (lp?.exitQuiz ?? r.lektion.exit) }
       : null;
-    const nastaRad = rader.slice(i + 1).find((x) => x.grupp === grupp || x.grupp === undefined || grupp === undefined);
+    const nastaRad = rader.slice(i + 1).find((x) => typFor(x.r) !== 'laboration' && (x.grupp === grupp || x.grupp === undefined || grupp === undefined));
     // Läxan är ALLTID kumulativ: alla begrepp till och med det här delkapitlet, i det
     // kumulativa rummet (Biologi612) — samma begrepp och rum som nästa lektions läxförhör.
     const laxaRum = klipp((har(r.lektion.laxa) ? rumITexten(r.lektion.laxa) : null) ?? exitRum);
