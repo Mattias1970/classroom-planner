@@ -121,9 +121,10 @@ describe('Del 134: pedagogisk planering och provlapp ur planeringen', () => {
     expect(p.kapitelLista[0].viktigaBegrepp).toEqual(['evolution', 'cellandning', 'stamcell']);
   });
 
-  it('null utan bok eller planering; okänt kapitel ger null', () => {
+  it('null utan bok; utan registrerad planering byggs den ur förhandsvisningen (Del 227); okänt kapitel ger null', () => {
     const s = bygg();
-    expect(pedagogiskPlanering({ ...s, planeringar: [] }, 'bi')).toBeNull();
+    expect(pedagogiskPlanering({ ...s, planeringar: [] }, 'bi')).not.toBeNull();
+    expect(pedagogiskPlanering({ ...s, amnen: s.amnen.map((a) => ({ ...a, bokId: undefined })) }, 'bi')).toBeNull();
     expect(pedagogiskPlanering(s, 'bi', 9)).toBeNull();
     expect(pedagogiskPlanering(s, 'saknas')).toBeNull();
   });

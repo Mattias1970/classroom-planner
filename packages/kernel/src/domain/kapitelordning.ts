@@ -7,7 +7,8 @@
  * kurser — delkapitel, prov och egna rader som hör till kapitlet — flyttas som ett block.
  * Genomförda kurser (datum före idag) rörs aldrig; ett kapitel med en genomförd kurs är låst.
  */
-import { amnesPlanFor, andraPlanering, kursLista, type Kurs } from './struktur.js';
+import { delkapitelKod } from './bok.js';
+import { amnesPlanFor, andraPlanering, kursLista, planeringsRader, type Kurs } from './struktur.js';
 import type { PlanFranUtkast, Struktur } from './typer.js';
 
 /** Lärarens ordning: kapitelnummer i läsföljd och, per kapitel, delkapitelkoderna i läsföljd. */
@@ -173,4 +174,25 @@ export function sattKapitelOrdning(s: Struktur, amneId: string, o: KapitelOrdnin
     ut = andraPlanering(ut, amneId, { planFranUtkast: nyttUtkast }, idag);
   }
   return ut;
+}
+
+/**
+ * Tar bort delkapitel ur planeringen (när den skapas): alla lektioner i delkapitlen markeras
+ * borttagna (lektionsVal.bort), efterföljande lektioner flyttas fram. Väljs alla delkapitel i ett
+ * kapitel bort försvinner hela kapitlet — även prov och repetitionsavsnitt. Egna rader rörs inte.
+ */
+export function taBortDelkapitelUrPlan(s: Struktur, amneId: string, koder: string[], idag?: string): Struktur {
+  if (koder.length === 0) return s;
+  const amne = s.amnen.find((a) => a.id === amneId);
+  const bok = s.bocker.find((b) => b.id === amne?.bokId);
+  if (amne === undefined || bok === undefined) throw new Error('Ämnet saknar bok.');
+  const bort = new Set(koder);
+  const helaKapitel = new Set(bok.kapitel.filter((k) => k.delkapitel.length > 0 && k.delkapitel.every((d) => bort.has(d.kod))).map((k) => k.nr));
+  const lv = { ...(amne.lektionsVal ?? {}) };
+  for (const r of planeringsRader(bok, amne)) {
+    if (r.nyckel.startsWith('er:')) continue;
+    const kod = delkapitelKod(r.lektion.avsnitt);
+    if ((kod !== null && bort.has(kod)) || (kod === null && helaKapitel.has(r.kapitel))) lv[r.nyckel] = { ...(lv[r.nyckel] ?? {}), bort: true };
+  }
+  return andraPlanering(s, amneId, { lektionsVal: lv }, idag);
 }

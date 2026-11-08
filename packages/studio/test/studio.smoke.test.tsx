@@ -203,10 +203,14 @@ describe('Studio v2 — hela kedjan', () => {
     expect([...ruta.querySelectorAll('li')].map((li) => li.textContent?.slice(0, 6))).toEqual(['Kap 7 ', 'Kap 10']);
     act(() => { ruta.querySelector<HTMLButtonElement>('[aria-label="Flytta kapitel 10 tidigare"]')!.click(); });
     expect(ruta.textContent).toContain('Egen ordning');
-    act(() => { knapp(host, '✔ Skapa planering med egen ordning').click(); });
+    // Delkapitel kan väljas bort: 7.2 kryssas ur
+    act(() => { ruta.querySelector<HTMLInputElement>('[aria-label="Ta med 7.2"]')!.click(); });
+    expect(ruta.textContent).toContain('1 delkapitel tas inte med');
+    act(() => { knapp(host, '✔ Skapa planering med egen ordning utan 1 delkapitel').click(); });
     expect(lasStruktur().planeringar).toHaveLength(1);
     const plan = amnesPlanFor(lasStruktur(), lasStruktur().amnen[0].id, undefined, false)!.a;
-    expect(plan.map((r) => r.lektion.avsnitt).slice(0, 3)).toEqual(['10.1 Former av kol', '7.1 Kolatomen', '7.2 Kolväten']);   // därefter laborationer (halvklass)
+    expect(plan.map((r) => r.lektion.avsnitt).slice(0, 2)).toEqual(['10.1 Former av kol', '7.1 Kolatomen']);   // 7.2 bortvald; därefter laborationer (halvklass)
+    expect(plan.some((r) => r.lektion.avsnitt === '7.2 Kolväten')).toBe(false);
     // 🧩 Kursernas ordning visar kapitelpanelen med den nya följden
     expect(host.textContent).toContain('📚 Kapitlens ordning');
   });

@@ -64,6 +64,7 @@ export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, m
           <div className="st-info-popup pp-modal" role="dialog" aria-label="Pedagogisk planering" onClick={(e) => e.stopPropagation()}>
             <h3 style={{ margin: '0 0 4px' }}>👨‍👩‍👧 Pedagogisk planering</h3>
             <p className="small muted" style={{ margin: '0 0 8px' }}>Kryssa i delkapitlen som planeringen ska täcka — gärna över flera kapitel. Dokumentet får syfte, begrepp, innehåll, filmer, prov och bedömning samt veckoplaneringen för just de delkapitlen.</p>
+            {!s.planeringar.some((p) => p.amneId === amneId) && <p className="status warn small" style={{ margin: '0 0 8px' }}>⚠ Planeringen är inte skapad än — dokumentet bygger på förhandsvisningen (bokens ordning). Skapa planeringen med ▶ Skapa planering först om du vill ha din egen kapitelordning och dina datum.</p>}
             <label className="small" style={{ display: 'block', marginBottom: 6 }}>Omfång
               <input aria-label="Planeringens omfång" value={omfang} placeholder="6.1-6.5, 7.1-7.3" onChange={(e) => setOmfang(e.target.value)} style={{ width: '100%' }} />
               {omf.fel !== null && <span className="status warn small" style={{ display: 'block' }}>⚠ {omf.fel}</span>}

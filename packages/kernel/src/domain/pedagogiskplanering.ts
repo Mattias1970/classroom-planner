@@ -270,7 +270,8 @@ function pedagogiskPlaneringKapitel(s: Struktur, amneId: string, kapitelNr: numb
   const amne = s.amnen.find((a) => a.id === amneId);
   const klass = s.klasser.find((k) => k.id === amne?.klassId);
   const bok = s.bocker.find((b) => b.id === amne?.bokId);
-  const ap = amnesPlanFor(s, amneId, idag);
+  // Del 227 · även innan planeringen registrerats: dokumentet bygger då på förhandsvisningen (samma plan som ämnessidan visar)
+  const ap = amnesPlanFor(s, amneId, idag, false);
   if (amne === undefined || klass === undefined || bok === undefined || ap === null) return null;
   const dagensIdag = idag ?? '';
   const nasta = ap.a.find((r) => r.datum !== null && r.datum >= dagensIdag) ?? ap.a[ap.a.length - 1];

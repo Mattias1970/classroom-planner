@@ -10,7 +10,7 @@ import {
 } from '../src/domain/struktur.js';
 import {
   bokensKapitelOrdning, flyttaDelkapitelIOrdning, flyttaKapitelIOrdning, kursOrdningUrKapitelOrdning, planensKapitel,
-  planensKapitelOrdning, sammaKapitelOrdning, sattKapitelOrdning,
+  planensKapitelOrdning, sammaKapitelOrdning, sattKapitelOrdning, taBortDelkapitelUrPlan,
 } from '../src/domain/kapitelordning.js';
 import { pedagogiskPlaneringForOmfang } from '../src/domain/pedagogiskplanering.js';
 import { tomStruktur, type Skolar, type Struktur } from '../src/domain/typer.js';
@@ -123,5 +123,36 @@ describe('pedagogisk planering följer kapitelordningen', () => {
     expect(pl.innehall.map((i) => i.kod)).toEqual(['10.1', '10.2', '7.3', '7.1', '7.2']);
     expect(pl.begreppPerDelkapitel.map((b) => b.kod)).toEqual(['10.1', '10.2', '7.3', '7.1', '7.2']);
     expect(pl.begrepp.slice(0, 2)).toEqual(['diamant', 'grafit']);
+  });
+});
+
+describe('taBortDelkapitelUrPlan', () => {
+  it('tar bort valda delkapitel; hela kapitlet (med prov) när alla dess delkapitel väljs bort', () => {
+    let s = bygg();
+    s = taBortDelkapitelUrPlan(s, 'ke', ['7.3'], '2026-08-10');
+    expect(avsnitt(s, '2026-08-10')).toEqual(['7.1 Kolatomen', '7.2 Kolväten', 'Prov kap 7', '10.1 Former av kol', '10.2 Fossila bränslen', 'Prov kap 10']);
+    s = taBortDelkapitelUrPlan(s, 'ke', ['10.1', '10.2'], '2026-08-10');
+    expect(avsnitt(s, '2026-08-10')).toEqual(['7.1 Kolatomen', '7.2 Kolväten', 'Prov kap 7']);
+    expect(taBortDelkapitelUrPlan(s, 'ke', [], '2026-08-10')).toBe(s);
+  });
+
+  it('fungerar ihop med kapitelordningen: kap 10 först, utan 7.2', () => {
+    let s = bygg();
+    s = sattKapitelOrdning(s, 'ke', { kapitel: [10, 7] });
+    s = taBortDelkapitelUrPlan(s, 'ke', ['7.2']);
+    expect(avsnitt(s)).toEqual(['10.1 Former av kol', '10.2 Fossila bränslen', 'Prov kap 10', '7.1 Kolatomen', '7.3 Omättade kolväten', 'Prov kap 7']);
+  });
+});
+
+describe('pedagogisk planering utan registrerad planering', () => {
+  it('bygger på förhandsvisningen när planeringen inte skapats än', () => {
+    let s = tomStruktur();
+    s = laggTillSkolar(s, LA); s = sparaBok(s, KE);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO 8' });
+    s = laggTillKlass(s, { id: 'k8b', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'ke', klassId: 'k8b', namn: 'Kemi', bokId: 'ke', schema: SCHEMA });
+    const pl = pedagogiskPlaneringForOmfang(s, 'ke', [{ fran: '7.1', till: '7.2' }], '2026-08-10');
+    expect(pl).not.toBeNull();
+    expect(pl!.innehall.map((i) => i.kod)).toEqual(['7.1', '7.2']);
   });
 });

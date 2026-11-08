@@ -448,7 +448,7 @@ export function valbaraDelkapitel(s: Struktur, amneId: string, omfang: string, i
     const k = kodDelar(kod); if (k === null) return false;
     return omf.spann.some((sp) => { const a = kodDelar(sp.fran); const b = kodDelar(sp.till); return a !== null && b !== null && a[0] === k[0] && k[1] >= a[1] && k[1] <= b[1]; });
   };
-  const ap = amnesPlanFor(s, amneId, idag);
+  const ap = amnesPlanFor(s, amneId, idag, false);
   const iPlan = new Set((ap?.a ?? []).map((r) => delkapitelKod(r.lektion.avsnitt)).filter((k): k is string => k !== null));
   return bok.kapitel.map((k) => ({ nr: k.nr, namn: k.namn, delkapitel: k.delkapitel.map((d) => ({ kod: d.kod, namn: d.namn, vald: inom(d.kod), iPlanen: iPlan.has(d.kod) })) }));
 }
