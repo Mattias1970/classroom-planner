@@ -32,6 +32,7 @@ export * from './domain/kalender.js';
 export * from './domain/schemapdf.js';
 export * from './export/sidregister.js';
 export * from './domain/pedagogiskplanering.js';
+export * from './domain/kapitelordning.js';
 export * from './domain/binogifilmer.js';
 export * from './domain/vagtillprovet.js';
 export * from './domain/elevkort.js';

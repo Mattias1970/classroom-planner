@@ -39,7 +39,7 @@ import {
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
-  resultatProcent, saknadeResultat, veckorapportLarm, veckaText, tolkaResultatRader, digiexamProvInfo, digiexamProvTyp, eProvGrans, ordinarieProvFor, planForAmne, harLaborationsstandard, kursLista, flyttaKurs, amnesPlanFor, type Kurs, amnesPlan, amnesOffset, sattLaborationsstandard, sattPlanFrystTill, sparaLaborationer, sattPassVal, type HalvklassSession, type Laboration, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type Elev, type KalenderDagRuta, type KalenderHandelse, type SchemaAktivitet,
+  resultatProcent, saknadeResultat, veckorapportLarm, veckaText, tolkaResultatRader, digiexamProvInfo, digiexamProvTyp, eProvGrans, ordinarieProvFor, planForAmne, harLaborationsstandard, kursLista, flyttaKurs, sattKapitelOrdning, amnesPlanFor, type Kurs, amnesPlan, amnesOffset, sattLaborationsstandard, sattPlanFrystTill, sparaLaborationer, sattPassVal, type HalvklassSession, type Laboration, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type Elev, type KalenderDagRuta, type KalenderHandelse, type SchemaAktivitet,
   gruppNyckel, grundRader, planeringsRader, antalIBoken, lektionerPerDelkapitel, sattLektionerPerDelkapitel, sattAntalLektioner, sattLektionsVal, laggTillEgenRad, taBortEgenRad, bokLektioner, type LektionsVal,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
@@ -72,6 +72,7 @@ import { Foraldrakontakt } from './v3/Foraldrakontakt.js';
 import { Datarepo } from './v3/Datarepo.js';
 import { amnesIkon } from './v3/ikoner.js';
 import { SparaMeny } from './SparaMeny.js';
+import { KapitelOrdningPanel, SkapaPlaneringRuta } from './KapitelOrdning.js';
 import { StWidget, MiniTal, MiniRemsa, useWidgetLage } from './StWidget.js';
 import { ElevFilter } from './ElevFilter.js';
 import {
@@ -1548,6 +1549,8 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
   const planB = ap?.b ?? TOM_PLAN;
   const halvklassPlan = ap?.sessioner ?? null;
   const harPlanering = s.planeringar.some((p) => p.amneId === id);
+  // Del 227 · rutan där kapitlens ordning väljs innan planeringen skapas
+  const [skapaRuta, setSkapaRuta] = useState(false);
   // Genomförd planering rörs aldrig: första gången ett halvklassämne visas med laborationer
   // fryses allt före idag, så att frysdatumet inte glider med kalendern
   useEffect(() => {
@@ -1711,15 +1714,28 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
       </label>}{' '}
       {arStodAmne(a.namn) && <span className="muted small">Fri planering — varje schemapass blir ett tillfälle som detaljplaneras fritt. </span>}
       <button className="btn" disabled={!arStodAmne(a.namn) && !bok}
+        title={arStodAmne(a.namn) ? undefined : 'Välj kapitlens ordning (bokens ordning förvald) och skapa planeringen'}
         onClick={() => arStodAmne(a.namn)
           ? kor(() => skapaFriPlanering(lasStruktur(), id, new Date().toISOString()),
               `Fri planering skapad: ett tillfälle per ${a.namn}-pass i skolåret. Detaljplanera texterna under 🧭 Detaljplanering.`)
-          : kor(() => registreraPlanering(lasStruktur(), { id: nyttId('pl'), amneId: id, bokId: bok!.id, skapad: new Date().toISOString() }),
-          halv
-            ? `Planering skapad: ${bok!.titel} utlagd på Grupp A (${plan.filter((p) => p.datum !== null).length} lektioner) och Grupp B (${planB.filter((p) => p.datum !== null).length} lektioner).`
-            : `Planering skapad: ${bok!.titel} utlagd på ${klass.namn}s schema — ${plan.filter((p) => p.datum !== null).length} lektioner får datum.`)}>
+          : setSkapaRuta(true)}>
         {harPlanering ? '➕ Spara ny planeringsversion' : '▶ Skapa planering'}
       </button>
+      {skapaRuta && bok && (
+        <SkapaPlaneringRuta s={s} amneId={id} idag={idag} harPlanering={harPlanering} bokTitel={bok.titel} onAvbryt={() => setSkapaRuta(false)}
+          onSkapa={(ordning) => {
+            setSkapaRuta(false);
+            // Del 227 · planeringen registreras och får därefter lärarens kapitelordning (bokens ordning = ingen ändring)
+            kor(() => {
+              let st = registreraPlanering(lasStruktur(), { id: nyttId('pl'), amneId: id, bokId: bok.id, skapad: new Date().toISOString() });
+              if (ordning !== null) st = sattKapitelOrdning(st, id, ordning, harPlanering ? idag : undefined);   // ny planering: inget är genomfört
+              return st;
+            }, (halv
+              ? `Planering skapad: ${bok.titel} utlagd på Grupp A (${plan.filter((p) => p.datum !== null).length} lektioner) och Grupp B (${planB.filter((p) => p.datum !== null).length} lektioner).`
+              : `Planering skapad: ${bok.titel} utlagd på ${klass.namn}s schema — ${plan.filter((p) => p.datum !== null).length} lektioner får datum.`)
+              + (ordning !== null ? ` Kapitlen läses i ordningen ${ordning.kapitel.map((n) => `kap ${n}`).join(' → ')}.` : ''));
+          }} />
+      )}
       {bok && harPlanering && <EgnaRaderRedigerare amne={a} bok={bok} kor={kor} idag={idag} />}
       {bok && harPlanering && <FoljPlanering s={s} amneId={a.id} klassNamn={klass.namn} kor={kor} idag={idag} />}
       {(s.planeringsarkiv ?? []).some((x) => x.amneId === a.id) && (
@@ -2937,14 +2953,15 @@ function KapitelSlut({ s, bok, plan, amneId, kor, idag }: { s: Struktur; bok: Bo
  * Del 149 · Kurserna (delkapitlen) i lärarens ordning. ▲ flyttar kursen tidigare, ▼ senare;
  * hela kursens lektioner följer med och kalendern visar den nya följden. Genomförda kurser låses.
  */
-function KursOrdning({ plan, amneId, kor, idag }: { plan: PlaneradLektion[]; amneId: string; kor: (fn: () => Struktur, m: string) => void; idag: string }) {
+function KursOrdning({ s, plan, amneId, kor, idag }: { s: Struktur; plan: PlaneradLektion[]; amneId: string; kor: (fn: () => Struktur, m: string) => void; idag: string }) {
   const kurser = kursLista(plan, idag);
   if (kurser.length < 2) return null;
   const flytta = (k: Kurs, steg: -1 | 1) => kor(() => flyttaKurs(lasStruktur(), amneId, k.nyckel, steg, idag),
     `${k.titel} flyttad ${steg < 0 ? 'tidigare' : 'senare'} — hela kursen (${k.antalLektioner} lektion${k.antalLektioner === 1 ? '' : 'er'}) och efterföljande kurser har fått nya datum.`);
   return (
     <details className="uppg-kort kursordning no-print">
-      <summary>🧩 Kursernas ordning <small className="muted">· {kurser.length} kurser (delkapitel) — flytta en kurs fram eller tillbaka i tid, lektionerna följer med</small></summary>
+      <summary>🧩 Kursernas ordning <small className="muted">· {kurser.length} kurser (delkapitel) — flytta ett kapitel eller en kurs fram eller tillbaka i tid, lektionerna följer med</small></summary>
+      <KapitelOrdningPanel s={s} amneId={amneId} idag={idag} kor={kor} />
       <table className="tbl small kurs-tabell">
         <thead><tr><th>#</th><th>Kurs</th><th>Lektioner</th><th>Startar</th><th>Flytta</th></tr></thead>
         <tbody>{kurser.map((k, i) => {
@@ -3089,7 +3106,7 @@ function GruppPlanering(props: {
   return (
     <>
       {rubrik !== undefined && <h3 className="grupp-h">{rubrik}</h3>}
-      {kanAndra && <KursOrdning plan={plan} amneId={amneId!} kor={kor!} idag={idag!} />}
+      {kanAndra && <KursOrdning s={s!} plan={plan} amneId={amneId!} kor={kor!} idag={idag!} />}
       {kanAndra && <LaddaKapitel s={s!} bok={bok} amneId={amneId!} kor={kor!} idag={idag!} />}
       {kanAndra && <SchemaAktiviteter s={s!} amneId={amneId!} kor={kor!} idag={idag!} />}
       {kanAndra && (

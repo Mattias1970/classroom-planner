@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from '../src/App';
-import { kalenderHandelser, planForAmne } from '@planner/kernel';
+import { amnesPlanFor, kalenderHandelser, planForAmne } from '@planner/kernel';
 import { lasStruktur } from '../src/store';
 import { resetIdRaknare } from '@planner/kernel';
 
@@ -165,8 +165,50 @@ describe('Studio v2 — hela kedjan', () => {
     expect(host.textContent).toContain('1.1 Bråk');
     expect(host.textContent).toContain('ETT'); // bokens nivånamn i tabellhuvudet
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
     expect(lasStruktur().planeringar).toHaveLength(1);
     expect(host.textContent).toContain('2 lektioner får datum');
+  });
+
+  it('Del 227: ▶ Skapa planering öppnar kapitelordningen — bokens ordning förvald, kap 10 kan läggas före kap 7', async () => {
+    const KEMI = JSON.stringify({
+      schema: 'classroom-planner-bok', version: 1,
+      bok: { id: 'liber-kemi', titel: 'Spektrum Kemi', förlag: 'Liber', ämne: 'Kemi', årskurs: 8,
+        kapitelMeta: { '7': { name: 'Organisk kemi', col: '#2f5aa8' }, '10': { name: 'Kol och förbränning', col: '#b05c22' } } },
+      lektioner: {
+        '7': [{ id: 1, type: 'regular', avsnitt: '7.1 Kolatomen', del: 1, begrepp: 'bindning' }, { id: 2, type: 'regular', avsnitt: '7.2 Kolväten', del: 1, begrepp: 'metan' }],
+        '10': [{ id: 1, type: 'regular', avsnitt: '10.1 Former av kol', del: 1, begrepp: 'diamant' }],
+      },
+    });
+    const host = render();
+    skapaSkolar(host, '2026/2027');
+    act(() => { knapp(host, '2026/2027').click(); });
+    await importeraBok(host, KEMI);
+    skriv(input(host, 'Tjänstens namn'), 'NO');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { knapp(host, 'NO').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { knapp(host, '8B').click(); });
+    valj(select(host, 'Ämne'), 'Kemi');
+    valj(select(host, 'Bok för ämnet'), 'liber-kemi');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    act(() => { knapp(host, '▶ Skapa planering').click(); });
+    // Rutan: bokens ordning förvald (kap 7 före kap 10)
+    const ruta = host.querySelector('[aria-label="Kapitlens ordning"]')!;
+    expect(ruta.textContent).toContain('Bokens ordning');
+    expect([...ruta.querySelectorAll('li')].map((li) => li.textContent?.slice(0, 6))).toEqual(['Kap 7 ', 'Kap 10']);
+    act(() => { ruta.querySelector<HTMLButtonElement>('[aria-label="Flytta kapitel 10 tidigare"]')!.click(); });
+    expect(ruta.textContent).toContain('Egen ordning');
+    act(() => { knapp(host, '✔ Skapa planering med egen ordning').click(); });
+    expect(lasStruktur().planeringar).toHaveLength(1);
+    const plan = amnesPlanFor(lasStruktur(), lasStruktur().amnen[0].id, undefined, false)!.a;
+    expect(plan.map((r) => r.lektion.avsnitt).slice(0, 3)).toEqual(['10.1 Former av kol', '7.1 Kolatomen', '7.2 Kolväten']);   // därefter laborationer (halvklass)
+    // 🧩 Kursernas ordning visar kapitelpanelen med den nya följden
+    expect(host.textContent).toContain('📚 Kapitlens ordning');
   });
 
   it('lärare kopplas till tjänsten och får härlett schema; ämnen planeras utan lärare', async () => {
@@ -470,6 +512,7 @@ describe('Kalenderutskrift och Planering-huvudfliken', () => {
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
   }
 
   it('🖨 Skriv ut månader visar en sida per månad i skolåret', async () => {
@@ -593,6 +636,7 @@ describe('Stödpass (Ma/NO-stöd)', () => {
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
     act(() => { knapp(host, '✏ Uppgifter').click(); });
     expect(host.querySelector('.regel')!.textContent).toContain('Ma/NO-stöd');
     expect(host.querySelector('.regel')!.textContent).toContain('torsdag 15:00–16:00');
@@ -666,6 +710,7 @@ describe('Tema, kapitelheader och avklarat-kryss', () => {
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
 
     const header = host.querySelector('.kap-header')!;
     expect(header.textContent).toContain('Kapitel 1');            // testbokens kapitel
@@ -710,7 +755,9 @@ describe('Veckoutskrift och versionerade planeringar', () => {
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
     act(() => { knapp(host, '➕ Spara ny planeringsversion').click(); });
+    act(() => { knapp(host, '✔ Spara ny planeringsversion').click(); });
 
     expect(lasStruktur().planeringar[0].version).toBe(2);
     expect(lasStruktur().planeringsarkiv).toHaveLength(1);
@@ -768,6 +815,7 @@ describe('Vänstermeny, tjänstöversikt och årsöversikt', () => {
     // Öppna ämnet via tjänstöversikten och skapa planering
     act(() => { knapp(host, 'Öppna / planera →').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
     act(() => { treeKnapp(host, '💼 Ma åk 8').click(); });
     expect(host.querySelector('.panel')!.textContent).toContain('✓ planerad');
   });
@@ -803,6 +851,7 @@ describe('Kalender', () => {
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
   }
 
   it('kalendervyn visar månadsrutnät med lektioner och kapitelfärgförklaring', async () => {
@@ -864,6 +913,7 @@ describe('Veckoschema och schemakonflikter', () => {
     const host = render();
     await tvaAmnenSammaTid(host);
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
     act(() => { knapp(host, '📆 Kalender').click(); });
     // Default vecka-läge; navigera till skolårets start (aug) via schemat
     expect(host.querySelector('.schema')).not.toBeNull();
@@ -1029,6 +1079,7 @@ describe('NO+Tk blockkurs och kalenderfärger', () => {
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
     act(() => { knapp(host, '📆 Kalender').click(); });
     const lekt = host.querySelector('.sch-lekt') as HTMLElement;
     expect(lekt).not.toBeNull();
@@ -1229,6 +1280,7 @@ describe('Del 161 · 🔁 Följ en annan klass planering', () => {
       act(() => { knapp(host, '➕ Lägg till ämne').click(); });
       act(() => { treeKnapp(host, '📖 Biologi').click(); });
       act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
     }
     // 8B: film på lektion 2 via detaljplaneringen
     act(() => { treeKnapp(host, '👥 8B').click(); });
@@ -1388,6 +1440,7 @@ describe('Kalenderklick öppnar lektionsplaneringen', () => {
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
 
     act(() => { knapp(host, '📆 Kalender').click(); });
     act(() => { knapp(host, 'Månad').click(); });
@@ -1441,6 +1494,7 @@ describe('Kalenderklick öppnar lektionsplaneringen', () => {
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
 
     act(() => { knapp(host, '📆 Kalender').click(); });
     // Läsår-vyn: dag med lektion är klickbar → veckovyn öppnas på den veckan
@@ -2127,6 +2181,7 @@ describe('Lektionssidans redigerbara ytor', () => {
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
     act(() => { knapp(host, '🧭 Detaljplanering').click(); });
     valj(select(host, 'Välj lektion'), '0');   // Del 133: förvalet är dagens lektion — testet gäller lektion 1
 
@@ -2598,6 +2653,7 @@ describe('Del 139: lektionsregler och inga Del-etiketter', () => {
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
     expect(host.querySelector('.panel')!.textContent).not.toContain('· Del 1');
     act(() => { knapp(host, '📊 Årsöversikt').click(); });
     const panel = () => host.querySelector('.panel')!;
@@ -2645,6 +2701,7 @@ describe('Del 140: planeringsmall', () => {
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
     const amneId = lasStruktur().amnen[0].id;
     expect(host.querySelectorAll('table.plan tbody tr').length).toBe(2);
     const mall = JSON.stringify({
@@ -2714,6 +2771,7 @@ describe('Del 127: halvklasspass är laborationer', () => {
     valj(select(host, 'Bok för ämnet'), 'gleerups-biologi-8');
     expect(lasStruktur().amnen[0].bokId).toBe('gleerups-biologi-8');
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
     // Lektionsplanen: halvklasspassen är laborationer — automatiskt
     expect(host.textContent).toContain('Laboration 1');
     act(() => { knapp(host, '🧪 Laborationer').click(); });
@@ -2792,6 +2850,7 @@ describe('Del 129: lektioner tas bort, ersätts och utökas i Lektionsplan', () 
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
     act(() => { knapp(host, '📋 Planering').click(); });
 
     // Lektionsnummer i Lektionsplan
@@ -3142,6 +3201,7 @@ describe('Del 143: byt grupp A/B med ett klick, redigerbar BAM i detaljplanering
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
     act(() => { knapp(host, '🧭 Detaljplanering').click(); });
     expect(host.textContent).toContain('TAVLAN');
 
@@ -3311,6 +3371,7 @@ describe('Del 149: kurser (delkapitel) flyttas fram och tillbaka', () => {
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
     act(() => { knapp(host, '📋 Planering').click(); });
     expect(avsnitten(host).slice(0, 4)).toEqual(['1.1 Tal', '1.1 Tal', '1.2 Potenser', '1.3 Bråk']);
     // Kurslistan: 1.3 Bråk tidigare → hamnar före 1.2 Potenser
@@ -3439,6 +3500,7 @@ describe('Del 185: ladda ett kapitel från ett pass och ta bort en lektion med �
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
     act(() => { knapp(host, '📋 Planering').click(); });
     // ons 19/8 1.1 (genomförd), 26/8 1.2, 2/9 Prov, 9/9 2.1, 16/9 2.2
     expect(avsnitten(host)).toEqual(['1.1 Tal', '1.2 Potenser', 'Prov kap 1', '2.1 Andelen', '2.2 Delen']);
@@ -3496,6 +3558,7 @@ describe('Del 187: schemabrytande aktivitet mellan två klockslag', () => {
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
     act(() => { knapp(host, '📋 Planering').click(); });
     expect(datum(host)).toEqual(['2026-08-19 1.1 Tal', '2026-08-26 1.2 Potenser', '2026-09-02 1.3 Bråk']);
 
@@ -3542,6 +3605,7 @@ describe('Del 204: tid som försvinner från schemat (Struktur → skolår) — 
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
     act(() => { knapp(host, '📋 Planering').click(); });
     expect(datum(host)).toEqual(['2026-08-19 1.1 Del', '2026-08-26 1.2 Del', '2026-09-02 1.3 Del', '2026-09-09 1.4 Del']);
 
@@ -3610,6 +3674,7 @@ describe('Del 188: redigera genomförda lektioner — låsta tills läraren lås
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
     act(() => { knapp(host, '📋 Planering').click(); });
     const fore = rader(host);
     expect(fore).toEqual(['2026-08-19 1.1 Tal', '2026-08-26 1.2 Potenser', '2026-09-02 1.3 Bråk']);
@@ -3656,6 +3721,7 @@ describe('Del 188: redigera genomförda lektioner — låsta tills läraren lås
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
     act(() => { knapp(host, '📋 Planering').click(); });
     expect(rader(host)).toEqual(['2026-08-19 1.1 Tal', '2026-08-26 1.2 Potenser', '2026-09-02 1.3 Bråk']);
     // 🗑 finns på den genomförda raden utan 🔓; avbryt ändrar inget, OK tar bort och de följande flyttas tidigare
@@ -3698,6 +3764,7 @@ describe('Del 188: redigera genomförda lektioner — låsta tills läraren lås
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
     act(() => { knapp(host, '📋 Planering').click(); });
     valj(select(host, 'Sista delkapitlet'), '1.1');
     expect(host.querySelector('.kapitel-slut')?.textContent).toContain('Tar bort 1.2, 1.3 (2 lektioner)');
@@ -3769,6 +3836,7 @@ describe('Del 205: 📅 Läsåret i Översikt — lov bakåt i tiden, tid som f�
     skriv(input(host, 'Slut pass 1'), '10:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
     act(() => { nav(host, 'Planering').click(); });
     expect(datum(host)).toEqual(['2026-08-19 1.1 Del', '2026-08-26 1.2 Del', '2026-09-02 1.3 Del', '2026-09-09 1.4 Del']);
 
@@ -3852,6 +3920,7 @@ describe('Del 205b: Del av dag i Läsåret — utvecklingssamtal 13–17 tar eft
     skriv(input(host, 'Slut pass 2'), '15:00');
     act(() => { knapp(host, '➕ Lägg till ämne').click(); });
     act(() => { knapp(host, '▶ Skapa planering').click(); });
+    act(() => { knapp(host, '✔ Skapa planering').click(); });   // Del 227: bekräfta kapitelordningen (bokens)
     act(() => { nav(host, 'Planering').click(); });
     expect(datum(host)).toEqual(['2026-08-19 1.1 Del', '2026-08-19 1.2 Del', '2026-08-26 1.3 Del', '2026-08-26 1.4 Del']);
 

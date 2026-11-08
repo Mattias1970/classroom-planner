@@ -15,6 +15,7 @@ import { binogiFilmerFor } from './binogifilmer.js';
 import { amnesPlanFor, hamtaLektionsplan, lektionsNamn } from './struktur.js';
 import { isoVecka } from './skolar.js';
 import type { Bok, PlaneradLektion, Struktur } from './typer.js';
+import { planensKapitelOrdning, type KapitelOrdning } from './kapitelordning.js';
 
 export interface PlanFilm { titel: string; url: string }
 
@@ -195,7 +196,7 @@ export function pedagogiskPlanering(s: Struktur, amneId: string, kapitelNr?: num
  * slås ihop: syfte per kapitel, begrepp, innehåll och filmer för de valda delkapitlen, och
  * veckoplaneringen i datumordning. null när inget delkapitel i omfånget finns.
  */
-export function pedagogiskPlaneringForOmfang(s: Struktur, amneId: string, spann: Array<{ fran: string; till: string }>, idag?: string, genomforda?: ReadonlySet<string> | null): PedagogiskPlanering | null {
+export function pedagogiskPlaneringForOmfang(s: Struktur, amneId: string, spann: Array<{ fran: string; till: string }>, idag?: string, genomforda?: ReadonlySet<string> | null, ordning?: KapitelOrdning): PedagogiskPlanering | null {
   const kodDelar = (kod: string): [number, number] | null => { const m = /^(\d+)\.(\d+)$/.exec(kod.trim()); return m === null ? null : [Number(m[1]), Number(m[2])]; };
   const perKapitel = new Map<number, Array<[number, number]>>();
   for (const sp of spann) {
@@ -203,11 +204,16 @@ export function pedagogiskPlaneringForOmfang(s: Struktur, amneId: string, spann:
     if (a === null || b === null || a[0] !== b[0]) continue;
     perKapitel.set(a[0], [...(perKapitel.get(a[0]) ?? []), [a[1], b[1]]]);
   }
+  // Del 227 · Kapitlen i lärarens ordning (annars planens: kap 10 före kap 7 om planen läser så); onämnda kapitel sist i nummerordning
+  const o = ordning ?? planensKapitelOrdning(s, amneId, idag);
+  const kapFoljd = [...o.kapitel.filter((nr) => perKapitel.has(nr)), ...[...perKapitel.keys()].filter((nr) => !o.kapitel.includes(nr)).sort((x, y) => x - y)];
   const delar: PedagogiskPlanering[] = [];
-  for (const [nr, intervall] of [...perKapitel.entries()].sort((x, y) => x[0] - y[0])) {
+  for (const nr of kapFoljd) {
+    const intervall = perKapitel.get(nr)!;
     const inom = (kod: string | null): boolean => { const k = kod === null ? null : kodDelar(kod); return k !== null && k[0] === nr && intervall.some(([f, t]) => k[1] >= f && k[1] <= t); };
     const pl = pedagogiskPlaneringKapitel(s, amneId, nr, idag, inom, genomforda ?? null);
-    if (pl !== null && pl.innehall.length > 0) delar.push(pl);
+    if (pl === null || pl.innehall.length === 0) continue;
+    delar.push(ordnaDelkapitel(pl, o.delkapitel?.[String(nr)]));
   }
   if (delar.length === 0) return null;
   const forsta = delar[0];
@@ -247,6 +253,16 @@ export function pedagogiskPlaneringForOmfang(s: Struktur, amneId: string, spann:
     veckor,
     laborationer: delar.flatMap((pl) => pl.laborationer).filter((l, i, arr) => arr.findIndex((x) => x.nyckel === l.nyckel) === i).sort((a, b) => (a.datum ?? '').localeCompare(b.datum ?? '')),
   };
+}
+
+/** Del 227 · Delkapitlen i ett kapitel i lärarens följd: innehåll, begrepp per delkapitel, filmer och den platta begreppslistan. */
+function ordnaDelkapitel(pl: PedagogiskPlanering, foljd: string[] | undefined): PedagogiskPlanering {
+  if (foljd === undefined || foljd.length === 0) return pl;
+  const rang = (kod: string) => { const i = foljd.indexOf(kod); return i === -1 ? 1e9 : i; };
+  const sortera = <T extends { kod: string }>(xs: T[]): T[] => xs.map((x, i) => [x, i] as const).sort((a, b) => rang(a[0].kod) - rang(b[0].kod) || a[1] - b[1]).map(([x]) => x);
+  const begreppPerDelkapitel = sortera(pl.begreppPerDelkapitel);
+  const begrepp = [...new Set([...begreppPerDelkapitel.flatMap((d) => d.begrepp), ...pl.begrepp])];
+  return { ...pl, innehall: sortera(pl.innehall), begreppPerDelkapitel, filmer: sortera(pl.filmer), begrepp };
 }
 
 /** Ett kapitel; `inom` begränsar till vissa delkapitel (null = alla). */

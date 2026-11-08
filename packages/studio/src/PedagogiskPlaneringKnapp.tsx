@@ -5,8 +5,9 @@
  * Innehållet byggs av kernel (pedagogiskPlaneringForOmfang) och Word-filen av pedagogiskWord.ts.
  */
 import { useEffect, useState } from 'react';
-import { omfangUrKoder, pedagogiskPlanering, pedagogiskPlaneringForOmfang, tolkaOmfang, valbaraDelkapitel, type PlanLaboration, type Struktur } from '@planner/kernel';
+import { bokensKapitelOrdning, omfangUrKoder, pedagogiskPlanering, pedagogiskPlaneringForOmfang, planensKapitel, planensKapitelOrdning, tolkaOmfang, valbaraDelkapitel, type KapitelOrdning, type PlanLaboration, type Struktur } from '@planner/kernel';
 import { lasInstallning, sparaInstallning } from './store.js';
+import { KapitelOrdningRedigerare, fullOrdning } from './KapitelOrdning.js';
 
 export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, meddela, sparaLabb }: {
   s: Struktur; amneId: string;
@@ -27,7 +28,14 @@ export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, m
   // Del 224 · laborationerna i omfånget: läraren kryssar i vilka som är genomförda (förval: datum före idag)
   const [labbVal, setLabbValRaw] = useState<Record<string, boolean>>(() => lasInstallning<Record<string, boolean>>(`pp.labbar.${amneId}`, {}));
   const setLabbVal = (v: Record<string, boolean>) => { setLabbValRaw(v); sparaInstallning(`pp.labbar.${amneId}`, v); };
-  const forhand = omf.fel === null && omf.spann.length > 0 ? pedagogiskPlaneringForOmfang(s, amneId, omf.spann, idag) : pedagogiskPlanering(s, amneId, aktivtKapitel ?? undefined, idag);
+  // Del 227 · kapitlens (och delkapitlens) ordning i dokumentet: planens ordning förvald (kap 10 före kap 7 när planen läser så), egen ordning sparas per ämne
+  const [ordningRaw, setOrdningRaw] = useState<KapitelOrdning | null>(() => lasInstallning<KapitelOrdning | null>(`pp.ordning.${amneId}`, null));
+  const setOrdning = (o: KapitelOrdning | null) => { setOrdningRaw(o); sparaInstallning(`pp.ordning.${amneId}`, o); };
+  const valdaKapitel = planensKapitel(s, amneId, idag)
+    .map((k) => ({ ...k, delkapitel: k.delkapitel.filter((kod) => valda.includes(kod)), kurser: k.kurser.filter((x) => valda.some((kod) => x.nyckel.endsWith(`:${kod}`))) }))
+    .filter((k) => k.delkapitel.length > 0);
+  const ordning = fullOrdning(valdaKapitel, ordningRaw ?? planensKapitelOrdning(s, amneId, idag));
+  const forhand = omf.fel === null && omf.spann.length > 0 ? pedagogiskPlaneringForOmfang(s, amneId, omf.spann, idag, undefined, ordning) : pedagogiskPlanering(s, amneId, aktivtKapitel ?? undefined, idag);
   const labbar = (forhand?.laborationer ?? []).map((l) => ({ ...l, genomford: labbVal[l.nyckel] ?? l.genomford }));
   const genomforda = new Set(labbar.filter((l) => l.genomford).map((l) => l.nyckel));
   const vaxla = (kod: string) => setOmfang(omfangUrKoder(valda.includes(kod) ? valda.filter((x) => x !== kod) : [...valda, kod]));
@@ -41,7 +49,7 @@ export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, m
   };
   const exportera = () => {
     const pl = omf.fel === null && omf.spann.length > 0
-      ? pedagogiskPlaneringForOmfang(s, amneId, omf.spann, idag, genomforda)
+      ? pedagogiskPlaneringForOmfang(s, amneId, omf.spann, idag, genomforda, ordning)
       : pedagogiskPlanering(s, amneId, aktivtKapitel ?? undefined, idag, genomforda);
     if (pl === null) { meddela?.('✗ Kunde inte bygga planeringen — inget valt delkapitel finns i boken, eller ämnet saknar planering.'); return; }
     void import('./pedagogiskWord.js').then(({ exporteraPedagogiskPlanering }) => exporteraPedagogiskPlanering(pl)).then(() => {
@@ -72,6 +80,14 @@ export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, m
                 ))}
               </div>
             ))}
+            {valdaKapitel.length > 0 && (valdaKapitel.length > 1 || valdaKapitel[0].delkapitel.length > 1) && (
+              <div className="pp-ordning" style={{ margin: '10px 0 4px' }}>
+                <b className="small">I vilken ordning?</b>
+                <p className="small muted" style={{ margin: '2px 0 4px' }}>Dokumentet följer planeringens ordning (kap 10 före kap 7 om ni läser så). Flytta ett kapitel med ▲▼ och ett delkapitel med ◀▶; veckoplaneringen står alltid i datumordning.</p>
+                <KapitelOrdningRedigerare kapitel={valdaKapitel} ordning={ordning} setOrdning={setOrdning} bokens={bokensKapitelOrdning(s, amneId)} kompakt />
+                {ordningRaw !== null && <button type="button" className="chipbtn" style={{ marginTop: 4 }} onClick={() => setOrdning(null)} title="Följ planeringens ordning igen">↺ Planeringens ordning</button>}
+              </div>
+            )}
             {labbar.length > 0 && (
               <div className="pp-labbar" style={{ margin: '10px 0 4px' }}>
                 <b className="small">Vilka laborationer har genomförts?</b>
