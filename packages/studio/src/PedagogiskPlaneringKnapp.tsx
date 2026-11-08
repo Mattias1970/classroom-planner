@@ -9,7 +9,7 @@ import { bokensKapitelOrdning, omfangUrKoder, pedagogiskPlanering, pedagogiskPla
 import { lasInstallning, sparaInstallning } from './store.js';
 import { KapitelOrdningRedigerare, fullOrdning } from './KapitelOrdning.js';
 
-export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, meddela, sparaLabb, sattOrdning }: {
+export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, meddela, sparaLabb, sattOrdning, laggBinogi }: {
   s: Struktur; amneId: string;
   /** Kapitlet som pågår — förvalet när inget sparats. */
   aktivtKapitel: number | null;
@@ -19,6 +19,8 @@ export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, m
   sparaLabb?: (lektionsIndex: number, namn: string, fraga: string) => void;
   /** Del 230 · Ändrar kapitlens ordning i själva planeringen — en ordning för lektionsplan, detaljplanering, kalender och dokument. */
   sattOrdning?: (o: KapitelOrdning) => void;
+  /** Del 231 · Lägger Binogis bästa film på varje kommande delkapitel (syns i dokumentets filmlista). */
+  laggBinogi?: () => void;
 }) {
   const [oppen, setOppen] = useState(false);
   const [omfang, setOmfangRaw] = useState<string>(() => lasInstallning<string>(`pp.omfang.${amneId}`, ''));
@@ -112,6 +114,12 @@ export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, m
                   <LabbRad key={l.nyckel} l={l} vaxla={() => setLabbVal({ ...labbVal, [l.nyckel]: !l.genomford })} spara={sparaLabb} />
                 ))}
               </div>
+            )}
+            {laggBinogi !== undefined && (
+              <p className="small" style={{ margin: '8px 0 0' }}>
+                <button type="button" className="chipbtn" onClick={laggBinogi} title="Matchar varje kommande delkapitel mot Binogis katalog och lägger den bästa filmen på lektionen">🎬 Lägg Binogis bästa film på delkapitlen</button>
+                <span className="muted"> · {(forhand?.filmer ?? []).reduce((n, f) => n + f.filmer.length, 0)} filmer i dokumentet just nu</span>
+              </p>
             )}
             <div className="modal-actions">
               <button className="btn" disabled={omf.fel !== null || valda.length === 0} onClick={exportera}>📄 Ladda ner Word</button>

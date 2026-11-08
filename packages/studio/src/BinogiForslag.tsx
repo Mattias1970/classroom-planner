@@ -7,7 +7,7 @@
  * begränsad till app.binogi.se.
  */
 import { useState } from 'react';
-import { binogiSokUrl, foreslaBinogiFilmer, hamtaLektionsplan, type BinogiPost, type Bok, type PlaneradLektion, type Struktur } from '@planner/kernel';
+import { binogiSokIAppen, foreslaBinogiFilmer, hamtaLektionsplan, type BinogiPost, type Bok, type PlaneradLektion, type Struktur } from '@planner/kernel';
 import { lasInstallning, sparaInstallning } from './store.js';
 
 const EGNA_NYCKEL = 'binogi.egnaPoster';
@@ -42,7 +42,7 @@ export function BinogiForslag({ s, amneId, bok, plan, laggPa }: {
   };
   return (
     <div className="uppg-kort binogi-forslag" style={{ borderLeft: '4px solid #2d6da3' }}>
-      <b>🎬 Binogi-förslag per delkapitel</b> <small className="muted">— matchade mot bokens begrepp och rubriker. Öppna, kontrollera i Binogi och lägg på lektionen. ⚠ = adressen är härledd ur titeln och inte kontrollerad än.</small>
+      <b>🎬 Binogi-förslag per delkapitel</b> <small className="muted">— Binogis egen lektionskatalog matchad mot bokens begrepp och rubriker. Öppna, titta och lägg på lektionen; ▶-länken fungerar för dig som är inloggad, eleverna får delningslänken via lektionskortet.</small>
       {kapitelIPlanen.map((k) => {
         const forslag = foreslaBinogiFilmer(bok, k.nr, egna);
         const visa = oppet === k.nr;
@@ -52,7 +52,7 @@ export function BinogiForslag({ s, amneId, bok, plan, laggPa }: {
             <button type="button" className="chipbtn" onClick={() => setOppet(visa ? null : k.nr)} aria-expanded={visa}>{visa ? '▾' : '▸'} Kapitel {k.nr} {k.namn} <small className="muted">· {antal} förslag</small></button>
             {visa && forslag.map((d) => (
               <div key={d.kod} className="rad small" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2, margin: '6px 0 6px 12px' }}>
-                <span><b>{d.kod}</b> {d.namn} {d.forslag.length === 0 && <span className="muted">— inget i katalogen passar.</span>} <a href={binogiSokUrl([d.namn, ...d.sokord])} target="_blank" rel="noreferrer" title="Webbsökning begränsad till app.binogi.se">🔍 sök</a></span>
+                <span><b>{d.kod}</b> {d.namn} {d.forslag.length === 0 && <span className="muted">— inget i katalogen passar.</span>} <a href={binogiSokIAppen(d.sokord.length > 0 ? d.sokord.slice(0, 2) : [d.namn])} target="_blank" rel="noreferrer" title="Sök i Binogi (fungerar utan inloggning)">🔍 sök i Binogi</a></span>
                 {d.forslag.map((f) => {
                   const lekt = lektionerFor(k.nr, d.kod);
                   const finns = f.redanIBoken || redanPaLektion(d.kod, k.nr, f.url);
@@ -60,7 +60,7 @@ export function BinogiForslag({ s, amneId, bok, plan, laggPa }: {
                   return (
                     <span key={f.url} className="rad" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap', marginLeft: 12 }}>
                       <a href={f.url} target="_blank" rel="noreferrer" title={`Matchade: ${f.traffar.join(', ')}`}>▶ {f.post.titel}</a>
-                      <small className="muted">{f.poang} p · {f.traffar.slice(0, 4).join(', ')}</small>
+                      <small className="muted">{f.post.kapitel !== undefined ? `${f.post.kapitel} › ${(f.post.avsnitt ?? [])[0] ?? ''} · ` : ''}{f.poang} p · {f.traffar.slice(0, 4).join(', ')}</small>
                       {verif ? <small title="Adressen är kontrollerad">✓</small> : (
                         <button type="button" className="chipbtn" title="Jag har öppnat länken och den fungerar" onClick={() => setVerifierade([...verifierade, f.url])}>⚠ markera som verifierad</button>
                       )}

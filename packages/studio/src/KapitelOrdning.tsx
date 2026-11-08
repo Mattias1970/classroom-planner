@@ -107,8 +107,8 @@ export function KapitelOrdningRedigerare({ kapitel, ordning, setOrdning, bokens,
  */
 export function SkapaPlaneringRuta({ s, amneId, idag, harPlanering, bokTitel, onSkapa, onAvbryt }: {
   s: Struktur; amneId: string; idag: string; harPlanering: boolean; bokTitel: string;
-  /** ordning = null när läraren behåller bokens ordning; bort = delkapitelkoder som inte ska med. */
-  onSkapa: (ordning: KapitelOrdning | null, bort: string[]) => void;
+  /** ordning = null när läraren behåller bokens ordning; bort = delkapitelkoder som inte ska med; binogi = lägg Binogis bästa film på varje delkapitel. */
+  onSkapa: (ordning: KapitelOrdning | null, bort: string[], binogi: boolean) => void;
   onAvbryt: () => void;
 }) {
   // En ny planering har inget genomfört — först när en planering finns låses det som redan lästs
@@ -118,6 +118,7 @@ export function SkapaPlaneringRuta({ s, amneId, idag, harPlanering, bokTitel, on
   // Förval: planens nuvarande ordning (bokens, om läraren inte redan valt en annan — t.ex. i 👨‍👩‍👧 Pedagogisk planering)
   const [ordning, setOrdning] = useState<KapitelOrdning>(() => planensKapitelOrdning(s, amneId, lastTill));
   const [bort, setBort] = useState<Set<string>>(() => new Set());
+  const [binogi, setBinogi] = useState(true);
   const egen = !sammaKapitelOrdning(fullOrdning(kapitel, ordning), fullOrdning(kapitel, bokens));
   const allaKoder = kapitel.flatMap((k) => k.delkapitel);
   const kvar = allaKoder.filter((kod) => !bort.has(kod)).length;
@@ -128,8 +129,12 @@ export function SkapaPlaneringRuta({ s, amneId, idag, harPlanering, bokTitel, on
         <p className="small muted" style={{ margin: '0 0 8px' }}>Vilka kapitel ska ingå, och i vilken ordning? Bokens ordning är förvald — flytta ett kapitel med ▲▼ (t.ex. kap 10 före kap 7) och delkapitel inom ett kapitel med ◀▶. Kryssa ur ett delkapitel eller ett helt kapitel för att lämna det utanför planeringen. Allt kan ändras senare under 🧩 Kursernas ordning och i Lektionsplan.</p>
         <KapitelOrdningRedigerare kapitel={kapitel} ordning={ordning} setOrdning={setOrdning} bokens={bokens} bort={bort} setBort={setBort} />
         {bort.size > 0 && <p className="small muted" style={{ margin: '6px 0 0' }}>{bort.size} delkapitel tas inte med{kvar === 0 ? ' — minst ett delkapitel måste ingå' : ''}.</p>}
+        <label className="small" style={{ display: 'block', margin: '8px 0 0' }}>
+          <input type="checkbox" checked={binogi} onChange={(e) => setBinogi(e.target.checked)} />{' '}
+          🎬 Lägg Binogis bästa film på varje delkapitel <span className="muted">— ur Binogis egen katalog, matchad mot bokens begrepp; syns i 🎬 Filmer, på lektionskorten och i den pedagogiska planeringen. Kan ändras efteråt.</span>
+        </label>
         <div className="modal-actions">
-          <button className="btn" disabled={kvar === 0} onClick={() => onSkapa(egen ? fullOrdning(kapitel, ordning) : null, [...bort])}>✔ {harPlanering ? 'Spara ny planeringsversion' : 'Skapa planering'}{egen ? ' med egen ordning' : ' i bokens ordning'}{bort.size > 0 ? ` utan ${bort.size} delkapitel` : ''}</button>
+          <button className="btn" disabled={kvar === 0} onClick={() => onSkapa(egen ? fullOrdning(kapitel, ordning) : null, [...bort], binogi)}>✔ {harPlanering ? 'Spara ny planeringsversion' : 'Skapa planering'}{egen ? ' med egen ordning' : ' i bokens ordning'}{bort.size > 0 ? ` utan ${bort.size} delkapitel` : ''}</button>
           <button className="btn sec" onClick={onAvbryt}>Avbryt</button>
         </div>
       </div>

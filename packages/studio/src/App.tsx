@@ -39,7 +39,7 @@ import {
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
   klassOversikt, klaratKrav, matchaElev, provLista, provSammanstallning,
-  resultatProcent, saknadeResultat, veckorapportLarm, veckaText, tolkaResultatRader, digiexamProvInfo, digiexamProvTyp, eProvGrans, ordinarieProvFor, planForAmne, harLaborationsstandard, kursLista, flyttaKurs, sattKapitelOrdning, taBortDelkapitelUrPlan, amnesPlanFor, type Kurs, amnesPlan, amnesOffset, sattLaborationsstandard, sattPlanFrystTill, sparaLaborationer, sattPassVal, type HalvklassSession, type Laboration, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type Elev, type KalenderDagRuta, type KalenderHandelse, type SchemaAktivitet,
+  resultatProcent, saknadeResultat, veckorapportLarm, veckaText, tolkaResultatRader, digiexamProvInfo, digiexamProvTyp, eProvGrans, ordinarieProvFor, planForAmne, harLaborationsstandard, kursLista, flyttaKurs, sattKapitelOrdning, taBortDelkapitelUrPlan, laggBinogiFilmerPaPlan, amnesPlanFor, type Kurs, amnesPlan, amnesOffset, sattLaborationsstandard, sattPlanFrystTill, sparaLaborationer, sattPassVal, type HalvklassSession, type Laboration, type ResultatKalla, sattStodPass, skapaFriPlanering, STOD_AMNEN, type Amne, type Bok, type EgenRad, type Tjanst, type Grupp, type Elev, type KalenderDagRuta, type KalenderHandelse, type SchemaAktivitet,
   gruppNyckel, grundRader, planeringsRader, antalIBoken, lektionerPerDelkapitel, sattLektionerPerDelkapitel, sattAntalLektioner, sattLektionsVal, laggTillEgenRad, taBortEgenRad, bokLektioner, type LektionsVal,
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
@@ -1625,6 +1625,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
                 plan.map((rad, index) => ({ rad, index }))));
           }}>📄 Kapitel → Word</button>
         <PedagogiskPlaneringKnapp s={s} amneId={a.id} disabled={!bok || plan.length === 0} meddela={(m) => kor(() => lasStruktur(), m)}
+          laggBinogi={() => { let txt = ''; kor(() => { const r = laggBinogiFilmerPaPlan(lasStruktur(), a.id, { fran: idag }); txt = `🎬 ${r.tillagda.length} Binogi-filmer lades på kommande delkapitel${r.utanForslag.length > 0 ? ` — inget passande för ${r.utanForslag.join(', ')}` : ''}.`; return r.s; }, txt || '🎬 Binogi-filmer.'); }}
           sattOrdning={(o) => kor(() => sattKapitelOrdning(lasStruktur(), a.id, o, harPlanering ? idag : undefined),
             `Kapitlens ordning: ${o.kapitel.map((n) => `kap ${n}`).join(' → ')} — gäller hela planeringen (lektionsplan, detaljplanering, kalender och dokument).`)}
           sparaLabb={(i, namn, fraga) => kor(() => {
@@ -1726,20 +1727,22 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
       </button>
       {skapaRuta && bok && (
         <SkapaPlaneringRuta s={s} amneId={id} idag={idag} harPlanering={harPlanering} bokTitel={bok.titel} onAvbryt={() => setSkapaRuta(false)}
-          onSkapa={(ordning, bort) => {
+          onSkapa={(ordning, bort, binogi) => {
             setSkapaRuta(false);
-            // Del 227 · planeringen registreras och får därefter lärarens kapitelordning (bokens ordning = ingen ändring) och bortvalda delkapitel
-            kor(() => {
-              const dag = harPlanering ? idag : undefined;   // ny planering: inget är genomfört
-              let st = registreraPlanering(lasStruktur(), { id: nyttId('pl'), amneId: id, bokId: bok.id, skapad: new Date().toISOString() });
-              if (ordning !== null) st = sattKapitelOrdning(st, id, ordning, dag);
-              if (bort.length > 0) st = taBortDelkapitelUrPlan(st, id, bort, dag);
-              return st;
-            }, (halv
+            // Del 227 · planeringen registreras och får därefter lärarens kapitelordning (bokens ordning = ingen ändring) och bortvalda delkapitel;
+            // Del 231 · därefter Binogis bästa film per delkapitel (valbart)
+            // (beräknas före kor() så att meddelandet kan berätta vad Binogi-steget gav)
+            const dag = harPlanering ? idag : undefined;   // ny planering: inget är genomfört
+            let st = registreraPlanering(lasStruktur(), { id: nyttId('pl'), amneId: id, bokId: bok.id, skapad: new Date().toISOString() });
+            if (ordning !== null) st = sattKapitelOrdning(st, id, ordning, dag);
+            if (bort.length > 0) st = taBortDelkapitelUrPlan(st, id, bort, dag);
+            let binogiText = '';
+            if (binogi) { const r = laggBinogiFilmerPaPlan(st, id, { fran: dag }); st = r.s; binogiText = ` 🎬 ${r.tillagda.length} Binogi-filmer lades på delkapitlen${r.utanForslag.length > 0 ? ` (inget passande för ${r.utanForslag.join(', ')})` : ''}.`; }
+            kor(() => st, (halv
               ? `Planering skapad: ${bok.titel} utlagd på Grupp A (${plan.filter((p) => p.datum !== null).length} lektioner) och Grupp B (${planB.filter((p) => p.datum !== null).length} lektioner).`
               : `Planering skapad: ${bok.titel} utlagd på ${klass.namn}s schema — ${plan.filter((p) => p.datum !== null).length} lektioner får datum.`)
               + (ordning !== null ? ` Kapitlen läses i ordningen ${ordning.kapitel.map((n) => `kap ${n}`).join(' → ')}.` : '')
-              + (bort.length > 0 ? ` Utan ${bort.join(', ')}.` : ''));
+              + (bort.length > 0 ? ` Utan ${bort.join(', ')}.` : '') + binogiText);
           }} />
       )}
       {bok && harPlanering && <EgnaRaderRedigerare amne={a} bok={bok} kor={kor} idag={idag} />}

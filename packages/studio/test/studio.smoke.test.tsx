@@ -177,7 +177,7 @@ describe('Studio v2 — hela kedjan', () => {
         kapitelMeta: { '7': { name: 'Organisk kemi', col: '#2f5aa8' }, '10': { name: 'Kol och förbränning', col: '#b05c22' } } },
       lektioner: {
         '7': [{ id: 1, type: 'regular', avsnitt: '7.1 Kolatomen', del: 1, begrepp: 'bindning' }, { id: 2, type: 'regular', avsnitt: '7.2 Kolväten', del: 1, begrepp: 'metan' }],
-        '10': [{ id: 1, type: 'regular', avsnitt: '10.1 Former av kol', del: 1, begrepp: 'diamant' }],
+        '10': [{ id: 1, type: 'regular', avsnitt: '10.1 Former av kol', del: 1, begrepp: 'diamant, grafit, grafen' }],
       },
     });
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -208,8 +208,12 @@ describe('Studio v2 — hela kedjan', () => {
     // Delkapitel kan väljas bort: 7.2 kryssas ur
     act(() => { ruta.querySelector<HTMLInputElement>('[aria-label="Ta med 7.2"]')!.click(); });
     expect(ruta.textContent).toContain('1 delkapitel tas inte med');
+    // Del 231 · Binogi-steget är förvalt: bästa filmen per delkapitel läggs på lektionen när planeringen skapas
+    expect(ruta.querySelector<HTMLInputElement>('input[type="checkbox"]:checked')).not.toBeNull();
     act(() => { knapp(host, '✔ Skapa planering med egen ordning utan 1 delkapitel').click(); });
     expect(lasStruktur().planeringar).toHaveLength(1);
+    const binogiVidSkapande = lasStruktur().lektionsplaner.flatMap((p) => p.filmer ?? []).filter((f) => f.includes('https://app.binogi.se/l/'));
+    expect(binogiVidSkapande).toEqual(['Grundämnet kol|https://app.binogi.se/l/grundaemnet-kol']);   // 10.1 Former av kol; 7.1 har ingen tillräckligt bra träff
     const teori = (rader: { nyckel?: string; lektion: { avsnitt: string } }[]) => rader.filter((r) => !(r.nyckel ?? '').startsWith('lab:') && !(r.nyckel ?? '').startsWith('pass:')).map((r) => r.lektion.avsnitt);
     const plan = amnesPlanFor(lasStruktur(), lasStruktur().amnen[0].id, undefined, false)!.a;
     expect(teori(plan).slice(0, 2)).toEqual(['10.1 Former av kol', '7.1 Kolatomen']);   // 7.2 bortvald; laborationerna (halvklass) räknas inte
@@ -230,12 +234,19 @@ describe('Studio v2 — hela kedjan', () => {
     act(() => { knapp(host, '🎬 Filmer').click(); });
     expect(host.textContent).toContain('🎬 Binogi-förslag per delkapitel');
     act(() => { knapp(host, 'Kapitel 7 Organisk kemi').click(); });
-    expect(host.textContent).toContain('▶ Kolets kemi');          // 7.1 Kolatomen (bindning)
-    const forslag = [...host.querySelectorAll('.binogi-forslag button')].find((b) => b.textContent?.startsWith('+ på lektion')) as HTMLButtonElement;
-    act(() => { forslag.click(); });
-    const filmer = lasStruktur().lektionsplaner.flatMap((p) => p.filmer ?? []);
-    expect(filmer.some((f) => f.includes('https://app.binogi.se/l/'))).toBe(true);
-    expect(host.textContent).toContain('finns redan');
+    const binogiRuta = host.querySelector('.binogi-forslag')!;
+    expect(binogiRuta.textContent).toContain('▶ Kolväten');          // 7.2 bortvald ur planen men kvar i boken → förslag ur Binogis katalog
+    expect(binogiRuta.textContent).toContain('ingen lektion i planen');   // 7.2 är bortvald
+    act(() => { knapp(host, 'Kapitel 10 Kol och förbränning').click(); });
+    expect(binogiRuta.textContent).toContain('▶ Grundämnet kol');
+    expect(binogiRuta.textContent).toContain('finns redan');          // den film som lades på vid skapandet
+    // Ytterligare förslag läggs på lektionen med ett klick
+    const forslag = [...binogiRuta.querySelectorAll('button')].find((b) => b.textContent?.startsWith('+ på lektion')) as HTMLButtonElement | undefined;
+    if (forslag !== undefined) {
+      act(() => { forslag.click(); });
+      const filmer = lasStruktur().lektionsplaner.flatMap((p) => p.filmer ?? []).filter((f) => f.includes('https://app.binogi.se/l/'));
+      expect(filmer.length).toBeGreaterThan(binogiVidSkapande.length);
+    }
   });
 
   it('lärare kopplas till tjänsten och får härlett schema; ämnen planeras utan lärare', async () => {
@@ -1317,7 +1328,7 @@ describe('Del 161 · 🔁 Följ en annan klass planering', () => {
     skriv(input(host, 'Ny film'), 'Fotosyntes|https://exempel.se/f');
     act(() => { knapp(host, '+ Lägg till film').click(); });
     const bId = lasStruktur().amnen.find((a) => a.klassId === lasStruktur().klasser.find((k) => k.namn === '8B')!.id)!.id;
-    expect(lasStruktur().lektionsplaner.find((p) => p.amneId === bId && p.lektionsIndex === 1)?.filmer).toEqual(['Fotosyntes|https://exempel.se/f']);
+    expect(lasStruktur().lektionsplaner.find((p) => p.amneId === bId && p.lektionsIndex === 1)?.filmer).toContain('Fotosyntes|https://exempel.se/f');   // Del 231: Binogis film kan redan ligga där
     // 8A: följ 8B
     act(() => { treeKnapp(host, '👥 8A').click(); });
     act(() => { treeKnapp(host, '📖 Biologi').click(); });
@@ -1329,7 +1340,7 @@ describe('Del 161 · 🔁 Följ en annan klass planering', () => {
     expect(lasStruktur().amnen.find((a) => a.id === aId)?.planFranUtkast?.namn).toBe('Följer 8B · Biologi');
     expect(host.textContent).toContain('8A följer 8B · Biologi');
     const planA = lasStruktur().lektionsplaner.filter((p) => p.amneId === aId);
-    expect(planA.some((p) => p.filmer?.[0] === 'Fotosyntes|https://exempel.se/f')).toBe(true);
+    expect(planA.some((p) => p.filmer?.includes('Fotosyntes|https://exempel.se/f'))).toBe(true);
   });
 });
 
