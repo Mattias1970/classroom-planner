@@ -229,6 +229,15 @@ describe('Studio v2 — hela kedjan', () => {
     const planEfter = amnesPlanFor(lasStruktur(), lasStruktur().amnen[0].id, undefined, false)!.a;
     expect(teori(planEfter)[0]).toBe('7.1 Kolatomen');
     expect(lasStruktur().amnen[0].kursOrdning?.[0]).toBe('7:7.1');   // sparas på ämnet (☁), inte i boken
+    // Del 232 · Dokumentets planering blir appens: förvald kryssruta, och "✔ Uppdatera bara planeringen" lägger de valda delkapitlen först
+    expect(input(host, 'Använd i appens planering').checked).toBe(true);
+    expect(host.textContent).toContain('📄 Ladda ner Word och uppdatera planeringen');
+    skriv(input(host, 'Planeringens omfång'), '10.1');
+    act(() => { knapp(host, '✔ Uppdatera bara planeringen').click(); });
+    expect(teori(amnesPlanFor(lasStruktur(), lasStruktur().amnen[0].id, undefined, false)!.a)[0]).toBe('10.1 Former av kol');
+    expect(host.textContent).toContain('Planeringen följer den pedagogiska planeringen: 10.1 → 7.1');
+    act(() => { knapp(host, '👨‍👩‍👧 Pedagogisk planering').click(); });
+    expect(host.querySelector('[aria-label="Pedagogisk planering"]')!.textContent).toContain('de valda delkapitlen (10.1) läggs först');
     act(() => { knapp(host, 'Avbryt').click(); });
     // Del 229 · 🎬 Filmer: Binogi-förslag per delkapitel ur katalogen, läggs på lektionen med ett klick
     act(() => { knapp(host, '🎬 Filmer').click(); });

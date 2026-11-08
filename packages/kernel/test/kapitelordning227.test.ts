@@ -10,7 +10,7 @@ import {
 } from '../src/domain/struktur.js';
 import {
   bokensKapitelOrdning, flyttaDelkapitelIOrdning, flyttaKapitelIOrdning, kursOrdningUrKapitelOrdning, planensKapitel,
-  planensKapitelOrdning, sammaKapitelOrdning, sattKapitelOrdning, taBortDelkapitelUrPlan,
+  planensKapitelOrdning, sammaKapitelOrdning, sattKapitelOrdning, taBortDelkapitelUrPlan, anvandPedagogiskPlanering, ordningUrPedagogiskPlanering,
 } from '../src/domain/kapitelordning.js';
 import { pedagogiskPlaneringForOmfang } from '../src/domain/pedagogiskplanering.js';
 import { tomStruktur, type Skolar, type Struktur } from '../src/domain/typer.js';
@@ -154,5 +154,33 @@ describe('pedagogisk planering utan registrerad planering', () => {
     const pl = pedagogiskPlaneringForOmfang(s, 'ke', [{ fran: '7.1', till: '7.2' }], '2026-08-10');
     expect(pl).not.toBeNull();
     expect(pl!.innehall.map((i) => i.kod)).toEqual(['7.1', '7.2']);
+  });
+});
+
+describe('Del 232 · anvandPedagogiskPlanering — dokumentets planering blir appens', () => {
+  it('valda delkapitel läggs först i dokumentets ordning; övriga följer efter i planens ordning', () => {
+    const s = bygg();
+    const o = ordningUrPedagogiskPlanering(s, 'ke', ['7.1', '7.2', '10.1'], { kapitel: [10, 7] }, '2026-08-10');
+    expect(o.kapitel).toEqual([10, 7]);
+    expect(o.delkapitel).toEqual({ '10': ['10.1', '10.2'], '7': ['7.1', '7.2', '7.3'] });
+    const r = anvandPedagogiskPlanering(s, 'ke', ['7.1', '7.2', '10.1'], { kapitel: [10, 7] }, '2026-08-10');
+    expect(avsnitt(r.s, '2026-08-10').slice(0, 7)).toEqual(['10.1 Former av kol', '10.2 Fossila bränslen', 'Prov kap 10', '7.1 Kolatomen', '7.2 Kolväten', '7.3 Omättade kolväten', 'Prov kap 7']);
+    expect(r.foljd).toEqual(['10.1', '10.2', '7.1', '7.2', '7.3']);
+    expect(r.lasta).toEqual([]);
+    expect(r.s.amnen[0].kursOrdning?.[0]).toBe('10:10.1');          // sparas på ämnet, inte i boken
+    expect(r.s.bocker[0]).toEqual(s.bocker[0]);
+  });
+  it('delkapitlens följd inom kapitlet följer dokumentet (7.3 före 7.1); ovalda delkapitel kommer sist i kapitlet', () => {
+    const s = bygg();
+    const r = anvandPedagogiskPlanering(s, 'ke', ['7.3', '7.1'], { kapitel: [7], delkapitel: { '7': ['7.3', '7.1'] } }, '2026-08-10');
+    expect(r.foljd).toEqual(['7.3', '7.1', '7.2', '10.1', '10.2']);
+  });
+  it('påbörjade delkapitel ligger kvar; de kommande läggs om och rapporteras som låsta', () => {
+    const s = bygg();
+    const idag = '2026-08-20';   // 7.1 (tis 18/8) är genomförd
+    const r = anvandPedagogiskPlanering(s, 'ke', ['10.1', '7.1', '7.2'], { kapitel: [10, 7] }, idag);
+    expect(avsnitt(r.s, idag).slice(0, 4)).toEqual(['7.1 Kolatomen', '10.1 Former av kol', '10.2 Fossila bränslen', 'Prov kap 10']);
+    expect(r.lasta).toEqual(['7.1']);
+    expect(r.foljd.slice(0, 3)).toEqual(['10.1', '10.2', '7.2']);
   });
 });

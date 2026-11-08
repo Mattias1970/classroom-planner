@@ -196,3 +196,58 @@ export function taBortDelkapitelUrPlan(s: Struktur, amneId: string, koder: strin
   }
   return andraPlanering(s, amneId, { lektionsVal: lv }, idag);
 }
+
+/**
+ * Del 232 · Ordningen som gör den pedagogiska planeringen till appens planering: kapitlen som
+ * ingår i omfånget först, i dokumentets ordning; inom varje kapitel de valda delkapitlen först
+ * (i dokumentets följd) och kapitlets övriga delkapitel därefter i planens nuvarande följd.
+ * Kapitel utanför omfånget kommer sist i planens nuvarande ordning.
+ */
+export function ordningUrPedagogiskPlanering(s: Struktur, amneId: string, koder: readonly string[], dokumentets: KapitelOrdning, idag?: string): KapitelOrdning {
+  const plan = planensKapitelOrdning(s, amneId, idag);
+  const valdaKap = [...new Set(koder.map((k) => Number(k.split('.')[0])))];
+  const kapitel = [
+    ...dokumentets.kapitel.filter((nr) => valdaKap.includes(nr)),
+    ...valdaKap.filter((nr) => !dokumentets.kapitel.includes(nr)),
+    ...plan.kapitel.filter((nr) => !valdaKap.includes(nr)),
+  ];
+  const delkapitel: Record<string, string[]> = { ...(plan.delkapitel ?? {}) };
+  for (const nr of valdaKap) {
+    const iPlanen = plan.delkapitel?.[String(nr)] ?? [];
+    const iDok = dokumentets.delkapitel?.[String(nr)] ?? [];
+    const valda = [...iDok.filter((k) => koder.includes(k)), ...koder.filter((k) => k.startsWith(`${nr}.`) && !iDok.includes(k))];
+    delkapitel[String(nr)] = [...valda, ...iPlanen.filter((k) => !valda.includes(k))];
+  }
+  return { kapitel, delkapitel };
+}
+
+export interface PedagogiskPlaneringIPlanen {
+  s: Struktur;
+  /** Ordningen som lades på planen. */
+  ordning: KapitelOrdning;
+  /** Delkapitlen i planens kommande lektioner efter ändringen (första lektionen per delkapitel). */
+  foljd: string[];
+  /** Delkapitel i omfånget som inte kunde läggas först — de är redan påbörjade/genomförda. */
+  lasta: string[];
+}
+
+/**
+ * Del 232 · Gör den pedagogiska planeringen till klassens planering: de valda delkapitlen läggs
+ * först bland de kommande lektionerna, i dokumentets ordning. Genomförda lektioner flyttas aldrig;
+ * lektionsplan, detaljplanering, kalender och dokument följer sedan samma ordning (sparas med
+ * ämnet via ☁, bokfilen rörs inte).
+ */
+export function anvandPedagogiskPlanering(s: Struktur, amneId: string, koder: readonly string[], dokumentets: KapitelOrdning, idag?: string): PedagogiskPlaneringIPlanen {
+  const ordning = ordningUrPedagogiskPlanering(s, amneId, koder, dokumentets, idag);
+  const ut = sattKapitelOrdning(s, amneId, ordning, idag);
+  const plan = amnesPlanFor(ut, amneId, idag, false);
+  const foljd: string[] = [];
+  const lasta: string[] = [];
+  for (const k of kursLista(plan?.a ?? [], idag)) {
+    const kod = kodUrKurs(k);
+    if (kod === null) continue;
+    if (k.genomford) { if (koder.includes(kod)) lasta.push(kod); continue; }
+    if (!foljd.includes(kod)) foljd.push(kod);
+  }
+  return { s: ut, ordning, foljd, lasta };
+}
