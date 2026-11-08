@@ -184,3 +184,14 @@ describe('Del 232 · anvandPedagogiskPlanering — dokumentets planering blir ap
     expect(r.foljd.slice(0, 3)).toEqual(['10.1', '10.2', '7.2']);
   });
 });
+
+describe('Del 233 · dokumentets filmlista hämtar Binogis katalog när bok och lektionsplan saknar filmer', () => {
+  it('10.1 Former av kol får Grundämnet kol med kontrollerad adress; delkapitel utan bra träff står tomma', () => {
+    const s = bygg();
+    const pl = pedagogiskPlaneringForOmfang(s, 'ke', [{ fran: '7.1', till: '7.2' }, { fran: '10.1', till: '10.1' }], '2026-08-10')!;
+    const f = Object.fromEntries(pl.filmer.map((d) => [d.kod, d.filmer.map((x) => `${x.titel}|${x.url}`)]));
+    expect(f['10.1']).toEqual(['Grundämnet kol|https://app.binogi.se/l/grundaemnet-kol']);
+    expect(f['7.2']).toEqual(['Kolväten|https://app.binogi.se/l/kolvaeten']);   // bara träffar med poäng ≥ 6
+    expect(f['7.1']).toEqual([]);
+  });
+});

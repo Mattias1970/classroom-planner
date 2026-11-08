@@ -36,7 +36,7 @@ const filmRad = (filmer: PlanFilm[], prefix?: string, namn?: string) => new Para
   spacing: { after: 60 },
   children: [
     ...(prefix !== undefined ? [new TextRun({ text: `${prefix}${namn !== undefined ? ` ${namn}` : ''}`, bold: true, color: MORK }), new TextRun({ text: '   ' })] : []),
-    ...(filmer.length === 0 ? [new TextRun({ text: 'inga filmer i bokfilen', italics: true, color: DAMPAD })] : []),
+    ...(filmer.length === 0 ? [new TextRun({ text: 'inga filmer — sök på app.binogi.se', italics: true, color: DAMPAD })] : []),
     ...filmer.flatMap((f, i) => [lank(f), ...(i < filmer.length - 1 ? [new TextRun({ text: '  ·  ', color: DAMPAD })] : [])]),
   ],
 });

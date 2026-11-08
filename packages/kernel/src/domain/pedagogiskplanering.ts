@@ -12,6 +12,7 @@ import { delkapitelKod } from './bok.js';
 import { begreppForLektion } from './lektionskort.js';
 import { NO_TK_AMNEN, socrativeRum } from './amnen.js';
 import { binogiFilmerFor } from './binogifilmer.js';
+import { foreslaBinogiFilmer } from './binogikatalog.js';
 import { amnesPlanFor, hamtaLektionsplan, lektionsNamn } from './struktur.js';
 import { isoVecka } from './skolar.js';
 import type { Bok, PlaneradLektion, Struktur } from './typer.js';
@@ -170,11 +171,16 @@ function filmerFor(bok: Bok, kapitelNr: number, kod: string | null, lpFilmer: st
       lagg(titel === '' ? f.titel : titel, f.url);
     }
   }
-  // Del 226 · inbyggd Binogi-lista när bokfilen saknar filmer för delkapitlet
-  if (ut.length === 0) for (const f of binogiFilmerFor(bok, kod)) lagg(f.titel, f.url);
   for (const f of lpFilmer) {
     const [titel, ...rest] = f.split('|'); const url = rest.join('|').trim();
     if (url === '') lagg(titel.trim(), titel.trim()); else lagg(titel.trim(), url);
+  }
+  // Del 226 · inbyggd Binogi-lista när varken bokfilen eller lektionsplanen har filmer för delkapitlet
+  if (ut.length === 0) for (const f of binogiFilmerFor(bok, kod)) lagg(f.titel, f.url);
+  // Del 233 · annars Binogis katalog (kontrollerade adresser): de bästa träffarna på delkapitlets begrepp och rubrik
+  if (ut.length === 0 && kod !== null) {
+    const d = foreslaBinogiFilmer(bok, kapitelNr, [], 2).find((x) => x.kod === kod);
+    for (const f of d?.forslag ?? []) if (f.poang >= 6) lagg(f.post.titel, f.url);
   }
   return ut;
 }
