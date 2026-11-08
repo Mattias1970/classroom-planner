@@ -73,6 +73,7 @@ import { Datarepo } from './v3/Datarepo.js';
 import { amnesIkon } from './v3/ikoner.js';
 import { SparaMeny } from './SparaMeny.js';
 import { KapitelOrdningPanel, SkapaPlaneringRuta } from './KapitelOrdning.js';
+import { BinogiForslag } from './BinogiForslag.js';
 import { StWidget, MiniTal, MiniRemsa, useWidgetLage } from './StWidget.js';
 import { ElevFilter } from './ElevFilter.js';
 import {
@@ -2402,6 +2403,7 @@ function FilmerFlik({ s, amneId, plan, bok, kor, oppnaLektion }: {
         <p>Alla filmlänkar (t.ex. Binogi) som lagts till på enskilda lektioner samlas här. Lägg till eller ta bort en länk direkt — det uppdaterar automatiskt motsvarande lektionssida.</p>
       </div>
       <p className="muted small"><b>{totalt} filmer totalt i planeringen</b></p>
+      <BinogiForslag s={s} amneId={amneId} bok={bok} plan={plan} laggPa={laggPa} />
       {bok.kapitel.filter((k) => k.resurser.filmer.length > 0).map((k) => (
         <div key={k.nr} className="uppg-kort" style={{ borderLeft: `4px solid ${k.farg}` }}>
           <b>📚 Kapitel {k.nr} {k.namn}</b> <small className="muted">— bokens filmresurser ({k.resurser.filmer.length}); välj lektion för att lägga till</small>

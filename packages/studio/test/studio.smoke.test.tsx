@@ -213,6 +213,16 @@ describe('Studio v2 — hela kedjan', () => {
     expect(plan.some((r) => r.lektion.avsnitt === '7.2 Kolväten')).toBe(false);
     // 🧩 Kursernas ordning visar kapitelpanelen med den nya följden
     expect(host.textContent).toContain('📚 Kapitlens ordning');
+    // Del 229 · 🎬 Filmer: Binogi-förslag per delkapitel ur katalogen, läggs på lektionen med ett klick
+    act(() => { knapp(host, '🎬 Filmer').click(); });
+    expect(host.textContent).toContain('🎬 Binogi-förslag per delkapitel');
+    act(() => { knapp(host, 'Kapitel 7 Organisk kemi').click(); });
+    expect(host.textContent).toContain('▶ Kolets kemi');          // 7.1 Kolatomen (bindning)
+    const forslag = [...host.querySelectorAll('.binogi-forslag button')].find((b) => b.textContent?.startsWith('+ på lektion')) as HTMLButtonElement;
+    act(() => { forslag.click(); });
+    const filmer = lasStruktur().lektionsplaner.flatMap((p) => p.filmer ?? []);
+    expect(filmer.some((f) => f.includes('https://app.binogi.se/l/'))).toBe(true);
+    expect(host.textContent).toContain('finns redan');
   });
 
   it('lärare kopplas till tjänsten och får härlett schema; ämnen planeras utan lärare', async () => {
