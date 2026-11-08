@@ -1625,12 +1625,13 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
                 plan.map((rad, index) => ({ rad, index }))));
           }}>📄 Kapitel → Word</button>
         <PedagogiskPlaneringKnapp s={s} amneId={a.id} disabled={!bok || plan.length === 0} meddela={(m) => kor(() => lasStruktur(), m)}
-          laggBinogi={() => { let txt = ''; kor(() => { const r = laggBinogiFilmerPaPlan(lasStruktur(), a.id, { fran: idag }); txt = `🎬 ${r.tillagda.length} Binogi-filmer lades på kommande delkapitel${r.utanForslag.length > 0 ? ` — inget passande för ${r.utanForslag.join(', ')}` : ''}.`; return r.s; }, txt || '🎬 Binogi-filmer.'); }}
-          anvandIPlanen={(koder, o) => {
-            // Del 232 · dokumentets planering blir appens: valda delkapitel först, i dokumentets ordning
-            const r = anvandPedagogiskPlanering(lasStruktur(), a.id, koder, o, harPlanering ? idag : undefined);
-            kor(() => r.s, `Planeringen följer den pedagogiska planeringen: ${r.foljd.slice(0, koder.length + 2).join(' → ')}${r.foljd.length > koder.length + 2 ? ' → …' : ''} — gäller lektionsplan, detaljplanering, kalender och dokument.`
-              + (r.lasta.length > 0 ? ` ${r.lasta.join(', ')} är redan påbörjade och ligger kvar där de ligger.` : ''));
+          laggBinogi={() => { const r = laggBinogiFilmerPaPlan(lasStruktur(), a.id, { fran: idag }); kor(() => r.s, `🎬 ${r.tillagda.length} Binogi-filmer lades på kommande delkapitel${r.utanForslag.length > 0 ? ` — inget passande för ${r.utanForslag.join(', ')}` : ''}.`); }}
+          skapaPlanering={bok === undefined ? undefined : (koder, o) => {
+            // Del 232/234 · ämnet saknar planering: dokumentet skapar den — valda delkapitel först, i dokumentets ordning, plus Binogi-steget
+            const st = registreraPlanering(lasStruktur(), { id: nyttId('pl'), amneId: a.id, bokId: bok.id, skapad: new Date().toISOString() });
+            const r = anvandPedagogiskPlanering(st, a.id, koder, o, undefined);
+            const b = laggBinogiFilmerPaPlan(r.s, a.id, {});
+            kor(() => b.s, `Planeringen skapad från den pedagogiska planeringen: ${r.foljd.slice(0, koder.length + 2).join(' → ')}${r.foljd.length > koder.length + 2 ? ' → …' : ''} — lektionsplan, detaljplanering, kalender och dokument följer den. 🎬 ${b.tillagda.length} Binogi-filmer lades på delkapitlen.`);
           }}
           sattOrdning={(o) => kor(() => sattKapitelOrdning(lasStruktur(), a.id, o, harPlanering ? idag : undefined),
             `Kapitlens ordning: ${o.kapitel.map((n) => `kap ${n}`).join(' → ')} — gäller hela planeringen (lektionsplan, detaljplanering, kalender och dokument).`)}

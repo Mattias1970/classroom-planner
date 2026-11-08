@@ -9,7 +9,7 @@ import { bokensKapitelOrdning, omfangUrKoder, pedagogiskPlanering, pedagogiskPla
 import { lasInstallning, lasStruktur, sparaInstallning } from './store.js';
 import { KapitelOrdningRedigerare, fullOrdning } from './KapitelOrdning.js';
 
-export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, meddela, sparaLabb, sattOrdning, laggBinogi, anvandIPlanen }: {
+export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, meddela, sparaLabb, sattOrdning, laggBinogi, skapaPlanering }: {
   s: Struktur; amneId: string;
   /** Kapitlet som pågår — förvalet när inget sparats. */
   aktivtKapitel: number | null;
@@ -22,11 +22,11 @@ export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, m
   /** Del 231 · Lägger Binogis bästa film på varje kommande delkapitel (syns i dokumentets filmlista). */
   laggBinogi?: () => void;
   /**
-   * Del 232 · Gör dokumentets planering till appens: de valda delkapitlen läggs först bland kommande
-   * lektioner i dokumentets ordning (lektionsplan, detaljplanering, kalender). Körs när Word laddas ner
-   * om kryssrutan "Använd i appens planering" är ikryssad (förval).
+   * Del 232/234 · När ämnet saknar planering: skapar appens planering från dokumentet — de valda
+   * delkapitlen först, i dokumentets ordning, plus Binogi-steget. Körs när Word laddas ner om kryssrutan
+   * "Skapa planeringen i appen" är ikryssad (förval). Finns en planering följer dokumentet alltid den.
    */
-  anvandIPlanen?: (koder: string[], ordning: KapitelOrdning) => void;
+  skapaPlanering?: (koder: string[], ordning: KapitelOrdning) => void;
 }) {
   const [oppen, setOppen] = useState(false);
   const [omfang, setOmfangRaw] = useState<string>(() => lasInstallning<string>(`pp.omfang.${amneId}`, ''));
@@ -71,19 +71,19 @@ export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, m
     }
     setOppen(true);
   };
-  // Del 232 · förval: dokumentets planering blir appens planering
+  // Del 232/234 · utan planering: förval att dokumentet också skapar appens planering
   const [anvand, setAnvandRaw] = useState<boolean>(() => lasInstallning<boolean>(`pp.anvand.${amneId}`, true));
   const setAnvand = (v: boolean) => { setAnvandRaw(v); sparaInstallning(`pp.anvand.${amneId}`, v); };
-  const kanAnvanda = anvandIPlanen !== undefined && harPlanering && valda.length > 0;
+  const kanSkapa = skapaPlanering !== undefined && !harPlanering && valda.length > 0;
   const exportera = () => {
-    // Först läggs planen om (så att dokumentets veckoplanering och datum bygger på den nya ordningen)
-    const st = kanAnvanda && anvand ? (() => { anvandIPlanen(valda, ordning); return lasStruktur(); })() : s;
+    // Först skapas planeringen (så att dokumentets veckoplanering och datum bygger på den)
+    const st = kanSkapa && anvand ? (() => { skapaPlanering(valda, ordning); return lasStruktur(); })() : s;
     const pl = omf.fel === null && omf.spann.length > 0
       ? pedagogiskPlaneringForOmfang(st, amneId, omf.spann, idag, genomforda, ordning)
       : pedagogiskPlanering(st, amneId, aktivtKapitel ?? undefined, idag, genomforda);
     if (pl === null) { meddela?.('✗ Kunde inte bygga planeringen — inget valt delkapitel finns i boken, eller ämnet saknar planering.'); return; }
     void import('./pedagogiskWord.js').then(({ exporteraPedagogiskPlanering }) => exporteraPedagogiskPlanering(pl)).then(() => {
-      meddela?.(`Pedagogisk planering ${pl.omfang ?? `kap ${pl.kapitel.nr}`} nedladdad som Word.${kanAnvanda && anvand ? ' Appens planering följer dokumentet.' : ''}`); setOppen(false);
+      meddela?.(`Pedagogisk planering ${pl.omfang ?? `kap ${pl.kapitel.nr}`} nedladdad som Word.${kanSkapa && anvand ? ' Planeringen är skapad i appen efter dokumentet.' : ''}`); setOppen(false);
     });
   };
   return (
@@ -94,7 +94,9 @@ export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, m
           <div className="st-info-popup pp-modal" role="dialog" aria-label="Pedagogisk planering" onClick={(e) => e.stopPropagation()}>
             <h3 style={{ margin: '0 0 4px' }}>👨‍👩‍👧 Pedagogisk planering</h3>
             <p className="small muted" style={{ margin: '0 0 8px' }}>Kryssa i delkapitlen som planeringen ska täcka — gärna över flera kapitel. Dokumentet får syfte, begrepp, innehåll, filmer, prov och bedömning samt veckoplaneringen för just de delkapitlen.</p>
-            {!s.planeringar.some((p) => p.amneId === amneId) && <p className="status warn small" style={{ margin: '0 0 8px' }}>⚠ Planeringen är inte skapad än — dokumentet bygger på förhandsvisningen (bokens ordning). Skapa planeringen med ▶ Skapa planering först om du vill ha din egen kapitelordning och dina datum.</p>}
+            {harPlanering
+              ? <p className="small muted" style={{ margin: '0 0 8px' }}>📋 Dokumentet följer klassens planering: delkapitlens ordning, datum, laborationer och prov hämtas ur lektionsplanen.</p>
+              : <p className="status warn small" style={{ margin: '0 0 8px' }}>⚠ Ämnet har ingen planering än — dokumentet bygger på förhandsvisningen. Med kryssrutan nedan skapas planeringen i appen från dokumentet (förval).</p>}
             <label className="small" style={{ display: 'block', marginBottom: 6 }}>Omfång
               <input aria-label="Planeringens omfång" value={omfang} placeholder="6.1-6.5, 7.1-7.3" onChange={(e) => setOmfang(e.target.value)} style={{ width: '100%' }} />
               {omf.fel !== null && <span className="status warn small" style={{ display: 'block' }}>⚠ {omf.fel}</span>}
@@ -114,7 +116,9 @@ export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, m
             {sattOrdning !== undefined && valdaKapitel.length > 0 && (valdaKapitel.length > 1 || valdaKapitel[0].delkapitel.length > 1) && (
               <div className="pp-ordning" style={{ margin: '10px 0 4px' }}>
                 <b className="small">I vilken ordning?</b>
-                <p className="small muted" style={{ margin: '2px 0 4px' }}>Det här är planeringens ordning för klassen — flyttar du ett kapitel (▲▼) eller delkapitel (◀▶) ändras lektionsplan, detaljplanering, kalender och dokument på samma gång. Sparas med ämnet (☁), bokfilen rörs inte. Veckoplaneringen står alltid i datumordning.</p>
+                <p className="small muted" style={{ margin: '2px 0 4px' }}>{harPlanering
+                  ? 'Det här är klassens planering — flyttar du ett kapitel (▲▼) eller delkapitel (◀▶) ändras lektionsplan, detaljplanering, kalender och dokument på samma gång. Sparas med ämnet (☁), bokfilen rörs inte. Veckoplaneringen står alltid i datumordning.'
+                  : 'Ordningen dokumentet läser i — och som planeringen skapas med om kryssrutan nedan är ikryssad. Bokens ordning är förvalet.'}</p>
                 <KapitelOrdningRedigerare kapitel={valdaKapitel} ordning={ordning} setOrdning={setOrdning} bokens={bokensKapitelOrdning(s, amneId)} kompakt />
               </div>
             )}
@@ -133,15 +137,15 @@ export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, m
                 <span className="muted"> · {(forhand?.filmer ?? []).reduce((n, f) => n + f.filmer.length, 0)} filmer i dokumentet just nu</span>
               </p>
             )}
-            {kanAnvanda && (
+            {kanSkapa && (
               <label className="small" style={{ display: 'block', margin: '10px 0 0' }}>
-                <input type="checkbox" aria-label="Använd i appens planering" checked={anvand} onChange={(e) => setAnvand(e.target.checked)} />{' '}
-                <b>Använd den här planeringen i appen</b> <span className="muted">— de valda delkapitlen ({valda.join(', ')}) läggs först bland kommande lektioner i dokumentets ordning; lektionsplan, detaljplanering och kalender följer med. Genomförda lektioner rörs inte. Sparas med ämnet (☁).</span>
+                <input type="checkbox" aria-label="Skapa planeringen i appen" checked={anvand} onChange={(e) => setAnvand(e.target.checked)} />{' '}
+                <b>Skapa planeringen i appen från det här dokumentet</b> <span className="muted">— de valda delkapitlen ({valda.join(', ')}) läses först, i dokumentets ordning; lektionsplan, detaljplanering och kalender byggs därefter, och Binogis bästa film läggs på varje delkapitel. Sparas med ämnet (☁), bokfilen rörs inte.</span>
               </label>
             )}
             <div className="modal-actions">
-              <button className="btn" disabled={omf.fel !== null || valda.length === 0} onClick={exportera}>📄 Ladda ner Word{kanAnvanda && anvand ? ' och uppdatera planeringen' : ''}</button>
-              {kanAnvanda && <button type="button" className="btn sec" onClick={() => { anvandIPlanen(valda, ordning); setOppen(false); }} title="Lägg om appens planering efter dokumentet utan att ladda ner">✔ Uppdatera bara planeringen</button>}
+              <button className="btn" disabled={omf.fel !== null || valda.length === 0} onClick={exportera}>📄 Ladda ner Word{kanSkapa && anvand ? ' och skapa planeringen' : ''}</button>
+              {kanSkapa && <button type="button" className="btn sec" onClick={() => { skapaPlanering(valda, ordning); setOppen(false); }} title="Skapa appens planering efter dokumentet utan att ladda ner">✔ Skapa bara planeringen</button>}
               <button className="btn sec" onClick={() => setOppen(false)}>Avbryt</button>
             </div>
           </div>

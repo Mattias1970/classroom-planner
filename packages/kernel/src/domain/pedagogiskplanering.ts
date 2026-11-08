@@ -223,7 +223,8 @@ export function pedagogiskPlaneringForOmfang(s: Struktur, amneId: string, spann:
   }
   if (delar.length === 0) return null;
   const forsta = delar[0];
-  const omfang = spann.map((x) => (x.fran === x.till ? x.fran : `${x.fran}–${x.till}`)).join(' · ');
+  // Del 234 · omfångets etikett i planeringens ordning ('10.1 · 7.1–7.6'), inte som läraren råkade skriva det
+  const omfang = delar.map((pl) => pl.kapitelLista[0].omfang ?? `kap ${pl.kapitel.nr}`).join(' · ');
   const veckor: PlanVecka[] = [];
   for (const d of delar.flatMap((pl) => pl.veckor.flatMap((v) => v.dagar)).sort((a, b) => a.datum.localeCompare(b.datum))) {
     const v = veckor[veckor.length - 1];

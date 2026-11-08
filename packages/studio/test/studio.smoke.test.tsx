@@ -170,6 +170,57 @@ describe('Studio v2 — hela kedjan', () => {
     expect(host.textContent).toContain('2 lektioner får datum');
   });
 
+  it('Del 234: utan planering skapar 👨‍👩‍👧 Pedagogisk planering appens planering — valda delkapitel först i dokumentets ordning, Binogi-film på köpet', async () => {
+    const KEMI = JSON.stringify({
+      schema: 'classroom-planner-bok', version: 1,
+      bok: { id: 'liber-kemi', titel: 'Spektrum Kemi', förlag: 'Liber', ämne: 'Kemi', årskurs: 8,
+        kapitelMeta: { '7': { name: 'Organisk kemi', col: '#2f5aa8' }, '10': { name: 'Kol och förbränning', col: '#b05c22' } } },
+      lektioner: {
+        '7': [{ id: 1, type: 'regular', avsnitt: '7.1 Kolatomen', del: 1, begrepp: 'bindning' }, { id: 2, type: 'regular', avsnitt: '7.2 Kolväten', del: 1, begrepp: 'metan' }],
+        '10': [{ id: 1, type: 'regular', avsnitt: '10.1 Former av kol', del: 1, begrepp: 'diamant, grafit, grafen' }],
+      },
+    });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-10T10:00:00Z'));   // före läsårsstart: inget är genomfört
+    const host = render();
+    skapaSkolar(host, '2026/2027');
+    act(() => { knapp(host, '2026/2027').click(); });
+    await importeraBok(host, KEMI);
+    skriv(input(host, 'Tjänstens namn'), 'NO');
+    act(() => { knapp(host, '➕ Lägg till tjänst').click(); });
+    act(() => { knapp(host, 'NO').click(); });
+    skriv(input(host, 'Klassens namn'), '8B');
+    act(() => { knapp(host, '➕ Lägg till klass').click(); });
+    act(() => { knapp(host, '8B').click(); });
+    valj(select(host, 'Ämne'), 'Kemi');
+    valj(select(host, 'Bok för ämnet'), 'liber-kemi');
+    valj(select(host, 'Veckodag pass 1'), '3');
+    skriv(input(host, 'Start pass 1'), '09:00');
+    skriv(input(host, 'Slut pass 1'), '10:00');
+    act(() => { knapp(host, '➕ Lägg till ämne').click(); });
+    // Ingen planering än: dialogen varnar och erbjuder att skapa planeringen (förval)
+    act(() => { knapp(host, '👨‍👩‍👧 Pedagogisk planering').click(); });
+    const dialog = host.querySelector('[aria-label="Pedagogisk planering"]')!;
+    expect(dialog.textContent).toContain('Ämnet har ingen planering än');
+    skriv(input(host, 'Planeringens omfång'), '7.1, 10.1');
+    expect(input(host, 'Skapa planeringen i appen').checked).toBe(true);
+    expect(knapp(host, '📄 Ladda ner Word och skapa planeringen')).toBeTruthy();
+    // Kap 10 först i dokumentets ordning
+    act(() => { dialog.querySelector<HTMLButtonElement>('[aria-label="Flytta kapitel 10 tidigare"]')!.click(); });
+    act(() => { knapp(host, '✔ Skapa bara planeringen').click(); });
+    expect(lasStruktur().planeringar).toHaveLength(1);
+    const teori = (rader: { nyckel?: string; lektion: { avsnitt: string } }[]) => rader.filter((r) => !(r.nyckel ?? '').startsWith('lab:') && !(r.nyckel ?? '').startsWith('pass:')).map((r) => r.lektion.avsnitt);
+    expect(teori(amnesPlanFor(lasStruktur(), lasStruktur().amnen[0].id, undefined, false)!.a).slice(0, 3)).toEqual(['10.1 Former av kol', '7.1 Kolatomen', '7.2 Kolväten']);
+    expect(lasStruktur().amnen[0].kursOrdning).toContain('10:10.1');   // sparas på ämnet (☁), inte i boken
+    expect(lasStruktur().lektionsplaner.flatMap((p) => p.filmer ?? [])).toContain('Grundämnet kol|https://app.binogi.se/l/grundaemnet-kol');
+    // Nu finns planeringen: dokumentet följer den och omfångets etikett står i planens ordning
+    act(() => { knapp(host, '👨‍👩‍👧 Pedagogisk planering').click(); });
+    expect(host.querySelector('[aria-label="Pedagogisk planering"]')!.textContent).toContain('Dokumentet följer klassens planering');
+    expect(input(host, 'Skapa planeringen i appen')).toBeNull();
+    act(() => { knapp(host, 'Avbryt').click(); });
+    vi.useRealTimers();
+  });
+
   it('Del 227: ▶ Skapa planering öppnar kapitelordningen — bokens ordning förvald, kap 10 kan läggas före kap 7', async () => {
     const KEMI = JSON.stringify({
       schema: 'classroom-planner-bok', version: 1,
@@ -229,15 +280,11 @@ describe('Studio v2 — hela kedjan', () => {
     const planEfter = amnesPlanFor(lasStruktur(), lasStruktur().amnen[0].id, undefined, false)!.a;
     expect(teori(planEfter)[0]).toBe('7.1 Kolatomen');
     expect(lasStruktur().amnen[0].kursOrdning?.[0]).toBe('7:7.1');   // sparas på ämnet (☁), inte i boken
-    // Del 232 · Dokumentets planering blir appens: förvald kryssruta, och "✔ Uppdatera bara planeringen" lägger de valda delkapitlen först
-    expect(input(host, 'Använd i appens planering').checked).toBe(true);
-    expect(host.textContent).toContain('📄 Ladda ner Word och uppdatera planeringen');
-    skriv(input(host, 'Planeringens omfång'), '10.1');
-    act(() => { knapp(host, '✔ Uppdatera bara planeringen').click(); });
-    expect(teori(amnesPlanFor(lasStruktur(), lasStruktur().amnen[0].id, undefined, false)!.a)[0]).toBe('10.1 Former av kol');
-    expect(host.textContent).toContain('Planeringen följer den pedagogiska planeringen: 10.1 → 7.1');
-    act(() => { knapp(host, '👨‍👩‍👧 Pedagogisk planering').click(); });
-    expect(host.querySelector('[aria-label="Pedagogisk planering"]')!.textContent).toContain('de valda delkapitlen (10.1) läggs först');
+    // Del 234 · Finns en planering följer dokumentet den — ingen "skapa planering"-kryssruta, och knappen är bara nedladdning
+    const ppDialog = host.querySelector('[aria-label="Pedagogisk planering"]')!;
+    expect(ppDialog.textContent).toContain('Dokumentet följer klassens planering');
+    expect(input(host, 'Skapa planeringen i appen')).toBeNull();
+    expect(knapp(host, '📄 Ladda ner Word')).toBeTruthy();
     act(() => { knapp(host, 'Avbryt').click(); });
     // Del 229 · 🎬 Filmer: Binogi-förslag per delkapitel ur katalogen, läggs på lektionen med ett klick
     act(() => { knapp(host, '🎬 Filmer').click(); });
