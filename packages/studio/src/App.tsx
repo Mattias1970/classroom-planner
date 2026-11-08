@@ -1625,6 +1625,8 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
                 plan.map((rad, index) => ({ rad, index }))));
           }}>📄 Kapitel → Word</button>
         <PedagogiskPlaneringKnapp s={s} amneId={a.id} disabled={!bok || plan.length === 0} meddela={(m) => kor(() => lasStruktur(), m)}
+          sattOrdning={(o) => kor(() => sattKapitelOrdning(lasStruktur(), a.id, o, harPlanering ? idag : undefined),
+            `Kapitlens ordning: ${o.kapitel.map((n) => `kap ${n}`).join(' → ')} — gäller hela planeringen (lektionsplan, detaljplanering, kalender och dokument).`)}
           sparaLabb={(i, namn, fraga) => kor(() => {
             const bas = hamtaLektionsplan(lasStruktur(), a.id, i) ?? { id: `lp-${a.id}-${i}`, amneId: a.id, lektionsIndex: i };
             return sattLektionsplan(lasStruktur(), { ...bas, ...(namn !== '' ? { avsnittText: namn } : {}), labFraga: fraga });

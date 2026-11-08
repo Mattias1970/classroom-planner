@@ -115,7 +115,8 @@ export function SkapaPlaneringRuta({ s, amneId, idag, harPlanering, bokTitel, on
   const lastTill = harPlanering ? idag : undefined;
   const kapitel = planensKapitel(s, amneId, lastTill);
   const bokens = bokensKapitelOrdning(s, amneId);
-  const [ordning, setOrdning] = useState<KapitelOrdning>(() => (harPlanering ? planensKapitelOrdning(s, amneId, idag) : bokens));
+  // Förval: planens nuvarande ordning (bokens, om läraren inte redan valt en annan — t.ex. i 👨‍👩‍👧 Pedagogisk planering)
+  const [ordning, setOrdning] = useState<KapitelOrdning>(() => planensKapitelOrdning(s, amneId, lastTill));
   const [bort, setBort] = useState<Set<string>>(() => new Set());
   const egen = !sammaKapitelOrdning(fullOrdning(kapitel, ordning), fullOrdning(kapitel, bokens));
   const allaKoder = kapitel.flatMap((k) => k.delkapitel);

@@ -9,7 +9,7 @@ import { bokensKapitelOrdning, omfangUrKoder, pedagogiskPlanering, pedagogiskPla
 import { lasInstallning, sparaInstallning } from './store.js';
 import { KapitelOrdningRedigerare, fullOrdning } from './KapitelOrdning.js';
 
-export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, meddela, sparaLabb }: {
+export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, meddela, sparaLabb, sattOrdning }: {
   s: Struktur; amneId: string;
   /** Kapitlet som pågår — förvalet när inget sparats. */
   aktivtKapitel: number | null;
@@ -17,6 +17,8 @@ export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, m
   meddela?: (m: string) => void;
   /** Del 226 · Sparar laborationens namn och frågeställning i lektionsplanen (avsnittText + labFraga). */
   sparaLabb?: (lektionsIndex: number, namn: string, fraga: string) => void;
+  /** Del 230 · Ändrar kapitlens ordning i själva planeringen — en ordning för lektionsplan, detaljplanering, kalender och dokument. */
+  sattOrdning?: (o: KapitelOrdning) => void;
 }) {
   const [oppen, setOppen] = useState(false);
   const [omfang, setOmfangRaw] = useState<string>(() => lasInstallning<string>(`pp.omfang.${amneId}`, ''));
@@ -28,13 +30,27 @@ export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, m
   // Del 224 · laborationerna i omfånget: läraren kryssar i vilka som är genomförda (förval: datum före idag)
   const [labbVal, setLabbValRaw] = useState<Record<string, boolean>>(() => lasInstallning<Record<string, boolean>>(`pp.labbar.${amneId}`, {}));
   const setLabbVal = (v: Record<string, boolean>) => { setLabbValRaw(v); sparaInstallning(`pp.labbar.${amneId}`, v); };
-  // Del 227 · kapitlens (och delkapitlens) ordning i dokumentet: planens ordning förvald (kap 10 före kap 7 när planen läser så), egen ordning sparas per ämne
-  const [ordningRaw, setOrdningRaw] = useState<KapitelOrdning | null>(() => lasInstallning<KapitelOrdning | null>(`pp.ordning.${amneId}`, null));
-  const setOrdning = (o: KapitelOrdning | null) => { setOrdningRaw(o); sparaInstallning(`pp.ordning.${amneId}`, o); };
-  const valdaKapitel = planensKapitel(s, amneId, idag)
+  // Del 230 · kapitlens (och delkapitlens) ordning är planeringens egen: ändras den här ändras hela planeringen
+  // (sattKapitelOrdning → sparas med ämnet via ☁, bokfilen rörs inte). Dokumentet följer alltid planen.
+  const harPlanering = s.planeringar.some((p) => p.amneId === amneId);
+  const last = harPlanering ? idag : undefined;
+  const valdaKapitel = planensKapitel(s, amneId, last)
     .map((k) => ({ ...k, delkapitel: k.delkapitel.filter((kod) => valda.includes(kod)), kurser: k.kurser.filter((x) => valda.some((kod) => x.nyckel.endsWith(`:${kod}`))) }))
     .filter((k) => k.delkapitel.length > 0);
-  const ordning = fullOrdning(valdaKapitel, ordningRaw ?? planensKapitelOrdning(s, amneId, idag));
+  const ordning = fullOrdning(valdaKapitel, planensKapitelOrdning(s, amneId, last));
+  const setOrdning = (o: KapitelOrdning) => {
+    // De valda delkapitlens nya följd läggs in i planens fullständiga ordning (ovalda delkapitel behåller sin plats)
+    const hela = planensKapitelOrdning(s, amneId, last);
+    const kapitel = [...o.kapitel, ...hela.kapitel.filter((n) => !o.kapitel.includes(n))];
+    const delkapitel: Record<string, string[]> = { ...(hela.delkapitel ?? {}) };
+    for (const [nr, foljd] of Object.entries(o.delkapitel ?? {})) {
+      const alla = hela.delkapitel?.[nr] ?? [];
+      const platser = alla.map((kod, i) => (foljd.includes(kod) ? i : -1)).filter((i) => i >= 0);
+      const ny = [...alla]; platser.forEach((p, i) => { ny[p] = foljd[i]; });
+      delkapitel[nr] = ny;
+    }
+    sattOrdning?.({ kapitel, delkapitel });
+  };
   const forhand = omf.fel === null && omf.spann.length > 0 ? pedagogiskPlaneringForOmfang(s, amneId, omf.spann, idag, undefined, ordning) : pedagogiskPlanering(s, amneId, aktivtKapitel ?? undefined, idag);
   const labbar = (forhand?.laborationer ?? []).map((l) => ({ ...l, genomford: labbVal[l.nyckel] ?? l.genomford }));
   const genomforda = new Set(labbar.filter((l) => l.genomford).map((l) => l.nyckel));
@@ -81,12 +97,11 @@ export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, m
                 ))}
               </div>
             ))}
-            {valdaKapitel.length > 0 && (valdaKapitel.length > 1 || valdaKapitel[0].delkapitel.length > 1) && (
+            {sattOrdning !== undefined && valdaKapitel.length > 0 && (valdaKapitel.length > 1 || valdaKapitel[0].delkapitel.length > 1) && (
               <div className="pp-ordning" style={{ margin: '10px 0 4px' }}>
                 <b className="small">I vilken ordning?</b>
-                <p className="small muted" style={{ margin: '2px 0 4px' }}>Dokumentet följer planeringens ordning (kap 10 före kap 7 om ni läser så). Flytta ett kapitel med ▲▼ och ett delkapitel med ◀▶; veckoplaneringen står alltid i datumordning.</p>
+                <p className="small muted" style={{ margin: '2px 0 4px' }}>Det här är planeringens ordning för klassen — flyttar du ett kapitel (▲▼) eller delkapitel (◀▶) ändras lektionsplan, detaljplanering, kalender och dokument på samma gång. Sparas med ämnet (☁), bokfilen rörs inte. Veckoplaneringen står alltid i datumordning.</p>
                 <KapitelOrdningRedigerare kapitel={valdaKapitel} ordning={ordning} setOrdning={setOrdning} bokens={bokensKapitelOrdning(s, amneId)} kompakt />
-                {ordningRaw !== null && <button type="button" className="chipbtn" style={{ marginTop: 4 }} onClick={() => setOrdning(null)} title="Följ planeringens ordning igen">↺ Planeringens ordning</button>}
               </div>
             )}
             {labbar.length > 0 && (

@@ -180,6 +180,8 @@ describe('Studio v2 — hela kedjan', () => {
         '10': [{ id: 1, type: 'regular', avsnitt: '10.1 Former av kol', del: 1, begrepp: 'diamant' }],
       },
     });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-10T10:00:00Z'));   // före läsårsstart: inget är genomfört
     const host = render();
     skapaSkolar(host, '2026/2027');
     act(() => { knapp(host, '2026/2027').click(); });
@@ -208,11 +210,22 @@ describe('Studio v2 — hela kedjan', () => {
     expect(ruta.textContent).toContain('1 delkapitel tas inte med');
     act(() => { knapp(host, '✔ Skapa planering med egen ordning utan 1 delkapitel').click(); });
     expect(lasStruktur().planeringar).toHaveLength(1);
+    const teori = (rader: { nyckel?: string; lektion: { avsnitt: string } }[]) => rader.filter((r) => !(r.nyckel ?? '').startsWith('lab:') && !(r.nyckel ?? '').startsWith('pass:')).map((r) => r.lektion.avsnitt);
     const plan = amnesPlanFor(lasStruktur(), lasStruktur().amnen[0].id, undefined, false)!.a;
-    expect(plan.map((r) => r.lektion.avsnitt).slice(0, 2)).toEqual(['10.1 Former av kol', '7.1 Kolatomen']);   // 7.2 bortvald; därefter laborationer (halvklass)
+    expect(teori(plan).slice(0, 2)).toEqual(['10.1 Former av kol', '7.1 Kolatomen']);   // 7.2 bortvald; laborationerna (halvklass) räknas inte
     expect(plan.some((r) => r.lektion.avsnitt === '7.2 Kolväten')).toBe(false);
     // 🧩 Kursernas ordning visar kapitelpanelen med den nya följden
     expect(host.textContent).toContain('📚 Kapitlens ordning');
+    // Del 230 · Ordningen i 👨‍👩‍👧 Pedagogisk planering ÄR planeringens ordning: flyttas kap 7 först där, följer lektionsplanen med
+    act(() => { knapp(host, '👨‍👩‍👧 Pedagogisk planering').click(); });
+    skriv(input(host, 'Planeringens omfång'), '7.1, 10.1');
+    const ppRuta = host.querySelector('[aria-label="Pedagogisk planering"]')!;
+    expect([...ppRuta.querySelectorAll('li')].map((li) => li.textContent?.slice(0, 6))).toEqual(['Kap 10', 'Kap 7 ']);
+    act(() => { ppRuta.querySelector<HTMLButtonElement>('[aria-label="Flytta kapitel 7 tidigare"]')!.click(); });
+    const planEfter = amnesPlanFor(lasStruktur(), lasStruktur().amnen[0].id, undefined, false)!.a;
+    expect(teori(planEfter)[0]).toBe('7.1 Kolatomen');
+    expect(lasStruktur().amnen[0].kursOrdning?.[0]).toBe('7:7.1');   // sparas på ämnet (☁), inte i boken
+    act(() => { knapp(host, 'Avbryt').click(); });
     // Del 229 · 🎬 Filmer: Binogi-förslag per delkapitel ur katalogen, läggs på lektionen med ett klick
     act(() => { knapp(host, '🎬 Filmer').click(); });
     expect(host.textContent).toContain('🎬 Binogi-förslag per delkapitel');
