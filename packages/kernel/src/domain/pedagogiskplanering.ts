@@ -298,7 +298,13 @@ function pedagogiskPlaneringKapitel(s: Struktur, amneId: string, kapitelNr: numb
     const valdaDatum = rader.filter((x) => inom(delkapitelKod(x.r.lektion.avsnitt))).map((x) => x.r.datum!);
     const forstaDatum = valdaDatum[0];
     const provRad = rader.find((x) => typFor(x.r) === 'prov');
-    const sistaDatum = provRad?.r.datum ?? valdaDatum[valdaDatum.length - 1];
+    // Del 235 · utan prov i planen: laborationerna närmast efter sista valda lektion tas med — fram till nästa
+    // teorilektion i planen (oavsett kapitel) och högst en vecka framåt
+    const sistaValda = valdaDatum[valdaDatum.length - 1];
+    const nastaTeori = sistaValda === undefined ? undefined : ap.a.find((r) => r.datum !== null && r.datum > sistaValda && !(r.nyckel ?? '').startsWith('lab:') && !(r.nyckel ?? '').startsWith('pass:'));
+    const enVecka = sistaValda === undefined ? undefined : new Date(Date.parse(sistaValda) + 7 * 86_400_000).toISOString().slice(0, 10);
+    const sistaDatum = provRad?.r.datum ?? (sistaValda === undefined ? undefined
+      : rader.filter((x) => x.r.datum! >= sistaValda && x.r.datum! < (nastaTeori?.datum ?? '9999') && x.r.datum! <= enVecka!).map((x) => x.r.datum!).pop());
     const kvar = rader.filter((x) => {
       const kod = delkapitelKod(x.r.lektion.avsnitt);
       if (kod !== null) return inom(kod);

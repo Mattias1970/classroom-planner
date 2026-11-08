@@ -601,9 +601,10 @@ describe('Del 127: halvklasspass som laborationer', async () => {
     expect(h.a[1]).toMatchObject({ datum: '2026-08-18', lektion: { avsnitt: '1.1 Bråk', del: 2 } });
     expect(h.b[1]).toMatchObject({ datum: '2026-08-20', lektion: { avsnitt: '1.1 Bråk', del: 2 } });
     expect(h.sessioner[1]).toMatchObject({ typ: 'teori', standard: false, val: { typ: 'teori', kalla: 'nasta' } });
-    // Måndagen efter får då provet (lektion 3), och nästa halvklasspass är laboration igen
+    // Måndagen efter får då provet (lektion 3); Del 235 · halvklasspasset efter provet är tomt (ingen laboration efter kapitlets prov)
     expect(h.a.find((r) => r.datum === '2026-08-24')!.lektion.typ).toBe('exam');
-    expect(h.a.find((r) => r.datum === '2026-08-25')!.lektion.typ).toBe('laboration');
+    expect(h.a.find((r) => r.datum === '2026-08-25')).toBeUndefined();
+    expect(h.sessioner.find((x) => x.a.datum === '2026-08-25')).toMatchObject({ typ: 'lab', tom: true, laboration: null, rubrik: '— tomt (efter provet)' });
     // Slå på igen
     s = vaxlaLabUndantag(s, 'bi', sessionsNyckel('2026-08-18', '10:00'));
     expect(passValFor(s.amnen[0], sessionsNyckel('2026-08-18', '10:00'))).toBeNull();

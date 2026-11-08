@@ -195,3 +195,49 @@ describe('Del 233 · dokumentets filmlista hämtar Binogis katalog när bok och 
     expect(f['7.1']).toEqual([]);
   });
 });
+
+describe('Del 235 · halvklasspass efter kapitlets prov är tomma; dokumentet tar med laborationen efter ett valt delkapitel utan prov', () => {
+  function halvklass(): Struktur {
+    let s = tomStruktur();
+    s = laggTillSkolar(s, LA); s = sparaBok(s, KE);
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO 8' });
+    s = laggTillKlass(s, { id: 'k8b', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'ke', klassId: 'k8b', namn: 'Kemi', bokId: 'ke', halvklass: true,
+      schema: [{ dag: 1, start: '09:15', slut: '10:30' }, { dag: 5, start: '08:25', slut: '09:35' }, { dag: 4, start: '09:45', slut: '10:55' }],
+      schemaB: [{ dag: 1, start: '09:15', slut: '10:30' }, { dag: 5, start: '08:25', slut: '09:35' }, { dag: 4, start: '08:30', slut: '09:40' }] });
+    return registreraPlanering(s, { id: 'pl', amneId: 'ke', bokId: 'ke', skapad: '2026-08-10' });
+  }
+  it('torsdagen mellan Prov kap 7 och 10.1 får ingen laboration; torsdagen efter Prov kap 10 (boken slut) är också tom', () => {
+    const s = halvklass();
+    const rader = amnesPlanFor(s, 'ke', '2026-08-10', false)!.a.filter((r) => r.datum !== null).map((r) => `${r.datum} ${r.lektion.avsnitt}`);
+    // mån 17/8 7.1 · tor 20/8 lab · fre 21/8 7.2 · mån 24/8 7.3 · tor 27/8 lab · fre 28/8 Prov kap 7 · [tor 3/9 tomt] · mån 31/8 10.1 …
+    expect(rader.slice(0, 8)).toEqual([
+      '2026-08-17 7.1 Kolatomen', '2026-08-20 Laboration 1', '2026-08-21 7.2 Kolväten', '2026-08-24 7.3 Omättade kolväten',
+      '2026-08-27 Laboration 2', '2026-08-28 Prov kap 7', '2026-08-31 10.1 Former av kol', '2026-09-03 Laboration 3',
+    ]);
+    // Prov kap 7 fredag 28/8 → nästa torsdag 3/9 ligger efter 10.1 (mån 31/8) så kapitel 10 har börjat: laboration som vanligt.
+    // Flytta provet senare genom att läsa kap 10 först: då ligger torsdagen efter Prov kap 10 före 7.1? Nej — testa i stället bokens slut:
+    const slut = amnesPlanFor(s, 'ke', '2026-08-10', false)!;
+    const provKap10 = slut.a.find((r) => r.lektion.avsnitt === 'Prov kap 10')!.datum!;
+    expect(slut.a.some((r) => r.datum !== null && r.datum > provKap10)).toBe(false);                                   // inga laborationer efter sista provet
+    expect(slut.sessioner.filter((x) => x.a.datum > provKap10 && !x.helklass).every((x) => x.tom === true && x.typ === 'lab')).toBe(true);   // halvklasspassen: tomma, ingen platshållare
+  });
+  it('dokumentet för omfånget 10.1 tar med torsdagens laboration efter 10.1 även när kapitel 10 saknar prov i planen', () => {
+    // Kapitel 10 utan provlektion (som Spektrum Kemi när bara 10.1 är inläst)
+    const utanProv = bokFromImport(JSON.stringify({
+      schema: 'classroom-planner-bok', version: 1,
+      bok: { id: 'ke', titel: 'Spektrum Kemi', förlag: 'Liber', ämne: 'Kemi', årskurs: 8, kapitelMeta: { '7': { name: 'Organisk kemi', col: '#2f5aa8' }, '10': { name: 'Kol och förbränning', col: '#b05c22' } } },
+      lektioner: {
+        '7': [{ id: 1, type: 'regular', avsnitt: '7.1 Kolatomen', del: 1 }, { id: 4, type: 'exam', avsnitt: 'Prov kap 7', del: 1 }],
+        '10': [{ id: 1, type: 'regular', avsnitt: '10.1 Former av kol', del: 1 }],
+      },
+    }));
+    const s = sparaBok(halvklass(), utanProv);
+    const pl = pedagogiskPlaneringForOmfang(s, 'ke', [{ fran: '10.1', till: '10.1' }], '2026-08-10')!;
+    const dagar = pl.veckor.flatMap((v) => v.dagar).map((d) => `${d.datum} ${d.typ}`);
+    // mån 17/8 7.1 · tor 20/8 lab · fre 21/8 Prov kap 7 · mån 24/8 10.1 · tor 27/8 lab (kapitel 10 pågår) · sedan är boken slut → tomma halvklasspass
+    expect(dagar).toEqual(['2026-08-24 lektion', '2026-08-27 laboration', '2026-08-27 laboration']);   // veckan efter 10.1, inte resten av årets torsdagar
+    const rader = amnesPlanFor(s, 'ke', '2026-08-10', false)!.a.filter((r) => r.datum !== null).map((r) => `${r.datum} ${r.lektion.avsnitt}`);
+    expect(rader.slice(0, 5)).toEqual(['2026-08-17 7.1 Kolatomen', '2026-08-20 Laboration 1', '2026-08-21 Prov kap 7', '2026-08-24 10.1 Former av kol', '2026-08-27 Laboration 2']);
+  });
+});

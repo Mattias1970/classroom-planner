@@ -986,6 +986,8 @@ export interface HalvklassSession {
   rubrik: string;
   /** Laborationen ur listan när typ är lab och källan är listan; null = platshållare. */
   laboration: Laboration | null;
+  /** Del 235 · Halvklasspass efter kapitlets prov, innan nästa kapitel börjat: inget läggs ut — passet är tomt. */
+  tom?: true;
 }
 
 export interface HalvklassPlanering { a: PlaneradLektion[]; b: PlaneradLektion[]; sessioner: HalvklassSession[] }
@@ -1036,6 +1038,17 @@ export function skapaHalvklassPlanering(skolar: Skolar, amne: Amne, bok: Bok, of
   return halvklassPlan(skolar, amne, [...lektioner.slice(0, teoriFore), ...utkastTeoriRader(lektioner, u)], [...labbar.slice(0, labFore), ...utkastLabbar(labbar, u)], offset, idag);
 }
 
+/**
+ * Del 235 · Halvklasspasset ska vara tomt: senast utlagda teorilektion är kapitlets prov och nästa
+ * lektion ur boken hör till ett annat kapitel (eller boken är slut efter provet).
+ */
+function efterProv(a: PlaneradLektion[], nasta: PlanRad | undefined): boolean {
+  const sista = [...a].reverse().find((r) => !(r.nyckel ?? '').startsWith('lab:') && !(r.nyckel ?? '').startsWith('pass:'));
+  if (sista === undefined) return false;
+  const prov = sista.lektion.typ === 'exam' || /\bprov\b/i.test(sista.lektion.avsnitt);
+  return prov && (nasta === undefined || nasta.kapitel !== sista.kapitel);
+}
+
 function halvklassPlan(skolar: Skolar, amne: Amne, lektioner: PlanRad[], labbar: Laboration[], offset: number, idag?: string): HalvklassPlanering {
   const budget = noFonster(skolar, amne).budget;
   const slotsA = samlaSlots(skolar, amne.schema, amne.klassId).slice(offset, budget === Number.POSITIVE_INFINITY ? undefined : offset + budget);
@@ -1076,12 +1089,15 @@ function halvklassPlan(skolar: Skolar, amne: Amne, lektioner: PlanRad[], labbar:
     const val = passValFor(amne, nyckel);
     const typ: 'teori' | 'lab' = val !== null ? val.typ : (arHel ? 'teori' : 'lab');
     const kapitel = a[a.length - 1]?.kapitel ?? lektioner[nastaLektion]?.kapitel ?? 1;
-    let lektion: Lektion | null = null; let kap = kapitel; let laboration: Laboration | null = null; let radNyckel = '';
+    let lektion: Lektion | null = null; let kap = kapitel; let laboration: Laboration | null = null; let radNyckel = ''; let tom = false;
     if (val !== null && val.kalla === 'egen') {
       lektion = egenPassLektion(val); radNyckel = `pass:${nyckel}`;
     } else if (typ === 'teori') {
       const l = lektioner[nastaLektion];
       if (l !== undefined) { nastaLektion += 1; lektion = l.lektion; kap = l.kapitel; radNyckel = l.nyckel; }
+    } else if (val === null && efterProv(a, lektioner[nastaLektion])) {
+      // Del 235 · standardpass mellan kapitlets prov och nästa kapitel: ingen laboration — tomt
+      tom = true;
     } else {
       laboration = labbar[nastaLab] ?? null; nastaLab += 1;
       lektion = laborationTillLektion(laboration, nastaLab); radNyckel = laboration === null ? `lab:#${nastaLab}` : `lab:${laboration.id}`;
@@ -1089,7 +1105,8 @@ function halvklassPlan(skolar: Skolar, amne: Amne, lektioner: PlanRad[], labbar:
     if (lektion !== null) { lagg(a, kap, lektion, radNyckel, x); if (xb !== null && xb.datum >= fryst) lagg(b, kap, lektion, radNyckel, xb); }
     sessioner.push({
       nyckel, vecka: x.vecka, helklass: arHel, fryst: false, genomford: genomford(x.datum), a: x, b: xb, typ, standard: val === null, val, laboration,
-      rubrik: lektion?.avsnitt ?? (typ === 'teori' ? '(boken är slut)' : 'Laboration'),
+      rubrik: lektion?.avsnitt ?? (tom ? '— tomt (efter provet)' : typ === 'teori' ? '(boken är slut)' : 'Laboration'),
+      ...(tom ? { tom: true as const } : {}),
     });
   }
   // Bokens lektioner som inte fick plats
