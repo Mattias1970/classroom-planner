@@ -1384,3 +1384,6 @@ input.fel { border-color: #B71C1C; }
 .arkivmappar { width: 100%; }
 .arkivmappar td { vertical-align: top; }
 .arkivmappar .lokal { display: block; color: #5b6478; font-size: 11px; margin-top: 2px; }
+
+/* Del 241 · Sparfel: lagringen är full */
+.status.warn.sparfel { border-left: 5px solid #b3392f; margin: 0 0 10px; }

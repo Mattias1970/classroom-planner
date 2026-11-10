@@ -45,7 +45,7 @@ import {
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
   vagTyp,
 } from '@planner/kernel';
-import { exportJson, importJson, lasInstallning, lasStruktur, sparaInstallning, sparaStruktur } from './store.js';
+import { exportJson, importJson, lasInstallning, lasStruktur, sparaInstallning, sparaStruktur, LAGRINGSGRANS_TECKEN, useSparfel } from './store.js';
 import { RapportdesignVy, MallRendering, Trendsteg } from './rapportdesign.js';
 import { MagmaImport } from './MagmaImport.js';
 import { ImportFragor, type VantandeImport } from './ImportFragor.js';
@@ -118,10 +118,12 @@ export function App() {
   }, [tema]);
   const [msg, setMsg] = useState('');
   const spara = (ny: Struktur, m = '') => { sparaStruktur(ny); setS(ny); if (m) setMsg(m); };
-  const angraStack = useRef<string[]>([]);
+  // Del 241: ångra-stacken håller strukturerna själva (oföränderliga, delar det mesta med varandra) i stället
+  // för upp till tjugo JSON-kopior av hela dokumentet
+  const angraStack = useRef<Struktur[]>([]);
   const kor = (fn: () => Struktur, m: string) => {
     try {
-      const fore = JSON.stringify(lasStruktur());
+      const fore = lasStruktur();
       // Del 189: säkra dubbletter (samma namn, inga resultat på samma prov hos båda) slås alltid ihop
       const d = slaIhopSakraDubbletter(fn());
       angraStack.current = [...angraStack.current.slice(-19), fore];   // max 20 steg
@@ -132,13 +134,13 @@ export function App() {
   useEffect(() => {
     const d = slaIhopSakraDubbletter(lasStruktur());
     if (d.ihop.length === 0) return;
-    angraStack.current = [...angraStack.current.slice(-19), JSON.stringify(lasStruktur())];
+    angraStack.current = [...angraStack.current.slice(-19), lasStruktur()];
     spara(d.s, `✓ ${dubblettText(d.ihop)} (↩ Ångra finns)`);
   }, []);
   const angra = () => {
     const fore = angraStack.current.pop();
     if (fore === undefined) { setMsg('Inget att ångra.'); return; }
-    spara(JSON.parse(fore) as Struktur, '↩ Ångrat.');
+    spara(fore, '↩ Ångrat.');
   };
 
   // ── v3-layout (standard) eller v2 (flikarna) ──
@@ -173,6 +175,17 @@ export function App() {
         {layout === 'v3' ? '🗂 Visa v2-flikarna' : '✨ Visa v3-layouten'}
       </button>
     </>
+  );
+  // Del 241 · Sparfel: webbläsarens lagring tog inte emot strukturen (full). Förut märktes det inte förrän det
+  // senast gjorda var borta; nu står det överst tills en sparning går igenom igen.
+  const sparfel = useSparfel();
+  const sparfelRuta = sparfel === null ? null : (
+    <p className="status warn sparfel" role="alert">
+      ⚠ <b>Det senaste kunde inte sparas i webbläsaren — lagringen är full.</b>{' '}
+      Appens data är {(sparfel.tecken / 1e6).toFixed(1).replace('.', ',')} miljoner tecken och webbläsaren tar emot ungefär {(LAGRINGSGRANS_TECKEN / 1e6).toFixed(1).replace('.', ',')}.
+      Ändringarna finns kvar tills sidan stängs eller laddas om. Spara strukturen till datarepot eller ta en ⬇ Backup nu.{' '}
+      <button className="linkbtn" onClick={() => { setVy({ typ: 'datarepo' }); setHuvudvy('struktur'); setVald({ typ: 'github' }); }}>Öppna Datarepo →</button>
+    </p>
   );
   // Del 239 · Bevakning av datarepot: köade uppladdningar skickas, och nya resultat där ger en fråga om de ska laddas
   const arkivBevakning = (
@@ -223,6 +236,7 @@ export function App() {
       <div className="studio">
         <Skal s={s} vy={vy} setVy={setVy} filter={filter} setFilter={setFilter} notiser={notiser} larareNamn={larare} verktyg={verktyg} angra={angra}>
           {msg && <p className="status">{msg}</p>}
+          {sparfelRuta}
           {arkivBevakning}
           {vy.typ !== 'elever' && <VeckorapportLarm s={s} kor={kor} onOppna={() => setVy({ typ: 'elever' })} />}
           {vy.typ === 'oversikt' && <Oversikt s={s} filter={filter} setVy={setVy} struktur={struktur} lasaret={<Lasaret s={s} skolarId={filter.skolarId} kor={kor} />} />}
@@ -284,6 +298,7 @@ export function App() {
         </label>
         <button className="btn sec" onClick={() => setLayout('v3')} title="Den nya layouten">✨ v3</button>
       </header>
+      {sparfelRuta}
       {arkivBevakning}
       {huvudvy !== 'rapporter' && <VeckorapportLarm s={s} kor={kor} onOppna={() => setHuvudvy('rapporter')} />}
       {huvudvy === 'kalender' || huvudvy === 'superteach' || huvudvy === 'rapporter' ? (

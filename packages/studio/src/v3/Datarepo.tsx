@@ -13,7 +13,7 @@ import {
   githubLank, hamtaBockerFranGitHub, hamtaFilerFranGitHub, konfigKomplett, laddaFranGitHub, lasGitHubConfig, lokalSokvag, sparaGitHubConfig, sparaTillGitHub, testaAnslutning,
   type GitHubConfig,
 } from '../github.js';
-import { exportJson, importJson, lasStruktur } from '../store.js';
+import { exportJson, importJson, LAGRINGSGRANS_TECKEN, lagradeTecken, lasStruktur } from '../store.js';
 import { hamtaTillImport, listaArkiv, skickaKoade, useUppladdningsko } from '../resultatarkiv.js';
 
 type Test = Awaited<ReturnType<typeof testaAnslutning>>;
@@ -31,6 +31,10 @@ export function Datarepo({ s, spara, kor, meddela }: {
   const [logg, setLogg] = useState<string[]>([]);
   const uppdatera = (delta: Partial<GitHubConfig>) => { const ny = { ...cfg, ...delta }; setCfg(ny); sparaGitHubConfig(ny); };
   const klar = konfigKomplett(cfg);
+  // Del 241 · hur mycket av webbläsarens lagring appens data tar — när den är full går inget mer att spara
+  const lagrat = useMemo(() => lagradeTecken(), [s]);
+  const lagratProcent = Math.round((lagrat / LAGRINGSGRANS_TECKEN) * 100);
+  const miljoner = (n: number) => (n / 1e6).toFixed(1).replace('.', ',');
   const skriv = (rad: string) => setLogg((l) => [rad, ...l].slice(0, 12));
 
   const testa = () => {
@@ -79,6 +83,8 @@ export function Datarepo({ s, spara, kor, meddela }: {
         <Kpi ikon={Ikon.bok} rubrik="Böcker i appen" varde={String(s.bocker.length)} under={test !== null ? `${test.bocker.length} i repot` : 'testa anslutningen'} ton="gron" />
         <Kpi ikon={Ikon.staplar} rubrik="Resultat i appen" varde={String((s.resultat ?? []).length)} under={`${s.elever.length} elever · ${s.klasser.length} klasser`} ton="lila" />
         <Kpi ikon={Ikon.kalender} rubrik="Rapportmallar" varde={String((s.rapportmallar ?? []).length)} under={test !== null ? `${test.mallar} i repot` : ''} ton="orange" />
+        <Kpi ikon={lagratProcent >= 80 ? Ikon.varning : Ikon.klassrum} rubrik="Lagring i webbläsaren" varde={`${lagratProcent} %`}
+          under={`${miljoner(lagrat)} av ca ${miljoner(LAGRINGSGRANS_TECKEN)} miljoner tecken${lagratProcent >= 80 ? ' — snart fullt: spara strukturen till datarepot' : ''}`} ton={lagratProcent >= 80 ? 'orange' : 'gron'} />
       </div>
 
       <div className="v3-rutnat tva">

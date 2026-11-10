@@ -34,7 +34,7 @@ TypeScript-monorepo. Strict mode. Vitest. Lärarens planerings- och analysverkty
 
 - Svenska domäntermer i typ- och funktionsnamn (`provTillfallen`, `snittProcent`, `laxforhor`)
 - `Iso8601 = string` (aldrig `Date`); datum `YYYY-MM-DD`, tid `HH:MM` svensk tid via `svenskTid`
-- Mutera aldrig indata — returnera kopior
+- Mutera aldrig indata — returnera kopior. Strukturen ur `lasStruktur()` och cachade värden (planen, passen) delas mellan anropare; testerna fryser dem (Del 241)
 - Inga TODO-stubbar; osäkra fält sätts till `"—"`, fält att verifiera till `"⚠ kontrollera"`
 - Testfixturer använder fejkade namn (Testsson, Provlund, Övnegård) — riktiga elevnamn committas aldrig
 

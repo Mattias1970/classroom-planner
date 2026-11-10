@@ -59,7 +59,10 @@ export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, m
     }
     sattOrdning?.({ kapitel, delkapitel });
   };
-  const forhand = omf.fel === null && omf.spann.length > 0 ? pedagogiskPlaneringForOmfang(s, amneId, omf.spann, idag, undefined, ordning) : pedagogiskPlanering(s, amneId, aktivtKapitel ?? undefined, idag);
+  // Del 241: förhandsvisningen byggs bara när dialogen är öppen — den används inte av själva knappen, men byggdes
+  // förut vid varje omritning av Planering (hela den pedagogiska planeringen inklusive Binogi-matchningen)
+  const forhand = !oppen ? null
+    : omf.fel === null && omf.spann.length > 0 ? pedagogiskPlaneringForOmfang(s, amneId, omf.spann, idag, undefined, ordning) : pedagogiskPlanering(s, amneId, aktivtKapitel ?? undefined, idag);
   const labbar = (forhand?.laborationer ?? []).map((l) => ({ ...l, genomford: labbVal[l.nyckel] ?? l.genomford }));
   const genomforda = new Set(labbar.filter((l) => l.genomford).map((l) => l.nyckel));
   const vaxla = (kod: string) => setOmfang(omfangUrKoder(valda.includes(kod) ? valda.filter((x) => x !== kod) : [...valda, kod]));

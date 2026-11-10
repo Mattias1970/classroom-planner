@@ -19,8 +19,19 @@ function easterSunday(year: number): Date {
   return new Date(Date.UTC(year, month, day));
 }
 
-/** Svenska röda dagar (mån–fre-relevanta) för ett kalenderår. */
-export function helgdagar(year: number): Map<IsoDatum, string> {
+// Del 241: röda dagar räknas en gång per år — ledigEtikett frågar för varje pass i varje planering
+const helgdagarCache = new Map<number, ReadonlyMap<IsoDatum, string>>();
+
+/** Svenska röda dagar (mån–fre-relevanta) för ett kalenderår. Resultatet delas — ändra inte i det. */
+export function helgdagar(year: number): ReadonlyMap<IsoDatum, string> {
+  const cachad = helgdagarCache.get(year);
+  if (cachad !== undefined) return cachad;
+  const out = raknaHelgdagar(year);
+  helgdagarCache.set(year, out);
+  return out;
+}
+
+function raknaHelgdagar(year: number): Map<IsoDatum, string> {
   const out = new Map<IsoDatum, string>();
   const fixa: Array<[number, number, string]> = [
     [0, 1, 'Nyårsdagen'], [0, 6, 'Trettondedag jul'], [4, 1, 'Första maj'],

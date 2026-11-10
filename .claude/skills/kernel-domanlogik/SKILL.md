@@ -33,6 +33,15 @@ export function xxx(s: Struktur, f: Filter): Xxx[] { … }
 
 Exportera från `packages/kernel/src/index.ts` med `export * from './domain/<fil>.js'` (notera `.js`-ändelsen i importen — ESM).
 
+## Delade värden och cachar (Del 241)
+
+Strukturen är oföränderlig, och hastigheten bygger på det:
+
+- `lasStruktur()` (studio/store.ts) lämnar **samma objekt** så länge lagringen är oförändrad. Ändra aldrig i det — bygg en ny struktur med spread och spara den.
+- Dyra, rena uträkningar sparas på objekten de beror på (`minne.ts`: `TrippelCache`, `delat`): `amnesPlan` (skolår + ämne + bok), `samlaSlots` (skolår + schema + klass), `helgdagar` (år), `foreslaBinogiFilmer` (bok + kapitel). Det som lämnas ut delas av alla anropare — kopiera (`[...x]`, `{ ...x }`) innan du sorterar, lägger till eller ändrar.
+- En ny cache: nyckeln ska täcka **allt** resultatet beror på, och värdet ska gå genom `delat()`.
+- I testerna är delade värden frysta (`test/setup.ts`) och `lasStruktur()` kontrollerar att strukturen inte ändrats på plats — ett `TypeError: Cannot add property …` eller "har ändrats på plats" betyder att koden muterar något delat.
+
 ## Tester
 
 Vitest i `packages/kernel/test/<modul>.test.ts`. Ett `describe` per funktionsområde, `it`-texten beskriver beteendet på svenska: `it('halvklass A/B slås ihop till ett tillfälle')`.

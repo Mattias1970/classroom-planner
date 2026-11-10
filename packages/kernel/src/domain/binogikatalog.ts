@@ -12,6 +12,7 @@ import type { Bok, Delkapitel, Kapitel, Struktur } from './typer.js';
 import { BINOGI_LEKTIONER } from './binogikatalog.data.js';
 import { amnesPlanFor, hamtaLektionsplan, sattLektionsplan } from './struktur.js';
 import { delkapitelKod } from './bok.js';
+import { delat } from './minne.js';
 
 export interface BinogiPost {
   titel: string;
@@ -90,27 +91,53 @@ function delkapitelText(kap: Kapitel, d: Delkapitel): { text: string; begrepp: s
   return { text, begrepp };
 }
 
-/** Poängsätter en katalogpost mot ett delkapitel. */
-function poangsatt(post: BinogiPost, text: string, begrepp: string[], rubrik: string): { poang: number; traffar: string[] } {
+// Del 241 · Det som bara beror på katalogposten (normaliserade ord och ordstammar) räknas en gång per post, och
+// det som bara beror på delkapitlet en gång per delkapitel — förut normaliserades samma ord om för varje
+// kombination av post och delkapitel (642 lektioner × alla delkapitel, vid varje omritning av Planering).
+interface PostForberedd {
+  /** Titelns ord (minst tre tecken, inte generiska) med ordstam. */
+  titelOrd: Array<{ o: string; st: string }>;
+  /** Postens egna begrepp, normaliserade. */
+  egna: ReadonlySet<string>;
+  /** Begrepp + nyckelord i ordning: originalordet, normaliserat, ordstam och om ordet är generiskt. */
+  ord: Array<{ ord: string; n: string; st: string; generisk: boolean }>;
+}
+const forberedda = new WeakMap<BinogiPost, PostForberedd>();
+function forbered(post: BinogiPost): PostForberedd {
+  const c = forberedda.get(post);
+  if (c !== undefined) return c;
+  const ut: PostForberedd = {
+    titelOrd: norm(post.titel).split(' ').filter((x) => x.length >= 3 && !GENERISKA.has(x)).map((o) => ({ o, st: stam(o) })),
+    egna: new Set((post.begrepp ?? []).map(norm)),
+    ord: [...(post.begrepp ?? []), ...post.nyckelord].map((ord) => { const n = norm(ord); return { ord, n, st: stam(n), generisk: GENERISKA.has(n) }; }),
+  };
+  forberedda.set(post, ut);
+  return ut;
+}
+
+interface DelkapitelForberett { text: string; begreppN: ReadonlySet<string>; begreppStam: ReadonlySet<string>; rubrikStam: ReadonlySet<string> }
+function forberedDelkapitel(text: string, begrepp: string[], rubrik: string): DelkapitelForberett {
   const begreppN = begrepp.map(norm);
-  const begreppStam = new Set(begreppN.map(stam));
+  return { text, begreppN: new Set(begreppN), begreppStam: new Set(begreppN.map(stam)), rubrikStam: new Set(norm(rubrik).split(' ').map(stam)) };
+}
+
+/** Poängsätter en katalogpost mot ett delkapitel. */
+function poangsatt(post: BinogiPost, d: DelkapitelForberett): { poang: number; traffar: string[] } {
+  const p = forbered(post);
   const traffar: string[] = [];
   const raknade = new Set<string>();
   let poang = 0;
   // Titelns ord i delkapitlets rubrik väger tyngst (4): 'Förbränning' ↔ '10.4 Förbränning påverkar miljön', 'Eld' ↔ '10.5 Eld behöver …'
-  const rubrikN = norm(rubrik);
-  for (const o of norm(post.titel).split(' ').filter((x) => x.length >= 3 && !GENERISKA.has(x))) {
-    if (rubrikN.split(' ').some((r) => stam(r) === stam(o))) { poang += 4; traffar.push(`${o} (rubriken)`); raknade.add(stam(o)); }
+  for (const { o, st } of p.titelOrd) {
+    if (d.rubrikStam.has(st)) { poang += 4; traffar.push(`${o} (rubriken)`); raknade.add(st); }
   }
-  const egna = new Set((post.begrepp ?? []).map(norm));
-  for (const ord of [...(post.begrepp ?? []), ...post.nyckelord]) {
-    const n = norm(ord);
-    if (raknade.has(stam(n)) || GENERISKA.has(n)) continue;
-    raknade.add(stam(n));
-    const vikt = egna.has(n) ? 1 : 0;                                                       // Binogis egen begreppslista väger extra
-    if (begreppN.includes(n)) { poang += 3 + vikt; traffar.push(ord); continue; }          // exakt ett av delkapitlets begrepp
-    if (n.length >= 4 && begreppStam.has(stam(n))) { poang += 2 + vikt; traffar.push(ord); continue; }
-    if (n.length >= 4 && text.includes(n)) { poang += 1; traffar.push(ord); }              // nämns i texten
+  for (const { ord, n, st, generisk } of p.ord) {
+    if (raknade.has(st) || generisk) continue;
+    raknade.add(st);
+    const vikt = p.egna.has(n) ? 1 : 0;                                                     // Binogis egen begreppslista väger extra
+    if (d.begreppN.has(n)) { poang += 3 + vikt; traffar.push(ord); continue; }             // exakt ett av delkapitlets begrepp
+    if (n.length >= 4 && d.begreppStam.has(st)) { poang += 2 + vikt; traffar.push(ord); continue; }
+    if (n.length >= 4 && d.text.includes(n)) { poang += 1; traffar.push(ord); }            // nämns i texten
   }
   return { poang, traffar };
 }
@@ -120,15 +147,31 @@ function poangsatt(post: BinogiPost, text: string, begrepp: string[], rubrik: st
  * ämnen än bokens tas bara med när de passar mycket bra (poäng ≥ 5). Max `max` förslag per delkapitel.
  */
 export function foreslaBinogiFilmer(bok: Bok, kapitelNr: number, extra: readonly BinogiPost[] = [], max = 4): DelkapitelForslag[] {
+  // Del 241: utan egna poster beror förslagen bara på boken — de sparas på bokobjektet (ett kapitel frågas
+  // annars en gång per delkapitel av den pedagogiska planeringen). Resultatet delas — ändra inte i det.
+  if (extra.length > 0) return raknaBinogiForslag(bok, kapitelNr, extra, max);
+  let perBok = forslagCache.get(bok);
+  if (perBok === undefined) { perBok = new Map(); forslagCache.set(bok, perBok); }
+  const nyckel = `${kapitelNr}|${max}`;
+  const cachad = perBok.get(nyckel);
+  if (cachad !== undefined) return cachad;
+  const ut = delat(raknaBinogiForslag(bok, kapitelNr, extra, max), 3);
+  perBok.set(nyckel, ut);
+  return ut;
+}
+const forslagCache = new WeakMap<Bok, Map<string, DelkapitelForslag[]>>();
+
+function raknaBinogiForslag(bok: Bok, kapitelNr: number, extra: readonly BinogiPost[], max: number): DelkapitelForslag[] {
   const kap = bok.kapitel.find((k) => k.nr === kapitelNr);
   if (kap === undefined) return [];
   const katalog = [...extra, ...BINOGI_KATALOG];
   const bokAmne = (bok.amne ?? '').toLowerCase();
   return kap.delkapitel.map((d) => {
     const { text, begrepp } = delkapitelText(kap, d);
+    const forberett = forberedDelkapitel(text, begrepp, d.namn);
     const egnaUrl = new Set(kap.resurser.filmer.filter((f) => f.titel.startsWith(`${d.kod} `) || f.titel.startsWith(`${d.kod}·`) || f.titel.startsWith(`${d.kod} ·`)).map((f) => f.url));
     const forslag = katalog.map((post) => {
-      const { poang, traffar } = poangsatt(post, text, begrepp, d.namn);
+      const { poang, traffar } = poangsatt(post, forberett);
       const sammaAmne = post.amne.toLowerCase() === bokAmne;
       return { post, url: binogiUrl(post), poang: sammaAmne ? poang : poang - 2, traffar, redanIBoken: egnaUrl.has(binogiUrl(post)) };
     }).filter((f) => f.poang >= 3 && (f.traffar.length >= 2 || f.traffar.some((x) => x.endsWith('(rubriken)'))))

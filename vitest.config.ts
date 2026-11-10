@@ -8,6 +8,7 @@ export default defineConfig({
   test: {
     globals: false,
     include: ['packages/*/test/**/*.test.ts', 'packages/*/test/**/*.test.tsx'],
+    setupFiles: [resolve(__dirname, 'packages/kernel/test/setup.ts')],
   },
   resolve: {
     alias: {

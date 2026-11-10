@@ -6,6 +6,7 @@
 import { bokLektioner, delkapitelKod, NIVA_GRON_BLA_ROD, byggKapitel } from './bok.js';
 import { NO_TK_AMNEN } from './amnen.js';
 import { isoVecka, normaliseraDagar, passSparr } from './skolar.js';
+import { delat, TrippelCache } from './minne.js';
 import type {
   Amne, Bok, EgenRad, Elev, IsoDatum, Klass, Laboration, Larare, Lektion, LektionsPlan, LektionsVal, Pass, PassVal, PlaneradLektion,
   Planering, PlanFranUtkast, Skolar, SkolarDag, StodPass, Struktur, Tjanst } from './typer.js';
@@ -490,7 +491,24 @@ interface Slot { datum: string; vecka: number; start: string; slut: string; }
  * Del 187: även pass som överlappar en schemabrytande aktivitet för klassen (eller alla klasser);
  * `klassId` null = bortse från aktiviteter (NO-blockens budget hålls stabil).
  */
+// Del 241: passen räknas en gång per skolår + schema + klass. Samma skolår- och schemaobjekt ger samma pass,
+// och de frågas efter för varje ämne, varje vecka och varje omritning. Resultatet delas — ändra inte i det.
+const slotsCache = new WeakMap<Skolar, WeakMap<Pass[], Map<string, Slot[]>>>();
+
 export function samlaSlots(skolar: Skolar, schema: Pass[], klassId?: string | null): Slot[] {
+  let perSkolar = slotsCache.get(skolar);
+  if (perSkolar === undefined) { perSkolar = new WeakMap(); slotsCache.set(skolar, perSkolar); }
+  let perSchema = perSkolar.get(schema);
+  if (perSchema === undefined) { perSchema = new Map(); perSkolar.set(schema, perSchema); }
+  const nyckel = klassId === undefined ? '?' : klassId === null ? '-' : `k:${klassId}`;
+  const cachad = perSchema.get(nyckel);
+  if (cachad !== undefined) return cachad;
+  const slots = delat(raknaSlots(skolar, schema, klassId));
+  perSchema.set(nyckel, slots);
+  return slots;
+}
+
+function raknaSlots(skolar: Skolar, schema: Pass[], klassId?: string | null): Slot[] {
   const perDag = new Map<number, Pass[]>();
   for (const p of schema.filter(giltigtPass)) {
     if (!perDag.has(p.dag)) perDag.set(p.dag, []);
@@ -1181,7 +1199,17 @@ export interface AmnesPlan {
  * Halvklassämnen med laborationsstandard räknas via skapaHalvklassPlanering, övriga via
  * skapaPlanering (grupp A och B var för sig med samma lektionsföljd).
  */
+// Del 241: planen beror bara på skolåret, ämnet och boken (samt `idag` när halvklasspassen är laborationer).
+// Den byggdes om för varje ämne och vecka vid varje omritning (veckorapportlarmet, notiserna, kalendern …);
+// nu återanvänds den tills något av de tre objekten byts ut. Resultatet delas — ändra inte i det.
+const planCache = new TrippelCache<Skolar, Amne, Bok, AmnesPlan>();
+
 export function amnesPlan(skolar: Skolar, amne: Amne, bok: Bok, offset = 0, idag?: string): AmnesPlan {
+  const nyckel = `${offset}|${harLaborationsstandard(amne) ? idag ?? '' : ''}`;
+  return planCache.hamta(skolar, amne, bok, nyckel, () => delat(raknaAmnesPlan(skolar, amne, bok, offset, idag)));
+}
+
+function raknaAmnesPlan(skolar: Skolar, amne: Amne, bok: Bok, offset: number, idag?: string): AmnesPlan {
   if (harLaborationsstandard(amne)) {
     const h = skapaHalvklassPlanering(skolar, amne, bok, offset, idag);
     return { a: h.a, b: h.b, sessioner: h.sessioner };
