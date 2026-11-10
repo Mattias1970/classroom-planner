@@ -12,7 +12,8 @@
 import { elevernaIKlassen } from './struktur.js';
 import type { Elev, Struktur } from './typer.js';
 import { begreppUrFacit, type Resultat, type ResultatKalla } from './resultat.js';
-import { fragenyckel, svarText } from './trendkoll.js';
+import { svarText } from './trendkoll.js';
+import { enaFragorPaBegrepp, fragenyckel } from './fragaidentitet.js';
 import { koderForProv } from './elevrapport.js';
 import { amneMatchar, kapitelMatchar } from './dashboard.js';
 import { magmaKlassFor, magmaTestForProv } from './magmauppgifter.js';
@@ -137,7 +138,8 @@ function ommarkera(s: Struktur, r: Resultat, kod: Map<string, string>): Resultat
 
 function tillfallenForRaknad(s: Struktur, f: DelkapitelFilter): Tillfalle[] {
   const fragaKod = new Map<string, string>();
-  const rs = resultatIFilter(s, f).filter((r) => (r.svar ?? []).length > 0).map((r) => ommarkera(s, r, fragaKod));
+  // Del 238: omskrivna Socrative-frågor hålls ihop på begreppet (det rätta svaret), inte på frågetexten
+  const rs = enaFragorPaBegrepp(resultatIFilter(s, f).filter((r) => (r.svar ?? []).length > 0)).map((r) => ommarkera(s, r, fragaKod));
   const grupper = new Map<string, Resultat[]>();
   for (const r of rs) {
     const n = `${r.datum}|${r.kalla}|${r.prov}`;

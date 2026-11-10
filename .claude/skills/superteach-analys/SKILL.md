@@ -34,7 +34,8 @@ Quiznamnet (`Biologi 4.1 Begrepp`) är bara etikett och visas i sin helhet i tab
 ## Härledda mått
 
 - **Närvaro** finns inte som egen källa — den härleds: en dag med läxförhör och/eller exit ticket är en lektion, elev utan svar på båda är frånvarande.
-- **Trendkoll** (`trendkoll.ts`) jämför frågor med identisk text mellan två förhör: fel→rätt = lärt, rätt→fel = glömt. Facit härleds ur eleverna med full poäng. Kräver frågekolumnerna, som bara följer med filimport.
+- **Trendkoll** (`trendkoll.ts`) jämför samma fråga mellan två förhör: fel→rätt = lärt, rätt→fel = glömt. Facit härleds ur eleverna med full poäng. Kräver frågekolumnerna, som bara följer med filimport.
+- **Frågans identitet** (`fragaidentitet.ts`, Del 238): en Socrative-fråga är sitt begrepp — det rätta svaret — inom ämne och kapitel. En omskriven fråga hamnar i samma kolumn som tidigare versioner och visas med senaste formuleringen. Frågetexten gäller när svaret inte är ett begrepp (sant/falskt, tal, uträkning, 'alla ovanstående') eller när två frågor i samma quiz har samma rätta svar. Sparade resultat ändras inte — sammanslagningen görs vid läsning (`enaFragorPaBegrepp`).
 - **Trendkluster**: en elev vars senaste aggregerande läxförhör är ≥ 90 % och inte faller hamnar aldrig i Riskzon.
 
 ## Lagring

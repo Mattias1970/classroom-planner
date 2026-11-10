@@ -4,7 +4,8 @@
  * De aggregerande läxförhören återanvänder frågorna: rummet Biologi41
  * innehåller delkapitel 4.1, Biologi412 innehåller 4.1 OCH 4.2, och de
  * första frågorna är ordagrant desamma. Genom att para ihop frågor med
- * identisk text mellan två förhör kan varje elevs svar jämföras:
+ * identisk text — eller samma begrepp som rätt svar (Del 238, se
+ * fragaidentitet.ts) — mellan två förhör kan varje elevs svar jämföras:
  *
  *   fel → rätt   = eleven har lärt sig
  *   rätt → fel   = eleven har glömt (eller gissade rätt förra gången)
@@ -17,18 +18,7 @@
 import { elevernaIKlassen } from './struktur.js';
 import type { Elev, Struktur } from './typer.js';
 import type { Resultat, ResultatKalla } from './resultat.js';
-
-/** Normaliserad frågetext — skiljetecken, mellanslag och skiftläge ignoreras. */
-// Samma frågetexter normaliseras tusentals gånger per omritning — cacha resultatet
-const nyckelCache = new Map<string, string>();
-export function fragenyckel(fraga: string): string {
-  const c = nyckelCache.get(fraga);
-  if (c !== undefined) return c;
-  const n = fraga.toLowerCase().replace(/[.,;:!?"'()[\]{}…]/g, ' ').replace(/\s+/g, ' ').trim();
-  if (nyckelCache.size > 20000) nyckelCache.clear();
-  nyckelCache.set(fraga, n);
-  return n;
-}
+import { enaFragorPaBegrepp, fragenyckel } from './fragaidentitet.js';
 
 /** 'B • ekosystem' → 'ekosystem' — svarstexten utan alternativbokstav och punkt. */
 export function svarText(svar: string): string {
@@ -194,11 +184,12 @@ export interface TrendkollFilter { klassId: string; amneId?: string; kallor?: Re
 export function trendkoll(s: Struktur, f: TrendkollFilter): Trendkoll {
   const elever = elevernaIKlassen(s, f.klassId);
   const elevIds = new Set(elever.map((e) => e.id));
-  const rs = (s.resultat ?? []).filter((r) => elevIds.has(r.elevId)
+  // Del 238: omskrivna frågor paras ihop på begreppet (det rätta svaret), inte bara på identisk text
+  const rs = enaFragorPaBegrepp((s.resultat ?? []).filter((r) => elevIds.has(r.elevId)
     && (f.amneId === undefined || r.amneId === f.amneId)
     && (f.kallor === undefined || f.kallor.includes(r.kalla))
     && (f.fran === undefined || r.datum >= f.fran) && (f.till === undefined || r.datum <= f.till)
-    && (r.svar ?? []).length > 0);
+    && (r.svar ?? []).length > 0));
   // Gruppera per tillfälle (datum + prov), kronologiskt
   const grupper = new Map<string, Resultat[]>();
   for (const r of rs) {

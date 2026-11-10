@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { arRatt, fragenyckel, jamforProv, trendkoll } from '../src/domain/trendkoll.js';
+import { arRatt, jamforProv, trendkoll } from '../src/domain/trendkoll.js';
+import { fragenyckel } from '../src/domain/fragaidentitet.js';
 import { harledSvarsnyckel, tolkaSocrativeRapport } from '../src/domain/socrative.js';
 import { importeraResultat, type FragaSvar } from '../src/domain/resultat.js';
 import { laggTillAmne, laggTillElev, laggTillKlass, laggTillSkolar, laggTillTjanst } from '../src/domain/struktur.js';

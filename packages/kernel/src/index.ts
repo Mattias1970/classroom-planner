@@ -19,6 +19,7 @@ export * from './domain/provlapp.js';
 export * from './domain/roster.js';
 export * from './domain/elevrapport.js';
 export * from './domain/trendkoll.js';
+export * from './domain/fragaidentitet.js';
 export * from './domain/delkapiteltrend.js';
 export * from './domain/elevanalys.js';
 export * from './domain/enkelrapport.js';
