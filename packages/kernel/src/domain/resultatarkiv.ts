@@ -80,8 +80,11 @@ export function arkivFilFor(s: Struktur, sokvag: string): ArkivFil | undefined {
 
 /** Är filen (för ämnet och källan) redan importerad här? Socrative/Magma/DigiExam syns i filregistret, Teams bara i arkivet. */
 export function arArkivFilImporterad(s: Struktur, amneId: string, kalla: ArkivKalla, filnamn: string): boolean {
-  if ((s.filregister ?? []).some((f) => f.amneId === amneId && f.filnamn === filnamn)) return true;
-  return (s.resultatArkiv ?? []).some((x) => x.amneId === amneId && x.kalla === kalla && x.filnamn === filnamn && x.importerad);
+  // Del 239: jämför som namnet står i arkivet — 'Procent 50%.xlsx' heter 'Procent 50-.xlsx' där, och ska
+  // inte se ut som en ny fil på datorn den laddades upp från
+  const led = arkivLed(filnamn);
+  if ((s.filregister ?? []).some((f) => f.amneId === amneId && arkivLed(f.filnamn) === led)) return true;
+  return (s.resultatArkiv ?? []).some((x) => x.amneId === amneId && x.kalla === kalla && arkivLed(x.filnamn) === led && x.importerad);
 }
 
 export interface ArkivStatus {
@@ -110,4 +113,82 @@ export function arkivStatus(s: Struktur, amneId?: string): ArkivStatus {
     if (x.uppladdad !== '') uppladdade += 1; else saknarKopia.push({ amneId: x.amneId, filnamn: x.filnamn, kalla: 'teams' });
   }
   return { uppladdade, saknarKopia };
+}
+
+// ── Del 239 · Var filerna ligger, och vad som är nytt i datarepot ────────────────────────
+
+/** Mappen en arkivsökväg ligger i ('resultat/ak8/8B/Biologi/socrative/fil.xlsx' → 'resultat/ak8/8B/Biologi/socrative'). */
+export function arkivMappAv(sokvag: string): string {
+  const i = sokvag.lastIndexOf('/');
+  return i === -1 ? '' : sokvag.slice(0, i);
+}
+
+/** Mappen i datarepot där ämnets filer från en viss källa hamnar. */
+export function arkivMappFor(s: Struktur, amneId: string, kalla: ArkivKalla): string {
+  return arkivMappAv(arkivSokvag(s, amneId, kalla, 'x'));
+}
+
+export interface ArkivRad {
+  sokvag: string;
+  /** null för filer som ligger utanför konventionen. */
+  tolk: ArkivSokvag | null;
+  /** Ämnet här i appen, eller null när klassen/ämnet inte finns här. */
+  amneId: string | null;
+  /** Filen är redan importerad i den här appen. */
+  importerad: boolean;
+}
+
+export interface ArkivJamforelse {
+  rader: ArkivRad[];
+  /** Filer i datarepot som hör till en klass och ett ämne här men inte är importerade här. */
+  nya: ArkivRad[];
+  /** Filer utanför konventionen, eller för klasser/ämnen som inte finns här. */
+  okanda: ArkivRad[];
+  importerade: number;
+}
+
+/** Jämför datarepots resultatfiler (sökvägar under resultat/) med det som är importerat i appen. */
+export function jamforArkiv(s: Struktur, sokvagar: string[]): ArkivJamforelse {
+  const rader: ArkivRad[] = [...new Set(sokvagar)].sort((a, b) => a.localeCompare(b, 'sv', { numeric: true })).map((sokvag) => {
+    const tolk = tolkaArkivSokvag(sokvag);
+    const amneId = amneForArkivSokvag(s, sokvag);
+    return { sokvag, tolk, amneId, importerad: tolk !== null && amneId !== null && arArkivFilImporterad(s, amneId, tolk.kalla, tolk.filnamn) };
+  });
+  return {
+    rader,
+    nya: rader.filter((r) => r.tolk !== null && r.amneId !== null && !r.importerad),
+    okanda: rader.filter((r) => r.tolk === null || r.amneId === null),
+    importerade: rader.filter((r) => r.importerad).length,
+  };
+}
+
+export interface ArkivMapp {
+  /** Mappens sökväg i datarepot. */
+  mapp: string;
+  /** Ämnet här i appen (null: mappen hör inte till en klass/ett ämne här). */
+  amneId: string | null;
+  kalla: ArkivKalla | null;
+  /** Filnamnen i mappen. */
+  filer: string[];
+  /** Hur många av filerna som inte är importerade här. */
+  nya: number;
+}
+
+/** Mapparna som resultatfilerna ligger i, med filerna per mapp — för att visa var allt finns. */
+export function arkivMappar(rader: ArkivRad[]): ArkivMapp[] {
+  const ut = new Map<string, ArkivMapp>();
+  for (const r of rader) {
+    const mapp = arkivMappAv(r.sokvag);
+    const m = ut.get(mapp) ?? { mapp, amneId: r.amneId, kalla: r.tolk?.kalla ?? null, filer: [], nya: 0 };
+    m.filer.push(r.sokvag.slice(mapp.length + 1));
+    if (r.tolk !== null && r.amneId !== null && !r.importerad) m.nya += 1;
+    ut.set(mapp, m);
+  }
+  return [...ut.values()].sort((a, b) => a.mapp.localeCompare(b.mapp, 'sv', { numeric: true }));
+}
+
+/** Mapparna som appen själv känner till (uppladdade filer i registret) — går att visa utan nätverk. */
+export function kandaArkivMappar(s: Struktur): ArkivMapp[] {
+  const uppladdade = (s.resultatArkiv ?? []).filter((x) => x.uppladdad !== '');
+  return arkivMappar(uppladdade.map((x) => ({ sokvag: x.sokvag, tolk: tolkaArkivSokvag(x.sokvag), amneId: x.amneId, importerad: true })));
 }

@@ -2331,7 +2331,6 @@ describe('Funktionsparitet med v1: Ångra + uppgiftsintervall', () => {
 describe('Biblioteket hämtar böcker från datarepot', () => {
   it('☁-knappen listar books/, importerar giltiga och rapporterar ogiltiga', async () => {
     const { sparaGitHubConfig } = await import('../src/github');
-    sparaGitHubConfig({ owner: 'Mattias1970', repo: 'classroom-planner-data', branch: 'main', path: 'studio/struktur.json', token: 'tok' });
     const b64 = (t: string) => btoa(String.fromCharCode(...new TextEncoder().encode(t)));
     const f = vi.fn()
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ tree: [
@@ -2350,6 +2349,9 @@ describe('Biblioteket hämtar böcker från datarepot', () => {
     vi.stubGlobal('fetch', f);
     try {
       const host = render();
+      // Del 239: nyckeln fylls i efter start — annars läser bevakningen av resultatarkivet filträdet först
+      // och tar det första av de ordnade svaren nedan
+      sparaGitHubConfig({ owner: 'Mattias1970', repo: 'classroom-planner-data', branch: 'main', path: 'studio/struktur.json', token: 'tok' });
       act(() => { treeKnapp(host, '➕ Lägg till bok').click(); });
       await act(async () => { knapp(host, '☁ Hämta böcker från datarepot').click(); await Promise.resolve(); });
       await act(async () => { await Promise.resolve(); await Promise.resolve(); });

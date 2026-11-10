@@ -1371,3 +1371,16 @@ input.fel { border-color: #B71C1C; }
 .provlapp-dk.muted { opacity: .6; }
 /* Del 217 · Pedagogisk planering — välj delkapitel */
 .pp-modal { max-width: 720px; width: 100%; }
+
+/* Del 239 · Bevakning av resultatarkivet: frågan om nya resultat i datarepot */
+.arkivbevakning { margin: 0 0 10px; display: flex; flex-direction: column; gap: 6px; }
+.arkivfraga { background: #EEF4FF; border: 1px solid #B9CCF2; border-left: 5px solid #2F5AA8; border-radius: 10px; padding: 10px 14px; }
+.arkivfraga p { margin: 0 0 6px; }
+.arkivfraga ul { margin: 0 0 8px; padding-left: 20px; }
+.arkivfraga code, .arkivsokvag { font-family: ui-monospace, Consolas, monospace; font-size: 12px; background: rgba(47, 90, 168, .08); border-radius: 4px; padding: 1px 4px; word-break: break-all; }
+.arkivfraga details { display: inline-block; margin-left: 8px; vertical-align: top; }
+.arkivfraga .arkivfiler { list-style: none; padding-left: 0; margin: 4px 0 0; font-size: 12px; color: #44506a; }
+.arkivknappar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.arkivmappar { width: 100%; }
+.arkivmappar td { vertical-align: top; }
+.arkivmappar .lokal { display: block; color: #5b6478; font-size: 11px; margin-top: 2px; }

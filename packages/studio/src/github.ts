@@ -13,6 +13,8 @@ export interface GitHubConfig {
   branch: string;
   path: string;
   token: string;
+  /** Del 239 · Mappen på den här datorn där datarepot är klonat (valfritt) — bara för att visa var filerna ligger lokalt. */
+  lokalMapp?: string;
 }
 
 const CFG_KEY = 'classroom-planner.studio.github';
@@ -31,6 +33,20 @@ export function sparaGitHubConfig(cfg: GitHubConfig): void {
 
 export function konfigKomplett(cfg: GitHubConfig): boolean {
   return cfg.owner.trim() !== '' && cfg.repo.trim() !== '' && cfg.path.trim() !== '' && cfg.token.trim() !== '';
+}
+
+/** Del 239 · Adressen till en mapp ('tree') eller fil ('blob') i datarepot på github.com. */
+export function githubLank(cfg: GitHubConfig, sokvag: string, typ: 'tree' | 'blob' = 'tree'): string {
+  const led = sokvag.split('/').filter((x) => x !== '').map(encodeURIComponent).join('/');
+  return `https://github.com/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}/${typ}/${encodeURIComponent(cfg.branch)}${led === '' ? '' : `/${led}`}`;
+}
+
+/** Del 239 · Samma sökväg i den lokala klonen (med datorns egna snedstreck), eller null när mappen inte är angiven. */
+export function lokalSokvag(cfg: GitHubConfig, sokvag: string): string | null {
+  const rot = (cfg.lokalMapp ?? '').trim().replace(/[\\/]+$/, '');
+  if (rot === '') return null;
+  const skilje = rot.includes('\\') || /^[A-Za-z]:/.test(rot) ? '\\' : '/';
+  return `${rot}${skilje}${sokvag.split('/').join(skilje)}`;
 }
 
 function api(cfg: GitHubConfig): string {

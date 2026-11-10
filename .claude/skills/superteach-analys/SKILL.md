@@ -42,6 +42,12 @@ Quiznamnet (`Biologi 4.1 Begrepp`) är bara etikett och visas i sin helhet i tab
 
 Bokdata är läsbar men aldrig skrivbar från appen (`classroom-planner-data`). Allt användarskapat är overlays i localStorage via `lsGet`/`lsSet` med minnesfallback (NFR-005). Filer registreras i `filregister` med `datum`, `rum` och `traffar`; en fil med 0 träffar räknas inte som importerad och erbjuds igen.
 
+## Resultatarkivet i datarepot (Del 203, 239)
+
+- Varje importerad resultatfil laddas upp till `resultat/ak<årskurs>/<klass>/<ämne>/<källa>/<fil>` (`arkivSokvag`). Går det inte (ingen nyckel, nätet nere) läggs filen i en kö i IndexedDB (`koaUppladdning`) och skickas automatiskt vid nästa kontroll.
+- `ArkivBevakning` kontrollerar datarepot när appen startar och när fönstret aktiveras (högst var tionde minut): köade filer laddas upp, och finns det filer i arkivet som inte är importerade här (`jamforArkiv`) frågar appen om de ska laddas. "Ja" hämtar dem till importsidorna (`hamtaTillImport` → `laggVantandeFiler`) för granskning — inget importeras utan att läraren trycker Importera.
+- Datarepo → Resultatarkiv visar var mapparna och filerna ligger (`arkivMappar`, länk till github.com, valfri lokal klonmapp `GitHubConfig.lokalMapp`).
+
 ## Vanliga fel
 
 - **0 matchade resultat** → klassen saknar elever. Importera Socrative-rostern först.

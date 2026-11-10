@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  amneForArkivSokvag, arArkivFilImporterad, arkivLed, arkivSokvag, arkivStatus, arskursFor, bokFromImport, laggTillAmne, laggTillKlass, laggTillSkolar, laggTillTjanst,
+  amneForArkivSokvag, arArkivFilImporterad, arkivMappAv, arkivMappar, arkivMappFor, jamforArkiv, kandaArkivMappar, arkivLed, arkivSokvag, arkivStatus, arskursFor, bokFromImport, laggTillAmne, laggTillKlass, laggTillSkolar, laggTillTjanst,
   registreraArkivFil, registreraFil, resetIdRaknare, sparaBok, tolkaArkivSokvag, tomStruktur, type Struktur,
 } from '../src/index.js';
 
@@ -45,5 +45,61 @@ describe('Del 203 · resultatarkivet', () => {
     s = registreraArkivFil(s, { ...s.resultatArkiv![1], uppladdad: '2026-09-03T00:00:00Z' });
     expect(arkivStatus(s, 'bi')).toMatchObject({ uppladdade: 2 });
     expect(s.resultatArkiv).toHaveLength(2);
+  });
+});
+
+describe('Del 239 · var filerna ligger och vad som är nytt i datarepot', () => {
+  const REPO = [
+    'resultat/ak8/8B/Biologi/socrative/a.xlsx',
+    'resultat/ak8/8B/Biologi/socrative/b.xlsx',
+    'resultat/ak8/8B/Matematik/magma/m.xlsx',
+    'resultat/ak8/8A/Biologi/socrative/annan-klass.xlsx',
+    'resultat/gammalt/fil.xlsx',
+  ];
+
+  it('mappen för ett ämne och en källa, och mappen ur en sökväg', () => {
+    const s = bygg();
+    expect(arkivMappFor(s, 'bi', 'socrative')).toBe('resultat/ak8/8B/Biologi/socrative');
+    expect(arkivMappFor(s, 'ma', 'teams')).toBe('resultat/ak8/8B/Matematik/teams');
+    expect(arkivMappAv('resultat/ak8/8B/Biologi/socrative/a.xlsx')).toBe('resultat/ak8/8B/Biologi/socrative');
+  });
+
+  it('nya = filer för klasser och ämnen här som inte är importerade; resten är okända', () => {
+    let s = bygg();
+    s = registreraFil(s, { amneId: 'bi', filnamn: 'a.xlsx', importerad: '2026-09-01T10:00:00Z', kalla: 'socrative-exit', prov: 'Biologi41' });
+    const j = jamforArkiv(s, REPO);
+    expect(j.nya.map((r) => r.sokvag)).toEqual(['resultat/ak8/8B/Biologi/socrative/b.xlsx', 'resultat/ak8/8B/Matematik/magma/m.xlsx']);
+    expect(j.okanda.map((r) => r.sokvag)).toEqual(['resultat/ak8/8A/Biologi/socrative/annan-klass.xlsx', 'resultat/gammalt/fil.xlsx']);
+    expect(j.importerade).toBe(1);
+    // En tom app (data som försvunnit) ser allt för sina klasser som nytt
+    expect(jamforArkiv(bygg(), REPO).nya).toHaveLength(3);
+  });
+
+  it('en fil vars namn skrevs om i arkivet (%, #) räknas som importerad på datorn den kom ifrån', () => {
+    let s = bygg();
+    s = registreraFil(s, { amneId: 'ma', filnamn: 'Class_2026_09_01__07_00_QZ_Procent_50%.xlsx', importerad: '2026-09-01T10:00:00Z', kalla: 'socrative-exit', prov: 'Procent' });
+    const sokvag = arkivSokvag(s, 'ma', 'socrative', 'Class_2026_09_01__07_00_QZ_Procent_50%.xlsx');
+    expect(sokvag).toBe('resultat/ak8/8B/Matematik/socrative/Class_2026_09_01__07_00_QZ_Procent_50-.xlsx');
+    expect(jamforArkiv(s, [sokvag]).nya).toEqual([]);
+  });
+
+  it('mapparna listas med sina filer och antal nya', () => {
+    let s = bygg();
+    s = registreraFil(s, { amneId: 'bi', filnamn: 'a.xlsx', importerad: '2026-09-01T10:00:00Z', kalla: 'socrative-exit', prov: 'Biologi41' });
+    const mappar = arkivMappar(jamforArkiv(s, REPO).rader);
+    expect(mappar.map((m) => [m.mapp, m.filer.length, m.nya])).toEqual([
+      ['resultat/ak8/8A/Biologi/socrative', 1, 0],
+      ['resultat/ak8/8B/Biologi/socrative', 2, 1],
+      ['resultat/ak8/8B/Matematik/magma', 1, 1],
+      ['resultat/gammalt', 1, 0],
+    ]);
+    expect(mappar[1]).toMatchObject({ amneId: 'bi', kalla: 'socrative', filer: ['a.xlsx', 'b.xlsx'] });
+  });
+
+  it('kända mappar ur registret — bara filer som faktiskt är uppladdade', () => {
+    let s = bygg();
+    s = registreraArkivFil(s, { sokvag: arkivSokvag(s, 'bi', 'socrative', 'a.xlsx'), filnamn: 'a.xlsx', amneId: 'bi', kalla: 'socrative', uppladdad: '2026-09-01T10:00:05Z', importerad: true });
+    s = registreraArkivFil(s, { sokvag: arkivSokvag(s, 'bi', 'teams', 't.xlsx'), filnamn: 't.xlsx', amneId: 'bi', kalla: 'teams', uppladdad: '', importerad: true });
+    expect(kandaArkivMappar(s).map((m) => m.mapp)).toEqual(['resultat/ak8/8B/Biologi/socrative']);
   });
 });

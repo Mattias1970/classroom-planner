@@ -62,6 +62,7 @@ import { BamRedigering } from './BamRedigering.js';
 import { PlaneringsTavla } from './PlaneringsTavla.js';
 import { Kortrad } from './Kortrad.js';
 import { arkiveraFiler, tagVantandeFiler, uppladdningsText, useVantandeFiler } from './resultatarkiv.js';
+import { ArkivBevakning } from './ArkivBevakning.js';
 import { Skal, Kort, type Filter, type V3Vy } from './v3/Skal.js';
 import { Oversikt } from './v3/Oversikt.js';
 import { Lasaret } from './Lasaret.js';
@@ -173,6 +174,12 @@ export function App() {
       </button>
     </>
   );
+  // Del 239 · Bevakning av datarepot: köade uppladdningar skickas, och nya resultat där ger en fråga om de ska laddas
+  const arkivBevakning = (
+    <ArkivBevakning s={s} uppdatera={() => setS(lasStruktur())} meddela={setMsg}
+      oppnaImport={(klassId, amneId) => { setFilter((f) => ({ ...f, klassId, amneId })); setVy({ typ: 'resultat' }); setHuvudvy('superteach'); }}
+      oppnaDatarepo={() => { setVy({ typ: 'datarepo' }); setHuvudvy('struktur'); setVald({ typ: 'github' }); }} />
+  );
   // Notiser: förväntade prov utan resultat i vald klass (samma varning som i SuperTeach)
   const notiser = useMemo(() => {
     const idag = new Date().toISOString().slice(0, 10);
@@ -216,6 +223,7 @@ export function App() {
       <div className="studio">
         <Skal s={s} vy={vy} setVy={setVy} filter={filter} setFilter={setFilter} notiser={notiser} larareNamn={larare} verktyg={verktyg} angra={angra}>
           {msg && <p className="status">{msg}</p>}
+          {arkivBevakning}
           {vy.typ !== 'elever' && <VeckorapportLarm s={s} kor={kor} onOppna={() => setVy({ typ: 'elever' })} />}
           {vy.typ === 'oversikt' && <Oversikt s={s} filter={filter} setVy={setVy} struktur={struktur} lasaret={<Lasaret s={s} skolarId={filter.skolarId} kor={kor} />} />}
           {vy.typ === 'planering' && (
@@ -276,12 +284,13 @@ export function App() {
         </label>
         <button className="btn sec" onClick={() => setLayout('v3')} title="Den nya layouten">✨ v3</button>
       </header>
+      {arkivBevakning}
       {huvudvy !== 'rapporter' && <VeckorapportLarm s={s} kor={kor} onOppna={() => setHuvudvy('rapporter')} />}
       {huvudvy === 'kalender' || huvudvy === 'superteach' || huvudvy === 'rapporter' ? (
         <main className="panel full">
           {msg && <p className="status">{msg}</p>}
           {huvudvy === 'rapporter' && <RapportVy s={s} kor={kor} meddela={setMsg} />}
-          {huvudvy === 'superteach' && <SuperTeachVy s={s} kor={kor} />}
+          {huvudvy === 'superteach' && <SuperTeachVy s={s} kor={kor} klassIdIn={filter.klassId} amneIdIn={filter.amneId} />}
           {huvudvy === 'kalender' && <KalenderVy s={s} kor={kor} onOppnaLektion={(amneId, i) => { setLektionsHopp({ amneId, i, n: Date.now() }); setHuvudvy('planering'); }} />}
         </main>
       ) : huvudvy === 'planering' ? (
@@ -6076,6 +6085,9 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, o
   // Del 155: elever i rapportens roster som saknas i klassen läggs till vid import (som standard)
   const [kompletteraKlass, setKompletteraKlass] = useState(true);
   const [importApp, setImportApp] = useState<ImportApp>('socrative');
+  // Del 239: 📥 Importera fälls ut när filer hämtade från datarepot väntar på granskning
+  const [importOppen, setImportOppen] = useState(false);
+  const laserArkiv = useRef(false);
   const lasFiler = async (filer: FileList | File[] | null, arkiv = false) => {
     if (filer === null) return;
     const ut: FilRad[] = [];
@@ -6169,11 +6181,22 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, o
   };
   // Del 203: filer hämtade från datarepot (Datarepo → Resultatarkiv) läggs fram för granskning här
   useEffect(() => {
-    const mina = vantandeFiler.filter((v) => v.klassId === klass.id && v.kalla === 'socrative');
-    if (mina.length === 0) return;
-    const filer = mina.flatMap((v) => tagVantandeFiler(v.amneId, 'socrative'));
-    if (filer.length > 0) { setImportApp('socrative'); void lasFiler(filer, true); }
-  }, [vantandeFiler]); // eslint-disable-line react-hooks/exhaustive-deps
+    const forKlassen = vantandeFiler.filter((v) => v.klassId === klass.id);
+    if (forKlassen.length === 0) return;
+    setImportOppen(true);
+    const mina = forKlassen.filter((v) => v.kalla === 'socrative');
+    if (mina.length > 0) {
+      const filer = mina.flatMap((v) => tagVantandeFiler(v.amneId, 'socrative'));
+      if (filer.length > 0) { setImportApp('socrative'); laserArkiv.current = true; void lasFiler(filer, true).finally(() => { laserArkiv.current = false; }); }
+      return;
+    }
+    // Del 239: Magma-, DigiExam- och Teams-filer plockas upp av sin egen importflik — öppna den för rätt ämne
+    // (inte medan Socrative-filer läses eller ligger framme för granskning)
+    if (laserArkiv.current || filRader.length > 0) return;
+    const nasta = forKlassen[0];
+    if (amneId !== nasta.amneId) { setAmneId(nasta.amneId); onKontext?.({ amneId: nasta.amneId }); }
+    setImportApp(nasta.kalla);
+  }, [vantandeFiler, klass.id, filRader.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const idag = new Date().toISOString().slice(0, 10);
   const omf = omfangFilter(s, klass.id, amne?.id ?? '', omfang, idag);
@@ -6227,7 +6250,8 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, o
       )}
 
       {/* ── Del 142: Importnav — alla källor högst upp, en rad per app ── */}
-      <details className="st-fall st-import" open={s.elever.filter((e) => e.klassId === klass.id).length === 0 || (s.resultat ?? []).length === 0}>
+      <details className="st-fall st-import" open={importOppen || s.elever.filter((e) => e.klassId === klass.id).length === 0 || (s.resultat ?? []).length === 0}
+        onToggle={(e) => { const oppen = (e.currentTarget as HTMLDetailsElement).open; if (oppen !== importOppen) setImportOppen(oppen); }}>
         <summary><b>📥 Importera</b> <small className="muted">Socrative · Magma · DigiExam · Teams-inlämningar · PowerPoint-placeringar · elevlista och grupper</small></summary>
       <div className="st-importnav" role="tablist" aria-label="Importera från">
         {IMPORT_APPAR.map((a) => (

@@ -43,7 +43,7 @@ describe('Del 203 · resultatarkivet i UI-lagret', () => {
     expect(put.url).toContain('/contents/resultat/ak8/8B/Biologi/socrative/Biologi41.xlsx');
     expect(JSON.parse(put.body!).content).toBe(btoa('hej'));
     expect(lasStruktur().resultatArkiv![0].uppladdad).not.toBe('');
-    expect(uppladdningsText(u)).toBe(' ☁ 1 fil i datarepot.');
+    expect(uppladdningsText(u)).toBe(' ☁ 1 fil i datarepot: resultat/ak8/8B/Biologi/socrative/.');   // Del 239: säger var filen ligger
     expect(await listaArkiv()).toEqual(['resultat/ak8/8B/Biologi/socrative/Biologi41.xlsx', 'resultat/ak8/8B/Biologi/magma/x.xlsx']);
     const fil = await hamtaArkivFil('resultat/ak8/8B/Biologi/socrative/Biologi41.xlsx');
     expect(fil.name).toBe('Biologi41.xlsx');
