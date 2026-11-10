@@ -132,6 +132,33 @@ describe('Del 238 · Frågans identitet är begreppet (det rätta svaret)', () =
     expect(m.rader[0].celler[2]).toBeNull(); // population fanns inte i första förhöret
   });
 
+  it('exit ticket och läxförhör: frågans nummer är detsamma före och efter att frågan uppdaterats', () => {
+    const prov = (st: Struktur, kalla: 'socrative-exit' | 'socrative-laxforhor', namn: string, datum: string, rum: string, rader: Rad[]): Struktur =>
+      importeraResultat(st, { klassId: 'k', amneId: 'bi', kalla, prov: namn, datum, rum, rader: [
+        { namn: 'Anna Berg', poang: rader.length, maxPoang: rader.length, svar: svar(rader) },
+      ] }).s;
+    // Exit ticket på 4.1 (rum Biologi41) och läxförhöret nästa lektion — samma formuleringar
+    let s = prov(grund(), 'socrative-exit', 'Exit 4.1', '2026-08-21', 'Biologi41',
+      [[BIOTOP, 'B • biotop', true, 'B • biotop'], [EKO_V1, 'A • ekologi', true, 'A • ekologi']]);
+    s = prov(s, 'socrative-laxforhor', 'Bi 4.1', '2026-08-24', 'Biologi41',
+      [[BIOTOP, 'A • biotop', true, 'A • biotop'], [EKO_V1, 'C • ekologi', true, 'C • ekologi']]);
+    const nummer = (st: Struktur) => Object.fromEntries(fragematris(st, { klassId: 'k', amneId: 'bi' }).fragor.map((f) => [f.begrepp!.toLowerCase(), f.nr]));
+    const fore = nummer(s);
+    expect(fore).toEqual({ biotop: 1, ekologi: 2 });
+
+    // Läraren skriver om ekologi-frågan; nästa läxförhör (4.1–4.2) har den nya texten och en ny fråga
+    s = prov(s, 'socrative-laxforhor', 'Bi 4.1-4.2', '2026-08-28', 'Biologi412',
+      [[EKO_V2, 'D • ekologi', true, 'D • ekologi'], [BIOTOP, 'A • biotop', true, 'A • biotop'], [POP, 'B • population', true, 'B • population']]);
+    const m = fragematris(s, { klassId: 'k', amneId: 'bi' });
+    expect(nummer(s)).toEqual({ ...fore, population: 3 });   // samma nummer som förut; bara den nya frågan tillkommer
+    expect(m.fragor[1].fraga).toBe(EKO_V2);
+    // Fråga 2 har svar i alla tre proven — exit ticketen, läxförhöret och det nya läxförhöret
+    expect(m.rader.map((r) => [r.kalla, r.celler[1]?.procent])).toEqual([['socrative-exit', 100], ['socrative-laxforhor', 100], ['socrative-laxforhor', 100]]);
+    // Samma sak när bara läxförhören visas
+    const lax = fragematris(s, { klassId: 'k', amneId: 'bi', kallor: ['socrative-laxforhor'] });
+    expect(lax.fragor.map((f) => f.begrepp!.toLowerCase())).toEqual(['biotop', 'ekologi', 'population']);
+  });
+
   it('muterar inte indata och lämnar oförändrade resultat som samma objekt', () => {
     const s = omskriven();
     const fore = JSON.stringify(s.resultat);
