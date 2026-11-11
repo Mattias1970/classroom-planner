@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { bokFromImport } from '../src/domain/bok.js';
 import {
-  handelserPerDatum, kalenderHandelser, manadsRutor, skolarManader, veckaRutor,
+  amnenUtanPlanering, handelserPerDatum, kalenderHandelser, manadsRutor, skolarManader, veckaRutor,
 } from '../src/domain/kalender.js';
 import {
   laggTillAmne, laggTillKlass, laggTillSkolar, laggTillTjanst, registreraPlanering,
@@ -143,5 +143,56 @@ describe('Del 127f: kalendern visar samma plan som ämnessidan för halvklassäm
     expect(kal.find((x) => x.datum === '2026-08-27')!.avsnitt).toBe('🧪 Fältstudie vid dammen');
     expect(kal.find((x) => x.datum === '2026-09-01')!.avsnitt).toBe('🧪 Mikroskopera celler');
     expect(kal.find((x) => x.datum === '2026-09-08')!.avsnitt).toBe('Laboration 2'); // platshållare efter listan
+  });
+});
+
+describe('Del 245 · ämnen med schema men utan planering syns i kalendern', () => {
+  const medOplanerad = (): Struktur => {
+    let s = bygg();
+    s = laggTillKlass(s, { id: 'k8a', tjanstId: 'tj', namn: '8A' });
+    // 8A Matematik: schema finns (tisdag och fredag), men ingen planering är skapad
+    return laggTillAmne(s, { id: 'am-a', klassId: 'k8a', namn: 'Matematik', bokId: 'b', schema: [{ dag: 2, start: '12:40', slut: '13:35' }, { dag: 5, start: '14:20', slut: '15:10' }] });
+  };
+
+  it('passen läggs ut enligt schemat som "Ingen planering" — lov och temadagar gäller som vanligt', () => {
+    const h = kalenderHandelser(medOplanerad(), 'la').filter((x) => x.klassNamn === '8A');
+    expect(h.slice(0, 3).map((x) => [x.datum, x.start, x.slut, x.amnesNamn, x.avsnitt, x.oplanerad])).toEqual([
+      ['2026-08-18', '12:40', '13:35', 'Matematik', 'Ingen planering', true],
+      ['2026-08-21', '14:20', '15:10', 'Matematik', 'Ingen planering', true],
+      ['2026-08-25', '12:40', '13:35', 'Matematik', 'Ingen planering', true],
+    ]);
+    expect(h.every((x) => x.oplanerad === true && x.amneId === 'am-a' && x.lektionsIndex === undefined)).toBe(true);
+    // passen fortsätter hela läsåret
+    expect(h.at(-1)!.datum > '2027-06-01').toBe(true);
+  });
+
+  it('ämnet med planering visas som förut, utan oplanerade pass', () => {
+    const h = kalenderHandelser(medOplanerad(), 'la').filter((x) => x.klassNamn === '8B');
+    expect(h).toHaveLength(2);
+    expect(h.some((x) => x.oplanerad === true)).toBe(false);
+  });
+
+  it('amnenUtanPlanering pekar ut ämnet — och säger till när planeringens bok saknas', () => {
+    const s = medOplanerad();
+    expect(amnenUtanPlanering(s, 'la').map((o) => [o.klassNamn, o.amne.namn, o.orsak])).toEqual([['8A', 'Matematik', 'ingen-planering']]);
+    const utanBok: Struktur = { ...s, bocker: [] };
+    expect(amnenUtanPlanering(utanBok, 'la').map((o) => [o.klassNamn, o.orsak])).toEqual([['8B', 'ingen-bok'], ['8A', 'ingen-planering']]);
+    expect(kalenderHandelser(utanBok, 'la').filter((x) => x.klassNamn === '8B')[0].avsnitt).toBe('Ingen planering (boken saknas)');
+    // när planeringen skapats försvinner ämnet ur listan
+    expect(amnenUtanPlanering(registreraPlanering(s, { id: 'pl-a', amneId: 'am-a', bokId: 'b', skapad: 'nu' }), 'la')).toEqual([]);
+  });
+
+  it('NO+Tk-block: ett delämne utan planering visas bara under sin egen period', () => {
+    let s = bygg();
+    ['Biologi', 'Kemi'].forEach((namn, i) => {
+      s = laggTillAmne(s, { id: `no${i}`, klassId: 'k8b', namn, noGrupp: 'no', noOrder: i, schema: [{ dag: 1, start: '10:00', slut: '11:00' }] });
+    });
+    const h = kalenderHandelser(s, 'la').filter((x) => x.oplanerad === true);
+    const bi = h.filter((x) => x.amnesNamn === 'Biologi').map((x) => x.datum);
+    const ke = h.filter((x) => x.amnesNamn === 'Kemi').map((x) => x.datum);
+    expect(bi.length).toBeGreaterThan(0);
+    expect(ke.length).toBeGreaterThan(0);
+    expect(bi.filter((d) => ke.includes(d))).toEqual([]);   // aldrig två delämnen på samma pass
+    expect(bi.at(-1)! < ke[0]).toBe(true);
   });
 });

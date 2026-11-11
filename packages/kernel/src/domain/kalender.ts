@@ -6,8 +6,8 @@
  */
 import { amneBakgrund } from './amnen.js';
 import { isoVecka } from './skolar.js';
-import { amnesOffset, amnesPlan, samlaSlots } from './struktur.js';
-import type { IsoDatum, PlaneradLektion, Skolar, Struktur } from './typer.js';
+import { amnesOffset, amnesPlan, noPeriodFor, samlaSlots } from './struktur.js';
+import type { Amne, IsoDatum, Pass, PlaneradLektion, Skolar, Struktur } from './typer.js';
 
 export interface KalenderHandelse {
   datum: IsoDatum;
@@ -26,6 +26,8 @@ export interface KalenderHandelse {
   /** Koppling till planeringen — klick i kalendern öppnar lektionssidan. */
   amneId?: string;
   lektionsIndex?: number;
+  /** Del 245 · Ämnet har schema men ingen planering (eller ingen bok) — passet visas ändå, som 'Ingen planering'. */
+  oplanerad?: true;
 }
 
 export interface KalenderDagRuta {
@@ -47,6 +49,25 @@ function addDays(iso: IsoDatum, n: number): IsoDatum {
 function veckodag(iso: IsoDatum): number {
   const d = new Date(`${iso}T00:00:00Z`).getUTCDay();
   return d === 0 ? 7 : d;
+}
+
+export interface AmneUtanPlanering { amne: Amne; klassNamn: string; orsak: 'ingen-planering' | 'ingen-bok' }
+
+/**
+ * Del 245 · Ämnen i skolårets klasser som har lektionspass i schemat men ingen planering i kalendern:
+ * planeringen är inte skapad, eller dess bok finns inte kvar i biblioteket.
+ */
+export function amnenUtanPlanering(s: Struktur, skolarId: string): AmneUtanPlanering[] {
+  const ut: AmneUtanPlanering[] = [];
+  for (const amne of s.amnen) {
+    const klass = s.klasser.find((k) => k.id === amne.klassId);
+    if (klass === undefined || !s.tjanster.some((t) => t.id === klass.tjanstId && t.skolarId === skolarId)) continue;
+    if (amne.schema.length === 0 && (amne.schemaB ?? []).length === 0) continue;
+    const planer = s.planeringar.filter((p) => p.amneId === amne.id);
+    if (planer.some((p) => s.bocker.some((b) => b.id === p.bokId))) continue;
+    ut.push({ amne, klassNamn: klass.namn, orsak: planer.length === 0 ? 'ingen-planering' : 'ingen-bok' });
+  }
+  return ut;
 }
 
 /**
@@ -82,6 +103,29 @@ export function kalenderHandelser(s: Struktur, skolarId: string, idag?: string):
           klassId: klass.id, klassNamn: klass.namn, amnesNamn: amne.namn, grupp: g.grupp,
           kapitel: p.kapitel, kapitelFarg: farg(p.kapitel), amnesFarg, avsnitt: p.lektion.avsnitt, vecka: p.vecka,
           amneId: amne.id, lektionsIndex,
+        });
+      }
+    }
+  }
+  // Del 245 · Ämnen med schema men utan planering: lektionerna finns i schemat och ska synas i kalendern, annars
+  // ser det ut som om klassen inte har ämnet. Passen visas som 'Ingen planering' tills planeringen skapats.
+  for (const o of amnenUtanPlanering(s, skolarId)) {
+    const amne = o.amne;
+    const klass = s.klasser.find((k) => k.id === amne.klassId)!;
+    const period = noPeriodFor(skolar, amne);
+    const grupper: Array<{ grupp?: 'A' | 'B'; schema: Pass[] }> = amne.halvklass === true
+      ? [{ grupp: 'A', schema: amne.schema }, { grupp: 'B', schema: amne.schemaB ?? [] }]
+      : [{ grupp: undefined, schema: amne.schema }];
+    for (const g of grupper) {
+      for (const slot of samlaSlots(skolar, g.schema, amne.klassId)) {
+        // NO+Tk-block: bara delämnets egen period, annars skulle alla fyra delämnen stå på varje pass
+        if (period !== null && (slot.datum < period.fran || slot.datum > period.till)) continue;
+        ut.push({
+          datum: slot.datum, start: slot.start, slut: slot.slut,
+          klassId: klass.id, klassNamn: klass.namn, amnesNamn: amne.namn, grupp: g.grupp,
+          kapitel: 0, kapitelFarg: '#5c6b7a', amnesFarg: amneBakgrund(amne.namn),
+          avsnitt: o.orsak === 'ingen-bok' ? 'Ingen planering (boken saknas)' : 'Ingen planering', vecka: slot.vecka,
+          amneId: amne.id, oplanerad: true,
         });
       }
     }

@@ -26,7 +26,7 @@ import {
   socrativeRum, sparaBok, lektionsNamn, sattSocrativeQr, socrativeQr, sattSocrativeLank, socrativeLank, rumUrLektion,
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
-  amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
+  amnenUtanPlanering, amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   arFilImporterad, arRatt, andraKalla, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
   arFilSparrad, havSparr, klassForRapport, rapportForFil, rumInfo, LAGSTA_SVARSANDEL, rattaFacit, rosterUtanAndraKlasser, sparraFilnamn, svarsandelForRapport, type Svarsandel,
   delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, enkelRapport, studieguide, rapportOversikt, forklaring, niva, type ForklaringId,
@@ -6801,6 +6801,16 @@ function KalenderVy({ s, onOppnaLektion, kor, kontext, onKontext }: {
       </div>
 
       {handelser.length === 0 && <p className="note">Inga planeringar i det här skolåret ännu — skapa en planering på ett ämne, så dyker lektionerna upp här.</p>}
+      {(() => {
+        // Del 245: ämnen med schema men utan planering syns ändå i kalendern — och pekas ut här
+        const utan = amnenUtanPlanering(s, skolar.id).filter((o) => klassFilter === '__alla__' || o.amne.klassId === klassFilter);
+        return utan.length === 0 ? null : (
+          <p className="note kal-oplanerade" aria-label="Ämnen utan planering">
+            ⚠ <b>Ingen planering:</b> {utan.map((o) => `${o.klassNamn} ${o.amne.namn}${o.orsak === 'ingen-bok' ? ' (boken saknas i biblioteket)' : ''}`).join(', ')} — passen visas streckade enligt schemat.
+            Skapa planeringen under <b>Planering</b> → klassen → ämnet → <b>▶ Skapa planering</b>, så fylls lektionerna i.
+          </p>
+        );
+      })()}
 
       {lage === 'manad' && (
         <MonadsGrid onOppna={onOppnaLektion} ar={ankAr} manad0={ankManad} skolar={skolar} perDatum={perDatum} klassNamn={klassNamnKal}
@@ -6854,7 +6864,7 @@ function KursPilar({ h }: { h: KalenderHandelse }) {
 function Handelsechip({ h, onOppna }: { h: KalenderHandelse; onOppna?: (amneId: string, i: number) => void }) {
   const klickbar = onOppna !== undefined && h.amneId !== undefined && h.lektionsIndex !== undefined;
   return (
-    <span className="kh" style={{ background: h.amnesFarg, cursor: klickbar ? 'pointer' : undefined }}
+    <span className={`kh${h.oplanerad === true ? ' oplanerad' : ''}`} style={{ background: h.amnesFarg, cursor: klickbar ? 'pointer' : undefined }}
       onClick={klickbar ? () => onOppna(h.amneId!, h.lektionsIndex!) : undefined}
       title={`${h.start}–${h.slut} ${h.klassNamn} ${h.amnesNamn}${h.grupp !== undefined ? ` ${h.grupp}` : ''} · ${h.avsnitt}${klickbar ? ' — klicka för lektionsplaneringen' : ''}`}>
       <b style={{ color: klassFarg(h.klassNamn) }}>{h.klassNamn} {h.amnesNamn}{h.grupp !== undefined ? ` ${h.grupp}` : ''}</b> {h.start} {h.avsnitt}<KursPilar h={h} />
@@ -6931,7 +6941,7 @@ function VeckoSchema({ rutor, onPrev, onNext, onIdag, onOppna }: {
             {r.handelser.map((h, i) => {
               const klickbar = onOppna !== undefined && h.amneId !== undefined && h.lektionsIndex !== undefined;
               return (
-              <div key={i} className="sch-lekt" style={{ top: `${topp(h.start)}%`, height: `${hojd(h.start, h.slut)}%`, background: h.amnesFarg, cursor: klickbar ? 'pointer' : undefined }}
+              <div key={i} className={`sch-lekt${h.oplanerad === true ? ' oplanerad' : ''}`} style={{ top: `${topp(h.start)}%`, height: `${hojd(h.start, h.slut)}%`, background: h.amnesFarg, cursor: klickbar ? 'pointer' : undefined }}
                 onClick={klickbar ? () => onOppna(h.amneId!, h.lektionsIndex!) : undefined}
                 title={`${h.start}–${h.slut} ${h.klassNamn} ${h.amnesNamn}${h.grupp !== undefined ? ` ${h.grupp}` : ''} · ${h.avsnitt}${klickbar ? ' — klicka för lektionsplaneringen' : ''}`}>
                 <b style={{ color: klassFarg(h.klassNamn) }}>{h.klassNamn} {h.amnesNamn}{h.grupp !== undefined ? ` ${h.grupp}` : ''}</b>

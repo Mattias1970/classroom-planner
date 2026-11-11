@@ -45,7 +45,7 @@ export function Oversikt({ s, filter, setVy, struktur, lasaret }: {
     const slut = new Date(`${idag}T12:00:00Z`); slut.setUTCDate(slut.getUTCDate() + 14);
     const till = slut.toISOString().slice(0, 10);
     return kalenderHandelser(s, skolar.id, idag)
-      .filter((h) => h.datum >= idag && h.datum <= till && klasser.some((k) => k.id === h.klassId))
+      .filter((h) => h.oplanerad !== true && h.datum >= idag && h.datum <= till && klasser.some((k) => k.id === h.klassId))
       .sort((a, b) => a.datum.localeCompare(b.datum) || a.start.localeCompare(b.start))
       .slice(0, 12);
   }, [s, filter.klassId, filter.skolarId, idag]); // eslint-disable-line react-hooks/exhaustive-deps
