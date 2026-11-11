@@ -48,6 +48,15 @@ Bokdata är läsbar men aldrig skrivbar från appen (`classroom-planner-data`). 
 - `ArkivBevakning` kontrollerar datarepot när appen startar och när fönstret aktiveras (högst var tionde minut): köade filer laddas upp, och finns det filer i arkivet som inte är importerade här (`jamforArkiv`) frågar appen om de ska laddas. "Ja" hämtar dem till importsidorna (`hamtaTillImport` → `laggVantandeFiler`) för granskning — inget importeras utan att läraren trycker Importera.
 - Datarepo → Resultatarkiv visar var mapparna och filerna ligger (`arkivMappar`, länk till github.com, valfri lokal klonmapp `GitHubConfig.lokalMapp`).
 
+## Vakten vid quizen (Del 242)
+
+- **Rätt klass** — `klassForRapport(s, valdKlass, rum, rader)` avgör vilken klass en Socrative-rapport hör till: klassrummet (`socrativeRum`, t.ex. `BIOLOGI8AA`) först, annars klassen där flest av rapportens elever finns, annars den valda. Importen går till den klassen även om en annan är vald, och `rosterUtanAndraKlasser` ser till att elever som redan finns i en annan klass aldrig läggs till i den valda.
+- **Elever i fel klass** — `eleverIFelKlass(s)` hittar elever som finns i två klasser (minst tre gemensamma namn) och pekar ut hemklassen; `rensaEleverIFelKlass` flyttar resultat, filposter, inlämningar m.m. till samma ämne i hemklassen och tar bort dubbletterna. `QuizVakt` frågar läraren först — inget flyttas utan ett ja, och ↩ Ångra lägger tillbaka.
+- **För få svar** — ett quiz med under `LAGSTA_SVARSANDEL` (30 %) av elevernas möjliga svar (`svarsandelForRapport`: besvarade frågor / elever i gruppen × frågor) är ett felstartat quiz. Vid import frågar appen ("Nej — spärra filen" / "Ladda ändå"); redan importerade pekas ut av `filerMedFaSvar` och frågan ställs överst i appen.
+- **Spärrade filer** — `Struktur.sparradeFiler` minns filnamnet (`filnamnsNyckel` tar bort " (1)" och skiftläge). En spärrad fil importeras inte igen, varken från datorn eller från resultatarkivet (`jamforArkiv` räknar den inte som ny). Spärren hävs under Importera eller i granskningstabellen.
+- **Samma svar = samma fråga** — `utanAlternativ` tar bort alternativbokstaven A–J (riktiga rapporter har upp till F), frågor enas på begreppet inom hela ämnet (inte per kapitel — läxförhören är kumulativa), och facit härleds så att nyckeln förklarar allas poäng (`harledSvarsnyckelMedKvalitet`) när ingen hade alla rätt. `rattaFacit` rättar redan importerade quiz vid start (meddelas, går att ångra). Två frågor med samma svar i samma quiz hålls isär.
+- Kvar att lösa: samma frågetext med olika rätt svar i olika quiz (t.ex. "Vad pekar nummer 1 på?" med ny bild) enas fortfarande på texten.
+
 ## Vanliga fel
 
 - **0 matchade resultat** → klassen saknar elever. Importera Socrative-rostern först.

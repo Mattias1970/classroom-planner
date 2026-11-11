@@ -9,6 +9,7 @@
  * BAM-kraven: läxförhör ≥ 90 %, exit ticket ≥ 70 %. Magma-prov: ≥ 70 % Godkänt
  * (85 Bra, 95 Utmärkt — se magmaprov.ts). DigiExam har inget fast krav.
  */
+import { utanAlternativ } from './svarsform.js';
 import type { Elev, PlaneradLektion, Struktur } from './typer.js';
 import { elevernaIKlassen, nyttId } from './struktur.js';
 import { koderForProv } from './delkapitelkoder.js';
@@ -68,8 +69,8 @@ export interface FragaSvar { fraga: string; svar: string; ratt: boolean | null; 
 /** 'A • ekologi' → 'ekologi'. Begreppet är det rätta svaret på begreppsfrågan. */
 export function begreppUrFacit(facit: string | undefined | null): string | null {
   if (facit === undefined || facit === null) return null;
-  // 'A • ekologi', 'A. ekologi', 'b) biotop' — bokstaven följs av bullet, punkt eller parentes
-  const b = facit.replace(/^[a-eA-E]\s*(?:[.)]|[•·])\s*/, '').replace(/[•·]/g, ' ').replace(/\s+/g, ' ').trim();
+  // 'A • ekologi', 'A. ekologi', 'b) biotop', 'F. Mitokondrier' — bokstaven följs av bullet, punkt eller parentes
+  const b = utanAlternativ(facit);
   return b === '' ? null : b;
 }
 export interface ImportRad { namn: string; poang: number; maxPoang: number; /** Student ID ur Socrative-rapporten (valfritt). */ sidId?: string; /** E-post ur filen (DigiExam) — matchas mot Elev.epost före namnet. */ epost?: string; svar?: FragaSvar[]; }
@@ -499,6 +500,8 @@ export interface FilPost {
   rum?: string;
   kalla: ResultatKalla;
   prov: string;
+  /** Del 242 · Läraren har valt att behålla filen trots att den har under 30 % av de möjliga svaren — appen frågar inte igen. */
+  behallTrotsFaSvar?: boolean;
 }
 
 /** Registrerar en importerad fil; samma (ämne, filnamn) ersätts vid omimport. */

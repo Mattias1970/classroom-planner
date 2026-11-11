@@ -28,6 +28,7 @@ import {
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   arFilImporterad, arRatt, andraKalla, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
+  arFilSparrad, havSparr, klassForRapport, LAGSTA_SVARSANDEL, rattaFacit, rosterUtanAndraKlasser, sparraFilnamn, svarsandelForRapport, type Svarsandel,
   delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, enkelRapport, studieguide, rapportOversikt, forklaring, niva, type ForklaringId,
   omfangFilter, kapitelVeckor, OMFANG_NAMN, type Omfang, type OmfangResultat, begreppForFraga, harmoniseraOvningar, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, laggTillSaknadeElever, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
@@ -63,6 +64,7 @@ import { PlaneringsTavla } from './PlaneringsTavla.js';
 import { Kortrad } from './Kortrad.js';
 import { arkiveraFiler, tagVantandeFiler, uppladdningsText, useVantandeFiler } from './resultatarkiv.js';
 import { ArkivBevakning } from './ArkivBevakning.js';
+import { QuizVakt } from './QuizVakt.js';
 import { Skal, Kort, type Filter, type V3Vy } from './v3/Skal.js';
 import { Oversikt } from './v3/Oversikt.js';
 import { Lasaret } from './Lasaret.js';
@@ -133,9 +135,15 @@ export function App() {
   // Del 189: dubbletter som redan finns i sparad data slås ihop när appen startar (går att ångra)
   useEffect(() => {
     const d = slaIhopSakraDubbletter(lasStruktur());
-    if (d.ihop.length === 0) return;
+    // Del 242: facit räknas om för quiz där ingen hade alla rätt (nyckeln ska förklara allas poäng) — går att ångra
+    const f = rattaFacit(d.s);
+    if (d.ihop.length === 0 && f.s === d.s) return;
     angraStack.current = [...angraStack.current.slice(-19), lasStruktur()];
-    spara(d.s, `✓ ${dubblettText(d.ihop)} (↩ Ångra finns)`);
+    const delar = [
+      ...(d.ihop.length > 0 ? [dubblettText(d.ihop)] : []),
+      ...(f.svar > 0 ? [`facit rättat i ${f.quiz} quiz där ingen hade alla rätt — ${f.svar} svar fick ändrad rättning`] : []),
+    ];
+    spara(f.s, delar.length > 0 ? `✓ ${delar.join(' · ')} (↩ Ångra finns)` : '');
   }, []);
   const angra = () => {
     const fore = angraStack.current.pop();
@@ -237,6 +245,7 @@ export function App() {
         <Skal s={s} vy={vy} setVy={setVy} filter={filter} setFilter={setFilter} notiser={notiser} larareNamn={larare} verktyg={verktyg} angra={angra}>
           {msg && <p className="status">{msg}</p>}
           {sparfelRuta}
+          <QuizVakt s={s} kor={kor} />
           {arkivBevakning}
           {vy.typ !== 'elever' && <VeckorapportLarm s={s} kor={kor} onOppna={() => setVy({ typ: 'elever' })} />}
           {vy.typ === 'oversikt' && <Oversikt s={s} filter={filter} setVy={setVy} struktur={struktur} lasaret={<Lasaret s={s} skolarId={filter.skolarId} kor={kor} />} />}
@@ -299,6 +308,7 @@ export function App() {
         <button className="btn sec" onClick={() => setLayout('v3')} title="Den nya layouten">✨ v3</button>
       </header>
       {sparfelRuta}
+      <QuizVakt s={s} kor={kor} />
       {arkivBevakning}
       {huvudvy !== 'rapporter' && <VeckorapportLarm s={s} kor={kor} onOppna={() => setHuvudvy('rapporter')} />}
       {huvudvy === 'kalender' || huvudvy === 'superteach' || huvudvy === 'rapporter' ? (
@@ -6088,6 +6098,14 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, o
     redanInne: boolean;
     /** Läraren har ändrat typen i rullgardinen före import. */
     typAndrad?: boolean;
+    /** Del 242 · Klassen filen hör till — rapportens rum eller var eleverna finns; inte nödvändigtvis den valda klassen. */
+    klassId: string; klassNamn: string; klassSkal: 'rum' | 'elever' | 'vald';
+    /** Del 242 · Andel av elevernas möjliga svar; under 30 % frågar appen innan filen importeras. */
+    andel: Svarsandel | null;
+    /** Del 242 · Filnamnet är spärrat (avvisat tidigare). */
+    sparrad: boolean;
+    /** Del 242 · Läraren har valt att importera filen trots få svar. */
+    importeraTrotsFaSvar?: boolean;
   }
   const [filRader, setFilRader] = useState<FilRad[]>([]);
   // Del 203: filerna själva behålls för uppladdning till resultatarkivet; filer hämtade därifrån laddas inte upp igen
@@ -6116,23 +6134,33 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, o
         // Rummet pekar ut ämnet: antingen klassrummet socrativeRum(ämne, klass) ('Matte8B')
         // eller ett rum som står som läxförhör/exit i något ämnes plan ('Biologi41')
         const rumN = rapport.rum.replace(/\s+/g, '').toUpperCase();
-        const viaRum = amnen.find((a2) => socrativeRum(a2.namn, klass.namn).toUpperCase() === rumN)
-          ?? amnen.find((a2) => planFor(a2).some((r) => [r.lektion.exit, r.lektion.socStart].some((x) => x.replace(/\s+/g, '').toUpperCase() === rumN)));
-        const amnet = viaRum ?? amne;
+        // Del 242: klassen filen hör till — klassrummet ('BIOLOGI8AA') eller var eleverna finns. En 8A-rapport som
+        // läses medan 8B är vald importeras till 8A, och 8A:s elever läggs inte till i 8B.
+        const rk = klassForRapport(s, klass.id, rapport.rum, rapport.rader);
+        const filKlass = s.klasser.find((k2) => k2.id === rk.klassId) ?? klass;
+        const filAmnen = filKlass.id === klass.id ? amnen : s.amnen.filter((a2) => a2.klassId === filKlass.id);
+        const viaRum = (rk.amneId !== null ? filAmnen.find((a2) => a2.id === rk.amneId) : undefined)
+          ?? filAmnen.find((a2) => socrativeRum(a2.namn, filKlass.namn).toUpperCase() === rumN)
+          ?? filAmnen.find((a2) => planFor(a2).some((r) => [r.lektion.exit, r.lektion.socStart].some((x) => x.replace(/\s+/g, '').toUpperCase() === rumN)));
+        const amnet = viaRum ?? (filKlass.id === klass.id ? amne : filAmnen.find((a2) => a2.namn === amne?.namn));
         const namninfo = tolkaSocrativeFilnamn(fil.name);
         const k = namninfo !== null && amnet !== undefined
           ? klassificeraSocrativeFil(rapport.rum, namninfo.startUtc, planFor(amnet))
           : null;
         const deltagare = rapport.rader.filter((r) => r.deltog);
+        const datum = k?.datum ?? namninfo?.startUtc.slice(0, 10) ?? new Date().toISOString().slice(0, 10);
         ut.push({
           filnamn: fil.name, quiz: rapport.quiz, rum: rapport.rum,
           amneId: amnet?.id ?? null, amnesNamn: amnet?.namn ?? '—',
+          klassId: filKlass.id, klassNamn: filKlass.namn, klassSkal: rk.skal,
+          andel: svarsandelForRapport(s, filKlass.id, datum, rapport.rader, rapport.fragor.length),
+          sparrad: arFilSparrad(s, fil.name),
           kalla: k?.kalla ?? null,
-          datum: k?.datum ?? namninfo?.startUtc.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+          datum,
           tid: k?.tid ?? null,
           beskrivning: k !== null ? `${k.avsnitt !== null ? `${k.avsnitt} · ` : ''}${k.beskrivning}` : 'kunde inte tidsbestämmas',
-          matchade: deltagare.filter((r) => matchaElev(s, klass.id, r.namn, r.sidId) !== null).length,
-          omatchadeNamn: deltagare.filter((r) => matchaElev(s, klass.id, r.namn, r.sidId) === null).map((r) => r.namn),
+          matchade: deltagare.filter((r) => matchaElev(s, filKlass.id, r.namn, r.sidId) !== null).length,
+          omatchadeNamn: deltagare.filter((r) => matchaElev(s, filKlass.id, r.namn, r.sidId) === null).map((r) => r.namn),
           deltog: deltagare.length,
           roster: rapport.rader.map((r) => ({ namn: r.namn, sidId: r.sidId })),
           rader: deltagare.map((r) => ({
@@ -6147,38 +6175,58 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, o
       } catch (fel) {
         ut.push({ filnamn: fil.name, quiz: '—', rum: '—', amneId: null, amnesNamn: '—', kalla: null, tid: null,
           datum: '', beskrivning: fel instanceof Error ? fel.message : 'kunde inte läsas',
+          klassId: klass.id, klassNamn: klass.namn, klassSkal: 'vald', andel: null, sparrad: false,
           matchade: 0, omatchadeNamn: [], deltog: 0, roster: [], rader: [], redanInne: false });
       }
     }
     setFilRader(ut);
   };
-  const importerbara = filRader.filter((f) => f.amneId !== null && f.kalla !== null && (importeraOm || !f.redanInne) && f.rader.length > 0);
-  // Namn i rapporternas roster som inte finns i klassen (även avstängda elever räknas som befintliga)
-  const saknasIKlassen = [...new Map(filRader.flatMap((f) => f.roster)
-    .filter((r) => matchaElev(s, klass.id, r.namn, r.sidId) === null)
-    .map((r) => [r.namn.toLowerCase().replace(/,/g, ' ').split(/\s+/).filter(Boolean).sort().join(' '), r])).values()];
+  // Del 242: under 30 % av elevernas möjliga svar = troligen ett felstartat quiz — importeras först när läraren sagt ja
+  const faSvar = (f: FilRad) => f.andel !== null && f.andel.andel < LAGSTA_SVARSANDEL;
+  const importerbara = filRader.filter((f) => f.amneId !== null && f.kalla !== null && (importeraOm || !f.redanInne) && f.rader.length > 0
+    && !f.sparrad && (!faSvar(f) || f.importeraTrotsFaSvar === true));
+  const fragaOmFaSvar = filRader.filter((f) => faSvar(f) && !f.sparrad && f.importeraTrotsFaSvar !== true && f.rader.length > 0 && (importeraOm || !f.redanInne));
+  const iAnnanKlass = filRader.filter((f) => f.klassId !== klass.id);
+  // Namn i rapporternas roster som inte finns i filens klass (även avstängda elever räknas som befintliga) — och inte heller
+  // i någon annan klass: de hör hemma där och läggs aldrig till här (Del 242)
+  const saknasPerKlass = [...new Set(filRader.map((f) => f.klassId))].map((kid) => {
+    const roster = filRader.filter((f) => f.klassId === kid).flatMap((f) => f.roster).filter((r) => matchaElev(s, kid, r.namn, r.sidId) === null);
+    const u = rosterUtanAndraKlasser(s, kid, roster);
+    const unika = [...new Map(u.rader.map((r) => [r.namn.toLowerCase().replace(/,/g, ' ').split(/\s+/).filter(Boolean).sort().join(' '), r])).values()];
+    return { klassId: kid, klassNamn: s.klasser.find((k2) => k2.id === kid)?.namn ?? '?', saknas: unika, iAndraKlasser: u.iAndraKlasser };
+  });
+  const saknasIKlassen = saknasPerKlass.flatMap((x) => x.saknas);
+  const finnsIAndraKlasser = saknasPerKlass.flatMap((x) => x.iAndraKlasser);
   const importeraFiler = () => {
     let st = lasStruktur();
-    let nyaElever: string[] = [];
+    const nyaElever: Array<{ klassNamn: string; namn: string[] }> = [];
     if (kompletteraKlass) {
-      const u = laggTillSaknadeElever(st, klass.id, filRader.flatMap((f) => f.roster), 'A', () => nyttId('e'), matchaElev);
-      st = u.struktur; nyaElever = u.tillagda;
+      for (const kid of [...new Set(filRader.map((f) => f.klassId))]) {
+        const roster = rosterUtanAndraKlasser(st, kid, filRader.filter((f) => f.klassId === kid).flatMap((f) => f.roster)).rader;
+        const u = laggTillSaknadeElever(st, kid, roster, 'A', () => nyttId('e'), matchaElev);
+        st = u.struktur;
+        if (u.tillagda.length > 0) nyaElever.push({ klassNamn: st.klasser.find((k2) => k2.id === kid)?.namn ?? '?', namn: u.tillagda });
+      }
     }
     let resultat = 0;
     const nyaVantande: VantandeImport[] = [];
     for (const f of importerbara) {
       const underlag = {
-        klassId: klass.id, amneId: f.amneId!, kalla: f.kalla!, prov: f.quiz, datum: f.datum, rum: f.rum, ...(f.tid !== null ? { tid: f.tid } : {}),
+        klassId: f.klassId, amneId: f.amneId!, kalla: f.kalla!, prov: f.quiz, datum: f.datum, rum: f.rum, ...(f.tid !== null ? { tid: f.tid } : {}),
         ...(f.typAndrad !== true ? { autoTyp: true } : {}), rader: f.rader,
       };
       const u = importeraResultat(st, underlag);
       resultat += u.traffar;
-      const fil = { amneId: f.amneId!, filnamn: f.filnamn, importerad: new Date().toISOString(), kalla: f.kalla!, prov: f.quiz, datum: f.datum, rum: f.rum };
+      const fil = { amneId: f.amneId!, filnamn: f.filnamn, importerad: new Date().toISOString(), kalla: f.kalla!, prov: f.quiz, datum: f.datum, rum: f.rum,
+        ...(f.importeraTrotsFaSvar === true ? { behallTrotsFaSvar: true } : {}) };
       st = registreraFil(u.s, { ...fil, traffar: u.traffar });
-      if (u.fragor.length > 0) nyaVantande.push({ etikett: `${klass.namn} · ${f.amnesNamn} · ${f.quiz}`, underlag, fragor: u.fragor, fil });
+      if (u.fragor.length > 0) nyaVantande.push({ etikett: `${f.klassNamn} · ${f.amnesNamn} · ${f.quiz}`, underlag, fragor: u.fragor, fil });
     }
     const klar = st;
-    kor(() => klar, `${importerbara.length} filer importerade (${resultat} resultat)${nyaElever.length > 0 ? ` · ${nyaElever.length} elever tillagda i ${klass.namn} ur Socrative-rostern: ${nyaElever.join(', ')}` : ''}${nyaVantande.length > 0 ? ` · ${nyaVantande.reduce((a, v) => a + v.fragor.length, 0)} namn behöver ett svar` : ''}.`);
+    const tillAndra = [...new Set(importerbara.filter((f) => f.klassId !== klass.id).map((f) => f.klassNamn))];
+    // Del 242: beskedet om filer som hörde till en annan klass ska stå kvar även när arkivbeskedet kommer efteråt
+    const tillAndraText = tillAndra.length > 0 ? ` · ${importerbara.filter((f) => f.klassId !== klass.id).length} hörde till ${tillAndra.join(' och ')} och importerades dit, inte till ${klass.namn}` : '';
+    kor(() => klar, `${importerbara.length} filer importerade (${resultat} resultat)${tillAndraText}${nyaElever.map((x) => ` · ${x.namn.length} elever tillagda i ${x.klassNamn} ur Socrative-rostern: ${x.namn.join(', ')}`).join('')}${nyaVantande.length > 0 ? ` · ${nyaVantande.reduce((a, v) => a + v.fragor.length, 0)} namn behöver ett svar` : ''}.`);
     setFilRader([]);
     setVantande(nyaVantande);
     // Del 203: filerna läggs i resultatarkivet (datarepot) per ämne
@@ -6191,7 +6239,7 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, o
         if (ur.length > 0) await arkiveraFiler(aId, 'socrative', ur, true);
         if (egna.length > 0) text += uppladdningsText(await arkiveraFiler(aId, 'socrative', egna));
       }
-      if (text !== '') kor(() => lasStruktur(), `Importen klar.${text}`);
+      if (text !== '') kor(() => lasStruktur(), `Importen klar${tillAndraText}.${text}`);
     })();
   };
   // Del 203: filer hämtade från datarepot (Datarepo → Resultatarkiv) läggs fram för granskning här
@@ -6342,6 +6390,17 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, o
             </details>
           );
         })()}
+        {(s.sparradeFiler ?? []).length > 0 && (
+          <details className="st-filer">
+            <summary>🚫 {(s.sparradeFiler ?? []).length} spärrade filer <small className="muted">· avvisade quiz (för få svar) som inte laddas igen</small></summary>
+            <ul className="small" style={{ margin: '4px 0', paddingLeft: 18 }}>
+              {(s.sparradeFiler ?? []).map((f) => (
+                <li key={f.filnamn}><b>{f.prov ?? f.filnamn}</b> <span className="muted">{f.datum ?? ''}{f.andel !== undefined ? ` · ${Math.round(f.andel * 100)} % av möjliga svar` : ''} · spärrad {f.sparrad} · {f.filnamn}</span>{' '}
+                  <button className="linkbtn" aria-label={`Häv spärren för ${f.filnamn}`} onClick={() => kor(() => havSparr(lasStruktur(), f.filnamn), `Spärren hävd för ${f.prov ?? f.filnamn} — filen kan importeras igen.`)}>Häv spärren</button></li>
+              ))}
+            </ul>
+          </details>
+        )}
         {s.elever.filter((e) => e.klassId === klass.id).length === 0 && (
           <p className="status warn">⚠ Klassen har inga elever registrerade — inga resultat kan matchas. Importera rostern (👥 ovan) först; filer som gav 0 resultat erbjuds igen automatiskt.</p>
         )}
@@ -6352,7 +6411,7 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, o
               <tr key={i}>
                 <td title={f.filnamn}>{f.filnamn.slice(0, 22)}…</td>
                 <td>{f.quiz}</td>
-                <td>{f.amnesNamn}</td>
+                <td>{f.klassId !== klass.id ? <b title={f.klassSkal === 'rum' ? `Kördes i rummet ${f.rum}` : `Eleverna finns i ${f.klassNamn}`}>{f.klassNamn} · </b> : null}{f.amnesNamn}</td>
                 <td className="small muted">{f.tid ?? '—'}</td>
                 <td>
                   <select aria-label={`Typ för ${f.filnamn}`} value={f.kalla ?? ''} disabled={f.amneId === null}
@@ -6364,18 +6423,53 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, o
                 <td><small className="muted">{f.beskrivning}</small></td>
                 <td>{f.deltog}</td>
                 <td>{f.matchade}{f.omatchadeNamn.length > 0 && <small className="muted" title={f.omatchadeNamn.join(', ')}> · ⚠ {f.omatchadeNamn.length} omatchade</small>}</td>
-                <td>{f.redanInne ? <span className="muted">redan importerad</span>
+                <td>{f.sparrad ? <span className="st-krav ej" title="Filen har avvisats tidigare och laddas inte igen">🚫 spärrad{' '}
+                    <button className="linkbtn" onClick={() => { kor(() => havSparr(lasStruktur(), f.filnamn), `Spärren hävd för ${f.filnamn}.`); setFilRader(filRader.map((x, j) => (j === i ? { ...x, sparrad: false } : x))); }}>häv</button></span>
+                  : f.redanInne ? <span className="muted">redan importerad</span>
                   : f.kalla === null || f.amneId === null ? <span className="st-krav ej">importeras ej</span>
-                  : <span className="st-krav ok">klar att importera</span>}</td>
+                  : faSvar(f) && f.importeraTrotsFaSvar !== true ? <span className="st-krav ej">för få svar — väntar på ditt val</span>
+                  : <span className="st-krav ok">klar att importera{f.klassId !== klass.id ? ` till ${f.klassNamn}` : ''}</span>}</td>
               </tr>
             ))}</tbody>
           </table>
+          {/* Del 242: filer som hör till en annan klass än den valda */}
+          {iAnnanKlass.length > 0 && (
+            <p className="status warn small" role="note">
+              ⚠ <b>{iAnnanKlass.length} {iAnnanKlass.length === 1 ? 'fil hör' : 'filer hör'} till {[...new Set(iAnnanKlass.map((f) => f.klassNamn))].join(' och ')}, inte till {klass.namn}</b>{' '}
+              ({[...new Set(iAnnanKlass.map((f) => (f.klassSkal === 'rum' ? `kördes i rummet ${f.rum}` : `eleverna finns i ${f.klassNamn}`)))].join('; ')}).
+              {' '}Resultaten importeras dit, och eleverna läggs inte till i {klass.namn}.
+            </p>
+          )}
+          {/* Del 242: under 30 % av elevernas möjliga svar — fråga innan filen laddas */}
+          {fragaOmFaSvar.length > 0 && (
+            <div className="status warn small" role="group" aria-label="Quiz med för få svar">
+              <b>⚠ {fragaOmFaSvar.length} {fragaOmFaSvar.length === 1 ? 'fil har' : 'filer har'} under 30 % av elevernas möjliga svar</b> — troligen ett felstartat quiz. Ska {fragaOmFaSvar.length === 1 ? 'den' : 'de'} laddas?
+              <ul style={{ margin: '4px 0', paddingLeft: 18 }}>
+                {fragaOmFaSvar.map((f) => (
+                  <li key={f.filnamn}>
+                    <b>{f.quiz}</b> ({f.klassNamn} · {f.datum}{f.tid !== null ? ` ${f.tid}` : ''}) — {Math.round((f.andel?.andel ?? 0) * 100)} %: {f.andel?.besvarade} av {f.andel?.mojliga} möjliga svar, {f.deltog} elever{' '}
+                    <button className="btn sm" aria-label={`Spärra ${f.filnamn}`} onClick={() => {
+                      kor(() => sparraFilnamn(lasStruktur(), { filnamn: f.filnamn, orsak: 'fa-svar', sparrad: new Date().toISOString().slice(0, 10), prov: f.quiz, datum: f.datum, ...(f.amneId !== null ? { amneId: f.amneId } : {}), ...(f.andel !== null ? { andel: f.andel.andel } : {}) }),
+                        `${f.quiz} (${f.datum}) laddas inte — filnamnet är spärrat och erbjuds inte igen.`);
+                      setFilRader(filRader.filter((x) => x.filnamn !== f.filnamn));
+                    }}>Nej — spärra filen</button>{' '}
+                    <button className="btn sec sm" aria-label={`Importera ${f.filnamn} ändå`} onClick={() => setFilRader(filRader.map((x) => (x.filnamn === f.filnamn ? { ...x, importeraTrotsFaSvar: true } : x)))}>Ladda ändå</button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {saknasIKlassen.length > 0 && (
             <p className="small">
               <label><input type="checkbox" aria-label="Lägg till saknade elever ur Socrative-rostern" checked={kompletteraKlass} onChange={(e) => setKompletteraKlass(e.target.checked)} />{' '}
-                <b>Lägg till {saknasIKlassen.length} elev{saknasIKlassen.length === 1 ? '' : 'er'} i {klass.namn}</b> som finns i Socratives roster men saknas i klassen (även de som inte deltog):</label>{' '}
+                {saknasPerKlass.filter((x) => x.saknas.length > 0).map((x, n) => (
+                  <span key={x.klassId}>{n > 0 ? ' · ' : ''}<b>Lägg till {x.saknas.length} elev{x.saknas.length === 1 ? '' : 'er'} i {x.klassNamn}</b></span>
+                ))} som finns i Socratives roster men saknas i klassen (även de som inte deltog):</label>{' '}
               <span className="muted">{saknasIKlassen.map((r) => r.namn).join(' · ')}</span>
             </p>
+          )}
+          {finnsIAndraKlasser.length > 0 && iAnnanKlass.length === 0 && (
+            <p className="small muted">👥 {finnsIAndraKlasser.length} namn i rostern finns redan i {[...new Set(finnsIAndraKlasser.map((x) => x.klassNamn))].join(' och ')} och läggs inte till i {klass.namn}: {finnsIAndraKlasser.map((x) => x.namn).join(' · ')}</p>
           )}
           {!kompletteraKlass && filRader.some((f) => f.omatchadeNamn.length > 0) && (
             <p className="small muted">⚠ Omatchade namn: {[...new Set(filRader.flatMap((f) => f.omatchadeNamn))].join(' · ')} — deras resultat sparas inte.</p>

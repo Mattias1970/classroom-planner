@@ -6,6 +6,7 @@
  *
  *   resultat/ak8/8B/Biologi/socrative/Biologi41 ... .xlsx
  */
+import { arFilSparrad } from './sparradefiler.js';
 import type { Struktur } from './typer.js';
 
 export type ArkivKalla = 'socrative' | 'magma' | 'digiexam' | 'teams';
@@ -83,8 +84,11 @@ export function arArkivFilImporterad(s: Struktur, amneId: string, kalla: ArkivKa
   // Del 239: jämför som namnet står i arkivet — 'Procent 50%.xlsx' heter 'Procent 50-.xlsx' där, och ska
   // inte se ut som en ny fil på datorn den laddades upp från
   const led = arkivLed(filnamn);
-  if ((s.filregister ?? []).some((f) => f.amneId === amneId && arkivLed(f.filnamn) === led)) return true;
-  return (s.resultatArkiv ?? []).some((x) => x.amneId === amneId && x.kalla === kalla && arkivLed(x.filnamn) === led && x.importerad);
+  // Del 242: filnamnet bär quizets starttid och är unikt för körningen — finns filen registrerad i NÅGOT ämne är
+  // den importerad. (En 8A-fil som laddades upp under 8B och sedan flyttades hem ska inte erbjudas igen.)
+  void amneId;
+  if ((s.filregister ?? []).some((f) => arkivLed(f.filnamn) === led)) return true;
+  return (s.resultatArkiv ?? []).some((x) => x.kalla === kalla && arkivLed(x.filnamn) === led && x.importerad);
 }
 
 export interface ArkivStatus {
@@ -136,6 +140,8 @@ export interface ArkivRad {
   amneId: string | null;
   /** Filen är redan importerad i den här appen. */
   importerad: boolean;
+  /** Del 242 · Filen är spärrad (avvisad av läraren) — den erbjuds inte igen. */
+  sparrad?: boolean;
 }
 
 export interface ArkivJamforelse {
@@ -152,11 +158,12 @@ export function jamforArkiv(s: Struktur, sokvagar: string[]): ArkivJamforelse {
   const rader: ArkivRad[] = [...new Set(sokvagar)].sort((a, b) => a.localeCompare(b, 'sv', { numeric: true })).map((sokvag) => {
     const tolk = tolkaArkivSokvag(sokvag);
     const amneId = amneForArkivSokvag(s, sokvag);
-    return { sokvag, tolk, amneId, importerad: tolk !== null && amneId !== null && arArkivFilImporterad(s, amneId, tolk.kalla, tolk.filnamn) };
+    const sparrad = tolk !== null && arFilSparrad(s, tolk.filnamn);
+    return { sokvag, tolk, amneId, importerad: tolk !== null && amneId !== null && arArkivFilImporterad(s, amneId, tolk.kalla, tolk.filnamn), ...(sparrad ? { sparrad } : {}) };
   });
   return {
     rader,
-    nya: rader.filter((r) => r.tolk !== null && r.amneId !== null && !r.importerad),
+    nya: rader.filter((r) => r.tolk !== null && r.amneId !== null && !r.importerad && r.sparrad !== true),
     okanda: rader.filter((r) => r.tolk === null || r.amneId === null),
     importerade: rader.filter((r) => r.importerad).length,
   };
@@ -181,7 +188,7 @@ export function arkivMappar(rader: ArkivRad[]): ArkivMapp[] {
     const mapp = arkivMappAv(r.sokvag);
     const m = ut.get(mapp) ?? { mapp, amneId: r.amneId, kalla: r.tolk?.kalla ?? null, filer: [], nya: 0 };
     m.filer.push(r.sokvag.slice(mapp.length + 1));
-    if (r.tolk !== null && r.amneId !== null && !r.importerad) m.nya += 1;
+    if (r.tolk !== null && r.amneId !== null && !r.importerad && r.sparrad !== true) m.nya += 1;
     ut.set(mapp, m);
   }
   return [...ut.values()].sort((a, b) => a.mapp.localeCompare(b.mapp, 'sv', { numeric: true }));

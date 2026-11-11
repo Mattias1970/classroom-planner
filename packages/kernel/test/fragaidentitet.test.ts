@@ -100,10 +100,32 @@ describe('Del 238 · Frågans identitet är begreppet (det rätta svaret)', () =
     expect(fragematris(s, { klassId: 'k', amneId: 'bi' }).fragor).toHaveLength(2);
   });
 
-  it('samma begrepp i ett annat kapitel är en annan fråga', () => {
-    let s = forhor(grund(), 'Bi 4.1', '2026-08-21', 'Biologi41', [[EKO_V1, 'A • ekologi', true, 'A • ekologi']], [[EKO_V1, 'A • ekologi', true, 'A • ekologi']]);
-    s = forhor(s, 'Bi 6.1', '2026-10-02', 'Biologi61', [[EKO_V2, 'A • ekologi', true, 'A • ekologi']], [[EKO_V2, 'A • ekologi', true, 'A • ekologi']]);
-    expect(fragematris(s, { klassId: 'k', amneId: 'bi' }).fragor).toHaveLength(2);
+  it('Del 242: begreppet gäller över kapitelgränser — exit ticketen i kap 7 och det kumulativa förhöret 6–7 delar kolumn', () => {
+    // Som i de riktiga quizen: 'Nervsystemet 7.4' (exit) och sedan '6.1 - 6.5, 7.1 - 7.4' (läxförhör) med omskriven fråga
+    let s = forhor(grund(), 'Nervsystemet 7.4', '2026-10-19', 'BIOLOGI8BB',
+      [['Synnerven leder nervimpulserna från synsinnescellerna till syncentrum.', 'B. Synnerv', true, 'B. Synnerv']],
+      [['Synnerven leder nervimpulserna från synsinnescellerna till syncentrum.', 'A. Näthinna', false, 'B. Synnerv']]);
+    s = forhor(s, '6.1 - 6.5, 7.1 - 7.4', '2026-10-23', 'BIOLOGI8BB',
+      [['Leder nervimpulserna från synsinnescellerna till syncentrum.', 'F. Synnerv', true, 'F. Synnerv'], [EKO_V1, 'A. Ekologi', true, 'A. Ekologi']],
+      [['Leder nervimpulserna från synsinnescellerna till syncentrum.', 'F. Synnerv', true, 'F. Synnerv'], [EKO_V1, 'A. Ekologi', true, 'A. Ekologi']]);
+    const m = fragematris(s, { klassId: 'k', amneId: 'bi' });
+    expect(m.fragor.map((f) => f.begrepp).sort()).toEqual(['Ekologi', 'Synnerv']);   // två kolumner; alternativbokstaven F är borta ur begreppet
+    const syn = m.fragor.findIndex((f) => f.begrepp === 'Synnerv');
+    expect(m.fragor[syn].fraga).toBe('Leder nervimpulserna från synsinnescellerna till syncentrum.');
+    expect(m.rader.map((r) => r.celler[syn]?.procent)).toEqual([50, 100]);
+  });
+
+  it('Del 242: ett begrepp som är rätt svar på två frågor i ETT quiz hindrar inte sammanslagningen i de andra', () => {
+    // Quiz 1 och 3 har en fråga med svaret ekologi (omskriven emellan); quiz 2 har två frågor med det svaret
+    let s = forhor(grund(), 'Bi 4.1', '2026-08-21', 'Biologi41', [[EKO_V1, 'A. ekologi', true, 'A. ekologi']], [[EKO_V1, 'A. ekologi', true, 'A. ekologi']]);
+    s = forhor(s, 'Bi 4.1b', '2026-08-24', 'Biologi41',
+      [[EKO_V1, 'A. ekologi', true, 'A. ekologi'], [BIOTOP, 'A. ekologi', true, 'A. ekologi']],
+      [[EKO_V1, 'A. ekologi', true, 'A. ekologi'], [BIOTOP, 'A. ekologi', true, 'A. ekologi']]);
+    s = forhor(s, 'Bi 4.1-4.2', '2026-08-28', 'Biologi412', [[EKO_V2, 'C. ekologi', true, 'C. ekologi']], [[EKO_V2, 'C. ekologi', true, 'C. ekologi']]);
+    const m = fragematris(s, { klassId: 'k', amneId: 'bi' });
+    expect(m.fragor.map((f) => f.fraga)).toEqual([EKO_V2, BIOTOP]);   // ekologi-frågan är EN kolumn över alla tre quiz
+    expect(m.rader.map((r) => r.celler[0] !== null)).toEqual([true, true, true]);
+    expect(m.rader.map((r) => r.celler[1] !== null)).toEqual([false, true, false]);
   });
 
   it('hela vägen från Socrative-rapporten: omskriven fråga med omkastade alternativ blir en kolumn', () => {

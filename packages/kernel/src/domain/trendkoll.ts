@@ -19,16 +19,11 @@ import { elevernaIKlassen } from './struktur.js';
 import type { Elev, Struktur } from './typer.js';
 import type { Resultat, ResultatKalla } from './resultat.js';
 import { enaFragorPaBegrepp, fragenyckel } from './fragaidentitet.js';
+import { svarNyckel, utanAlternativ } from './svarsform.js';
 
-/** 'B • ekosystem' → 'ekosystem' — svarstexten utan alternativbokstav och punkt. */
+/** 'B • ekosystem' → 'ekosystem' — svarstexten utan alternativbokstav och punkt (se svarsform.ts). */
 export function svarText(svar: string): string {
-  // Socrative skriver 'B • biotop', 'B. biotop' eller 'b) biotop' — bokstaven följs av punkt, parentes eller bullet
-  return svar.replace(/^[a-e]\s*(?:[.)]|[•·])\s*/i, '').replace(/[•·]/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function svarNyckel(svar: string): string {
-  // Socrative skriver 'A. • ekologi'; alternativbokstaven räcker inte, texten avgör
-  return svar.toLowerCase().replace(/^[a-e]\s*[.)]\s*/i, '').replace(/[•·]/g, ' ').replace(/\s+/g, ' ').trim();
+  return utanAlternativ(svar);
 }
 
 /** Sant/falskt/null (obesvarad eller okänt facit) för ett svar. */

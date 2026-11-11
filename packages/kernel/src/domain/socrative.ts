@@ -13,6 +13,7 @@
  *   Class_2026_08_20__08_49_QZ_Biologi_4_1_Begrepp.xlsx
  */
 import type { PlaneradLektion } from './typer.js';
+import { svarNyckel } from './svarsform.js';
 
 export type Cell = string | number | null | undefined;
 
@@ -42,14 +43,31 @@ export interface SocrativeRapport {
  * Härleder facit ur rapporten: elever med full poäng har alla rätt, så deras
  * svar ÄR nyckeln. Saknas sådana elever används det vanligaste svaret bland
  * dem som har högst poäng, och frågan lämnas null om det står oavgjort.
+ *
+ * Del 242 · Det är bara en första gissning när ingen har alla rätt: den bästa eleven har ju fel på något,
+ * och då blev elevens felsvar "facit". Nyckeln justeras därför tills den förklarar ALLA elevers poäng så
+ * bra som möjligt — varje elevs antal svar som stämmer med nyckeln ska vara lika med elevens Score (#).
+ * Ett byte av svar på en fråga görs bara när det minskar den sammanlagda avvikelsen.
  */
 export function harledSvarsnyckel(rader: SocrativeElevRad[], antalFragor: number): Array<string | null> {
+  return harledSvarsnyckelMedKvalitet(rader, antalFragor).nyckel;
+}
+
+export interface HarleddSvarsnyckel {
+  nyckel: Array<string | null>;
+  /** Summan över eleverna av |antal svar som stämmer med nyckeln − elevens poäng|. 0 = nyckeln förklarar allas poäng. */
+  avvikelse: number;
+  /** Nyckeln går att lita på: den förklarar allas poäng exakt och minst en elev har svarat. */
+  exakt: boolean;
+}
+
+export function harledSvarsnyckelMedKvalitet(rader: Array<Pick<SocrativeElevRad, 'deltog' | 'poang' | 'maxPoang' | 'svar'>>, antalFragor: number): HarleddSvarsnyckel {
   const svarande = rader.filter((r) => r.deltog && r.svar !== undefined && r.svar.length > 0);
-  if (svarande.length === 0 || antalFragor === 0) return new Array<string | null>(antalFragor).fill(null);
+  if (svarande.length === 0 || antalFragor === 0) return { nyckel: new Array<string | null>(antalFragor).fill(null), avvikelse: 0, exakt: false };
   const basta = Math.max(...svarande.map((r) => r.poang));
   const topp = svarande.filter((r) => r.poang === basta);
   const kallor = topp.length > 0 ? topp : svarande;
-  return Array.from({ length: antalFragor }, (_, i) => {
+  const start = Array.from({ length: antalFragor }, (_, i) => {
     const rakna = new Map<string, number>();
     for (const r of kallor) {
       const v = (r.svar?.[i] ?? '').trim();
@@ -61,6 +79,67 @@ export function harledSvarsnyckel(rader: SocrativeElevRad[], antalFragor: number
     if (sorterad.length > 1 && sorterad[0][1] === sorterad[1][1]) return null;
     return sorterad[0][0];
   });
+
+  // Jämför på svarstexten (utan alternativbokstav). Poängen kan bara tolkas som "antal rätt" när varje fråga ger en poäng.
+  const norm = svarande.map((r) => Array.from({ length: antalFragor }, (_, j) => svarNyckel((r.svar?.[j] ?? '').trim())));
+  const nyckel: Array<string | null> = start.map((v) => (v === null ? null : svarNyckel(v)));
+  const traffar = norm.map((rad) => rad.reduce((n, v, j) => n + (v !== '' && v === nyckel[j] ? 1 : 0), 0));
+  const avvikelseAv = () => svarande.reduce((a, r, s) => a + Math.abs(traffar[s] - r.poang), 0);
+  let avvikelse = avvikelseAv();
+  if (svarande.every((r) => r.maxPoang === antalFragor) && avvikelse > 0) {
+    const kandidater = Array.from({ length: antalFragor }, (_, j) => [...new Set(norm.map((rad) => rad[j]).filter((v) => v !== ''))]);
+    const traff = (s: number, j: number, k: string | null) => (norm[s][j] !== '' && norm[s][j] === k ? 1 : 0);
+    const bytPar = (): boolean => {
+      for (let a = 0; a < antalFragor; a++) for (let b = a + 1; b < antalFragor; b++) {
+        for (const ka of kandidater[a]) for (const kb of kandidater[b]) {
+          if (ka === nyckel[a] || kb === nyckel[b]) continue;   // byten av en fråga i taget är redan prövade
+          let summa = 0;
+          for (let s = 0; s < svarande.length && summa < avvikelse; s++) {
+            summa += Math.abs(traffar[s] - traff(s, a, nyckel[a]) + traff(s, a, ka) - traff(s, b, nyckel[b]) + traff(s, b, kb) - svarande[s].poang);
+          }
+          if (summa < avvikelse) {
+            for (let s = 0; s < svarande.length; s++) traffar[s] += traff(s, a, ka) - traff(s, a, nyckel[a]) + traff(s, b, kb) - traff(s, b, nyckel[b]);
+            nyckel[a] = ka; nyckel[b] = kb; avvikelse = summa;
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+    for (let varv = 0; varv < 25 && avvikelse > 0; varv++) {
+      let battre = false;
+      for (let j = 0; j < antalFragor; j++) {
+        let basta2 = nyckel[j]; let lagst = avvikelse;
+        for (const k of kandidater[j]) {
+          if (k === nyckel[j]) continue;
+          let a = 0;
+          for (let s = 0; s < svarande.length; s++) {
+            const v = norm[s][j];
+            a += Math.abs(traffar[s] - (v !== '' && v === nyckel[j] ? 1 : 0) + (v === k ? 1 : 0) - svarande[s].poang);
+          }
+          if (a < lagst) { lagst = a; basta2 = k; }
+        }
+        if (basta2 !== nyckel[j]) {
+          for (let s = 0; s < svarande.length; s++) { const v = norm[s][j]; traffar[s] += (v === basta2 ? 1 : 0) - (v !== '' && v === nyckel[j] ? 1 : 0); }
+          nyckel[j] = basta2; avvikelse = lagst; battre = true;
+        }
+      }
+      if (!battre) {
+        // Fast med en avvikelse kvar: ibland måste två frågor bytas samtidigt (två elever med samma felsvar kan
+        // lura in ett byte i taget). Pröva par av frågor; hittas ett bättre par fortsätter bytena en i taget.
+        if (!bytPar()) break;
+      }
+    }
+  }
+  // Tillbaka till svaret som det står i rapporten: startgissningen om den gäller, annars den vanligaste skrivningen
+  const ut = nyckel.map((k, j) => {
+    if (k === null) return null;
+    if (start[j] !== null && svarNyckel(start[j]!) === k) return start[j];
+    const rakna = new Map<string, number>();
+    for (const r of svarande) { const v = (r.svar?.[j] ?? '').trim(); if (v !== '' && svarNyckel(v) === k) rakna.set(v, (rakna.get(v) ?? 0) + 1); }
+    return [...rakna.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  });
+  return { nyckel: ut, avvikelse, exakt: avvikelse === 0 && ut.some((k) => k !== null) };
 }
 
 function text(c: Cell): string { return c === null || c === undefined ? '' : String(c).trim(); }

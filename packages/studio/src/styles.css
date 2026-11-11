@@ -1387,3 +1387,11 @@ input.fel { border-color: #B71C1C; }
 
 /* Del 241 · Sparfel: lagringen är full */
 .status.warn.sparfel { border-left: 5px solid #b3392f; margin: 0 0 10px; }
+
+/* Del 242 · Vakten vid quizen: elever i fel klass och quiz med för få svar */
+.quizvakt { margin: 0 0 10px; display: flex; flex-direction: column; gap: 6px; }
+.quizfraga { background: #FFF6E5; border: 1px solid #EBC98A; border-left: 5px solid #C77B0A; border-radius: 10px; padding: 10px 14px; }
+.quizfraga p { margin: 0 0 6px; }
+.quizfraga ul { margin: 0 0 8px; padding-left: 20px; }
+.quizfraga li { margin-bottom: 4px; }
+.quizknappar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }

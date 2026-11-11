@@ -10,13 +10,14 @@
  *
  *   – svaret är inget begrepp (sant/falskt, ja/nej, tal och uträkningar)
  *   – två olika frågor i samma quiz har samma rätta svar (begreppet pekar då
- *     inte ut EN fråga)
+ *     inte ut EN fråga i just det quizet)
  *   – facit saknas och ingen elev har svarat rätt
  *
- * Begreppet gäller inom ämne och kapitel: samma ord i ett annat kapitel är en
- * annan fråga. Frågor med identisk text hålls ihop precis som tidigare.
+ * Del 242 · Begreppet gäller inom ämnet — inte per kapitel. De kumulativa läxförhören spänner över flera
+ * kapitel ('6.1 - 6.5, 7.1 - 7.4') medan exit ticketen hör till ett ('Nervsystemet 7.4'); med kapitlet i
+ * nyckeln hamnade samma fråga i två kolumner så fort den skrivits om. Frågor med identisk text hålls ihop
+ * precis som tidigare.
  */
-import { koderForProv } from './delkapitelkoder.js';
 import { begreppUrFacit, type FragaSvar, type Resultat, type ResultatKalla } from './resultat.js';
 
 const SOCRATIVE: ReadonlySet<ResultatKalla> = new Set<ResultatKalla>(['socrative-laxforhor', 'socrative-exit', 'socrative-ovning']);
@@ -85,22 +86,15 @@ export function enaFragorPaBegrepp(rs: Resultat[]): Resultat[] {
   const tidAv = (g: Resultat[]): string => g.map((r) => r.tid).filter((t): t is string => t !== undefined).sort()[0] ?? '';
   const tillfallen = [...grupper.values()]
     .map((g) => {
-      const kapitel = koderForProv(g[0].prov, g[0].rum)[0]?.split('.')[0] ?? '';
-      return { datum: g[0].datum, tid: tidAv(g), omfang: `${g[0].amneId ?? ''}|${kapitel}`, resultat: g, begrepp: begreppPerFraga(g) };
+      const begrepp = begreppPerFraga(g);
+      // Ett begrepp som i det här quizet är rätt svar på flera frågor pekar inte ut EN fråga här — de frågorna
+      // går på sin text. I ett annat quiz, där begreppet bara hör till en fråga, gäller det som vanligt.
+      const antal = new Map<string, number>();
+      for (const b of begrepp.values()) if (b !== null) antal.set(b, (antal.get(b) ?? 0) + 1);
+      const tvetydiga = new Set([...antal].filter(([, n]) => n > 1).map(([b]) => b));
+      return { datum: g[0].datum, tid: tidAv(g), omfang: g[0].amneId ?? '', resultat: g, begrepp, tvetydiga };
     })
     .sort((a, b) => a.datum.localeCompare(b.datum) || a.tid.localeCompare(b.tid));
-
-  // Begrepp som i något quiz är rätt svar på flera frågor pekar inte ut en fråga
-  const tvetydiga = new Set<string>();
-  for (const t of tillfallen) {
-    const sedda = new Set<string>();
-    for (const b of t.begrepp.values()) {
-      if (b === null) continue;
-      const nod = `${t.omfang}|${b}`;
-      if (sedda.has(nod)) tvetydiga.add(nod);
-      sedda.add(nod);
-    }
-  }
 
   // Slå ihop: frågetext ↔ begrepp (union–find). Textnoderna börjar med 'f|', begreppsnoderna med 'b|'.
   const foralder = new Map<string, string>();
@@ -114,7 +108,7 @@ export function enaFragorPaBegrepp(rs: Resultat[]): Resultat[] {
   let kopplingar = 0;
   for (const t of tillfallen) {
     for (const [n, b] of t.begrepp) {
-      if (b === null || tvetydiga.has(`${t.omfang}|${b}`)) continue;
+      if (b === null || t.tvetydiga.has(b)) continue;
       ena(`f|${n}`, `b|${t.omfang}|${b}`);
       kopplingar += 1;
     }
