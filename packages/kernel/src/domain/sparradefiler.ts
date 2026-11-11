@@ -18,6 +18,8 @@ export interface SparradFil {
   prov?: string;
   datum?: string;
   amneId?: string;
+  /** Socrative-rummet filen kördes i (Del 244: rapportlistan matchar på rum). */
+  rum?: string;
   /** Andel av de möjliga svaren (0–1) när filen spärrades. */
   andel?: number;
 }

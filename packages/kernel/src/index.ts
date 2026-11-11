@@ -24,6 +24,7 @@ export * from './domain/svarsform.js';
 export * from './domain/sparradefiler.js';
 export * from './domain/quizvakt.js';
 export * from './domain/amnesnamn.js';
+export * from './domain/rapportlista.js';
 export * from './domain/delkapiteltrend.js';
 export * from './domain/elevanalys.js';
 export * from './domain/enkelrapport.js';

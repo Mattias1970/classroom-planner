@@ -28,7 +28,7 @@ import {
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
   amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   arFilImporterad, arRatt, andraKalla, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
-  arFilSparrad, havSparr, klassForRapport, LAGSTA_SVARSANDEL, rattaFacit, rosterUtanAndraKlasser, sparraFilnamn, svarsandelForRapport, type Svarsandel,
+  arFilSparrad, havSparr, klassForRapport, rapportForFil, rumInfo, LAGSTA_SVARSANDEL, rattaFacit, rosterUtanAndraKlasser, sparraFilnamn, svarsandelForRapport, type Svarsandel,
   delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, enkelRapport, studieguide, rapportOversikt, forklaring, niva, type ForklaringId,
   omfangFilter, kapitelVeckor, OMFANG_NAMN, type Omfang, type OmfangResultat, begreppForFraga, harmoniseraOvningar, TYPNAMN, type FragaSvar, tolkaSocrativeFilnamn, tolkaSocrativeRapport,
   importeraRoster, laggTillSaknadeElever, rosterNamn, tilldelaGrupper, tolkaGruppLista, tolkaSocrativeRoster, type RosterRad,
@@ -65,6 +65,7 @@ import { Kortrad } from './Kortrad.js';
 import { arkiveraFiler, tagVantandeFiler, uppladdningsText, useVantandeFiler } from './resultatarkiv.js';
 import { ArkivBevakning } from './ArkivBevakning.js';
 import { QuizVakt } from './QuizVakt.js';
+import { Rapportlista } from './Rapportlista.js';
 import { Skal, Kort, type Filter, type V3Vy } from './v3/Skal.js';
 import { Oversikt } from './v3/Oversikt.js';
 import { Lasaret } from './Lasaret.js';
@@ -6106,6 +6107,11 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, o
     sparrad: boolean;
     /** Del 242 · Läraren har valt att importera filen trots få svar. */
     importeraTrotsFaSvar?: boolean;
+    /** Del 244 · Rummet är inget av våra (t.ex. SO8BB) — filen sorteras bort om läraren inte tar med den ändå. */
+    annatRum: boolean;
+    taMedAnnatRum?: boolean;
+    /** Del 244 · Finns filen i rapportlistan från Socrative? null = ingen lista inläst. */
+    iListan: boolean | null;
   }
   const [filRader, setFilRader] = useState<FilRad[]>([]);
   // Del 203: filerna själva behålls för uppladdning till resultatarkivet; filer hämtade därifrån laddas inte upp igen
@@ -6155,6 +6161,8 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, o
           klassId: filKlass.id, klassNamn: filKlass.namn, klassSkal: rk.skal,
           andel: svarsandelForRapport(s, filKlass.id, datum, rapport.rader, rapport.fragor.length),
           sparrad: arFilSparrad(s, fil.name),
+          annatRum: rumInfo(s, rapport.rum).slag === 'annat',
+          iListan: (s.socrativeRapporter ?? []).length === 0 ? null : rapportForFil(s, { filnamn: fil.name, rum: rapport.rum, quiz: rapport.quiz }) !== null,
           kalla: k?.kalla ?? null,
           datum,
           tid: k?.tid ?? null,
@@ -6175,7 +6183,7 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, o
       } catch (fel) {
         ut.push({ filnamn: fil.name, quiz: '—', rum: '—', amneId: null, amnesNamn: '—', kalla: null, tid: null,
           datum: '', beskrivning: fel instanceof Error ? fel.message : 'kunde inte läsas',
-          klassId: klass.id, klassNamn: klass.namn, klassSkal: 'vald', andel: null, sparrad: false,
+          klassId: klass.id, klassNamn: klass.namn, klassSkal: 'vald', andel: null, sparrad: false, annatRum: false, iListan: null,
           matchade: 0, omatchadeNamn: [], deltog: 0, roster: [], rader: [], redanInne: false });
       }
     }
@@ -6184,8 +6192,9 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, o
   // Del 242: under 30 % av elevernas möjliga svar = troligen ett felstartat quiz — importeras först när läraren sagt ja
   const faSvar = (f: FilRad) => f.andel !== null && f.andel.andel < LAGSTA_SVARSANDEL;
   const importerbara = filRader.filter((f) => f.amneId !== null && f.kalla !== null && (importeraOm || !f.redanInne) && f.rader.length > 0
-    && !f.sparrad && (!faSvar(f) || f.importeraTrotsFaSvar === true));
-  const fragaOmFaSvar = filRader.filter((f) => faSvar(f) && !f.sparrad && f.importeraTrotsFaSvar !== true && f.rader.length > 0 && (importeraOm || !f.redanInne));
+    && !f.sparrad && (!faSvar(f) || f.importeraTrotsFaSvar === true) && (!f.annatRum || f.taMedAnnatRum === true));
+  const fragaOmFaSvar = filRader.filter((f) => faSvar(f) && !f.sparrad && f.importeraTrotsFaSvar !== true && f.rader.length > 0 && (importeraOm || !f.redanInne)
+    && (!f.annatRum || f.taMedAnnatRum === true));
   const iAnnanKlass = filRader.filter((f) => f.klassId !== klass.id);
   // Namn i rapporternas roster som inte finns i filens klass (även avstängda elever räknas som befintliga) — och inte heller
   // i någon annan klass: de hör hemma där och läggs aldrig till här (Del 242)
@@ -6349,6 +6358,7 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, o
       {/* ── Import: Socrative-filer ── */}
       <div className="uppg-kort">
         <b>📥 Socrative quiz-rapporter</b> <small className="muted">Välj klassrapporter (xlsx). Rummet i filen matchas mot planens läxförhör/exit-rum (t.ex. Biologi41) och pekar ut ämne, lektion och källa; för rum som används till allt (Matte8B) avgör starttiden i filnamnet (UTC → svensk tid) enligt BAM-rytmen. Redan importerade filer hoppas över.</small>
+        <Rapportlista s={s} kor={kor} onFiler={(filer) => { void lasFiler(filer); }} />
         <div className="rad" style={{ marginTop: 6 }}>
           <input type="file" multiple accept=".xlsx" aria-label="Socrative-filer"
             onChange={(e) => { void lasFiler(e.target.files); e.target.value = ''; }} />
@@ -6410,7 +6420,7 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, o
             <tbody>{filRader.map((f, i) => (
               <tr key={i}>
                 <td title={f.filnamn}>{f.filnamn.slice(0, 22)}…</td>
-                <td>{f.quiz}</td>
+                <td>{f.quiz}{f.iListan === true ? <small className="muted" title="Rapporten finns i rapportlistan från Socrative"> · 📋 i listan</small> : f.iListan === false ? <small className="muted" title="Rapporten finns inte i den inlästa rapportlistan — listan kan behöva uppdateras"> · ej i listan</small> : null}</td>
                 <td>{f.klassId !== klass.id ? <b title={f.klassSkal === 'rum' ? `Kördes i rummet ${f.rum}` : `Eleverna finns i ${f.klassNamn}`}>{f.klassNamn} · </b> : null}{f.amnesNamn}</td>
                 <td className="small muted">{f.tid ?? '—'}</td>
                 <td>
@@ -6425,6 +6435,8 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, o
                 <td>{f.matchade}{f.omatchadeNamn.length > 0 && <small className="muted" title={f.omatchadeNamn.join(', ')}> · ⚠ {f.omatchadeNamn.length} omatchade</small>}</td>
                 <td>{f.sparrad ? <span className="st-krav ej" title="Filen har avvisats tidigare och laddas inte igen">🚫 spärrad{' '}
                     <button className="linkbtn" onClick={() => { kor(() => havSparr(lasStruktur(), f.filnamn), `Spärren hävd för ${f.filnamn}.`); setFilRader(filRader.map((x, j) => (j === i ? { ...x, sparrad: false } : x))); }}>häv</button></span>
+                  : f.annatRum && f.taMedAnnatRum !== true ? <span className="st-krav ej" title="Rummet hör inte till något av dina ämnen">annat rum ({f.rum}) — sorteras bort{' '}
+                    <button className="linkbtn" aria-label={`Ta med ${f.filnamn} ändå`} onClick={() => setFilRader(filRader.map((x, j) => (j === i ? { ...x, taMedAnnatRum: true } : x)))}>ta med ändå</button></span>
                   : f.redanInne ? <span className="muted">redan importerad</span>
                   : f.kalla === null || f.amneId === null ? <span className="st-krav ej">importeras ej</span>
                   : faSvar(f) && f.importeraTrotsFaSvar !== true ? <span className="st-krav ej">för få svar — väntar på ditt val</span>
@@ -6449,7 +6461,7 @@ function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, o
                   <li key={f.filnamn}>
                     <b>{f.quiz}</b> ({f.klassNamn} · {f.datum}{f.tid !== null ? ` ${f.tid}` : ''}) — {Math.round((f.andel?.andel ?? 0) * 100)} %: {f.andel?.besvarade} av {f.andel?.mojliga} möjliga svar, {f.deltog} elever{' '}
                     <button className="btn sm" aria-label={`Spärra ${f.filnamn}`} onClick={() => {
-                      kor(() => sparraFilnamn(lasStruktur(), { filnamn: f.filnamn, orsak: 'fa-svar', sparrad: new Date().toISOString().slice(0, 10), prov: f.quiz, datum: f.datum, ...(f.amneId !== null ? { amneId: f.amneId } : {}), ...(f.andel !== null ? { andel: f.andel.andel } : {}) }),
+                      kor(() => sparraFilnamn(lasStruktur(), { filnamn: f.filnamn, orsak: 'fa-svar', sparrad: new Date().toISOString().slice(0, 10), prov: f.quiz, datum: f.datum, rum: f.rum, ...(f.amneId !== null ? { amneId: f.amneId } : {}), ...(f.andel !== null ? { andel: f.andel.andel } : {}) }),
                         `${f.quiz} (${f.datum}) laddas inte — filnamnet är spärrat och erbjuds inte igen.`);
                       setFilRader(filRader.filter((x) => x.filnamn !== f.filnamn));
                     }}>Nej — spärra filen</button>{' '}

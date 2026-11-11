@@ -173,6 +173,7 @@ export function sparraFil(s: Struktur, filId: string, idag: string): Struktur {
   };
   return sparraFilnamn(utan, {
     filnamn: post.filnamn, orsak: 'fa-svar', sparrad: idag, prov: post.prov, amneId: post.amneId,
+    ...(post.rum !== undefined ? { rum: post.rum } : {}),
     ...(post.datum !== undefined ? { datum: post.datum } : {}), ...(andel !== null ? { andel: andel.andel } : {}),
   });
 }

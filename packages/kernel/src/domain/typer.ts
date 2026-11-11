@@ -465,6 +465,8 @@ export interface Struktur {
   filregister?: import('./resultat.js').FilPost[];
   /** Del 242 · Resultatfiler som läraren avvisat (t.ex. felstartade quiz med under 30 % svar) — laddas inte igen. */
   sparradeFiler?: import('./sparradefiler.js').SparradFil[];
+  /** Del 244 · Rapportlistan från Socratives sida Reports — facit över vilka rapporter som finns (se rapportlista.ts). */
+  socrativeRapporter?: import('./rapportlista.js').ListadRapport[];
   /** Del 158: namngivna planeringsutkast (planeringstavlan). */
   planUtkast?: PlanUtkast[];
   /** Del 164: lärarens egen status/text i utvärderingen inför utvecklingssamtal, per 'elevId|amneId'. */

@@ -57,6 +57,14 @@ Bokdata är läsbar men aldrig skrivbar från appen (`classroom-planner-data`). 
 - **Samma svar = samma fråga** — `utanAlternativ` tar bort alternativbokstaven A–J (riktiga rapporter har upp till F), frågor enas på begreppet inom hela ämnet (inte per kapitel — läxförhören är kumulativa), och facit härleds så att nyckeln förklarar allas poäng (`harledSvarsnyckelMedKvalitet`) när ingen hade alla rätt. `rattaFacit` rättar redan importerade quiz vid start (meddelas, går att ångra). Två frågor med samma svar i samma quiz hålls isär.
 - **Bildfrågor är egna frågor (Del 243)** — `arBildfraga` känner igen frågor som pekar i en bild ("Vad pekar nummer 6 på?"). De knyts aldrig till begreppet: en bildfråga och en textfråga med samma rätta svar slås inte ihop. Samma bildtext med ett annat rätt svar (ny bild) blir en egen fråga, visad som "Vad pekar nummer 1 på? (Hornhinna)"; stavningsvarianter av samma begrepp räknas som ett.
 
+## Rapportlistan från Socrative (Del 244)
+
+- `Struktur.socrativeRapporter` är facit över vilka rapporter som finns: läraren klistrar in listan från Socrative → Reports (även filtret *From Deleted Rooms*), `tolkaRapportlista` läser namn, datum, klockslag och rum.
+- **Tiden i listan är när aktiviteten avslutades (svensk tid); filnamnets tid är starten (UTC).** Ett rum kör en aktivitet i taget, så en fil hör till den rapport i samma rum vars fönster (förra rapportens slut … rapportens slut) rymmer filens start — och quiznamnet ska stämma (`rapportlage`, `rapportForFil`). En aktivitet kan ligga öppen i flera dagar.
+- Läge per rapport: importerad (typ + svarsandel; "riktigt test" = minst 30 % av svaren), spärrad, saknas, annat rum, utanför läsåret. `summeraRapporter` ger raden per rum.
+- **Rummen vi använder** (`rumInfo`): klassrum (`socrativeRum`), rum i planeringen, begreppsrum (ämne + siffror), ämnesrum (börjar på ett av lärarens ämnen). Allt annat (t.ex. `SO8BB`) är inte vårt: det sorteras bort i listan, och en sådan fil importeras inte utan "ta med ändå".
+- UI: `Rapportlista.tsx` under 📥 Importera → Socrative — släppruta för filer, tabellen per rum och listan över rapporter som saknas.
+
 ## Vanliga fel
 
 - **0 matchade resultat** → klassen saknar elever. Importera Socrative-rostern först.
