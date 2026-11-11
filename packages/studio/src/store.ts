@@ -5,7 +5,7 @@
  * här finns bara läs/skriv.
  */
 import { useSyncExternalStore } from 'react';
-import { saneraIdn, tomStruktur, type Struktur } from '@planner/kernel';
+import { saneraIdn, tomStruktur, uppdateraAmnesnamn, type Struktur } from '@planner/kernel';
 
 const KEY = 'classroom-planner.studio.v2';
 const mem = new Map<string, string>();
@@ -83,7 +83,8 @@ export function lasStruktur(): Struktur {
     // samma id) — då markeras/öppnas fel ämne i trädet. Dubbletter döps om,
     // och resultatet SPARAS direkt: annars får dubbletterna nya id:n vid varje
     // läsning, vald-id:t pekar fel och panelen blir blank.
-    const ren = saneraIdn(inlast);
+    // Del 243: ämnen som bytt namn ('Matematik spec' → 'MaNOTk-stöd') döps om och sparas direkt
+    const ren = uppdateraAmnesnamn(saneraIdn(inlast));
     const renText = JSON.stringify(ren);
     if (renText !== JSON.stringify(inlast)) { lsSet(KEY, renText); return minns(lsGet(KEY), ren); }
     return minns(raw, ren);
@@ -108,5 +109,5 @@ export function importJson(text: string): Struktur {
   if (raw.schema !== 'classroom-planner-studio' || !raw.struktur) {
     throw new Error('Filen är inte en Studio-backup (schema "classroom-planner-studio").');
   }
-  return { ...tomStruktur(), ...raw.struktur };
+  return uppdateraAmnesnamn({ ...tomStruktur(), ...raw.struktur });
 }

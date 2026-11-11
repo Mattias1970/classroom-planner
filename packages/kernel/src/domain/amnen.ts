@@ -11,11 +11,12 @@
 export const STANDARD_AMNEN = ['Matematik', 'Biologi', 'Fysik', 'Kemi', 'Teknik'] as const;
 
 /** Stödämnen: fritt planerade ämnen utan bok — varje schemapass blir en planerbar lektion. */
-export const STOD_AMNEN = ['Matematik stöd', 'Matematik spec', 'Ma/NO-stöd'] as const;
+// Del 243: 'Matematik spec' heter 'MaNOTk-stöd' (sparad data döps om vid inläsning, se amnesnamn.ts)
+export const STOD_AMNEN = ['Matematik stöd', 'MaNOTk-stöd', 'Ma/NO-stöd'] as const;
 
 /** Är ämnet ett stödämne (planeras fritt, utan bok)? */
 export function arStodAmne(amnesNamn: string): boolean {
-  return (STOD_AMNEN as readonly string[]).includes(amnesNamn);
+  return (STOD_AMNEN as readonly string[]).includes(amnesNamn) || amnesNamn === 'Matematik spec';
 }
 
 const HALVKLASS = new Set<string>(['Biologi', 'Fysik', 'Kemi', 'Teknik']);
@@ -45,6 +46,7 @@ export function amnesForkortning(amnesNamn: string): string {
   const n = amnesNamn.trim();
   const bas: Record<string, string> = { Matematik: 'Ma', Biologi: 'Bi', Fysik: 'Fk', Kemi: 'Ke', Teknik: 'Tk' };
   if (bas[n] !== undefined) return bas[n];
+  if (n === 'MaNOTk-stöd' || n === 'Matematik spec') return 'MaNOTk';
   for (const [namn, kort] of Object.entries(bas)) {
     if (n.startsWith(`${namn} `)) return `${kort} ${n.slice(namn.length + 1)}`;
   }

@@ -55,7 +55,7 @@ Bokdata är läsbar men aldrig skrivbar från appen (`classroom-planner-data`). 
 - **För få svar** — ett quiz med under `LAGSTA_SVARSANDEL` (30 %) av elevernas möjliga svar (`svarsandelForRapport`: besvarade frågor / elever i gruppen × frågor) är ett felstartat quiz. Vid import frågar appen ("Nej — spärra filen" / "Ladda ändå"); redan importerade pekas ut av `filerMedFaSvar` och frågan ställs överst i appen.
 - **Spärrade filer** — `Struktur.sparradeFiler` minns filnamnet (`filnamnsNyckel` tar bort " (1)" och skiftläge). En spärrad fil importeras inte igen, varken från datorn eller från resultatarkivet (`jamforArkiv` räknar den inte som ny). Spärren hävs under Importera eller i granskningstabellen.
 - **Samma svar = samma fråga** — `utanAlternativ` tar bort alternativbokstaven A–J (riktiga rapporter har upp till F), frågor enas på begreppet inom hela ämnet (inte per kapitel — läxförhören är kumulativa), och facit härleds så att nyckeln förklarar allas poäng (`harledSvarsnyckelMedKvalitet`) när ingen hade alla rätt. `rattaFacit` rättar redan importerade quiz vid start (meddelas, går att ångra). Två frågor med samma svar i samma quiz hålls isär.
-- Kvar att lösa: samma frågetext med olika rätt svar i olika quiz (t.ex. "Vad pekar nummer 1 på?" med ny bild) enas fortfarande på texten.
+- **Bildfrågor är egna frågor (Del 243)** — `arBildfraga` känner igen frågor som pekar i en bild ("Vad pekar nummer 6 på?"). De knyts aldrig till begreppet: en bildfråga och en textfråga med samma rätta svar slås inte ihop. Samma bildtext med ett annat rätt svar (ny bild) blir en egen fråga, visad som "Vad pekar nummer 1 på? (Hornhinna)"; stavningsvarianter av samma begrepp räknas som ett.
 
 ## Vanliga fel
 

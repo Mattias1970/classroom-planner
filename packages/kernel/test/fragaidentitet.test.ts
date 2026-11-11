@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  arRatt, aterkommandeFel, begreppsnyckel, enaFragorPaBegrepp, fragematris, importeraResultat, laggTillAmne, laggTillElev, laggTillKlass,
+  arBildfraga, arRatt, aterkommandeFel, begreppsnyckel, enaFragorPaBegrepp, fragematris, importeraResultat, laggTillAmne, laggTillElev, laggTillKlass,
   laggTillSkolar, laggTillTjanst, tolkaSocrativeRapport, tomStruktur, trendkoll, type FragaSvar, type Struktur,
 } from '../src/index.js';
 
@@ -189,5 +189,49 @@ describe('Del 238 · Frågans identitet är begreppet (det rätta svaret)', () =
     const sena = (s.resultat ?? []).filter((r) => r.datum === '2026-08-28');
     for (const r of sena) expect(ut).toContain(r); // senaste formuleringen: inget att skriva om
     expect(ut.filter((r) => r.datum === '2026-08-21').every((r) => r.svar?.[0].fraga === EKO_V2)).toBe(true);
+  });
+});
+
+describe('Del 243 · Bildfrågor är egna frågor', () => {
+  const BILD6 = 'Vad pekar nummer 6 på?';
+  const CHEF = 'Cellens ”chef” och styr det mesta som händer i cellen.';
+  const kolumner = (s: Struktur) => [...new Set(enaFragorPaBegrepp(s.resultat ?? []).flatMap((r) => (r.svar ?? []).map((sv) => sv.fraga)))].sort();
+
+  it('arBildfraga: frågor som pekar i en bild — inte ord som bildas eller telefonnummer', () => {
+    for (const f of ['Vad pekar nummer 1 på?', 'Vad visar bilden?', 'Vilken del är markerad med B?', 'Vad heter delen vid pilen?', 'Vad är nr 3 i figuren?', 'Vad är siffran 4?']) expect(arBildfraga(f), f).toBe(true);
+    for (const f of [CHEF, 'När en cell delar sig och bildar två exakt likadana celler.', 'Bildas av bukspottkörteln och töms till tunntarmen.',
+      'Kallas arbetsminne, är det minne där vi till exempel lägger ett telefonnummer på minnet i några sekunder.', 'De smaker som våra smaksinnesceller kan uppfatta.']) expect(arBildfraga(f), f).toBe(false);
+  });
+
+  it('en bildfråga och en textfråga med samma svar i olika quiz slås inte ihop', () => {
+    let s = forhor(grund(), 'Exit 6.1', '2026-09-01', 'Biologi61',
+      [[CHEF, 'A. Cellkärna', true, 'A. Cellkärna']], [[CHEF, 'B. Ribosom', false, 'A. Cellkärna']]);
+    s = forhor(s, 'Cellens delar', '2026-09-08', 'BIOLOGI8BB',
+      [[BILD6, 'C. Cellkärna', true, 'C. Cellkärna']], [[BILD6, 'C. Cellkärna', true, 'C. Cellkärna']]);
+    expect(kolumner(s)).toEqual([CHEF, BILD6].sort());
+  });
+
+  it('bildfrågan med samma svar i samma quiz hindrar inte att textfrågan följer sin omskrivna version', () => {
+    const CHEF2 = 'Styr det mesta som händer i cellen och innehåller arvsmassan.';
+    let s = forhor(grund(), 'Förhör 1', '2026-09-01', 'BIOLOGI8BB',
+      [[CHEF, 'A. Cellkärna', true, 'A. Cellkärna'], [BILD6, 'C. Cellkärna', true, 'C. Cellkärna']],
+      [[CHEF, 'B. Ribosom', false, 'A. Cellkärna'], [BILD6, 'C. Cellkärna', true, 'C. Cellkärna']]);
+    s = forhor(s, 'Förhör 2', '2026-09-08', 'BIOLOGI8BB',
+      [[CHEF2, 'D. Cellkärna', true, 'D. Cellkärna'], [BILD6, 'C. Cellkärna', true, 'C. Cellkärna']],
+      [[CHEF2, 'D. Cellkärna', true, 'D. Cellkärna'], [BILD6, 'A. Lysosom', false, 'C. Cellkärna']]);
+    expect(kolumner(s)).toEqual([CHEF2, BILD6].sort());
+  });
+
+  it('samma bildtext med ett annat rätt svar (ny bild) är en ny fråga — begreppet skrivs ut efter texten', () => {
+    const B1 = 'Vad pekar nummer 1 på?';
+    let s = forhor(grund(), 'Cellen', '2026-09-01', 'BIOLOGI8BB', [[B1, 'A. Cellmenbran', true, 'A. Cellmenbran']], [[B1, 'B. Lysosom', false, 'A. Cellmenbran']]);
+    // stavfelet rättat i nästa version: fortfarande samma fråga
+    s = forhor(s, 'Cellen igen', '2026-09-08', 'BIOLOGI8BB', [[B1, 'A. Cellmembran', true, 'A. Cellmembran']], [[B1, 'A. Cellmembran', true, 'A. Cellmembran']]);
+    expect(kolumner(s)).toEqual([B1]);
+    // ny bild (ögat) med samma frågetext: en ny fråga
+    s = forhor(s, 'Ögat', '2026-10-20', 'BIOLOGI8BB', [[B1, 'C. Hornhinna', true, 'C. Hornhinna']], [[B1, 'D. Lins', false, 'C. Hornhinna']]);
+    expect(kolumner(s)).toEqual(['Vad pekar nummer 1 på? (Cellmembran)', 'Vad pekar nummer 1 på? (Hornhinna)']);
+    const m = fragematris(s, { klassId: 'k', amneId: 'bi' });
+    expect(m.fragor.map((f) => f.fraga).sort()).toEqual(['Vad pekar nummer 1 på? (Cellmembran)', 'Vad pekar nummer 1 på? (Hornhinna)']);
   });
 });

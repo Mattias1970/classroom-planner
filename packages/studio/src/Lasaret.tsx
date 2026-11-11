@@ -138,7 +138,11 @@ function NoPerioder({ s, la, kor }: { s: Struktur; la: Skolar; kor: Kor }) {
   const idag = new Date().toISOString().slice(0, 10);
   const klasser = s.klasser.filter((k) => s.tjanster.some((t) => t.id === k.tjanstId && t.skolarId === la.id)).sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
   const grupper = klasser.flatMap((k) => [...new Set(s.amnen.filter((a) => a.klassId === k.id && a.noGrupp !== undefined).map((a) => a.noGrupp!))].map((g) => ({
-    klass: k, amnen: s.amnen.filter((a) => a.klassId === k.id && a.noGrupp === g).sort((a, b) => (a.noOrder ?? 0) - (b.noOrder ?? 0)),
+    // Del 243: delämnena står i den ordning de läses — efter periodens startdatum (sedan slutdatum och blocknummer)
+    klass: k, amnen: s.amnen.filter((a) => a.klassId === k.id && a.noGrupp === g).sort((a, b) => {
+      const pa = noPeriodFor(la, a); const pb = noPeriodFor(la, b);
+      return (pa?.fran ?? '').localeCompare(pb?.fran ?? '') || (pa?.till ?? '').localeCompare(pb?.till ?? '') || (a.noOrder ?? 0) - (b.noOrder ?? 0);
+    }),
   })));
   if (grupper.length === 0) return null;
   return (

@@ -17,6 +17,10 @@
  * kapitel ('6.1 - 6.5, 7.1 - 7.4') medan exit ticketen hör till ett ('Nervsystemet 7.4'); med kapitlet i
  * nyckeln hamnade samma fråga i två kolumner så fort den skrivits om. Frågor med identisk text hålls ihop
  * precis som tidigare.
+ *
+ * Del 243 · Bildfrågor ('Vad pekar nummer 6 på?') är egna frågor. De beskriver inget begrepp utan pekar i en
+ * bild, så de knyts aldrig till begreppet: en bildfråga och en textfråga med samma rätta svar är två olika
+ * frågor, även i olika quiz. Och samma bildtext med ett annat rätt svar (ny bild) är en ny fråga.
  */
 import { begreppUrFacit, type FragaSvar, type Resultat, type ResultatKalla } from './resultat.js';
 
@@ -51,6 +55,32 @@ export function begreppsnyckel(svar: string | undefined | null): string | null {
   if (n === '' || INGET_BEGREPP.has(n)) return null;
   if (/\b(ovan|ovanstående|alternativen|alternativ)$/.test(n) || /^(alla|båda|bägge|ingen|inget|inga)( (av )?(dem|dessa|svaren))?$/.test(n)) return null;
   return n;
+}
+
+/**
+ * Del 243 · En bildfråga hänvisar till en bild i stället för att beskriva begreppet: 'Vad pekar nummer 3 på?',
+ * 'Vad visar bilden?', 'Vilken del är markerad med B?'. ('bildas' och 'telefonnummer' är inga bildord.)
+ */
+const BILDORD = /(?<!\p{L})(pekar|pilen|pilarna|pil\s+\d|bilden|bilderna|bild\s+\d|på\s+bild|figuren|figur\s+\d|(?:nummer|nr\.?|siffran?|bokstaven)\s*(?:\d+|[a-j])(?!\p{L})|markera[dt]e?|inringa[dt]e?)(?!\p{L})/iu;
+export function arBildfraga(fraga: string): boolean {
+  return BILDORD.test(fraga);
+}
+
+/** Två stavningar av samma begrepp ('cellmenbran'/'cellmembran', 'ribosom'/'ribosomer') — inte två olika begrepp. */
+function sammaBegrepp(a: string, b: string): boolean {
+  if (a === b) return true;
+  const [kort, lang] = a.length <= b.length ? [a, b] : [b, a];
+  if (kort.length >= 4 && lang.startsWith(kort) && lang.length - kort.length <= 3) return true;
+  const tillatet = lang.length >= 9 ? 2 : lang.length >= 6 ? 1 : 0;
+  if (tillatet === 0 || lang.length - kort.length > tillatet) return false;
+  // redigeringsavstånd (Levenshtein), en rad i taget
+  let rad = Array.from({ length: kort.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= lang.length; i++) {
+    const ny = [i];
+    for (let j = 1; j <= kort.length; j++) ny[j] = Math.min(rad[j] + 1, ny[j - 1] + 1, rad[j - 1] + (lang[i - 1] === kort[j - 1] ? 0 : 1));
+    rad = ny;
+  }
+  return rad[kort.length] <= tillatet;
 }
 
 /** Begreppet bakom varje fråga i ett tillfälle: facit ur rapporten, annars ett svar som rättats som rätt. */
@@ -89,10 +119,12 @@ export function enaFragorPaBegrepp(rs: Resultat[]): Resultat[] {
       const begrepp = begreppPerFraga(g);
       // Ett begrepp som i det här quizet är rätt svar på flera frågor pekar inte ut EN fråga här — de frågorna
       // går på sin text. I ett annat quiz, där begreppet bara hör till en fråga, gäller det som vanligt.
+      // Del 243: bildfrågor räknas inte — de knyts aldrig till begreppet och gör det därför inte tvetydigt
+      const bild = new Set([...begrepp.keys()].filter((n) => arBildfraga(n)));
       const antal = new Map<string, number>();
-      for (const b of begrepp.values()) if (b !== null) antal.set(b, (antal.get(b) ?? 0) + 1);
+      for (const [n, b] of begrepp) if (b !== null && !bild.has(n)) antal.set(b, (antal.get(b) ?? 0) + 1);
       const tvetydiga = new Set([...antal].filter(([, n]) => n > 1).map(([b]) => b));
-      return { datum: g[0].datum, tid: tidAv(g), omfang: g[0].amneId ?? '', resultat: g, begrepp, tvetydiga };
+      return { datum: g[0].datum, tid: tidAv(g), omfang: g[0].amneId ?? '', resultat: g, begrepp, tvetydiga, bild, bildtillagg: new Map<string, string>() };
     })
     .sort((a, b) => a.datum.localeCompare(b.datum) || a.tid.localeCompare(b.tid));
 
@@ -108,12 +140,40 @@ export function enaFragorPaBegrepp(rs: Resultat[]): Resultat[] {
   let kopplingar = 0;
   for (const t of tillfallen) {
     for (const [n, b] of t.begrepp) {
-      if (b === null || t.tvetydiga.has(b)) continue;
+      if (b === null || t.tvetydiga.has(b) || t.bild.has(n)) continue;
       ena(`f|${n}`, `b|${t.omfang}|${b}`);
       kopplingar += 1;
     }
   }
-  if (kopplingar === 0) return rs;
+
+  // Del 243: samma bildtext med olika rätta svar (ny bild) är olika frågor — texten får då begreppet efter sig,
+  // 'Vad pekar nummer 1 på? (Hornhinna)'. Stavningsvarianter av samma begrepp räknas som ett.
+  const bildsvar = new Map<string, Array<{ t: (typeof tillfallen)[number]; n: string; b: string }>>();
+  for (const t of tillfallen) {
+    for (const n of t.bild) {
+      const b = t.begrepp.get(n);
+      if (b === null || b === undefined) continue;
+      const k = `${t.omfang}|${n}`;
+      const l = bildsvar.get(k);
+      if (l === undefined) bildsvar.set(k, [{ t, n, b }]); else l.push({ t, n, b });
+    }
+  }
+  let delade = 0;
+  for (const forekomster of bildsvar.values()) {
+    const kluster: Array<typeof forekomster> = [];
+    for (const f of forekomster) {
+      const k = kluster.find((kl) => kl.some((x) => sammaBegrepp(x.b, f.b)));
+      if (k === undefined) kluster.push([f]); else k.push(f);
+    }
+    if (kluster.length < 2) continue;
+    for (const kl of kluster) {
+      const senasteB = kl[kl.length - 1].b;   // tillfällena är i tidsordning: den senaste stavningen gäller
+      const visat = senasteB.charAt(0).toUpperCase() + senasteB.slice(1);
+      for (const f of kl) f.t.bildtillagg.set(f.n, visat);
+    }
+    delade += 1;
+  }
+  if (kopplingar === 0 && delade === 0) return rs;
 
   // Senaste formuleringen per grupp; en grupp som rymmer två frågor ur samma quiz löses upp
   const senaste = new Map<string, { nyckel: string; text: string }>();
@@ -139,11 +199,15 @@ export function enaFragorPaBegrepp(rs: Resultat[]): Resultat[] {
     const s = senaste.get(g);
     return s === undefined || s.nyckel === n ? null : s.text;
   };
+  const tillaggFor = new Map<Resultat, Map<string, string>>();
+  for (const t of tillfallen) if (t.bildtillagg.size > 0) for (const r of t.resultat) tillaggFor.set(r, t.bildtillagg);
   return rs.map((r) => {
     if (!SOCRATIVE.has(r.kalla) || r.svar === undefined) return r;
+    const tillagg = tillaggFor.get(r);
     let andrad = false;
     const svar = r.svar.map((sv) => {
-      const text = nyText(sv);
+      const b = tillagg?.get(fragenyckel(sv.fraga));
+      const text = b !== undefined ? `${sv.fraga} (${b})` : nyText(sv);
       if (text === null) return sv;
       andrad = true;
       return { ...sv, fraga: text };
