@@ -93,6 +93,11 @@ export type LektionsOmrade = 'tavlan' | 'laxforhor' | 'genomgang' | 'begrepp' | 
 export interface Amne {
   id: string;
   klassId: string;
+  /**
+   * Del 246 · Samläsning: fler klasser som har ämnets lektioner tillsammans med hemklassen (t.ex. 8A och 8B på
+   * samma MaNOTk-stöd). Ett ämne, en planering, ett pass — men passet står i alla klassernas scheman och kalendrar.
+   */
+  medKlassIds?: string[];
   namn: string;
   /** Fristående bok ur biblioteket; undefined = ingen bok vald ännu. */
   bokId?: string;

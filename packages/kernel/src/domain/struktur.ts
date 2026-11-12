@@ -123,6 +123,16 @@ export function taBortKlass(s: Struktur, id: string): Struktur {
     elever: s.elever.filter((e) => e.klassId !== id),
   };
   for (const a of amnen) ut = taBortAmne(ut, a);
+  // Del 246: klassen läser inte längre med i andra klassers ämnen
+  if (ut.amnen.some((a) => (a.medKlassIds ?? []).includes(id))) {
+    ut = { ...ut, amnen: ut.amnen.map((a) => {
+      if (!(a.medKlassIds ?? []).includes(id)) return a;
+      const kvar = a.medKlassIds!.filter((x) => x !== id);
+      const { medKlassIds: _bort, ...rest } = a;
+      void _bort;
+      return kvar.length > 0 ? { ...rest, medKlassIds: kvar } : rest;
+    }) };
+  }
   return ut;
 }
 
@@ -279,6 +289,49 @@ export function taBortBok(s: Struktur, id: string): Struktur {
   };
 }
 
+// ── Samläsning: ett ämne som flera klasser har tillsammans (Del 246) ─────────
+/** Alla klasser som har ämnets lektioner: hemklassen först, sedan klasserna som läser med. */
+export function amnetsKlassIds(amne: Amne): string[] {
+  return [amne.klassId, ...(amne.medKlassIds ?? []).filter((id) => id !== amne.klassId)];
+}
+
+/** Klassernas namn som de står på passet: '8B', eller '8A+8B' när flera klasser har lektionen tillsammans. */
+export function amnetsKlassnamn(s: Struktur, amne: Amne): string {
+  const namn = amnetsKlassIds(amne).map((id) => s.klasser.find((k) => k.id === id)?.namn).filter((n): n is string => n !== undefined);
+  return [...new Set(namn)].sort((a, b) => a.localeCompare(b, 'sv', { numeric: true })).join('+');
+}
+
+/** Har klassen ämnets lektioner — som hemklass eller för att den läser med? */
+export function amnetGallerKlass(amne: Amne, klassId: string): boolean {
+  return amne.klassId === klassId || (amne.medKlassIds ?? []).includes(klassId);
+}
+
+/** Klassens ämnen: de egna och de som klassen läser tillsammans med en annan klass. */
+export function amnenForKlass(s: Struktur, klassId: string): Amne[] {
+  return s.amnen.filter((a) => amnetGallerKlass(a, klassId));
+}
+
+/**
+ * Sätter vilka klasser som läser ämnet tillsammans med hemklassen. Bara klasser i samma skolår räknas; hemklassen
+ * själv och okända klasser rensas bort. Samma struktur tillbaka när inget ändras.
+ */
+export function sattSamlasning(s: Struktur, amneId: string, klassIds: string[]): Struktur {
+  const amne = s.amnen.find((a) => a.id === amneId);
+  if (amne === undefined) return s;
+  const hem = s.klasser.find((k) => k.id === amne.klassId);
+  const skolarId = s.tjanster.find((t) => t.id === hem?.tjanstId)?.skolarId;
+  const giltiga = [...new Set(klassIds)].filter((id) => id !== amne.klassId
+    && s.klasser.some((k) => k.id === id && s.tjanster.some((t) => t.id === k.tjanstId && t.skolarId === skolarId)));
+  const forut = amne.medKlassIds ?? [];
+  if (giltiga.length === forut.length && giltiga.every((id) => forut.includes(id))) return s;
+  return { ...s, amnen: s.amnen.map((a) => {
+    if (a.id !== amneId) return a;
+    const { medKlassIds: _bort, ...rest } = a;
+    void _bort;
+    return giltiga.length > 0 ? { ...rest, medKlassIds: giltiga } : rest;
+  }) };
+}
+
 // ── Härledda scheman ─────────────────────────────────────────
 export interface SchemaRad extends Pass { klassNamn: string; amnesNamn: string; grupp?: 'A' | 'B'; }
 
@@ -286,11 +339,15 @@ export interface SchemaRad extends Pass { klassNamn: string; amnesNamn: string; 
 export function klassSchema(s: Struktur, klassId: string): SchemaRad[] {
   const klass = s.klasser.find((k) => k.id === klassId);
   if (!klass) return [];
-  return s.amnen.filter((a) => a.klassId === klassId)
-    .flatMap((a) => [
-      ...a.schema.map((p) => ({ ...p, klassNamn: klass.namn, amnesNamn: a.namn, grupp: a.halvklass === true ? 'A' as const : undefined })),
-      ...(a.halvklass === true ? (a.schemaB ?? []).map((p) => ({ ...p, klassNamn: klass.namn, amnesNamn: a.namn, grupp: 'B' as const })) : []),
-    ])
+  // Del 246: även ämnen som klassen läser tillsammans med en annan klass — passet får då båda klassernas namn
+  return amnenForKlass(s, klassId)
+    .flatMap((a) => {
+      const klassNamn = a.medKlassIds !== undefined ? amnetsKlassnamn(s, a) : klass.namn;
+      return [
+        ...a.schema.map((p) => ({ ...p, klassNamn, amnesNamn: a.namn, grupp: a.halvklass === true ? 'A' as const : undefined })),
+        ...(a.halvklass === true ? (a.schemaB ?? []).map((p) => ({ ...p, klassNamn, amnesNamn: a.namn, grupp: 'B' as const })) : []),
+      ];
+    })
     .sort((x, y) => x.dag - y.dag || x.start.localeCompare(y.start));
 }
 
@@ -438,11 +495,12 @@ export function schemaKonflikter(rader: SchemaRad[]): Array<[SchemaRad, SchemaRa
 function amneRader(s: Struktur, amne: Amne): SchemaRad[] {
   const klass = s.klasser.find((k) => k.id === amne.klassId);
   if (!klass) return [];
+  const klassNamn = amne.medKlassIds !== undefined ? amnetsKlassnamn(s, amne) : klass.namn;
   const rader: SchemaRad[] = amne.schema.map((p) => ({
-    ...p, klassNamn: klass.namn, amnesNamn: amne.namn, grupp: amne.halvklass === true ? 'A' as const : undefined,
+    ...p, klassNamn, amnesNamn: amne.namn, grupp: amne.halvklass === true ? 'A' as const : undefined,
   }));
   if (amne.halvklass === true) {
-    rader.push(...(amne.schemaB ?? []).map((p) => ({ ...p, klassNamn: klass.namn, amnesNamn: amne.namn, grupp: 'B' as const })));
+    rader.push(...(amne.schemaB ?? []).map((p) => ({ ...p, klassNamn, amnesNamn: amne.namn, grupp: 'B' as const })));
   }
   return rader;
 }
@@ -473,11 +531,15 @@ export function passKonflikter(s: Struktur, klassId: string, nyaPass: Pass[], ig
   const klass = s.klasser.find((k) => k.id === klassId);
   if (!klass) return [];
   const tjanst = s.tjanster.find((t) => t.id === klass.tjanstId);
-  const relevanta: Amne[] = s.amnen.filter((a) => a.klassId === klassId && a.id !== ignoreAmneId);
+  // Del 246: klassens ämnen är de egna och de som läses tillsammans med en annan klass; och ett samläst ämne
+  // krockar med allt som någon av dess klasser har
+  const egna = ignoreAmneId === undefined ? undefined : s.amnen.find((a) => a.id === ignoreAmneId);
+  const klassIds = new Set([klassId, ...(egna !== undefined ? amnetsKlassIds(egna) : [])]);
+  const relevanta: Amne[] = s.amnen.filter((a) => a.id !== ignoreAmneId && amnetsKlassIds(a).some((id) => klassIds.has(id)));
   if (tjanst?.larareId !== undefined) {
     const larartjanster = new Set(s.tjanster.filter((t) => t.larareId === tjanst.larareId).map((t) => t.id));
-    const andraKlasser = s.klasser.filter((k) => larartjanster.has(k.tjanstId) && k.id !== klassId).map((k) => k.id);
-    relevanta.push(...s.amnen.filter((a) => andraKlasser.includes(a.klassId) && a.id !== ignoreAmneId));
+    const andraKlasser = s.klasser.filter((k) => larartjanster.has(k.tjanstId) && !klassIds.has(k.id)).map((k) => k.id);
+    relevanta.push(...s.amnen.filter((a) => andraKlasser.includes(a.klassId) && a.id !== ignoreAmneId && !relevanta.includes(a)));
   }
   const rader = relevanta.flatMap((a) => amneRader(s, a));
   return rader.filter((r) => nyaPass.some((p) => passOverlapp(p, r)));

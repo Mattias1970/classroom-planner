@@ -11,7 +11,7 @@
  */
 import React, { useMemo, useState } from 'react';
 import {
-  amnesForkortning, amnesKallor, frageKort, kalenderHandelser, kortDatum, narvaroKort, rapportOversikt, tolkaVeckor, trendKluster,
+  amnesForkortning, amnesKallor, frageKort, handelseGallerKlass, kalenderHandelser, kortDatum, narvaroKort, rapportOversikt, tolkaVeckor, trendKluster,
   type Struktur,
 } from '@planner/kernel';
 import { Ikon, amnesIkon } from './ikoner.js';
@@ -45,7 +45,7 @@ export function Oversikt({ s, filter, setVy, struktur, lasaret }: {
     const slut = new Date(`${idag}T12:00:00Z`); slut.setUTCDate(slut.getUTCDate() + 14);
     const till = slut.toISOString().slice(0, 10);
     return kalenderHandelser(s, skolar.id, idag)
-      .filter((h) => h.oplanerad !== true && h.datum >= idag && h.datum <= till && klasser.some((k) => k.id === h.klassId))
+      .filter((h) => h.oplanerad !== true && h.datum >= idag && h.datum <= till && klasser.some((k) => handelseGallerKlass(h, k.id)))
       .sort((a, b) => a.datum.localeCompare(b.datum) || a.start.localeCompare(b.start))
       .slice(0, 12);
   }, [s, filter.klassId, filter.skolarId, idag]); // eslint-disable-line react-hooks/exhaustive-deps

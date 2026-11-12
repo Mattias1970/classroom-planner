@@ -14,7 +14,7 @@
  * kvar oförändrade som innehåll, så ingen funktion försvinner.
  */
 import React, { useEffect, useState } from 'react';
-import type { Struktur } from '@planner/kernel';
+import { amnetGallerKlass, type Struktur } from '@planner/kernel';
 import { Ikon, amnesIkon } from './ikoner.js';
 
 export type V3Vy =
@@ -49,7 +49,7 @@ export function Skal({ s, vy, setVy, filter, setFilter, notiser, larareNamn, ver
   }, [meny]);
 
   // Ämnesposter i sidopanelen: unika ämnesnamn i vald klass (annars alla), i designens ordning
-  const klassAmnen = s.amnen.filter((a) => filter.klassId === '' || a.klassId === filter.klassId);
+  const klassAmnen = s.amnen.filter((a) => filter.klassId === '' || amnetGallerKlass(a, filter.klassId));   // Del 246: även samlästa ämnen
   const ORDNING = ['matematik', 'kemi', 'biologi', 'fysik', 'teknik'];
   const amnesNamn = [...new Set((klassAmnen.length > 0 ? klassAmnen : s.amnen).map((a) => a.namn))]
     .sort((a, b) => {
@@ -59,7 +59,7 @@ export function Skal({ s, vy, setVy, filter, setFilter, notiser, larareNamn, ver
 
   const klasser = s.klasser;
   const skolar = s.skolar;
-  const amnenIKlass = s.amnen.filter((a) => a.klassId === filter.klassId);
+  const amnenIKlass = s.amnen.filter((a) => amnetGallerKlass(a, filter.klassId));
   const skolaNamn = s.tjanster[0]?.namn ?? 'Skolan';
   const ar = (v: V3Vy) => vyNyckel(v) === vyNyckel(vy);
   // Del 201 · Topplisten visar bara de fält som den öppna sidan använder — klass/ämne följer det som arbetas med
@@ -100,7 +100,7 @@ export function Skal({ s, vy, setVy, filter, setFilter, notiser, larareNamn, ver
       <div className="v3-huvud">
         <header className="v3-topp">
           {falt.has('klass') && <label className="v3-filter"><span className="v3-filter-ikon"><Ikon.elever storlek={16} /></span>Klass:
-            <select aria-label="Filter klass" value={filter.klassId} onChange={(e) => { const kid = e.target.value; const behall = s.amnen.some((a) => a.id === filter.amneId && a.klassId === kid); setFilter({ ...filter, klassId: kid, amneId: behall ? filter.amneId : '' }); }}>
+            <select aria-label="Filter klass" value={filter.klassId} onChange={(e) => { const kid = e.target.value; const behall = s.amnen.some((a) => a.id === filter.amneId && amnetGallerKlass(a, kid)); setFilter({ ...filter, klassId: kid, amneId: behall ? filter.amneId : '' }); }}>
               {vy.typ !== 'planering' && <option value="">alla</option>}{klasser.map((k) => <option key={k.id} value={k.id}>{k.namn}</option>)}
             </select></label>}
           {falt.has('skolar') && <label className="v3-filter"><span className="v3-filter-ikon"><Ikon.kalender storlek={16} /></span>Läsår:

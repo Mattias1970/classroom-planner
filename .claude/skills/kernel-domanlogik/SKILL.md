@@ -42,6 +42,11 @@ Strukturen är oföränderlig, och hastigheten bygger på det:
 - En ny cache: nyckeln ska täcka **allt** resultatet beror på, och värdet ska gå genom `delat()`.
 - I testerna är delade värden frysta (`test/setup.ts`) och `lasStruktur()` kontrollerar att strukturen inte ändrats på plats — ett `TypeError: Cannot add property …` eller "har ändrats på plats" betyder att koden muterar något delat.
 
+## Ämnen, klasser och kalender (Del 245–246)
+
+- **Ett ämne kan ha flera klasser** (`Amne.medKlassIds`, samläsning): ett ämne, en planering, ett pass — men passet står i alla klassernas scheman och kalendrar som t.ex. `8A+8B`. Fråga aldrig `a.klassId === klassId` när du menar "klassens ämnen": använd `amnenForKlass`, `amnetGallerKlass` och `handelseGallerKlass`. `klassId` är hemklassen (där elever, resultat och schemabrytande tid hämtas).
+- **Kalendern visar schemat, inte bara planeringen**: ett ämne med schema men utan planering läggs ut som `oplanerad` ("Ingen planering"); `amnenUtanPlanering` pekar ut dem.
+
 ## Tester
 
 Vitest i `packages/kernel/test/<modul>.test.ts`. Ett `describe` per funktionsområde, `it`-texten beskriver beteendet på svenska: `it('halvklass A/B slås ihop till ett tillfälle')`.

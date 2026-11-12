@@ -26,7 +26,7 @@ import {
   socrativeRum, sparaBok, lektionsNamn, sattSocrativeQr, socrativeQr, sattSocrativeLank, socrativeLank, rumUrLektion,
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
-  amnenUtanPlanering, amnesOversikt, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
+  amnenUtanPlanering, amnesOversikt, amnetGallerKlass, amnetsKlassnamn, handelseGallerKlass, sattSamlasning, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   arFilImporterad, arRatt, andraKalla, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
   arFilSparrad, havSparr, klassForRapport, rapportForFil, rumInfo, LAGSTA_SVARSANDEL, rattaFacit, rosterUtanAndraKlasser, sparraFilnamn, svarsandelForRapport, type Svarsandel,
   delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, enkelRapport, studieguide, rapportOversikt, forklaring, niva, type ForklaringId,
@@ -205,7 +205,7 @@ export function App() {
   // Notiser: förväntade prov utan resultat i vald klass (samma varning som i SuperTeach)
   const notiser = useMemo(() => {
     const idag = new Date().toISOString().slice(0, 10);
-    const amnen = s.amnen.filter((a) => filter.klassId === '' || a.klassId === filter.klassId);
+    const amnen = s.amnen.filter((a) => filter.klassId === '' || amnetGallerKlass(a, filter.klassId));
     const ut: Array<{ text: string; onKlick?: () => void }> = [];
     for (const a of amnen) {
       try {
@@ -1709,6 +1709,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
       {bok && flik === 'magma' && !arHalvklass(a.namn) && <MagmaFlik s={s} amneId={a.id} plan={plan} kor={kor} />}
       {bok && flik === 'anteckningar' && <AnteckningarFlik s={s} amneId={a.id} klassNamn={klass.namn} plan={plan} kor={kor} />}
       {flik === 'installningar' && (<>
+        <Samlasning s={s} amne={a} kor={kor} />
         {halv
           ? <HalvklassSchemaRedigerare key={a.id} s={s} amne={a} kor={kor} />
           : <AmneSchemaRedigerare key={a.id} s={s} amne={a} kor={kor} falt="schema" rubrik="Schema" />}
@@ -3259,6 +3260,34 @@ function GruppPlanering(props: {
           s={s} amneId={amneId} lektionsIndex={rader[valdRad].index} kor={kor} />
       )}
     </>
+  );
+}
+
+// ── Del 246 · Samläsning: ett lektionspass kan ha flera klasser ─────────
+function Samlasning({ s, amne, kor }: { s: Struktur; amne: Amne; kor: (fn: () => Struktur, m: string) => void }) {
+  const hem = s.klasser.find((k) => k.id === amne.klassId);
+  const skolarId = s.tjanster.find((t) => t.id === hem?.tjanstId)?.skolarId;
+  const andra = s.klasser.filter((k) => k.id !== amne.klassId && s.tjanster.some((t) => t.id === k.tjanstId && t.skolarId === skolarId));
+  if (hem === undefined || andra.length === 0) return null;
+  const med = new Set(amne.medKlassIds ?? []);
+  const valj = (klassId: string, pa: boolean) => {
+    const nya = andra.filter((k) => (k.id === klassId ? pa : med.has(k.id))).map((k) => k.id);
+    const namn = [hem.namn, ...andra.filter((k) => nya.includes(k.id)).map((k) => k.namn)].sort((x, y) => x.localeCompare(y, 'sv', { numeric: true })).join('+');
+    kor(() => sattSamlasning(lasStruktur(), amne.id, nya), nya.length > 0
+      ? `${amne.namn} läses av ${namn} tillsammans — passen står i alla klassernas scheman och kalendrar.`
+      : `${amne.namn} läses bara av ${hem.namn}.`);
+  };
+  return (
+    <div className="schema-red samlasning" aria-label="Samläsning">
+      <h3>Klasser på passen <small className="muted">ett lektionspass kan ha flera klasser — samma planering, samma tider</small></h3>
+      <div className="rad" style={{ gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+        <label title="Ämnets hemklass"><input type="checkbox" checked disabled /> {hem.namn}</label>
+        {andra.map((k) => (
+          <label key={k.id}><input type="checkbox" aria-label={`${amne.namn} tillsammans med ${k.namn}`} checked={med.has(k.id)} onChange={(e) => valj(k.id, e.target.checked)} /> {k.namn}</label>
+        ))}
+        {med.size > 0 && <span className="st-krav ok small">{amnetsKlassnamn(s, amne)} har {amne.namn} tillsammans</span>}
+      </div>
+    </div>
   );
 }
 
@@ -6692,7 +6721,7 @@ function KalenderVy({ s, onOppnaLektion, kor, kontext, onKontext }: {
   const [klassFilter, setKlassFilterRaw] = useState<string>(kontext?.klassId !== undefined && kontext.klassId !== '' ? kontext.klassId : '__alla__');
   const [amnesFilter, setAmnesFilterRaw] = useState<string>(kontext?.amneId !== undefined && kontext.amneId !== '' ? amnesNamnAv(kontext.amneId) : '__alla__');
   const setKlassFilter = (v: string) => { setKlassFilterRaw(v); setAmnesFilterRaw('__alla__'); onKontext?.({ klassId: v === '__alla__' ? '' : v, amneId: '' }); };
-  const setAmnesFilter = (v: string) => { setAmnesFilterRaw(v); const a = v === '__alla__' ? undefined : s.amnen.find((x) => x.namn === v && (klassFilter === '__alla__' || x.klassId === klassFilter)); onKontext?.({ amneId: a?.id ?? '' }); };
+  const setAmnesFilter = (v: string) => { setAmnesFilterRaw(v); const a = v === '__alla__' ? undefined : s.amnen.find((x) => x.namn === v && (klassFilter === '__alla__' || amnetGallerKlass(x, klassFilter))); onKontext?.({ amneId: a?.id ?? '' }); };
   useEffect(() => {
     if (kontext === undefined) return;
     const k = kontext.klassId === '' ? '__alla__' : kontext.klassId; if (k !== klassFilter) setKlassFilterRaw(k);
@@ -6706,11 +6735,11 @@ function KalenderVy({ s, onOppnaLektion, kor, kontext, onKontext }: {
 
   const handelser = useMemo(() => (skolar ? kalenderHandelser(s, skolar.id, new Date().toISOString().slice(0, 10)) : []), [s, skolar]);
   const filtrerade = useMemo(() => handelser.filter((h) =>
-    (klassFilter === '__alla__' || h.klassId === klassFilter)
+    (klassFilter === '__alla__' || handelseGallerKlass(h, klassFilter))
     && (amnesFilter === '__alla__' || h.amnesNamn === amnesFilter)), [handelser, klassFilter, amnesFilter]);
   const perDatum = useMemo(() => handelserPerDatum(filtrerade), [filtrerade]);
   const klasserMedPlan = useMemo(() => {
-    const ids = new Set(handelser.map((h) => h.klassId));
+    const ids = new Set(handelser.flatMap((h) => h.klassIds ?? [h.klassId]));
     return s.klasser.filter((k) => ids.has(k.id));
   }, [s.klasser, handelser]);
   const amnenMedPlan = useMemo(() => [...new Set(handelser.map((h) => h.amnesNamn))], [handelser]);
@@ -6803,7 +6832,7 @@ function KalenderVy({ s, onOppnaLektion, kor, kontext, onKontext }: {
       {handelser.length === 0 && <p className="note">Inga planeringar i det här skolåret ännu — skapa en planering på ett ämne, så dyker lektionerna upp här.</p>}
       {(() => {
         // Del 245: ämnen med schema men utan planering syns ändå i kalendern — och pekas ut här
-        const utan = amnenUtanPlanering(s, skolar.id).filter((o) => klassFilter === '__alla__' || o.amne.klassId === klassFilter);
+        const utan = amnenUtanPlanering(s, skolar.id).filter((o) => klassFilter === '__alla__' || amnetGallerKlass(o.amne, klassFilter));
         return utan.length === 0 ? null : (
           <p className="note kal-oplanerade" aria-label="Ämnen utan planering">
             ⚠ <b>Ingen planering:</b> {utan.map((o) => `${o.klassNamn} ${o.amne.namn}${o.orsak === 'ingen-bok' ? ' (boken saknas i biblioteket)' : ''}`).join(', ')} — passen visas streckade enligt schemat.

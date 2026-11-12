@@ -6,7 +6,7 @@
  */
 import { amneBakgrund } from './amnen.js';
 import { isoVecka } from './skolar.js';
-import { amnesOffset, amnesPlan, noPeriodFor, samlaSlots } from './struktur.js';
+import { amnesOffset, amnesPlan, amnetsKlassIds, amnetsKlassnamn, noPeriodFor, samlaSlots } from './struktur.js';
 import type { Amne, IsoDatum, Pass, PlaneradLektion, Skolar, Struktur } from './typer.js';
 
 export interface KalenderHandelse {
@@ -14,6 +14,9 @@ export interface KalenderHandelse {
   start: string;
   slut: string;
   klassId: string;
+  /** Del 246 · Alla klasser som har passet tillsammans (hemklassen först); saknas = bara klassId. */
+  klassIds?: string[];
+  /** Klassens namn — '8A+8B' när flera klasser har passet tillsammans. */
   klassNamn: string;
   amnesNamn: string;
   grupp?: 'A' | 'B';
@@ -49,6 +52,14 @@ function addDays(iso: IsoDatum, n: number): IsoDatum {
 function veckodag(iso: IsoDatum): number {
   const d = new Date(`${iso}T00:00:00Z`).getUTCDay();
   return d === 0 ? 7 : d;
+}
+
+/** Klasserna på ett samläst pass (Del 246) — inget fält alls för ett vanligt ämne. */
+const samlast = (amne: Amne): { klassIds?: string[] } => (amne.medKlassIds !== undefined && amne.medKlassIds.length > 0 ? { klassIds: amnetsKlassIds(amne) } : {});
+
+/** Gäller händelsen klassen? Ett samläst pass gäller alla sina klasser. */
+export function handelseGallerKlass(h: KalenderHandelse, klassId: string): boolean {
+  return h.klassId === klassId || (h.klassIds ?? []).includes(klassId);
 }
 
 export interface AmneUtanPlanering { amne: Amne; klassNamn: string; orsak: 'ingen-planering' | 'ingen-bok' }
@@ -100,7 +111,7 @@ export function kalenderHandelser(s: Struktur, skolarId: string, idag?: string):
         if (p.datum === null || p.start === null || p.slutTid === null || p.vecka === null) continue;
         ut.push({
           datum: p.datum, start: p.start, slut: p.slutTid,
-          klassId: klass.id, klassNamn: klass.namn, amnesNamn: amne.namn, grupp: g.grupp,
+          klassId: klass.id, ...samlast(amne), klassNamn: amnetsKlassnamn(s, amne), amnesNamn: amne.namn, grupp: g.grupp,
           kapitel: p.kapitel, kapitelFarg: farg(p.kapitel), amnesFarg, avsnitt: p.lektion.avsnitt, vecka: p.vecka,
           amneId: amne.id, lektionsIndex,
         });
@@ -122,7 +133,7 @@ export function kalenderHandelser(s: Struktur, skolarId: string, idag?: string):
         if (period !== null && (slot.datum < period.fran || slot.datum > period.till)) continue;
         ut.push({
           datum: slot.datum, start: slot.start, slut: slot.slut,
-          klassId: klass.id, klassNamn: klass.namn, amnesNamn: amne.namn, grupp: g.grupp,
+          klassId: klass.id, ...samlast(amne), klassNamn: amnetsKlassnamn(s, amne), amnesNamn: amne.namn, grupp: g.grupp,
           kapitel: 0, kapitelFarg: '#5c6b7a', amnesFarg: amneBakgrund(amne.namn),
           avsnitt: o.orsak === 'ingen-bok' ? 'Ingen planering (boken saknas)' : 'Ingen planering', vecka: slot.vecka,
           amneId: amne.id, oplanerad: true,

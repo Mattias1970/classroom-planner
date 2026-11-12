@@ -10,7 +10,7 @@
  * lektionens detaljplanering. Under det ligger v2:s Planering för ämnet.
  */
 import React, { useMemo, useState } from 'react';
-import { amnesKallor, frageKort, planForAmne, vagTillProvet, vagTypNamn, type Struktur, type VagBox, type VagLektion } from '@planner/kernel';
+import { amnesKallor, amnetGallerKlass, frageKort, planForAmne, vagTillProvet, vagTypNamn, type Struktur, type VagBox, type VagLektion } from '@planner/kernel';
 import { Ikon, amnesIkon } from './ikoner.js';
 import { DataSaknas, Kort, Kpi, type Filter, type V3Vy } from './Skal.js';
 
@@ -31,7 +31,7 @@ export function Amnessida({ s, amneNamn, filter, setVy, planering, oppnaLektion 
   /** Hoppa till lektionens detaljplanering (position i ämnets planering). */
   oppnaLektion?: (amneId: string, index: number) => void;
 }) {
-  const kandidater = s.amnen.filter((a) => a.namn === amneNamn && (filter.klassId === '' || a.klassId === filter.klassId));
+  const kandidater = s.amnen.filter((a) => a.namn === amneNamn && (filter.klassId === '' || amnetGallerKlass(a, filter.klassId)));   // Del 246: även samlästa ämnen
   const amne = kandidater[0];
   const I = amnesIkon(amneNamn);
   const idag = new Date().toISOString().slice(0, 10);
