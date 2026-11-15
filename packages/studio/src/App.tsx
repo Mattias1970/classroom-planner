@@ -35,7 +35,7 @@ import {
   elevKurva, elevMatris, elevNarvaro, frageKort, gruppSnitt, klassKurva, narvaroKort, periodDelta, sambandNarvaro, sambandsanalys,
   tidPaDagen, tolkaVeckor, trendKluster, veckoSerier, sokElever, lektionsDagar, kortDatum, klassSpridning, spridningsOpacitet,
   elevrapport, elevrapportText, tillfalleEtiketter, normeradSpridning, klusterKurvor, normeraBand, taBortFil, rensaResultat,
-  NORM_BAND, NORM_MAX, amnesKallor, lektionstester, elevLektionstest, tillfalleKortEtikett, KLUSTER_NAMN, TID_PASS, type Kluster,
+  NORM_BAND, NORM_MAX, amnesKallor, lektionstester, elevLektionstest, larmonster, LARMONSTER_MIN_LEKTIONER, tillfalleKortEtikett, KLUSTER_NAMN, TID_PASS, type Kluster,
   begransaTillElever, elevUrval, klassensElever, type ElevUrvalVal, arSocrative, elevIKlassen, sattElevStatus, rattaNamnordning, slaIhopSakraDubbletter,
   byggSittplatser, foreslaSittplatsDatum, sittplatsAnalys, sparaSittplatsering, taBortSittplatsering, tolkaSlideRutor,
   type Sittplats, type SlideRuta, type DashboardFilter, type FrageKort, type KortKalla, type ProvTillfalle,
@@ -3263,6 +3263,18 @@ function GruppPlanering(props: {
   );
 }
 
+// ── Del 252 · Lektionstest: förklaringarna som visas när musen hålls över rubrikerna ─────────
+const LEKT_TIPS = {
+  laxforhor: 'Läxförhöret i lektionens början: repetition av begreppen från tidigare delkapitel. Snitt och median (md) för eleverna som gjorde det.',
+  exit: 'Exit ticketen i lektionens slut: det nya innehållet från just den lektionen. Snitt och median (md) för eleverna som gjorde den.',
+  snitt: 'Δ snitt = medelvärdet av varje elevs (exit ticket − läxförhör) den lektionen, i procentenheter. Bara elever som gjorde båda testen räknas. Negativt = lägre på exit ticketen än på läxförhöret. Testen prövar olika innehåll (nytt mot repetition), så talet beskriver — det förklarar inte varför.',
+  median: 'Δ median = den mittersta elevens skillnad (exit ticket − läxförhör) den lektionen. Påverkas mindre av enstaka mycket höga eller låga resultat än snittet.',
+  monster: 'Eleven jämförs med klassen på vartdera testet, lektion för lektion (minst tre lektioner med båda testen). Läxförhöret är repetition och exit ticketen nytt innehåll, så nästan alla ligger lägre på exit ticketen — här räknas därför avståndet till klassen, inte skillnaden mellan testen. Mönstret beskriver resultaten; varför det ser ut så följs upp med eleven.',
+  hemma: 'Följer klassen på läxförhören men ligger tydligt under på exit tickets (minst 8 procentenheter under klassen, och minst 10 lägre än elevens eget läge på läxförhören). Kan tyda på att eleven har svårt att ta till sig nytt innehåll på lektionen men kompenserar med att öva hemma.',
+  lektion: 'Följer klassen på exit tickets men ligger tydligt under på läxförhören (minst 8 procentenheter under klassen, och minst 10 lägre än elevens eget läge på exit tickets). Kan tyda på att eleven hänger med på lektionen men övar mindre hemma.',
+  bada: 'Hur många elever som gjorde BÅDE läxförhöret och exit ticketen den lektionen, av dem som gjorde minst ett av testen. En lektion med bara ett av testen har inget att jämföra — då står det vilket test som gjordes.',
+} as const;
+
 // ── Del 246 · Samläsning: ett lektionspass kan ha flera klasser ─────────
 function Samlasning({ s, amne, kor }: { s: Struktur; amne: Amne; kor: (fn: () => Struktur, m: string) => void }) {
   const hem = s.klasser.find((k) => k.id === amne.klassId);
@@ -4365,7 +4377,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
     const samband = sambandsanalys(s, f);
     return {
       kort: frageKort(s, f), kurva, spridning: klassSpridning(s, f),
-      lekt: lektionstester(s, f), elevLekt: elevLektionstest(s, f),
+      lekt: lektionstester(s, f), elevLekt: elevLektionstest(s, f), monster: larmonster(s, f),
       klassFastnat: aterkommandeFelKlass(s, tkFilter),
       tk: trendkoll(s, tkFilter),
       normerad: normeradSpridning(s, f), klusterK: klusterKurvor(s, f), veckor: veckoSerier(s, f),
@@ -4376,7 +4388,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
       kravLinjer: [...new Set(kurva.map((t) => t.krav).filter((k): k is number => k !== null))].sort().map((p) => ({ procent: p, namn: 'Godkänt' })),
     };
   }, [s, filterNyckel]); // eslint-disable-line react-hooks/exhaustive-deps
-  const { kort, kurva, spridning, lekt, elevLekt, klassFastnat, tk, normerad, klusterK, veckor, kluster, grupper, samband, narvaro, narvaroPerElev, tid, narvaroSamband, kravLinjer } = klassData;
+  const { kort, kurva, spridning, lekt, elevLekt, monster, klassFastnat, tk, normerad, klusterK, veckor, kluster, grupper, samband, narvaro, narvaroPerElev, tid, narvaroSamband, kravLinjer } = klassData;
   const tidHarData = tid.some((c) => c.antal > 0);
 
   // ── Elevberoende: bara när vald elev i led/matris ändras ──
@@ -4862,17 +4874,41 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
 
       {/* Lektionstest: läxförhör vs exit ticket per lektion */}
       <StWidget {...W('st-sekt-lekt')} className="st-lektionstest" ikon="🎯" rubrik="Lektionstest" info={<InfoKnapp id="lektionstest" />}
-        under={<>läxförhör och exit ticket från samma lektion hålls isär · <b>Δ</b> = exit − läxförhör i procentenheter, räknat per lektion och sedan som medelvärde (bara lektioner med båda testerna)</>} mini={lektMini}>
+        under={<>läxförhör och exit ticket från samma lektion sida vid sida · <b>Δ</b> = exit − läxförhör i procentenheter, bara för elever som gjorde båda · testen prövar olika innehåll — håll musen över <span className="st-tip" aria-hidden="true">ⓘ</span> för förklaring</>} mini={lektMini}>
         <div className="rad">
           <span className="spacer" />
           <label className="small"><input type="checkbox" checked={visaElevDiff} onChange={(e) => setVisaElevDiff(e.target.checked)} /> per elev</label>
         </div>
+        {/* Del 252: det som går att lära av jämförelsen — vilka elever visar mer efter att ha övat hemma, och vilka mer på lektionen */}
+        {lekt.some((l) => l.antalBada > 0) && (
+          <div className="st-larmonster" aria-label="Mönster per elev">
+            <b title={LEKT_TIPS.monster}>Mönster per elev <span className="st-tip" aria-hidden="true">ⓘ</span></b>
+            {(['hemma', 'lektion'] as const).map((m) => {
+              const lista = monster.filter((x) => x.monster === m);
+              return (
+                <div key={m} className="st-larmonster-rad" title={LEKT_TIPS[m]}>
+                  <span className="st-larmonster-namn">{m === 'hemma' ? '🏠 Visar mer efter att ha övat hemma' : '🏫 Visar mer på lektionen än efter läxan'} <span className="st-tip" aria-hidden="true">ⓘ</span></span>
+                  {lista.length === 0 ? <small className="muted">ingen elev sticker ut</small> : lista.map((x) => (
+                    <button key={x.elev.id} className="chip st-larmonster-elev" onClick={() => setElevId(x.elev.id)}
+                      title={`${x.elev.namn}: läxförhör ${x.laxMotKlass > 0 ? '+' : ''}${x.laxMotKlass} och exit ticket ${x.exitMotKlass > 0 ? '+' : ''}${x.exitMotKlass} procentenheter mot klassen, i snitt över ${x.lektioner} lektioner med båda testen. Följ upp med eleven.`}>
+                      {x.elev.namn} <small>läx {x.laxMotKlass > 0 ? '+' : ''}{x.laxMotKlass} · exit {x.exitMotKlass > 0 ? '+' : ''}{x.exitMotKlass}</small></button>
+                  ))}
+                </div>
+              );
+            })}
+            {monster.every((x) => x.lektioner < LARMONSTER_MIN_LEKTIONER) && <small className="muted">Minst {LARMONSTER_MIN_LEKTIONER} lektioner med både läxförhör och exit ticket behövs innan ett mönster pekas ut.</small>}
+          </div>
+        )}
         {lekt.length === 0 ? <p className="muted small">Inga lektioner med både läxförhör och exit ticket i urvalet.</p> : !visaElevDiff ? (
           <div className="st-scroll">
             <table className="tbl st-tabell">
               <thead><tr>
-                <th>Lektion</th><th>Läxförhör</th><th>Exit ticket</th>
-                <th title="Snitt av elevernas exit − läxförhör">Δ snitt</th><th>Δ median</th><th>Elever</th>
+                <th>Lektion</th>
+                <th title={LEKT_TIPS.laxforhor}>Läxförhör <span className="st-tip" aria-hidden="true">ⓘ</span></th>
+                <th title={LEKT_TIPS.exit}>Exit ticket <span className="st-tip" aria-hidden="true">ⓘ</span></th>
+                <th title={LEKT_TIPS.snitt}>Δ snitt <span className="st-tip" aria-hidden="true">ⓘ</span></th>
+                <th title={LEKT_TIPS.median}>Δ median <span className="st-tip" aria-hidden="true">ⓘ</span></th>
+                <th title={LEKT_TIPS.bada}>Gjorde båda <span className="st-tip" aria-hidden="true">ⓘ</span></th>
               </tr></thead>
               <tbody>{lekt.map((l) => (
                 <tr key={l.datum}>
@@ -4885,7 +4921,11 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
                     <span className="st-bar"><i style={{ width: `${l.exitSnitt ?? 0}%`, background: KORT_FARG['socrative-exit'] }} /><b>{l.exitSnitt ?? '—'} %</b> <small className="muted">md {l.exitMedian ?? '—'}</small></span></>)}</td>
                   <td className={`st-diff ${(l.diffSnitt ?? 0) > 0 ? 'upp' : (l.diffSnitt ?? 0) < 0 ? 'ned' : ''}`}>{l.diffSnitt === null ? '—' : `${l.diffSnitt > 0 ? '+' : ''}${l.diffSnitt}`}</td>
                   <td className={`st-diff ${(l.diffMedian ?? 0) > 0 ? 'upp' : (l.diffMedian ?? 0) < 0 ? 'ned' : ''}`}>{l.diffMedian === null ? '—' : `${l.diffMedian > 0 ? '+' : ''}${l.diffMedian}`}</td>
-                  <td className="small muted">{l.antalBada} av {l.elever.length}</td>
+                  {/* Del 252: "0 av 25" sa inget — en lektion med bara ett test säger det i klartext, med förklaring under musen */}
+                  {l.laxforhorProv !== null && l.exitProv !== null
+                    ? <td className="small muted" title={`${l.antalBada} av ${l.elever.length} elever gjorde både läxförhöret och exit ticketen den här lektionen. Δ räknas bara på dem.`}>{l.antalBada} av {l.elever.length}</td>
+                    : <td className="small muted" title={`Den här lektionen hade bara ${l.exitProv !== null ? 'exit ticket — inget läxförhör' : 'läxförhör — ingen exit ticket'}. ${l.elever.length} elever gjorde ${l.exitProv !== null ? 'den' : 'det'}. Utan båda testen finns ingen skillnad (Δ) att räkna. Inget är fel och inget behöver tas bort.`}>
+                      <span className="st-ettest">bara {l.exitProv !== null ? 'exit ticket' : 'läxförhör'}</span> · {l.elever.length} elever <span className="st-tip" aria-hidden="true">ⓘ</span></td>}
                 </tr>
               ))}</tbody>
             </table>

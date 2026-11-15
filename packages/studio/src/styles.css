@@ -1434,3 +1434,14 @@ input.fel { border-color: #B71C1C; }
 
 /* Del 245 · Pass utan planering: streckad kant och dämpad bakgrund, så de inte förväxlas med planerade lektioner */
 .sch-lekt.oplanerad, .kh.oplanerad { opacity: 0.6; outline: 2px dashed rgba(255, 255, 255, 0.85); outline-offset: -3px; font-style: italic; }
+
+/* Del 252 · ⓘ-märket: håll musen över för en förklaring */
+.st-tip { display: inline-block; font-size: 11px; font-weight: 700; color: #5B6B85; cursor: help; margin-left: 2px; }
+th[title], td[title] { cursor: help; }
+.st-ettest { font-style: italic; }
+/* Del 252 · Mönster per elev i Lektionstest */
+.st-larmonster { margin: 4px 0 10px; padding: 8px 10px; border: 1px solid #DDE3EC; border-radius: 8px; background: #F8FAFD; display: grid; gap: 4px; font-size: 13px; }
+.st-larmonster-rad { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.st-larmonster-namn { min-width: 270px; }
+.st-larmonster-elev { cursor: pointer; border: 1px solid #C9D2E0; background: #fff; }
+.st-larmonster-elev small { color: #5B6B85; margin-left: 4px; }

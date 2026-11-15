@@ -65,6 +65,11 @@ Bokdata är läsbar men aldrig skrivbar från appen (`classroom-planner-data`). 
 - **Rummen vi använder** (`rumInfo`): klassrum (`socrativeRum`), rum i planeringen, begreppsrum (ämne + siffror), ämnesrum (börjar på ett av lärarens ämnen). Allt annat (t.ex. `SO8BB`) är inte vårt: det sorteras bort i listan, och en sådan fil importeras inte utan "ta med ändå".
 - UI: `Rapportlista.tsx` under 📥 Importera → Socrative — släppruta för filer, tabellen per rum och listan över rapporter som saknas.
 
+## Lektionstest och lärmönster (Del 252)
+
+- Skillnaden exit − läxförhör samma lektion säger i sig lite (repetition mot nytt innehåll — nästan alltid negativ). Det användbara är **mönstret per elev mot klassen** (`larmonster`): eleven jämförs med klassens snitt på vartdera testet, lektion för lektion, minst tre lektioner med båda testen. `hemma` = följer klassen på läxförhören men ligger tydligt under på exit tickets; `lektion` = tvärtom. Beskriv, förklara inte — orsaken följs upp med eleven.
+- Kolumnen "Gjorde båda" = elever med båda testen av dem som gjorde minst ett; en lektion med bara ett test skrivs i klartext ("bara exit ticket · 25 elever"), aldrig "0 av 25". Rubriker och rutor har förklaring under musen (ⓘ).
+
 ## Kapitelnummer är ämnets egna (Del 251)
 
 - **7.1 i Biologi och 7.1 i Kemi är olika delkapitel.** Ett tillfälle bär sitt ämne (`Tillfalle.amneId/amnesNamn/amnesKort`), vad som redan förhörts minns vi per ämne, och med flera ämnen i urvalet står ämnet före koden: `Bi 7.1`, `Ke 7.1` (`utanAmne` tar bort det). Med ett ämne i taget är koden som förut.

@@ -75,6 +75,9 @@ export const FORKLARINGAR = {
     lang: [
       'Bara lektioner där eleven gjort båda testerna räknas. Skillnaden räknas per lektion och medelvärdet tas sedan, så det kan avvika från skillnaden mellan de två totalsnitten (som kan bygga på olika lektioner).',
       'Testerna prövar olika innehåll och svårighetsgrad. Δ beskriver resultaten; vad skillnaden beror på följs upp med eleven.',
+      'Kolumnen "Gjorde båda" säger hur många elever som gjorde både läxförhöret och exit ticketen den lektionen, av dem som gjorde minst ett av testen. En lektion med bara ett av testen har inget att jämföra; då står det vilket test som gjordes och hur många som gjorde det.',
+      'Läxförhöret är repetition och exit ticketen nytt innehåll, så Δ är oftast negativt och säger i sig lite. Det som går att läsa ut är vilka lektioner som sticker ut (ett ovanligt stort tapp betyder att det nya innehållet var svårt) och, per elev, om någon genomgående ligger mycket högre på det ena testet än på det andra. Vad läxan har gett syns bäst i Trendkoll, som följer samma fråga från exit ticketen till nästa läxförhör.',
+      'Mönster per elev: eleven jämförs med klassen på vartdera testet, lektion för lektion (minst tre lektioner med båda testen). Den som följer klassen på läxförhören men ligger tydligt under på exit tickets visar mer av sitt kunnande efter att ha övat hemma än direkt på lektionen. Den som följer klassen på exit tickets men ligger tydligt under på läxförhören visar mer på lektionen än efter läxan. Det är en beskrivning av resultaten — varför det ser ut så följs upp med eleven.',
     ],
   },
   samband: {

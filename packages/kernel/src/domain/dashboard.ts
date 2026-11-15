@@ -863,3 +863,62 @@ export function elevLektionstest(s: Struktur, f: DashboardFilter): ElevLektionst
     };
   }).filter((r) => r.lektioner > 0);
 }
+
+// ── Del 252 · Lärmönster: var visar eleven sitt kunnande — på lektionen eller efter att ha övat hemma? ─────────
+
+/** Minst så många lektioner med både läxförhör och exit ticket krävs för att ett mönster ska pekas ut. */
+export const LARMONSTER_MIN_LEKTIONER = 3;
+/** Så många procentenheter under klassen på det ena testet (i snitt) … */
+export const LARMONSTER_UNDER = 8;
+/** … och så stort gap mellan elevens två lägen mot klassen krävs. */
+export const LARMONSTER_GAP = 10;
+/** På det andra testet får eleven ligga högst så här långt under klassen. */
+export const LARMONSTER_NIVA = 5;
+
+/**
+ * hemma   = följer klassen på läxförhören men ligger tydligt under på exit tickets (visar mer efter att ha övat hemma)
+ * lektion = följer klassen på exit tickets men ligger tydligt under på läxförhören (visar mer på lektionen än efter läxan)
+ */
+export type Larmonster = 'hemma' | 'lektion';
+export interface ElevLarmonster {
+  elev: Elev;
+  /** Lektioner där eleven gjorde både läxförhör och exit ticket. */
+  lektioner: number;
+  /** Elevens läxförhör jämfört med klassens snitt samma lektion, i procentenheter (snitt över lektionerna). */
+  laxMotKlass: number;
+  /** Elevens exit ticket jämfört med klassens snitt samma lektion. */
+  exitMotKlass: number;
+  monster: Larmonster | null;
+}
+
+/**
+ * Läxförhöret är repetition och exit ticketen nytt innehåll, så nästan alla ligger lägre på exit ticketen — den
+ * skillnaden säger lite. Här jämförs därför eleven med KLASSEN på vartdera testet, lektion för lektion: den som
+ * följer klassen på läxförhören men ligger tydligt under på exit tickets visar mer av sitt kunnande efter att ha
+ * övat hemma än direkt på lektionen — och tvärtom. Det är en beskrivning av resultaten, inte en förklaring;
+ * varför det ser ut så följs upp med eleven.
+ */
+export function larmonster(s: Struktur, f: DashboardFilter): ElevLarmonster[] {
+  const per = new Map<string, { elev: Elev; lax: number[]; exit: number[] }>();
+  for (const l of lektionstester(s, f)) {
+    const bada = l.elever.filter((r): r is LektionstestElev & { laxforhor: number; exit: number } => r.laxforhor !== null && r.exit !== null);
+    if (bada.length < 2) continue;   // ingen klass att jämföra med
+    const mLax = bada.reduce((n, r) => n + r.laxforhor, 0) / bada.length;
+    const mExit = bada.reduce((n, r) => n + r.exit, 0) / bada.length;
+    for (const r of bada) {
+      const p = per.get(r.elev.id) ?? { elev: r.elev, lax: [], exit: [] };
+      p.lax.push(r.laxforhor - mLax); p.exit.push(r.exit - mExit);
+      per.set(r.elev.id, p);
+    }
+  }
+  const medel = (v: number[]): number => Math.round(v.reduce((n, x) => n + x, 0) / v.length);
+  return [...per.values()].map((p) => {
+    const laxMotKlass = medel(p.lax); const exitMotKlass = medel(p.exit);
+    const nog = p.lax.length >= LARMONSTER_MIN_LEKTIONER;
+    const monster: Larmonster | null = !nog ? null
+      : exitMotKlass <= -LARMONSTER_UNDER && laxMotKlass - exitMotKlass >= LARMONSTER_GAP && laxMotKlass >= -LARMONSTER_NIVA ? 'hemma'
+        : laxMotKlass <= -LARMONSTER_UNDER && exitMotKlass - laxMotKlass >= LARMONSTER_GAP && exitMotKlass >= -LARMONSTER_NIVA ? 'lektion'
+          : null;
+    return { elev: p.elev, lektioner: p.lax.length, laxMotKlass, exitMotKlass, monster };
+  }).sort((a, b) => a.elev.namn.localeCompare(b.elev.namn, 'sv'));
+}
