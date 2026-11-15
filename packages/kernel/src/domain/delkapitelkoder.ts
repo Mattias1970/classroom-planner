@@ -5,8 +5,14 @@
  */
 import { delkapitelKod } from './bok.js';
 
-/** 'Biologi412' → { kapitel: 4, delar: [1, 2] }; 'Matte8B' → null. */
+/**
+ * 'Biologi412' → { kapitel: 4, delar: [1, 2] }; 'Matte8B' → null.
+ * Del 248: kapitel 10, 20 … — delkapitel 0 finns inte, så en nolla som andra siffra hör till kapitelnumret:
+ * 'Kemi101' → { kapitel: 10, delar: [1] }, 'Kemi1012' → { kapitel: 10, delar: [1, 2] }.
+ */
 export function tolkaRumKoder(rum: string): { kapitel: number; delar: number[] } | null {
+  const tio = /^[^\d]+([1-9]0)([1-9]\d*)$/.exec(rum.trim());
+  if (tio !== null) return { kapitel: Number(tio[1]), delar: tio[2].split('').map(Number) };
   const m = /^[^\d]+(\d)(\d+)$/.exec(rum.trim());
   if (m === null) return null;
   return { kapitel: Number(m[1]), delar: m[2].split('').map(Number) };

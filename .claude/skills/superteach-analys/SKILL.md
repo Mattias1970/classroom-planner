@@ -65,6 +65,11 @@ Bokdata är läsbar men aldrig skrivbar från appen (`classroom-planner-data`). 
 - **Rummen vi använder** (`rumInfo`): klassrum (`socrativeRum`), rum i planeringen, begreppsrum (ämne + siffror), ämnesrum (börjar på ett av lärarens ämnen). Allt annat (t.ex. `SO8BB`) är inte vårt: det sorteras bort i listan, och en sådan fil importeras inte utan "ta med ändå".
 - UI: `Rapportlista.tsx` under 📥 Importera → Socrative — släppruta för filer, tabellen per rum och listan över rapporter som saknas.
 
+## Delkapitlens ordning i resultat (Del 248)
+
+- Delkapitel står i **den ordning de förhördes**, inte nummerordning: läses kapitel 10 före kapitel 7 står 10.1 före 7.1 (`delkapitelITidsordning`). Det gäller frågematrisens kolumner och numrering, tabellhuvudet (`grupper[].forst` = datum för första förhöret), segmenten per tillfälle och elevens nuläge. Sortera aldrig delkapitel med `localeCompare(…, { numeric: true })` i resultatvyer.
+- Rum för kapitel 10: `Kemi101` = 10.1, `Kemi1012` = 10.1 + 10.2 (delkapitel 0 finns inte, så nollan hör till kapitelnumret).
+
 ## Vanliga fel
 
 - **0 matchade resultat** → klassen saknar elever. Importera Socrative-rostern först.

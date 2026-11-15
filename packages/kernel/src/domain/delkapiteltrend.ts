@@ -216,12 +216,42 @@ export interface SegmentTillfalle {
 }
 
 /**
+ * Del 248 · Delkapitlens ordning är den de förhördes i, inte nummerordning: läses kapitel 10 före kapitel 7 står
+ * 10.1 före 7.1. Tillfällena kommer i tidsordning; ett delkapitel får sin plats första gången en av dess frågor
+ * ställs. Okänt delkapitel ('—') hamnar sist, och delkapitel utan plats faller tillbaka på nummerordning.
+ */
+function delkapitelITidsordning(tillfallen: Tillfalle[], hemvist: Map<string, string>): { jamfor: (a: string, b: string) => number; forst: Map<string, string> } {
+  const plats = new Map<string, number>();
+  const forst = new Map<string, string>();
+  for (const t of tillfallen) {
+    for (const r of t.resultat) {
+      for (const sv of r.svar ?? []) {
+        const kod = hemvist.get(fragenyckel(sv.fraga)) ?? '—';
+        if (!plats.has(kod)) { plats.set(kod, plats.size); forst.set(kod, t.datum); }
+      }
+    }
+  }
+  const jamfor = (a: string, b: string): number => {
+    if (a === b) return 0;
+    if (a === '—') return 1;
+    if (b === '—') return -1;
+    const pa = plats.get(a); const pb = plats.get(b);
+    if (pa !== undefined && pb !== undefined) return pa - pb;
+    if (pa !== undefined) return -1;
+    if (pb !== undefined) return 1;
+    return a.localeCompare(b, 'sv', { numeric: true });
+  };
+  return { jamfor, forst };
+}
+
+/**
  * Varje tillfälle uppdelat i delkapitelsegment, kronologiskt. Med `elevId`
  * gäller siffrorna en elev, annars hela klassen.
  */
 export function delkapitelSegment(s: Struktur, f: DelkapitelFilter): SegmentTillfalle[] {
   const tillfallen = tillfallenFor(s, f);
   const hemvist = fragansDelkapitel(tillfallen);
+  const ordning = delkapitelITidsordning(tillfallen, hemvist);
   return tillfallen.map((t) => {
     const rader = f.elevId === undefined ? t.resultat : t.resultat.filter((r) => r.elevId === f.elevId);
     const per = new Map<string, { fragor: Set<string>; bedomda: number; ratt: number }>();
@@ -236,7 +266,7 @@ export function delkapitelSegment(s: Struktur, f: DelkapitelFilter): SegmentTill
       }
     }
     const segment: Segment[] = [...per.entries()]
-      .sort(([a], [b]) => a.localeCompare(b, 'sv', { numeric: true }))
+      .sort(([a], [b]) => ordning.jamfor(a, b))
       .map(([kod, v]) => ({
         kod, antalFragor: v.fragor.size, bedomda: v.bedomda, ratt: v.ratt,
         procent: v.bedomda === 0 ? null : Math.round((v.ratt / v.bedomda) * 100),
@@ -376,8 +406,8 @@ export interface FragaRad {
 export interface Fragematris {
   fragor: MatrisFraga[];
   rader: FragaRad[];
-  /** Kolumngrupper: delkapitlet och dess intervall av frågenummer. */
-  grupper: Array<{ kod: string; etikett: string; ursprung: string; fran: number; till: number }>;
+  /** Kolumngrupper: delkapitlet och dess intervall av frågenummer — i den ordning delkapitlen förhördes. `forst` = datum för första förhöret. */
+  grupper: Array<{ kod: string; etikett: string; ursprung: string; fran: number; till: number; forst?: string }>;
   /** Tillfällen i filtret som inte kan visas fråga för fråga (resultaten saknar svar per fråga). */
   utanSvar: TillfalleUtanSvar[];
 }
@@ -386,6 +416,7 @@ export interface Fragematris {
  * Matris med en rad per testtillfälle och en kolumn per fråga. Frågorna
  * numreras i den ordning delkapitlen introduceras, så kolumnerna grupperar
  * sig som Test41 · Test42 · Test43 … precis som i lärarens kalkylblad.
+ * Del 248: "introduceras" betyder när delkapitlet först förhördes — inte nummerordning (10.1 kan komma före 7.1).
  */
 export function fragematris(s: Struktur, f: DelkapitelFilter): Fragematris {
   const tillfallen = tillfallenFor(s, f);
@@ -404,9 +435,10 @@ export function fragematris(s: Struktur, f: DelkapitelFilter): Fragematris {
       }
     }
   }
+  const ordning = delkapitelITidsordning(tillfallen, hemvist);
   const nycklar = [...forstaGangen.keys()].sort((a, b) => {
     const ka = hemvist.get(a) ?? '—'; const kb = hemvist.get(b) ?? '—';
-    return ka.localeCompare(kb, 'sv', { numeric: true }) || forstaGangen.get(a)!.ordning - forstaGangen.get(b)!.ordning;
+    return ordning.jamfor(ka, kb) || forstaGangen.get(a)!.ordning - forstaGangen.get(b)!.ordning;
   });
   const fragor: MatrisFraga[] = nycklar.map((n, i) => {
     const post = forstaGangen.get(n)!;
@@ -440,7 +472,10 @@ export function fragematris(s: Struktur, f: DelkapitelFilter): Fragematris {
   for (const fr of fragor) {
     const sista = grupper[grupper.length - 1];
     if (sista !== undefined && sista.kod === fr.kod) sista.till = fr.nr;
-    else grupper.push({ kod: fr.kod, etikett: /^\d+\.\d+$/.test(fr.kod) ? testEtikett([fr.kod], 'Test') : fr.kod, ursprung: fr.ursprung, fran: fr.nr, till: fr.nr });
+    else {
+      const forst = ordning.forst.get(fr.kod);
+      grupper.push({ kod: fr.kod, etikett: /^\d+\.\d+$/.test(fr.kod) ? testEtikett([fr.kod], 'Test') : fr.kod, ursprung: fr.ursprung, fran: fr.nr, till: fr.nr, ...(forst !== undefined ? { forst } : {}) });
+    }
   }
   return { fragor, rader, grupper, utanSvar: tillfallenUtanSvar(s, f) };
 }
@@ -596,8 +631,8 @@ export function nulage(s: Struktur, elevId: string, f: DelkapitelFilter): Nulage
   });
   const perDel = new Map<string, FragaNu[]>();
   for (const fr of fragor) perDel.set(fr.kod, [...(perDel.get(fr.kod) ?? []), fr]);
+  // Del 248: matrisens frågor står redan i den ordning delkapitlen förhördes — den ordningen behålls här
   const delkapitel: DelkapitelNu[] = [...perDel.entries()]
-    .sort(([a], [b]) => a.localeCompare(b, 'sv', { numeric: true }))
     .map(([kod, lista]) => {
       const ratt = lista.filter((x) => x.ratt).length;
       const senast = [...lista].sort((a, b) => a.senastDatum.localeCompare(b.senastDatum)).pop() ?? null;

@@ -4561,9 +4561,9 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
             <table className="tbl st-fmtabell">
               <thead>
                 <tr><th colSpan={4} className="st-fmhorn" /> {fm.grupper.map((g) => (
-                  <th key={g.kod} colSpan={g.till - g.fran + 1} className="st-fmgrupp" title={`${g.ursprung} · ${g.etikett} · frågorna ${g.fran}–${g.till}`}>
+                  <th key={g.kod} colSpan={g.till - g.fran + 1} className="st-fmgrupp" title={`${g.ursprung} · ${g.etikett} · frågorna ${g.fran}–${g.till}${g.forst !== undefined ? ` · först förhört ${kortDatum(g.forst)}` : ''}`}>
                     <span className="st-fmgruppnamn">{fmVarld === 'socrative' ? g.ursprung : fmVarld === 'magma' && /^\d+\.\d+$/.test(g.kod) ? `Delkapitel ${g.kod}` : g.kod}</span>
-                    <small>{fmVarld === 'socrative' && g.kod !== '—' ? `${g.kod} · ` : ''}{g.till - g.fran + 1} {fmVarld === 'magma' ? 'uppgifter' : 'frågor'}</small>
+                    <small>{fmVarld === 'socrative' && g.kod !== '—' ? `${g.kod} · ` : ''}{g.till - g.fran + 1} {fmVarld === 'magma' ? 'uppgifter' : 'frågor'}{g.forst !== undefined ? ` · från ${kortDatum(g.forst)}` : ''}</small>
                   </th>
                 ))}</tr>
                 <tr><th>Vecka</th><th>Datum</th><th>Typ</th><th>{fmVarld === 'socrative' ? 'Quiz' : 'Prov'}</th>{fm.fragor.map((fr) => (
@@ -5929,7 +5929,7 @@ function RapportVy({ s, kor, meddela, kontext, onKontext }: {
                   <tr><th colSpan={2} className="st-fmhorn" />{analys.matris.grupper.map((g) => (
                     <th key={g.kod} colSpan={g.till - g.fran + 1} className="st-fmgrupp" title={g.ursprung}>
                       <span className="st-fmgruppnamn">{g.ursprung}</span>
-                      <small>{g.kod !== '—' ? `${g.kod} · ` : ''}{g.till - g.fran + 1} frågor</small>
+                      <small>{g.kod !== '—' ? `${g.kod} · ` : ''}{g.till - g.fran + 1} frågor{g.forst !== undefined ? ` · från ${kortDatum(g.forst)}` : ''}</small>
                     </th>
                   ))}</tr>
                   <tr><th>Quiz</th><th>Datum</th>{analys.matris.fragor.map((fr) => (

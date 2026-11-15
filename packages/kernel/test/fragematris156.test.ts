@@ -52,13 +52,14 @@ describe('Del 156 · Frågematrisen separerad: Socrative, DigiExam, Magma', () =
 
   it('DigiExam: frågorna hör till sitt prov — ordinarie och omprov delar kolumner, andra prov får egna', () => {
     const m = fragematris(bygg(), { klassId: 'k', kallor: ['digiexam'] });
+    // Del 248: proven står i den ordning de skrevs — Ekologi före Cellen
     expect(m.fragor.map((f) => [f.fraga, f.kod])).toEqual([
-      ['Cellen E-prov · Fråga 1', 'Cellen E-prov'],
       ['Ekologi E-prov · Fråga 1', 'Ekologi E-prov'], ['Ekologi E-prov · Fråga 2', 'Ekologi E-prov'],
+      ['Cellen E-prov · Fråga 1', 'Cellen E-prov'],
     ]);
-    expect(m.grupper.map((g) => g.etikett)).toEqual(['Cellen E-prov', 'Ekologi E-prov']);
+    expect(m.grupper.map((g) => g.etikett)).toEqual(['Ekologi E-prov', 'Cellen E-prov']);
     expect(m.rader.map((r) => [r.prov, r.celler.map((c) => c?.procent ?? null)])).toEqual([
-      ['Ekologi E-prov', [null, 50, 0]], ['Ekologi E-prov – omprov', [null, 100, 50]], ['Cellen E-prov', [100, null, null]],
+      ['Ekologi E-prov', [50, 0, null]], ['Ekologi E-prov – omprov', [100, 50, null]], ['Cellen E-prov', [null, null, 100]],
     ]);
   });
 
