@@ -46,7 +46,7 @@ import {
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
   vagTyp,
 } from '@planner/kernel';
-import { exportJson, importJson, lasInstallning, lasStruktur, sparaInstallning, sparaStruktur, LAGRINGSGRANS_TECKEN, useSparfel } from './store.js';
+import { exportJson, importJson, lasInstallning, lasStruktur, prenumereraStruktur, sparaInstallning, sparaStruktur, LAGRINGSGRANS_TECKEN, useSparfel } from './store.js';
 import { RapportdesignVy, MallRendering, Trendsteg } from './rapportdesign.js';
 import { MagmaImport } from './MagmaImport.js';
 import { ImportFragor, type VantandeImport } from './ImportFragor.js';
@@ -109,6 +109,8 @@ function valdFinns(s: Struktur, v: Vald): boolean {
 
 export function App() {
   const [s, setS] = useState<Struktur>(() => lasStruktur());
+  // Del 254: en annan flik har sparat — visa det den sparade
+  useEffect(() => prenumereraStruktur(() => setS(lasStruktur())), []);
   const [vald, setVald] = useState<Vald>(null);
   const [huvudvy, setHuvudvy] = useState<'struktur' | 'planering' | 'kalender' | 'superteach' | 'rapporter'>('struktur');
   const [lektionsHopp, setLektionsHopp] = useState<{ amneId: string; i: number; n: number } | null>(null);
@@ -190,8 +192,13 @@ export function App() {
   const sparfel = useSparfel();
   const sparfelRuta = sparfel === null ? null : (
     <p className="status warn sparfel" role="alert">
-      ⚠ <b>Det senaste kunde inte sparas i webbläsaren — lagringen är full.</b>{' '}
-      Appens data är {(sparfel.tecken / 1e6).toFixed(1).replace('.', ',')} miljoner tecken och webbläsaren tar emot ungefär {(LAGRINGSGRANS_TECKEN / 1e6).toFixed(1).replace('.', ',')}.
+      {sparfel.stor === true ? (
+        <>⚠ <b>Det senaste kunde inte sparas i webbläsaren.</b>{' '}
+          Webbläsarens lagring tog inte emot appens data ({(sparfel.tecken / 1e6).toFixed(1).replace('.', ',')} miljoner tecken) — disken kan vara full, eller webbläsaren tillåter inte lagring i det här fönstret.</>
+      ) : (
+        <>⚠ <b>Det senaste kunde inte sparas i webbläsaren — lagringen är full.</b>{' '}
+          Appens data är {(sparfel.tecken / 1e6).toFixed(1).replace('.', ',')} miljoner tecken och webbläsaren tar emot ungefär {(LAGRINGSGRANS_TECKEN / 1e6).toFixed(1).replace('.', ',')}.</>
+      )}{' '}
       Ändringarna finns kvar tills sidan stängs eller laddas om. Spara strukturen till datarepot eller ta en ⬇ Backup nu.{' '}
       <button className="linkbtn" onClick={() => { setVy({ typ: 'datarepo' }); setHuvudvy('struktur'); setVald({ typ: 'github' }); }}>Öppna Datarepo →</button>
     </p>

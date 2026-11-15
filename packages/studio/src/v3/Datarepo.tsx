@@ -13,7 +13,7 @@ import {
   githubLank, hamtaBockerFranGitHub, hamtaFilerFranGitHub, konfigKomplett, laddaFranGitHub, lasGitHubConfig, lokalSokvag, sparaGitHubConfig, sparaTillGitHub, testaAnslutning,
   type GitHubConfig,
 } from '../github.js';
-import { exportJson, importJson, LAGRINGSGRANS_TECKEN, lagradeTecken, lasStruktur } from '../store.js';
+import { exportJson, importJson, LAGRINGSGRANS_TECKEN, lagradeTecken, lagringsinfo, lasReservkopia, lasStruktur, reservSomBackup, storLagring, taBortReservkopia, vantaPaLagring, type Lagringsinfo } from '../store.js';
 import { hamtaTillImport, listaArkiv, skickaKoade, useUppladdningsko } from '../resultatarkiv.js';
 
 type Test = Awaited<ReturnType<typeof testaAnslutning>>;
@@ -35,6 +35,28 @@ export function Datarepo({ s, spara, kor, meddela }: {
   const lagrat = useMemo(() => lagradeTecken(), [s]);
   const lagratProcent = Math.round((lagrat / LAGRINGSGRANS_TECKEN) * 100);
   const miljoner = (n: number) => (n / 1e6).toFixed(1).replace('.', ',');
+  // Del 254 · den stora lagringen: hur mycket som ligger där, hur mycket webbläsaren tillåter, och undanlagda kopior
+  const [info, setInfo] = useState<Lagringsinfo | null>(null);
+  const [infoNr, setInfoNr] = useState(0);
+  useEffect(() => {
+    if (!storLagring()) { setInfo(null); return; }
+    let aktuell = true;
+    void vantaPaLagring().then(() => lagringsinfo()).then((i) => { if (aktuell) setInfo(i); });
+    return () => { aktuell = false; };
+  }, [s, infoNr]);
+  const storlek = (byte: number) => (byte >= 1e9 ? `${(byte / 1e9).toFixed(1).replace('.', ',')} GB` : `${Math.max(1, Math.round(byte / 1e6))} MB`);
+  const laddaNerReserv = (nyckel: string, datum: string) => {
+    void lasReservkopia(nyckel).then((text) => {
+      if (text === null) { meddela('✗ Kopian gick inte att läsa.'); return; }
+      try {
+        // Samma format som ⬇ Backup, så att kopian kan läsas in med Återställ
+        const fil = new Blob([reservSomBackup(text)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(fil); a.download = `classroom-planner-reservkopia-${datum.slice(0, 10)}.json`; a.click();
+        URL.revokeObjectURL(a.href);
+      } catch { meddela('✗ Kopian gick inte att läsa.'); }
+    });
+  };
   const skriv = (rad: string) => setLogg((l) => [rad, ...l].slice(0, 12));
 
   const testa = () => {
@@ -83,9 +105,35 @@ export function Datarepo({ s, spara, kor, meddela }: {
         <Kpi ikon={Ikon.bok} rubrik="Böcker i appen" varde={String(s.bocker.length)} under={test !== null ? `${test.bocker.length} i repot` : 'testa anslutningen'} ton="gron" />
         <Kpi ikon={Ikon.staplar} rubrik="Resultat i appen" varde={String((s.resultat ?? []).length)} under={`${s.elever.length} elever · ${s.klasser.length} klasser`} ton="lila" />
         <Kpi ikon={Ikon.kalender} rubrik="Rapportmallar" varde={String((s.rapportmallar ?? []).length)} under={test !== null ? `${test.mallar} i repot` : ''} ton="orange" />
-        <Kpi ikon={lagratProcent >= 80 ? Ikon.varning : Ikon.klassrum} rubrik="Lagring i webbläsaren" varde={`${lagratProcent} %`}
-          under={`${miljoner(lagrat)} av ca ${miljoner(LAGRINGSGRANS_TECKEN)} miljoner tecken${lagratProcent >= 80 ? ' — snart fullt: spara strukturen till datarepot' : ''}`} ton={lagratProcent >= 80 ? 'orange' : 'gron'} />
+        {info !== null ? (() => {
+          // Den stora lagringen: andelen av det webbläsaren tillåter — i praktiken en stor del av den lediga disken
+          const andel = info.anvant !== null && info.utrymme !== null && info.utrymme > 0 ? (info.anvant / info.utrymme) * 100 : null;
+          const trangt = andel !== null && andel >= 80;
+          return (
+            <Kpi ikon={trangt ? Ikon.varning : Ikon.klassrum} rubrik="Lagring i webbläsaren" varde={`${miljoner(info.tecken)} milj.`}
+              under={`tecken · stor lagring${info.utrymme !== null ? ` — webbläsaren tillåter ${storlek(info.utrymme)}` : ''}${trangt ? `, ${Math.round(andel!)} % används: spara strukturen till datarepot` : ''}`}
+              ton={trangt ? 'orange' : 'gron'} />
+          );
+        })() : (
+          <Kpi ikon={lagratProcent >= 80 ? Ikon.varning : Ikon.klassrum} rubrik="Lagring i webbläsaren" varde={`${lagratProcent} %`}
+            under={`${miljoner(lagrat)} av ca ${miljoner(LAGRINGSGRANS_TECKEN)} miljoner tecken${lagratProcent >= 80 ? ' — snart fullt: spara strukturen till datarepot' : ''}`} ton={lagratProcent >= 80 ? 'orange' : 'gron'} />
+        )}
       </div>
+      {info !== null && info.reserver.length > 0 && (
+        <div className="v3-reserver" aria-label="Undanlagda kopior">
+          <b>🗄 Undanlagda kopior i webbläsaren</b>{' '}
+          <small className="v3-kpi-under">Det som låg i den äldre, lilla lagringen när appens data flyttades till den stora. Behövs bara om något saknas efter flytten — då kan kopian laddas ner och läsas in med Återställ.</small>
+          <ul className="v3-lista v3-kompakt">
+            {info.reserver.map((r) => (
+              <li key={r.nyckel}>
+                {r.datum.replace('T', ' kl. ').slice(0, 20)} · {miljoner(r.tecken)} miljoner tecken{' '}
+                <button className="v3-knapp sek" type="button" onClick={() => laddaNerReserv(r.nyckel, r.datum)}>⬇ Ladda ner</button>{' '}
+                <button className="v3-knapp sek" type="button" onClick={() => { if (window.confirm('Ta bort den undanlagda kopian? Det går inte att ångra.')) void taBortReservkopia(r.nyckel).then(() => setInfoNr((n) => n + 1)); }}>Ta bort</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="v3-rutnat tva">
         <Kort rubrik="Nyckel och adress" under="tokenen sparas bara i den här webbläsaren och skickas enbart till api.github.com">

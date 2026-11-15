@@ -190,6 +190,9 @@ body[data-layout="v3"] .studio { max-width: none; padding: 0; }
 .v3-token { display: flex; gap: 6px; }
 .v3-token input { flex: 1; font-family: ui-monospace, Consolas, monospace; letter-spacing: .04em; }
 .v3-knapprad { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+/* Del 254 · undanlagda kopior från flytten till den stora lagringen */
+.v3-reserver { margin: 0 0 16px; padding: 10px 14px; border-radius: 12px; background: #F4F6FA; border: 1px solid #DDE3EC; font-size: 13px; }
+.v3-reserver .v3-knapp { padding: 2px 10px; font-size: 12px; }
 .v3-testresultat { margin-top: 12px; border-radius: 12px; padding: 10px 14px; font-size: 13px; }
 .v3-testresultat p { margin: 4px 0; }
 .v3-testresultat.ok { background: var(--v3-gron-ljus); }
