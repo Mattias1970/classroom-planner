@@ -89,6 +89,13 @@ Bokdata är läsbar men aldrig skrivbar från appen (`classroom-planner-data`). 
 - Samma text i två kapitel skiljs åt av ett **dolt kapitelmärke** sist i texten (` [8 hex]`). Visa alltid frågetext genom `utanKapitelmarke`; para aldrig ihop frågor på den visade texten.
 - Identiteten räknas på ämnets alla Socrative-resultat (`enadeForAmne`), inte på urvalet — annars försvinner länken när bara ett kapitel visas.
 
+## Omskriven fråga, samma svar (Del 253)
+
+- **Samma svar = samma frågenummer.** En fråga som skrivits om mellan två förhör i samma kapitel står i en kolumn (senaste formuleringen gäller). **Olika svar = olika frågor** — en fråga som tagits bort och en ny med annat svar slås aldrig ihop, även om de bytt plats i quizet.
+- **Begreppets andra namn inom parentes** räknas som samma svar: `begreppsvarianter('Autonoma (självständiga) nervsystemet')` → `autonoma nervsystemet`, `självständiga nervsystemet`; `'DNA (arvsmassa)'` → `dna`, `arvsmassa`. Det gäller inte när det andra namnet är en annan frågas svar i samma quiz.
+- **Den äldre formuleringen märks ut.** `enaFragor` sätter `FragaSvar.aldreFraga` (bara i minnet) på förekomster med äldre text; matrisen bär det som `FragaCell.aldreFraga` och `MatrisFraga.aldre` (text, svar som det stod då, första–sista datum). I gränssnittet: **tjock mörk ram** (`.st-fmruta.aldre`) runt det äldre förhörets ruta, understruket frågenummer, förklaringsrad och rutan "Frågan har skrivits om — samma svar" i frågedetaljen. Siffrorna ändras inte av ramen.
+- `MatrisFraga.begrepp` är svaret till den formulering som gäller nu — det som flest förhör anger (ett enstaka förhör kan ha ett osäkert härlett facit).
+
 ## Delkapitlens ordning i resultat (Del 248)
 
 - Delkapitel står i **den ordning de förhördes**, inte nummerordning: läses kapitel 10 före kapitel 7 står 10.1 före 7.1 (`delkapitelITidsordning`). Det gäller frågematrisens kolumner och numrering, tabellhuvudet (`grupper[].forst` = datum för första förhöret), segmenten per tillfälle och elevens nuläge. Sortera aldrig delkapitel med `localeCompare(…, { numeric: true })` i resultatvyer.

@@ -460,10 +460,19 @@ export interface MatrisFraga {
    * länken visar hur många som minns. `nr`/`kod` finns när den tidigare frågan står i samma matris.
    */
   tidigare?: { kapitel: string; fraga: string; nr?: number; kod?: string };
+  /**
+   * Del 253 · Frågan har skrivits om men svaret är detsamma: de äldre formuleringarna, äldst först, med datum för
+   * första och sista förhöret där de användes. `fraga` är den senaste formuleringen.
+   */
+  aldre?: Array<{ fraga: string; begrepp?: string; forst: string; sist: string }>;
 }
 
 /** Klassens utfall på en fråga i ett tillfälle. */
-export interface FragaCell { bedomda: number; ratt: number; procent: number | null; }
+export interface FragaCell {
+  bedomda: number; ratt: number; procent: number | null;
+  /** Del 253 · Tillfället ställde frågan i en äldre formulering (samma svar) — texten som den stod då. */
+  aldreFraga?: string;
+}
 
 export interface FragaRad {
   nyckel: string; prov: string; datum: string; tid?: string; kalla: ResultatKalla; rum?: string;
@@ -502,16 +511,36 @@ export function fragematris(s: Struktur, f: DelkapitelFilter): Fragematris {
   const tillfallen = tillfallenFor(s, f);
   const hemvist = fragansDelkapitel(tillfallen);
   // Frågornas ordning: efter delkapitel, sedan efter när de först dök upp
-  const forstaGangen = new Map<string, { fraga: string; ursprung: string; rum?: string; ordning: number; begrepp?: string }>();
+  type Aldre = NonNullable<MatrisFraga['aldre']>[number];
+  const forstaGangen = new Map<string, { fraga: string; ursprung: string; rum?: string; ordning: number; begrepp?: string; facit: Map<string, { text: string; tillfallen: Set<Tillfalle>; sist: number }>; aldre: Map<string, Aldre> }>();
   let raknare = 0;
   for (const t of tillfallen) {
     for (const r of t.resultat) {
       for (const sv of r.svar ?? []) {
         const n = fragenyckel(sv.fraga);
         const facit = begreppUrFacit(sv.facit);
-        const finns = forstaGangen.get(n);
-        if (finns !== undefined) { if (finns.begrepp === undefined && facit !== null) finns.begrepp = facit; continue; }
-        forstaGangen.set(n, { fraga: sv.fraga, ursprung: t.prov, ...(t.rum !== undefined ? { rum: t.rum } : {}), ordning: raknare++, ...(facit !== null ? { begrepp: facit } : {}) });
+        let post = forstaGangen.get(n);
+        if (post === undefined) {
+          post = { fraga: sv.fraga, ursprung: t.prov, ...(t.rum !== undefined ? { rum: t.rum } : {}), ordning: raknare++, facit: new Map(), aldre: new Map() };
+          forstaGangen.set(n, post);
+        }
+        if (sv.aldreFraga === undefined) {
+          // Rätt svar som det står till den formulering som gäller nu — det som flest förhör anger (ett enstaka
+          // förhör kan ha fått ett osäkert härlett facit)
+          if (facit !== null) {
+            const fk = facit.toLowerCase();
+            const fp = post.facit.get(fk) ?? { text: facit, tillfallen: new Set<Tillfalle>(), sist: 0 };
+            fp.tillfallen.add(t); fp.sist = raknare; fp.text = facit;
+            post.facit.set(fk, fp);
+          }
+        } else {
+          // Del 253: en äldre formulering av samma fråga — texten, svaret som det stod då och när den användes
+          const an = fragenyckel(sv.aldreFraga);
+          const a = post.aldre.get(an);
+          if (a === undefined) post.aldre.set(an, { fraga: sv.aldreFraga, ...(facit !== null ? { begrepp: facit } : {}), forst: t.datum, sist: t.datum });
+          else { if (t.datum < a.forst) a.forst = t.datum; if (t.datum > a.sist) a.sist = t.datum; if (a.begrepp === undefined && facit !== null) a.begrepp = facit; }
+        }
+        if (post.begrepp === undefined && facit !== null) post.begrepp = facit;
       }
     }
   }
@@ -522,7 +551,12 @@ export function fragematris(s: Struktur, f: DelkapitelFilter): Fragematris {
   });
   const fragor: MatrisFraga[] = nycklar.map((n, i) => {
     const post = forstaGangen.get(n)!;
-    return { nr: i + 1, fraga: utanKapitelmarke(post.fraga), kod: hemvist.get(n) ?? '—', ursprung: post.ursprung, ...(post.rum !== undefined ? { ursprungRum: post.rum } : {}), ...(post.begrepp !== undefined ? { begrepp: post.begrepp } : {}) };
+    const begrepp = [...post.facit.values()].sort((a, b) => b.tillfallen.size - a.tillfallen.size || b.sist - a.sist)[0]?.text ?? post.begrepp;
+    const aldre = [...post.aldre.values()].sort((a, b) => a.forst.localeCompare(b.forst));
+    return {
+      nr: i + 1, fraga: utanKapitelmarke(post.fraga), kod: hemvist.get(n) ?? '—', ursprung: post.ursprung, ...(post.rum !== undefined ? { ursprungRum: post.rum } : {}),
+      ...(begrepp !== undefined ? { begrepp } : {}), ...(aldre.length > 0 ? { aldre } : {}),
+    };
   });
   const index = new Map(nycklar.map((n, i) => [n, i]));
   // Del 249: länken till samma kunskap i ett tidigare kapitel
@@ -546,6 +580,7 @@ export function fragematris(s: Struktur, f: DelkapitelFilter): Fragematris {
         const cell = celler[i] ?? { bedomda: 0, ratt: 0, procent: null };
         if (sv.ratt !== null) { cell.bedomda += 1; if (sv.ratt) cell.ratt += 1; }
         cell.procent = cell.bedomda === 0 ? null : Math.round((cell.ratt / cell.bedomda) * 100);
+        if (sv.aldreFraga !== undefined && cell.aldreFraga === undefined) cell.aldreFraga = sv.aldreFraga;
         celler[i] = cell;
         if (f.elevId !== undefined && r.elevId === f.elevId) { elevCeller[i] = sv.ratt; elevSvar[i] = sv.svar.trim() === '' ? null : sv.svar; }
       }

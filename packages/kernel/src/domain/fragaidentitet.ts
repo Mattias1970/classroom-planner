@@ -89,18 +89,46 @@ function sammaBegrepp(a: string, b: string): boolean {
   return rad[kort.length] <= tillatet;
 }
 
+/**
+ * Del 253 · Ett begrepp med ett annat namn inom parentes är samma svar under båda namnen:
+ * 'Autonoma (självständiga) nervsystemet' = 'autonoma nervsystemet' = 'självständiga nervsystemet', och
+ * 'DNA (arvsmassa)' = 'DNA' = 'arvsmassa'. Ger de andra namnen (som begreppsnycklar) — utan själva begreppet.
+ */
+export function begreppsvarianter(svar: string | undefined | null): string[] {
+  const b = begreppUrFacit(svar);
+  if (b === null) return [];
+  const m = /^(.*?)\s*\(([^()]+)\)\s*(.*)$/.exec(b);
+  if (m === null) return [];
+  const [, fore, inom, efter] = m;
+  if (fore.trim() === '' && efter.trim() === '') return [];
+  const kandidater = [`${fore} ${efter}`];
+  // Parentesen sist: det andra namnet står för hela begreppet. Mitt i: det ersätter ordet närmast före.
+  if (efter.trim() === '') kandidater.push(inom);
+  else kandidater.push(`${fore.trim().split(/\s+/).slice(0, -1).join(' ')} ${inom} ${efter}`);
+  const hel = begreppsnyckel(b);
+  const ut: string[] = [];
+  for (const k of kandidater) {
+    const n = begreppsnyckel(k.trim());
+    if (n !== null && n !== hel && !ut.includes(n)) ut.push(n);
+  }
+  return ut;
+}
+
 /** Begreppet bakom varje fråga i ett tillfälle: facit ur rapporten, annars ett svar som rättats som rätt. */
-function begreppPerFraga(rs: Resultat[]): Map<string, string | null> {
+function begreppPerFraga(rs: Resultat[]): { begrepp: Map<string, string | null>; varianter: Map<string, string[]> } {
   const ut = new Map<string, string | null>();
+  const varianter = new Map<string, string[]>();
   for (const r of rs) {
     for (const sv of r.svar ?? []) {
       const n = fragenyckel(sv.fraga);
       if (ut.get(n) !== undefined && ut.get(n) !== null) continue;
-      const b = sv.facit !== undefined ? begreppsnyckel(sv.facit) : sv.ratt === true ? begreppsnyckel(sv.svar) : null;
+      const kalla = sv.facit !== undefined ? sv.facit : sv.ratt === true ? sv.svar : null;
+      const b = kalla === null ? null : begreppsnyckel(kalla);
       if (b !== null || !ut.has(n)) ut.set(n, b);
+      if (b !== null) varianter.set(n, begreppsvarianter(kalla));
     }
   }
-  return ut;
+  return { begrepp: ut, varianter };
 }
 
 /** FNV-1a (32 bit) → 8 hex-tecken. Kapitelmärket som skiljer samma frågetext i två kapitel åt. */
@@ -143,7 +171,7 @@ export function enaFragor(rs: Resultat[]): EnadeFragor {
   const tidAv = (g: Resultat[]): string => g.map((r) => r.tid).filter((t): t is string => t !== undefined).sort()[0] ?? '';
   const tillfallen = [...grupper.values()]
     .map((g) => {
-      const begrepp = begreppPerFraga(g);
+      const { begrepp, varianter: allaVarianter } = begreppPerFraga(g);
       // Ett begrepp som i det här quizet är rätt svar på flera frågor pekar inte ut EN fråga här — de frågorna
       // går på sin text. I ett annat quiz, där begreppet bara hör till en fråga, gäller det som vanligt.
       // Del 243: bildfrågor räknas inte — de knyts aldrig till begreppet och gör det därför inte tvetydigt
@@ -151,8 +179,19 @@ export function enaFragor(rs: Resultat[]): EnadeFragor {
       const antal = new Map<string, number>();
       for (const [n, b] of begrepp) if (b !== null && !bild.has(n)) antal.set(b, (antal.get(b) ?? 0) + 1);
       const tvetydiga = new Set([...antal].filter(([, n]) => n > 1).map(([b]) => b));
+      // Del 253: det andra namnet inom parentes ('Autonoma (självständiga) nervsystemet') gäller bara när det inte
+      // är en annan frågas svar i samma quiz — och inte två frågors andra namn
+      const varAntal = new Map<string, number>();
+      for (const [n, vs] of allaVarianter) if (!bild.has(n)) for (const v of vs) varAntal.set(v, (varAntal.get(v) ?? 0) + 1);
+      const varianter = new Map<string, string[]>();
+      for (const [n, vs] of allaVarianter) {
+        const b = begrepp.get(n);
+        if (bild.has(n) || b === null || b === undefined || tvetydiga.has(b)) continue;
+        const ok = vs.filter((v) => !antal.has(v) && varAntal.get(v) === 1);
+        if (ok.length > 0) varianter.set(n, ok);
+      }
       return {
-        datum: g[0].datum, tid: tidAv(g), omfang: g[0].amneId ?? '', koder: koderForProv(g[0].prov, g[0].rum), resultat: g, begrepp, tvetydiga, bild,
+        datum: g[0].datum, tid: tidAv(g), omfang: g[0].amneId ?? '', koder: koderForProv(g[0].prov, g[0].rum), resultat: g, begrepp, varianter, tvetydiga, bild,
         kap: new Map<string, string>(), bildtillagg: new Map<string, string>(),
       };
     })
@@ -189,7 +228,12 @@ export function enaFragor(rs: Resultat[]): EnadeFragor {
     for (const [n, b] of t.begrepp) {
       const palitligt = b !== null && !t.tvetydiga.has(b) && !t.bild.has(n);
       const tk = `${t.omfang}|${n}`; const bk = `${t.omfang}|${b ?? ''}`;
-      const c = sist(textKap.get(tk), iQuizet) ?? (palitligt ? sist(begreppKap.get(bk), iQuizet) : undefined) ?? nyttKap;
+      const andraNamn = t.varianter.get(n) ?? [];
+      const viaAndraNamn = (ok: (x: string) => boolean): string | undefined => {
+        for (const v of andraNamn) { const k = sist(begreppKap.get(`${t.omfang}|${v}`), ok); if (k !== undefined) return k; }
+        return undefined;
+      };
+      const c = sist(textKap.get(tk), iQuizet) ?? (palitligt ? sist(begreppKap.get(bk), iQuizet) ?? viaAndraNamn(iQuizet) : undefined) ?? nyttKap;
       const cf = `${t.omfang}:${c}`;
       const nod = `f|${cf}|${n}`;
       t.kap.set(n, cf);
@@ -212,6 +256,12 @@ export function enaFragor(rs: Resultat[]): EnadeFragor {
       if (nyttBegrepp) begreppKap.set(bk, [...(begreppKap.get(bk) ?? []), c]);
       if (b !== null) identBegrepp.set(nod, b);
       if (palitligt) ena(nod, `b|${cf}|${b}`);
+      // Del 253: samma svar under sitt andra namn — frågan har skrivits om, begreppet är detsamma
+      for (const v of andraNamn) {
+        ena(nod, `b|${cf}|${v}`);
+        const vk = `${t.omfang}|${v}`;
+        if (!(begreppKap.get(vk) ?? []).includes(c)) begreppKap.set(vk, [...(begreppKap.get(vk) ?? []), c]);
+      }
     }
   }
 
@@ -261,13 +311,13 @@ export function enaFragor(rs: Resultat[]): EnadeFragor {
   // Varje förekomst får sin identitet (gruppen, eller frågan själv när gruppen lösts upp) och sin grundtext.
   // Två identiteter med samma text — samma fråga i två kapitel — skiljs åt: den första behåller texten, de
   // senare får kapitelmärket efter sig.
-  interface Ident { id: string; text: string; cf: string }
+  interface Ident { id: string; text: string; cf: string; grupp?: boolean }
   const identFor = (cf: string, n: string, egenText: string, tillagg: string | undefined): Ident => {
     const nod = `f|${cf}|${n}`;
     if (tillagg !== undefined) return { id: `${nod}|bild|${tillagg}`, text: `${egenText} (${tillagg})`, cf };
     const g = rot(nod);
     if (upplosta.has(g)) return { id: nod, text: egenText, cf };
-    return { id: g, text: senaste.get(g)?.text ?? egenText, cf };
+    return { id: g, text: senaste.get(g)?.text ?? egenText, cf, grupp: true };
   };
   const utText = new Map<string, string>();          // identitet → texten i utdata
   const tagna = new Map<string, string>();           // frågenyckel → identiteten som har den
@@ -294,7 +344,9 @@ export function enaFragor(rs: Resultat[]): EnadeFragor {
         const text = textFor(i);
         if (text === sv.fraga) return sv;
         andrad = true;
-        return { ...sv, fraga: text };
+        // Del 253: frågan har skrivits om sedan dess (samma svar) — den äldre formuleringen följer med
+        const aldre = i.grupp === true && fragenyckel(sv.fraga) !== fragenyckel(i.text);
+        return { ...sv, fraga: text, ...(aldre ? { aldreFraga: sv.fraga } : {}) };
       });
       if (andrad) ut.set(r, { ...r, svar });
     }

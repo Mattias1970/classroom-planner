@@ -691,6 +691,13 @@ input.fel { border-color: #B71C1C; }
 .st-fmrepris-forklaring { margin: 6px 0 0; display: flex; align-items: center; gap: 6px; }
 .st-fmrepris-prov { display: inline-block; background: #E7EAEF; cursor: default; flex: none; }
 .st-fmtidigare { margin: 8px 0; padding: 6px 10px; border-left: 3px solid #5B4FE0; background: #F3F2FE; border-radius: 0 6px 6px 0; }
+/* Del 253 · Äldre formulering av samma fråga (samma svar): tjock mörk ram runt resultaten med den gamla texten */
+.st-fmruta.aldre { position: relative; }
+.st-fmruta.aldre::after { content: ''; position: absolute; inset: 0; border: 3px solid #1F2937; border-radius: 4px; pointer-events: none; }
+.st-fmruta.repris.aldre::after { box-shadow: inset 0 0 0 2px #5B4FE0; }
+.st-fmnr.omskriven { color: #1F2937; font-weight: 800; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 2px; }
+.st-fmhist.aldre { box-shadow: inset 0 0 0 2px #1F2937; }
+.st-fmaldre { margin: 8px 0; padding: 6px 10px; border-left: 4px solid #1F2937; background: #F1F3F6; border-radius: 0 6px 6px 0; }
 .st-fmvald { background: #F7F9FC; border: 1px solid var(--ram); border-radius: 10px; padding: 8px 12px; margin-top: 8px; }
 .st-fmvald p { margin: 4px 0 6px; font-weight: 600; }
 .st-fmhist { display: inline-block; border-radius: 6px; padding: 1px 8px; margin: 2px 4px 2px 0; font-size: 11px; font-weight: 700; color: #fff; text-shadow: 0 1px 1px rgba(0,0,0,.25); }

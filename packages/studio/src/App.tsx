@@ -4326,7 +4326,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
   const [visaTkPar, setVisaTkPar] = useState(false);
   const [tkSteg, setTkSteg] = useState<{ elevId: string; index: number } | null>(null);
   const [ledElev, setLedElev] = useState<string | null>(null);
-  const [vald, setVald] = useState<{ nr: number; fraga: string; kod: string; ursprung: string; begrepp?: string; tidigare?: { kapitel: string; fraga: string; nr?: number; kod?: string } } | null>(null);
+  const [vald, setVald] = useState<{ nr: number; fraga: string; kod: string; ursprung: string; begrepp?: string; tidigare?: { kapitel: string; fraga: string; nr?: number; kod?: string }; aldre?: Array<{ fraga: string; begrepp?: string; forst: string; sist: string }> } | null>(null);
   const [fMin, setFMin] = useState(0);
   const [fMax, setFMax] = useState(50);
   const [valdaTest, setValdaTest] = useState<string[]>([]);
@@ -4603,8 +4603,8 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
                   </th>
                 ))}</tr>
                 <tr><th>Vecka</th><th>Datum</th><th>Typ</th><th>{fmVarld === 'socrative' ? 'Quiz' : 'Prov'}</th>{fm.fragor.map((fr) => (
-                  <th key={fr.nr} className={`st-fmnr${fm.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}${fr.tidigare !== undefined ? ' repris' : ''}`}
-                    title={`${fr.kod} · ${fr.fraga}${fr.tidigare !== undefined ? ` · ↺ samma kunskap som ${fr.tidigare.nr !== undefined ? `fråga ${fr.tidigare.nr} ` : ''}i kapitel ${fr.tidigare.kapitel}` : ''}`}>{fr.nr}</th>
+                  <th key={fr.nr} className={`st-fmnr${fm.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}${fr.tidigare !== undefined ? ' repris' : ''}${fr.aldre !== undefined ? ' omskriven' : ''}`}
+                    title={`${fr.kod} · ${fr.fraga}${fr.tidigare !== undefined ? ` · ↺ samma kunskap som ${fr.tidigare.nr !== undefined ? `fråga ${fr.tidigare.nr} ` : ''}i kapitel ${fr.tidigare.kapitel}` : ''}${fr.aldre !== undefined ? ' · ✎ frågan har skrivits om — samma svar' : ''}`}>{fr.nr}</th>
                 ))}</tr>
               </thead>
               <tbody>{fmRader.map((rad) => (
@@ -4625,9 +4625,11 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
                     const titel = (c === null ? `Fråga ${fr.nr} ingick inte i ${rad.prov}`
                       : ledElev !== null ? `Fråga ${fr.nr}: ${elevSvar === true ? 'rätt' : elevSvar === false ? 'fel' : 'ej gjord'}`
                         : `Fråga ${fr.nr}: ${c.procent} % rätt (${c.ratt}/${c.bedomda})`)
-                      + (repris ? ` · ↺ samma kunskap som ${fr.tidigare!.nr !== undefined ? `fråga ${fr.tidigare!.nr} ` : ''}i kapitel ${fr.tidigare!.kapitel}` : '');
+                      + (repris ? ` · ↺ samma kunskap som ${fr.tidigare!.nr !== undefined ? `fråga ${fr.tidigare!.nr} ` : ''}i kapitel ${fr.tidigare!.kapitel}` : '')
+                      // Del 253: förhöret ställde frågan i en äldre formulering (samma svar) — tjock ram
+                      + (c?.aldreFraga !== undefined ? ` · ✎ äldre formulering, samma svar: ”${c.aldreFraga}”` : '');
                     return (
-                      <td key={fr.nr} className={`st-fmruta${vald?.nr === fr.nr ? ' vald' : ''}${fm.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}${repris ? ' repris' : ''}`} style={{ background: bg }} title={titel}
+                      <td key={fr.nr} className={`st-fmruta${vald?.nr === fr.nr ? ' vald' : ''}${fm.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}${repris ? ' repris' : ''}${c?.aldreFraga !== undefined ? ' aldre' : ''}`} style={{ background: bg }} title={titel}
                         onClick={() => setVald(vald?.nr === fr.nr ? null : fr)} />
                     );
                   })}
@@ -4649,6 +4651,11 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
               <span className="st-fmruta repris st-fmrepris-prov" aria-hidden="true" /> Lila-blå ram = samma kunskap som i ett tidigare kapitel. Frågan räknas bara i sitt eget kapitel; färgen visar hur många som minns.
             </p>
           )}
+          {fm.fragor.some((fr) => fr.aldre !== undefined) && (
+            <p className="small muted st-fmrepris-forklaring" aria-label="Förklaring omskriven fråga">
+              <span className="st-fmruta aldre st-fmrepris-prov" aria-hidden="true" /> Tjock ram = förhöret ställde frågan i en äldre formulering. Frågan har skrivits om sedan dess men svaret är detsamma, så resultaten står under samma frågenummer.
+            </p>
+          )}
           {vald !== null && (
             <div className="st-fmvald">
               <b>Fråga {vald.nr}</b> <span className="chip">{vald.kod}</span> <small className="muted">först ställd i {vald.ursprung}</small>
@@ -4664,9 +4671,22 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
               </dl>
               <div className="small">
                 {fmRader.map((rad, i) => { const c = rad.celler[fm.fragor.findIndex((x) => x.nr === vald.nr)]; return c === null ? null : (
-                  <span key={i} className="st-fmhist" style={{ background: ratFarg(c.procent) }} title={`${rad.prov}: ${c.procent} %`}>{rad.prov}: {c.procent} %</span>
+                  <span key={i} className={`st-fmhist${c.aldreFraga !== undefined ? ' aldre' : ''}`} style={{ background: ratFarg(c.procent) }}
+                    title={`${rad.prov}: ${c.procent} %${c.aldreFraga !== undefined ? ' · äldre formulering' : ''}`}>{rad.prov}: {c.procent} %</span>
                 ); })}
               </div>
+              {vald.aldre !== undefined && (
+                <div className="st-fmaldre" aria-label="Äldre formulering av frågan">
+                  <b>✎ Frågan har skrivits om — samma svar</b>
+                  {vald.aldre.map((a) => (
+                    <div key={a.fraga} className="small">
+                      <span className="muted">{a.forst === a.sist ? kortDatum(a.forst) : `${kortDatum(a.forst)}–${kortDatum(a.sist)}`}: </span>”{a.fraga}”
+                      {a.begrepp !== undefined && a.begrepp.toLowerCase() !== (vald.begrepp ?? '').toLowerCase() && <span className="muted"> · svaret skrevs då <b>{a.begrepp}</b></span>}
+                    </div>
+                  ))}
+                  <div className="small muted">Förhören med den äldre formuleringen har tjock ram i matrisen.</div>
+                </div>
+              )}
               {vald.tidigare !== undefined && (() => {
                 // Del 249: samma kunskap i ett tidigare kapitel — visas bredvid, räknas inte ihop
                 const forr = vald.tidigare;
@@ -6038,9 +6058,9 @@ function RapportVy({ s, kor, meddela, kontext, onKontext }: {
                       const fanns = rad.celler[i] !== null;
                       const svar = rad.elevCeller?.[i];
                       return (
-                        <td key={fr.nr} className={`st-fmruta${analys.matris.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}${fr.tidigare !== undefined && fanns ? ' repris' : ''}`}
+                        <td key={fr.nr} className={`st-fmruta${analys.matris.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}${fr.tidigare !== undefined && fanns ? ' repris' : ''}${rad.celler[i]?.aldreFraga !== undefined ? ' aldre' : ''}`}
                           style={{ background: !fanns ? '#F7F8FA' : svar === true ? '#4CAF50' : svar === false ? '#D32F2F' : '#E7EAEF' }}
-                          title={!fanns ? `Fråga ${fr.nr} ingick inte i ${rad.prov}` : `Fråga ${fr.nr}: ${svar === true ? 'rätt' : svar === false ? 'fel' : 'ej besvarad'} — ${fr.fraga}`}
+                          title={!fanns ? `Fråga ${fr.nr} ingick inte i ${rad.prov}` : `Fråga ${fr.nr}: ${svar === true ? 'rätt' : svar === false ? 'fel' : 'ej besvarad'} — ${rad.celler[i]?.aldreFraga ?? fr.fraga}${rad.celler[i]?.aldreFraga !== undefined ? ' (äldre formulering, samma svar)' : ''}`}
                           onClick={() => window.alert(`Fråga ${fr.nr} (${fr.kod})\n\n${fr.fraga}`)} />
                       );
                     })}

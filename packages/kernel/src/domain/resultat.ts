@@ -64,7 +64,14 @@ export interface Resultat {
 
 /** En rad ur en resultatfil, före elevmatchning. */
 /** Ett svar på en enskild fråga. `facit` = det rätta svaret, dvs. begreppet frågan beskriver ('A • ekologi'). */
-export interface FragaSvar { fraga: string; svar: string; ratt: boolean | null; facit?: string; }
+export interface FragaSvar {
+  fraga: string; svar: string; ratt: boolean | null; facit?: string;
+  /**
+   * Del 253 · Frågan som den stod i rapporten, när den senare skrivits om (samma svar) och `fraga` därför bär den
+   * nya formuleringen. Sätts bara av `enaFragor`, i minnet — sparas aldrig.
+   */
+  aldreFraga?: string;
+}
 
 /** 'A • ekologi' → 'ekologi'. Begreppet är det rätta svaret på begreppsfrågan. */
 export function begreppUrFacit(facit: string | undefined | null): string | null {
