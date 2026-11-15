@@ -113,9 +113,9 @@ describe('Del 75: frågematris och frågefilter', async () => {
     const m = fragematris(bygg(), f);
     expect(m.fragor.map((x) => `${x.nr}:${x.kod}`)).toEqual(['1:4.1', '2:4.1', '3:4.2', '4:4.3']);
     expect(m.grupper).toEqual([
-      { kod: '4.1', etikett: 'Test41', ursprung: 'Biologi 4.1 Begrepp', fran: 1, till: 2, forst: '2026-08-21' },
-      { kod: '4.2', etikett: 'Test42', ursprung: '4.1-4.2 Begrepp', fran: 3, till: 3, forst: '2026-08-28' },
-      { kod: '4.3', etikett: 'Test43', ursprung: '4.1-4.3 Begrepp', fran: 4, till: 4, forst: '2026-09-04' },
+      { kod: '4.1', etikett: 'Test41', ursprung: 'Biologi 4.1 Begrepp', fran: 1, till: 2, forst: '2026-08-21', amnesNamn: 'Biologi' },
+      { kod: '4.2', etikett: 'Test42', ursprung: '4.1-4.2 Begrepp', fran: 3, till: 3, forst: '2026-08-28', amnesNamn: 'Biologi' },
+      { kod: '4.3', etikett: 'Test43', ursprung: '4.1-4.3 Begrepp', fran: 4, till: 4, forst: '2026-09-04', amnesNamn: 'Biologi' },
     ]);
     // Första förhöret innehöll bara fråga 1 och 2
     expect(m.rader[0].celler.map((c) => c?.procent ?? null)).toEqual([50, 50, null, null]);
@@ -475,8 +475,8 @@ describe('Del 248 · delkapitlen står i den ordning de förhördes', async () =
     const m = fragematris(kemi(), kf);
     expect(m.fragor.map((x) => `${x.nr}:${x.kod}`)).toEqual(['1:10.1', '2:10.1', '3:7.1', '4:7.1']);
     expect(m.grupper).toEqual([
-      { kod: '10.1', etikett: 'Test101', ursprung: 'Kol 10.1', fran: 1, till: 2, forst: '2026-11-09' },
-      { kod: '7.1', etikett: 'Test71', ursprung: 'Kemi 7.1 Begrepp', fran: 3, till: 4, forst: '2026-11-13' },
+      { kod: '10.1', etikett: 'Test101', ursprung: 'Kol 10.1', fran: 1, till: 2, forst: '2026-11-09', amnesNamn: 'Kemi' },
+      { kod: '7.1', etikett: 'Test71', ursprung: 'Kemi 7.1 Begrepp', fran: 3, till: 4, forst: '2026-11-13', amnesNamn: 'Kemi' },
     ]);
     // raderna är tillfällena i tidsordning, och cellerna följer kolumnordningen
     expect(m.rader.map((r) => [r.datum, r.tid, r.prov, r.celler.map((c) => c?.procent ?? null)])).toEqual([
@@ -508,5 +508,76 @@ describe('Del 248 · delkapitlen står i den ordning de förhördes', async () =
       { namn: 'Anna Berg', poang: 4, maxPoang: 4, svar: sv([[S1, true], [S2, true], [K1, true], [K2, true]]) },
     ] }).s;
     expect(delkapitelSegment(kumulativt, kf).at(-1)!.segment.map((x) => x.kod)).toEqual(['10.1', '7.1']);
+  });
+});
+
+describe('Del 251 · Biologi och Kemi blandas inte ihop — kapitel 7.1 finns i båda', async () => {
+  const { fragematris, nulage, utanAmne } = await import('../src/domain/delkapiteltrend.js');
+  const N1 = 'Nervcellens långa utskott.';
+  const N2 = 'Kopplingen mellan två nervceller.';
+  const N3 = 'Hjärnan och ryggmärgen tillsammans.';
+  const K1 = 'Ämne som bara innehåller kolatomer i ett regelbundet mönster.';
+  const M1 = 'Med denna kan vi visa vilken form en molekyl egentligen har.';
+  const M2 = 'Talar om vilka atomer som ingår i en molekyl.';
+  function noBlock(): Struktur {
+    let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '2026/2027', start: '2026-08-17', slut: '2027-06-11', dagar: [] });
+    s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'NO' });
+    s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
+    s = laggTillAmne(s, { id: 'bi', klassId: 'k', namn: 'Biologi', schema: [{ dag: 1, start: '09:00', slut: '10:00' }] });
+    s = laggTillAmne(s, { id: 'ke', klassId: 'k', namn: 'Kemi', schema: [{ dag: 1, start: '09:00', slut: '10:00' }] });
+    s = laggTillElev(s, { id: 'a', klassId: 'k', namn: 'Anna Berg', grupp: 'A' });
+    s = laggTillElev(s, { id: 'b', klassId: 'k', namn: 'Omar Ali', grupp: 'A' });
+    const imp = (amneId: string, kalla: 'socrative-exit' | 'socrative-laxforhor', prov: string, datum: string, rum: string, anna: FragaSvar[], omar: FragaSvar[]) => {
+      s = importeraResultat(s, { klassId: 'k', amneId, kalla, prov, datum, tid: '09:21', rum, rader: [
+        { namn: 'Anna Berg', poang: anna.filter((x) => x.ratt).length, maxPoang: anna.length, svar: anna },
+        { namn: 'Omar Ali', poang: omar.filter((x) => x.ratt).length, maxPoang: omar.length, svar: omar },
+      ] }).s;
+    };
+    imp('bi', 'socrative-exit', 'Nervsystemet 7.1', '2026-10-09', 'BIOLOGI8BB', sv([[N1, true], [N2, true]]), sv([[N1, true], [N2, false]]));
+    imp('bi', 'socrative-laxforhor', 'Kap 7.1-7.2', '2026-10-12', 'BIOLOGI8BB', sv([[N1, true], [N2, true], [N3, true]]), sv([[N1, true], [N2, true], [N3, false]]));
+    imp('ke', 'socrative-exit', 'Kol 10.1', '2026-11-09', 'KEMI8BB', sv([[K1, true]]), sv([[K1, false]]));
+    imp('ke', 'socrative-exit', 'Kemi 7.1 Begrepp', '2026-11-13', 'KEMI8BB', sv([[M1, true], [M2, true]]), sv([[M1, false], [M2, true]]));
+    return s;
+  }
+
+  it('alla ämnen: Biologis 7.1 och Kemis 7.1 är olika delkapitel, vart ämne för sig', () => {
+    const m = fragematris(noBlock(), { klassId: 'k' });
+    expect(m.grupper.map((g) => [g.amnesNamn, g.kod, g.ursprung, g.till - g.fran + 1])).toEqual([
+      ['Biologi', 'Bi 7.1', 'Nervsystemet 7.1', 2],
+      ['Biologi', 'Bi 7.2', 'Kap 7.1-7.2', 1],
+      ['Kemi', 'Ke 10.1', 'Kol 10.1', 1],
+      ['Kemi', 'Ke 7.1', 'Kemi 7.1 Begrepp', 2],
+    ]);
+    expect(m.fragor.map((x) => [x.nr, x.kod, x.fraga])).toEqual([[1, 'Bi 7.1', N1], [2, 'Bi 7.1', N2], [3, 'Bi 7.2', N3], [4, 'Ke 10.1', K1], [5, 'Ke 7.1', M1], [6, 'Ke 7.1', M2]]);
+    // Kemi-förhöret har inget i Biologis kolumner, och tvärtom
+    expect(m.rader.map((r) => [r.amnesNamn, r.prov, r.test, r.celler.map((c) => c?.procent ?? null)])).toEqual([
+      ['Biologi', 'Nervsystemet 7.1', 'test71', [100, 50, null, null, null, null]],
+      ['Biologi', 'Kap 7.1-7.2', 'test712', [100, 100, 50, null, null, null]],
+      ['Kemi', 'Kol 10.1', 'test101', [null, null, null, 50, null, null]],
+      ['Kemi', 'Kemi 7.1 Begrepp', 'test71', [null, null, null, null, 50, 100]],
+    ]);
+    expect(utanAmne('Bi 7.1')).toBe('7.1');
+    expect(utanAmne('7.1')).toBe('7.1');
+    expect(utanAmne('Cellen E-prov')).toBe('Cellen E-prov');
+  });
+
+  it('ett ämne i taget: koden står utan ämne, som förut', () => {
+    const s = noBlock();
+    expect(fragematris(s, { klassId: 'k', amneId: 'bi' }).grupper.map((g) => [g.amnesNamn, g.kod])).toEqual([['Biologi', '7.1'], ['Biologi', '7.2']]);
+    expect(fragematris(s, { klassId: 'k', amneId: 'ke' }).grupper.map((g) => [g.amnesNamn, g.kod])).toEqual([['Kemi', '10.1'], ['Kemi', '7.1']]);
+  });
+
+  it('elevens nuläge och segmenten håller också isär ämnena', () => {
+    const s = noBlock();
+    expect(nulage(s, 'a', { klassId: 'k' }).delkapitel.map((d) => [d.kod, d.ratt + d.fel])).toEqual([['Bi 7.1', 2], ['Bi 7.2', 1], ['Ke 10.1', 1], ['Ke 7.1', 2]]);
+    expect(delkapitelSegment(s, { klassId: 'k' }).map((t) => t.segment.map((x) => x.kod))).toEqual([['Bi 7.1'], ['Bi 7.1', 'Bi 7.2'], ['Ke 10.1'], ['Ke 7.1']]);
+  });
+
+  it('ämnena står var för sig även när förhören varvas i tiden', () => {
+    let s = noBlock();
+    // ett sent Biologi-förhör efter att Kemi börjat: 7.3 hamnar ändå bland Biologis delkapitel
+    s = importeraResultat(s, { klassId: 'k', amneId: 'bi', kalla: 'socrative-exit', prov: 'Nervsystemet 7.3', datum: '2026-11-16', tid: '09:00', rum: 'BIOLOGI8BB', rader: [
+      { namn: 'Anna Berg', poang: 1, maxPoang: 1, svar: sv([['Ögats yttersta hinna.', true]]) }] }).s;
+    expect(fragematris(s, { klassId: 'k' }).grupper.map((g) => g.kod)).toEqual(['Bi 7.1', 'Bi 7.2', 'Bi 7.3', 'Ke 10.1', 'Ke 7.1']);
   });
 });

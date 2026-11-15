@@ -666,6 +666,9 @@ input.fel { border-color: #B71C1C; }
 .st-fmtabell th, .st-fmtabell td { border: none; padding: 0; }
 .st-fmgrupp { text-align: center; font-size: 11px; font-weight: 800; color: #465060; background: #E8ECF3; border-radius: 6px 6px 0 0; padding: 3px 6px !important; border-bottom: 2px solid #C9D2E0 !important; overflow: hidden; }
 .st-fmgruppnamn { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Del 251 · Ämnesraden överst när flera ämnen visas: Biologis delkapitel under Biologi, Kemis under Kemi */
+.st-fmtabell thead th.st-fmamne { text-align: left; font-size: 12px; font-weight: 800; color: #fff !important; background: #3D5A8F; border-radius: 6px 6px 0 0; padding: 3px 8px !important; box-shadow: -2px 0 0 0 #fff; }
+.st-fmradamne { display: inline-block; min-width: 20px; margin-right: 6px; padding: 0 5px; border-radius: 6px; background: #E8ECF3; color: #465060; font-weight: 700; font-size: 10px; text-align: center; }
 .st-fmgrupp small { display: block; font-weight: 600; font-size: 10px; color: #7a8494; }
 /* Etikettkolumnerna ska krympa till innehållet — annars sväljer den första all överbliven bredd */
 .st-dash .st-fmtabell th, .st-dash .st-fmtabell td,

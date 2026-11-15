@@ -9,6 +9,7 @@
  *
  * (Ring 1, I2: ingen fetch/DOM/lagring.)
  */
+import { amnesForkortning } from './amnen.js';
 import { elevernaIKlassen } from './struktur.js';
 import type { Elev, Struktur } from './typer.js';
 import { begreppUrFacit, type Resultat, type ResultatKalla } from './resultat.js';
@@ -26,6 +27,11 @@ export interface Tillfalle {
   nyckel: string; prov: string; datum: string; tid?: string; kalla: ResultatKalla; rum?: string; resultat: Resultat[];
   /** Del 156: DigiExam/Magma — frågans grupp (provet resp. delkapitlet) per frågenyckel. */
   fragaKod?: Map<string, string>;
+  /** Del 251 · Ämnet tillfället hör till — kapitel 7.1 finns i både Biologi och Kemi, och de får inte blandas. */
+  amneId?: string;
+  amnesNamn?: string;
+  /** Ämnets förkortning ('Bi', 'Ke') — står före delkapitlet när flera ämnen visas tillsammans. */
+  amnesKort?: string;
 }
 
 /** Del 156 · Frågematrisens tre världar: Socrative-quiz, DigiExam-prov och Magma-test blandas aldrig. */
@@ -144,19 +150,26 @@ function tillfallenForRaknad(s: Struktur, f: DelkapitelFilter): Tillfalle[] {
   // länken till ett tidigare kapitel finns kvar) även när bara ett kapitel eller en period visas.
   const enade = enadeForAmne(s, f);
   const rs = resultatIFilter(s, f).filter((r) => (r.svar ?? []).length > 0).map((r) => ommarkera(s, enade.omskrivna.get(r) ?? r, fragaKod));
+  // Del 251: ett tillfälle hör till ETT ämne — samma quiznamn samma dag i två ämnen är två tillfällen
   const grupper = new Map<string, Resultat[]>();
   for (const r of rs) {
-    const n = `${r.datum}|${r.kalla}|${r.prov}`;
+    const n = `${r.datum}|${r.kalla}|${r.prov}|${r.amneId ?? ''}`;
     grupper.set(n, [...(grupper.get(n) ?? []), r]);
   }
-  const ut = [...grupper.values()].map((resultat) => {
+  const tagnaNycklar = new Set<string>();
+  const ut = [...grupper.values()].map((resultat): Tillfalle => {
     // Klockslag: tidigaste kända bland resultaten (sätts vid filimport)
     const tid = resultat.map((r) => r.tid).filter((t): t is string => t !== undefined).sort()[0];
+    const amne = s.amnen.find((a) => a.id === resultat[0].amneId);
+    const bas = `${resultat[0].datum}|${resultat[0].kalla}|${resultat[0].prov}`;
+    const nyckel = tagnaNycklar.has(bas) ? `${bas}|${resultat[0].amneId ?? ''}` : bas;
+    tagnaNycklar.add(nyckel);
     return {
-      nyckel: `${resultat[0].datum}|${resultat[0].kalla}|${resultat[0].prov}`,
+      nyckel,
       prov: resultat[0].prov, datum: resultat[0].datum, ...(tid !== undefined ? { tid } : {}),
       kalla: resultat[0].kalla, ...(resultat[0].rum !== undefined ? { rum: resultat[0].rum } : {}), resultat,
       ...(fragaKod.size > 0 && matrisKalla(resultat[0].kalla) !== 'socrative' ? { fragaKod } : {}),
+      ...(amne !== undefined ? { amneId: amne.id, amnesNamn: amne.namn, amnesKort: amnesForkortning(amne.namn) } : {}),
     };
   }).sort(jamforTillfalle);
   tidigareKunskap.set(ut, enade.tidigare);
@@ -207,10 +220,26 @@ export function fragansDelkapitel(tillfallen: Tillfalle[]): Map<string, string> 
   return karta;
 }
 
+/** Del 251 · Visas flera ämnen tillsammans? Då får delkapitlen ämnet före sig ('Bi 7.1', 'Ke 7.1'). */
+function fleraAmnen(tillfallen: Tillfalle[]): boolean {
+  return new Set(tillfallen.map((t) => t.amneId ?? '')).size > 1;
+}
+
+/** 'Bi 7.1' → '7.1' — delkapitelkoden utan ämnesförkortning. */
+export function utanAmne(kod: string): string {
+  return kod.replace(/^\D+\s(?=\d+\.\d+$)/, '');
+}
+
 function fragansDelkapitelRaknad(tillfallen: Tillfalle[]): Map<string, string> {
   const karta = new Map<string, string>();
-  const sedda = new Set<string>();
+  // Del 251: kapitelnumren är ämnets egna — 7.1 i Biologi och 7.1 i Kemi är olika delkapitel. Vad som redan är
+  // förhört minns vi därför per ämne, och med flera ämnen i urvalet står ämnet före koden.
+  const flera = fleraAmnen(tillfallen);
+  const seddaPerAmne = new Map<string, Set<string>>();
   for (const t of tillfallen) {
+    const sedda = seddaPerAmne.get(t.amneId ?? '') ?? new Set<string>();
+    seddaPerAmne.set(t.amneId ?? '', sedda);
+    const medAmne = (kod: string): string => (flera && t.amnesKort !== undefined && /^\d+\.\d+$/.test(kod) ? `${t.amnesKort} ${kod}` : kod);
     const alla = koderForTillfalle(t);
     const nya = alla.filter((k) => !sedda.has(k));
     const hemvist = nya.length > 0 ? nya[nya.length - 1] : alla[alla.length - 1] ?? '—';
@@ -218,7 +247,7 @@ function fragansDelkapitelRaknad(tillfallen: Tillfalle[]): Map<string, string> {
     for (const r of t.resultat) {
       for (const sv of r.svar ?? []) {
         const n = fragenyckel(sv.fraga);
-        if (!karta.has(n)) karta.set(n, t.fragaKod?.get(n) ?? hemvist);
+        if (!karta.has(n)) karta.set(n, medAmne(t.fragaKod?.get(n) ?? hemvist));
       }
     }
   }
@@ -249,14 +278,23 @@ export interface SegmentTillfalle {
  * 10.1 före 7.1. Tillfällena kommer i tidsordning; ett delkapitel får sin plats första gången en av dess frågor
  * ställs. Okänt delkapitel ('—') hamnar sist, och delkapitel utan plats faller tillbaka på nummerordning.
  */
-function delkapitelITidsordning(tillfallen: Tillfalle[], hemvist: Map<string, string>): { jamfor: (a: string, b: string) => number; forst: Map<string, string> } {
+function delkapitelITidsordning(tillfallen: Tillfalle[], hemvist: Map<string, string>): { jamfor: (a: string, b: string) => number; forst: Map<string, string>; amneFor: Map<string, string> } {
   const plats = new Map<string, number>();
   const forst = new Map<string, string>();
+  // Del 251: ämnena hålls ihop — Biologis delkapitel står för sig och Kemis för sig, ämnena i den ordning de började
+  const amnePlats = new Map<string, number>();
+  const kodAmne = new Map<string, string>();
+  const amneFor = new Map<string, string>();
   for (const t of tillfallen) {
+    const amne = t.amneId ?? '';
     for (const r of t.resultat) {
       for (const sv of r.svar ?? []) {
         const kod = hemvist.get(fragenyckel(sv.fraga)) ?? '—';
-        if (!plats.has(kod)) { plats.set(kod, plats.size); forst.set(kod, t.datum); }
+        if (!plats.has(kod)) {
+          plats.set(kod, plats.size); forst.set(kod, t.datum); kodAmne.set(kod, amne);
+          if (!amnePlats.has(amne)) amnePlats.set(amne, amnePlats.size);
+          if (t.amnesNamn !== undefined) amneFor.set(kod, t.amnesNamn);
+        }
       }
     }
   }
@@ -264,13 +302,15 @@ function delkapitelITidsordning(tillfallen: Tillfalle[], hemvist: Map<string, st
     if (a === b) return 0;
     if (a === '—') return 1;
     if (b === '—') return -1;
+    const aa = kodAmne.get(a); const ab = kodAmne.get(b);
+    if (aa !== undefined && ab !== undefined && aa !== ab) return (amnePlats.get(aa) ?? 0) - (amnePlats.get(ab) ?? 0);
     const pa = plats.get(a); const pb = plats.get(b);
     if (pa !== undefined && pb !== undefined) return pa - pb;
     if (pa !== undefined) return -1;
     if (pb !== undefined) return 1;
     return a.localeCompare(b, 'sv', { numeric: true });
   };
-  return { jamfor, forst };
+  return { jamfor, forst, amneFor };
 }
 
 /**
@@ -429,6 +469,8 @@ export interface FragaRad {
   nyckel: string; prov: string; datum: string; tid?: string; kalla: ResultatKalla; rum?: string;
   /** Kort testnamn ur de delkapitel provet täcker: 'test41', 'test412'. */
   test: string;
+  /** Del 251 · Ämnet förhöret hör till (sätts när tillfället har ett ämne). */
+  amnesNamn?: string;
   /** En cell per fråga i `fragor`; null = frågan ingick inte i provet. */
   celler: Array<FragaCell | null>;
   /** Per elev: true/false/null (obesvarad). Sätts bara när elevId angetts. */
@@ -440,8 +482,12 @@ export interface FragaRad {
 export interface Fragematris {
   fragor: MatrisFraga[];
   rader: FragaRad[];
-  /** Kolumngrupper: delkapitlet och dess intervall av frågenummer — i den ordning delkapitlen förhördes. `forst` = datum för första förhöret. */
-  grupper: Array<{ kod: string; etikett: string; ursprung: string; fran: number; till: number; forst?: string }>;
+  /**
+   * Kolumngrupper: delkapitlet och dess intervall av frågenummer — i den ordning delkapitlen förhördes. `forst` = datum
+   * för första förhöret. Del 251: `amnesNamn` säger vilket ämne delkapitlet hör till; med flera ämnen i urvalet står
+   * ämnena var för sig och koden har ämnet före sig ('Bi 7.1', 'Ke 7.1').
+   */
+  grupper: Array<{ kod: string; etikett: string; ursprung: string; fran: number; till: number; forst?: string; amnesNamn?: string }>;
   /** Tillfällen i filtret som inte kan visas fråga för fråga (resultaten saknar svar per fråga). */
   utanSvar: TillfalleUtanSvar[];
 }
@@ -505,10 +551,10 @@ export function fragematris(s: Struktur, f: DelkapitelFilter): Fragematris {
       }
     }
     // Testnamnet byggs av de delkapitel provet faktiskt innehåller: 4.1 + 4.2 → test412
-    const koder = fragor.filter((_, i) => celler[i] !== null).map((fr) => fr.kod).filter((k) => k !== '—');
+    const koder = fragor.filter((_, i) => celler[i] !== null).map((fr) => utanAmne(fr.kod)).filter((k) => k !== '—');
     return {
       nyckel: t.nyckel, prov: t.prov, datum: t.datum, ...(t.tid !== undefined ? { tid: t.tid } : {}),
-      kalla: t.kalla, ...(t.rum !== undefined ? { rum: t.rum } : {}),
+      kalla: t.kalla, ...(t.rum !== undefined ? { rum: t.rum } : {}), ...(t.amnesNamn !== undefined ? { amnesNamn: t.amnesNamn } : {}),
       test: testEtikett(koder), celler, ...(f.elevId !== undefined ? { elevCeller, elevSvar } : {}),
     };
   });
@@ -518,7 +564,9 @@ export function fragematris(s: Struktur, f: DelkapitelFilter): Fragematris {
     if (sista !== undefined && sista.kod === fr.kod) sista.till = fr.nr;
     else {
       const forst = ordning.forst.get(fr.kod);
-      grupper.push({ kod: fr.kod, etikett: /^\d+\.\d+$/.test(fr.kod) ? testEtikett([fr.kod], 'Test') : fr.kod, ursprung: fr.ursprung, fran: fr.nr, till: fr.nr, ...(forst !== undefined ? { forst } : {}) });
+      const amnesNamn = ordning.amneFor.get(fr.kod);
+      grupper.push({ kod: fr.kod, etikett: /^\d+\.\d+$/.test(fr.kod) ? testEtikett([fr.kod], 'Test') : fr.kod, ursprung: fr.ursprung, fran: fr.nr, till: fr.nr,
+        ...(forst !== undefined ? { forst } : {}), ...(amnesNamn !== undefined ? { amnesNamn } : {}) });
     }
   }
   return { fragor, rader, grupper, utanSvar: tillfallenUtanSvar(s, f) };

@@ -26,7 +26,7 @@ import {
   socrativeRum, sparaBok, lektionsNamn, sattSocrativeQr, socrativeQr, sattSocrativeLank, socrativeLank, rumUrLektion,
   taBortAmne, taBortBok, taBortElev, taBortKlass, taBortLarare, taBortSkolar, taBortTjanst,
   tavelrubrik, uppdateraAmne, uppdateraElev, uppdateraSkolar,
-  amnenUtanPlanering, amnesOversikt, amnetGallerKlass, amnetsKlassnamn, handelseGallerKlass, sattSamlasning, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
+  amnenUtanPlanering, amnesForkortning, amnesOversikt, amnetGallerKlass, amnetsKlassnamn, handelseGallerKlass, sattSamlasning, arStodAmne, aterstallPlanering, bokHarNivaer, importeraResultat,
   arFilImporterad, arRatt, andraKalla, klassificeraSocrativeFil, registreraFil, trendkoll, aterkommandeFel, aterkommandeFelKlass,
   arFilSparrad, havSparr, klassForRapport, rapportForFil, rumInfo, LAGSTA_SVARSANDEL, rattaFacit, rosterUtanAndraKlasser, sparraFilnamn, svarsandelForRapport, type Svarsandel,
   delkapitelSegment, fragematris, filtreraFragor, jamforTillfalle, elevanalys, enkelRapport, studieguide, rapportOversikt, forklaring, niva, type ForklaringId,
@@ -4390,6 +4390,14 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
     };
   }, [s, filterNyckel, ledElev, fmVarld, fmTyper.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
   const { led, delFarger, fm } = elevData;
+  // Del 251: ämnena i matrisen, i kolumnordning — fler än ett ger en rad med ämnesnamn överst
+  const fmAmnen = fm.grupper.reduce<Array<{ namn: string; antal: number; fran: number; till: number }>>((ut, g) => {
+    const namn = g.amnesNamn ?? '';
+    const sista = ut[ut.length - 1];
+    if (sista !== undefined && sista.namn === namn) { sista.antal += g.till - g.fran + 1; sista.till = g.till; }
+    else ut.push({ namn, antal: g.till - g.fran + 1, fran: g.fran, till: g.till });
+    return ut;
+  }, []);
   // Frågematrisens rader: typfilter (tomt = alla) och vald datumordning — billigt, kan köras varje gång
   const fmRader = [...fm.rader]
     .filter((r) => fmVarld !== 'socrative' || fmTyper.length === 0 || fmTyper.includes(r.kalla))
@@ -4570,7 +4578,13 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
           <div className="st-scroll">
             <table className="tbl st-fmtabell">
               <thead>
-                <tr><th colSpan={4} className="st-fmhorn" /> {fm.grupper.map((g) => (
+                {fmAmnen.length > 1 && (
+                  // Del 251: flera ämnen i urvalet — varje ämnes delkapitel står för sig, under ämnets namn
+                  <tr className="st-fmamnen"><th colSpan={4} className="st-fmhorn" />{fmAmnen.map((a) => (
+                    <th key={a.namn} colSpan={a.antal} className="st-fmamne" title={`${a.namn}: fråga ${a.fran}–${a.till}`}>{a.namn}</th>
+                  ))}</tr>
+                )}
+                <tr><th colSpan={4} className="st-fmhorn" />{fm.grupper.map((g) => (
                   <th key={g.kod} colSpan={g.till - g.fran + 1} className="st-fmgrupp" title={`${g.ursprung} · ${g.etikett} · frågorna ${g.fran}–${g.till}${g.forst !== undefined ? ` · först förhört ${kortDatum(g.forst)}` : ''}`}>
                     <span className="st-fmgruppnamn">{fmVarld === 'socrative' ? g.ursprung : fmVarld === 'magma' && /^\d+\.\d+$/.test(g.kod) ? `Delkapitel ${g.kod}` : g.kod}</span>
                     <small>{fmVarld === 'socrative' && g.kod !== '—' ? `${g.kod} · ` : ''}{g.till - g.fran + 1} {fmVarld === 'magma' ? 'uppgifter' : 'frågor'}{g.forst !== undefined ? ` · från ${kortDatum(g.forst)}` : ''}</small>
@@ -4586,7 +4600,8 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
                   <td className="small muted">v{isoVeckaLbl(rad.datum)}</td>
                   <td className="small muted">{kortDatum(rad.datum)}{rad.tid !== undefined && <> <b>{rad.tid}</b></>}</td>
                   <td className="small"><span className={`st-typ ${rad.kalla}`}>{TYPNAMN[rad.kalla]}</span></td>
-                  <td className="st-fmprov" title={`${rad.prov}${rad.rum !== undefined ? ` · rum ${rad.rum}` : ''} · ${rad.test} · ${kortDatum(rad.datum)}`}>{rad.prov}</td>
+                  <td className="st-fmprov" title={`${rad.amnesNamn !== undefined ? `${rad.amnesNamn} · ` : ''}${rad.prov}${rad.rum !== undefined ? ` · rum ${rad.rum}` : ''} · ${rad.test} · ${kortDatum(rad.datum)}`}>
+                    {fmAmnen.length > 1 && rad.amnesNamn !== undefined && <small className="st-fmradamne">{amnesForkortning(rad.amnesNamn)}</small>}{rad.prov}</td>
                   {fm.fragor.map((fr, i) => {
                     const c = rad.celler[i];
                     const elevSvar = rad.elevCeller?.[i];

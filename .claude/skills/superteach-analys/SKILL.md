@@ -65,6 +65,12 @@ Bokdata är läsbar men aldrig skrivbar från appen (`classroom-planner-data`). 
 - **Rummen vi använder** (`rumInfo`): klassrum (`socrativeRum`), rum i planeringen, begreppsrum (ämne + siffror), ämnesrum (börjar på ett av lärarens ämnen). Allt annat (t.ex. `SO8BB`) är inte vårt: det sorteras bort i listan, och en sådan fil importeras inte utan "ta med ändå".
 - UI: `Rapportlista.tsx` under 📥 Importera → Socrative — släppruta för filer, tabellen per rum och listan över rapporter som saknas.
 
+## Kapitelnummer är ämnets egna (Del 251)
+
+- **7.1 i Biologi och 7.1 i Kemi är olika delkapitel.** Ett tillfälle bär sitt ämne (`Tillfalle.amneId/amnesNamn/amnesKort`), vad som redan förhörts minns vi per ämne, och med flera ämnen i urvalet står ämnet före koden: `Bi 7.1`, `Ke 7.1` (`utanAmne` tar bort det). Med ett ämne i taget är koden som förut.
+- Ämnena står var för sig i frågematrisen (ämnena i den ordning de började, delkapitlen i förhörsordning inom ämnet); `grupper[].amnesNamn` och `FragaRad.amnesNamn` bär ämnet till gränssnittet, som visar en ämnesrad överst.
+- Nyckla aldrig resultat på bara delkapitelkoden när urvalet kan rymma flera ämnen.
+
 ## Period och typval i resultat (Del 250)
 
 - **Perioden kommer ur planeringen och förhörens datum** (`resultatPeriod`): delämnets period i NO+Tk-blocket, annars första–sista planerade lektion, vidgad så att alla förhör ryms. Periodfältet överst visar den som förval; visa aldrig ett fast exempel som om det vore perioden.
