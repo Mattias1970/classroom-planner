@@ -12,7 +12,7 @@ import {
   arVeckorapportAmne, sattVeckorapportTodo, skapaVeckorapport, svenskTid, taBortVeckorapport, veckaFor, veckaText, veckorapportLarm, veckorapportText, veckorapporter, VECKORAPPORT_TID,
   type Struktur, type Tidpunkt, type Vecka, type Veckorapport,
 } from '@planner/kernel';
-import { lasStruktur } from './store.js';
+import { lasInstallning, lasStruktur, sparaInstallning } from './store.js';
 
 type Kor = (fn: () => Struktur, m: string) => void;
 
@@ -62,33 +62,81 @@ function skapa(kor: Kor, v: Vecka, nu: Tidpunkt): void {
   kor(() => skapaVeckorapport(lasStruktur(), v, nu).s, `Veckorapport ${veckaText(v)} skapad — bocka av att-göra-listan.`);
 }
 
+const LARM_OPPET = 'cp.veckolarm.oppen';
+const kortVecka = (v: Vecka): string => veckaText(v).replace(/^v\.\d+\s*\(/, '').replace(/\s*\d{4}\)$/, '');
+
 /**
  * Larmet: veckor som är dags (fredag 16:00) utan rapport, och rapporter med obockade punkter.
  * Visas överst i appen; `onOppna` går till listan.
+ *
+ * Del 247 · Larmet är en rad som fälls ut: raden säger hur mycket som återstår, och utfälld visar den
+ * rapporterna att skapa som knappar på en rad och att-göra-punkterna som en tabell — en rad per vecka, en
+ * kolumn per punkt. Valet utfälld/hopfälld sparas. `utfalld` tvingar den öppen (sidan Veckorapporter).
  */
-export function VeckorapportLarm({ s, kor, nu, onOppna }: { s: Struktur; kor: Kor; nu?: Tidpunkt; onOppna?: () => void }) {
+export function VeckorapportLarm({ s, kor, nu, onOppna, utfalld }: { s: Struktur; kor: Kor; nu?: Tidpunkt; onOppna?: () => void; utfalld?: boolean }) {
   const tid = nu ?? nuSvensk();
   const larm = veckorapportLarm(s, tid);
+  const [oppen, setOppen] = useState<boolean>(() => utfalld ?? lasInstallning<boolean>(LARM_OPPET, false));
   if (larm.saknade.length === 0 && larm.oklara.length === 0) return null;
+  const vaxla = () => { const ny = !oppen; setOppen(ny); if (utfalld === undefined) sparaInstallning(LARM_OPPET, ny); };
+  const kvar = larm.oklara.reduce((n, r) => n + r.todo.filter((t) => !t.klar).length, 0);
+  // Kolumnerna: att-göra-punkterna i den ordning de först förekommer (normalt Teams, Magma, Socrative)
+  const punkter = [...new Set(larm.oklara.flatMap((r) => r.todo.map((t) => t.text)))];
+  const skapaAlla = () => kor(() => larm.saknade.reduce((ut, v) => skapaVeckorapport(ut, v, tid).s, lasStruktur()),
+    `${larm.saknade.length} veckorapporter skapade — bocka av att-göra-listan.`);
+  const bockaVecka = (r: Veckorapport) => kor(() => r.todo.reduce((ut, t) => (t.klar ? ut : sattVeckorapportTodo(ut, r.id, t.id, true)), lasStruktur()), `✓ Allt klart för v.${r.vecka}`);
   return (
-    <div className="st-vecko-larm" role="alert" aria-label="Veckorapport">
-      <div className="rad" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <b>🔔 Veckorapport</b>
-        {larm.saknade.map((v) => (
-          <span key={`${v.ar}-${v.vecka}`} className="rad" style={{ gap: 6, alignItems: 'center' }}>
-            <span>{veckaText(v)} är dags (fredag {VECKORAPPORT_TID})</span>
-            <button className="btn sm" onClick={() => skapa(kor, v, tid)}>✍ Skapa veckorapport {`v.${v.vecka}`}</button>
-          </span>
-        ))}
+    <div className={`st-vecko-larm${oppen ? ' oppen' : ''}`} role="alert" aria-label="Veckorapport">
+      <div className="st-vecko-rad">
+        <button className="st-vecko-vaxla" aria-expanded={oppen} aria-label={oppen ? 'Fäll ihop veckorapport-larmet' : 'Fäll ut veckorapport-larmet'} onClick={vaxla}>
+          <span aria-hidden="true">{oppen ? '▾' : '▸'}</span> <b>🔔 Veckorapport</b>
+        </button>
+        <span className="st-vecko-summa">
+          {larm.saknade.length > 0 && <span className="st-vecko-bricka">{larm.saknade.length} {larm.saknade.length === 1 ? 'rapport' : 'rapporter'} att skapa</span>}
+          {kvar > 0 && <span className="st-vecko-bricka">{kvar} att göra{larm.oklara.length > 1 ? ` · ${larm.oklara.length} veckor` : ` · v.${larm.oklara[0].vecka}`}</span>}
+        </span>
         <span className="spacer" />
         {onOppna !== undefined && <button className="btn sec sm" onClick={onOppna}>📅 Veckorapporter</button>}
       </div>
-      {larm.oklara.map((r) => (
-        <div key={r.id} style={{ marginTop: 4 }}>
-          <small className="muted">Att göra för {veckaText(r)}:</small>
-          <TodoLista r={r} kor={kor} />
-        </div>
-      ))}
+      {oppen && (<>
+        {larm.saknade.length > 0 && (
+          <section className="st-vecko-del" aria-label="Rapporter att skapa">
+            <h4>Rapporter att skapa <small className="muted">dags fredag {VECKORAPPORT_TID}</small></h4>
+            <div className="st-vecko-knappar">
+              {larm.saknade.map((v) => (
+                <button key={`${v.ar}-${v.vecka}`} className="btn sm" title={`${veckaText(v)} är dags (fredag ${VECKORAPPORT_TID})`}
+                  aria-label={`Skapa veckorapport ${veckaText(v)}`} onClick={() => skapa(kor, v, tid)}>✍ v.{v.vecka} <small>{kortVecka(v)}</small></button>
+              ))}
+              {larm.saknade.length > 1 && <button className="btn sec sm" onClick={skapaAlla}>Skapa alla {larm.saknade.length}</button>}
+            </div>
+          </section>
+        )}
+        {larm.oklara.length > 0 && (
+          <section className="st-vecko-del" aria-label="Att göra">
+            <h4>Att göra <small className="muted">{kvar} {kvar === 1 ? 'punkt' : 'punkter'} kvar</small></h4>
+            <table className="st-vecko-matris">
+              <thead><tr><th>Vecka</th>{punkter.map((p) => <th key={p}>{p}</th>)}<th /></tr></thead>
+              <tbody>
+                {larm.oklara.map((r) => (
+                  <tr key={r.id}>
+                    <th scope="row" title={veckaText(r)}>v.{r.vecka} <small className="muted">{kortVecka(r)}</small></th>
+                    {punkter.map((p) => {
+                      const t = r.todo.find((x) => x.text === p);
+                      return (
+                        <td key={p}>{t === undefined ? <span className="muted">–</span> : (
+                          <input type="checkbox" aria-label={`${t.text} v.${r.vecka}`} checked={t.klar}
+                            onChange={(e) => kor(() => sattVeckorapportTodo(lasStruktur(), r.id, t.id, e.target.checked), e.target.checked ? `✓ ${t.text} (v.${r.vecka})` : `${t.text} (v.${r.vecka}) — inte klar`)} />
+                        )}</td>
+                      );
+                    })}
+                    <td><button className="linkbtn" aria-label={`Bocka av allt för v.${r.vecka}`} onClick={() => bockaVecka(r)}>✓ alla</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
+      </>)}
     </div>
   );
 }
@@ -107,7 +155,7 @@ export function Veckorapporter({ s, kor, nu, onTillbaka }: { s: Struktur; kor: K
         <h3 style={{ margin: 0 }}>📅 Veckorapporter</h3>
         <small className="muted">en rapport per vecka för NO och matematik — vad vi gjort, läxförhör, exit tickets och inlämningar i Teams; skapas fredag {VECKORAPPORT_TID}, texten fryses när rapporten skapas</small>
       </div>
-      <VeckorapportLarm s={s} kor={kor} nu={tid} />
+      <VeckorapportLarm s={s} kor={kor} nu={tid} utfalld />
       {larm.saknade.length === 0 && (
         <p className="muted small" style={{ margin: '6px 0' }}>
           Inget är dags. <button className="v3-lank" onClick={() => setForhand(!forhand)}>{forhand ? 'Dölj' : 'Visa'} hur veckans text ser ut just nu</button>

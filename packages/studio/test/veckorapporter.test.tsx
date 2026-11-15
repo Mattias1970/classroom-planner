@@ -39,8 +39,12 @@ describe('Del 194 · Veckorapporter', () => {
     expect(div.textContent).toContain('Inga veckorapporter än');
     nu = { datum: '2026-08-21', tid: '16:00' }; rendera();
     const larm = () => div.querySelector('[role="alert"]');
-    expect(larm()!.textContent).toContain('v.34 (17–21 augusti 2026) är dags (fredag 16:00)');
-    await act(async () => { [...div.querySelectorAll('button')].find((b) => b.textContent?.includes('Skapa veckorapport v.34'))!.click(); });
+    // Del 247: på sidan Veckorapporter är larmet utfällt — rapporten att skapa är en knapp, att-göra en tabell
+    expect(larm()!.textContent).toContain('1 rapport att skapa');
+    expect(larm()!.querySelector('[aria-label="Rapporter att skapa"]')!.textContent).toContain('dags fredag 16:00');
+    const skapaKnapp = larm()!.querySelector('button[aria-label="Skapa veckorapport v.34 (17–21 augusti 2026)"]') as HTMLButtonElement;
+    expect(skapaKnapp.textContent).toBe('✍ v.34 17–21 augusti');
+    await act(async () => { skapaKnapp.click(); });
     expect(s.veckorapporter).toHaveLength(1);
     expect(s.veckorapporter![0]).toMatchObject({ vecka: 34, skapad: '2026-08-21 16:00' });
     expect(s.veckorapporter![0].amnen[0].text).toContain('Vad vi gjort: kapitel 4 Ekologi — 4.1 Ekosystem (1 lektion).');
@@ -65,5 +69,71 @@ describe('Del 194 · Veckorapporter', () => {
     const div = document.createElement('div'); document.body.appendChild(div);
     act(() => createRoot(div).render(<VeckorapportLarm s={tomStruktur()} kor={() => {}} nu={{ datum: '2026-08-21', tid: '17:00' }} />));
     expect(div.querySelector('[role="alert"]')).toBeNull();
+  });
+});
+
+describe('Del 247 · larmet är en rad som fälls ut', () => {
+  const nu = { datum: '2026-09-04', tid: '17:00' };   // v.34, v.35 och v.36 är dags
+  function starta() {
+    let s = bygg(); sparaStruktur(s);
+    const div = document.createElement('div'); document.body.appendChild(div);
+    const root = createRoot(div);
+    const rendera = () => act(() => root.render(<VeckorapportLarm s={s} kor={kor} nu={nu} onOppna={() => {}} />));
+    const kor = (fn: () => Struktur) => { s = fn(); sparaStruktur(s); rendera(); };
+    rendera();
+    const larm = () => div.querySelector('[role="alert"]')!;
+    const vaxla = () => larm().querySelector('button.st-vecko-vaxla') as HTMLButtonElement;
+    return { div, larm, vaxla, s: () => s, stang: () => act(() => root.unmount()) };
+  }
+
+  it('hopfälld från början: en rad med hur mycket som återstår — inga knappar per vecka, inga kryssrutor', () => {
+    const { larm, vaxla, stang } = starta();
+    expect(vaxla().getAttribute('aria-expanded')).toBe('false');
+    expect([...larm().querySelectorAll('.st-vecko-bricka')].map((b) => b.textContent)).toEqual(['3 rapporter att skapa']);
+    expect(larm().querySelector('[aria-label="Rapporter att skapa"]')).toBeNull();
+    expect(larm().querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
+    expect([...larm().querySelectorAll('button')].map((b) => b.textContent!.trim())).toEqual(['▸ 🔔 Veckorapport', '📅 Veckorapporter']);
+    stang();
+  });
+
+  it('utfälld: rapporterna skapas med en knapp per vecka eller alla på en gång; att-göra är en tabell med en rad per vecka', async () => {
+    const { larm, vaxla, s, stang } = starta();
+    await act(async () => { vaxla().click(); });
+    expect(vaxla().getAttribute('aria-expanded')).toBe('true');
+    const skapaDel = () => larm().querySelector('[aria-label="Rapporter att skapa"]');
+    expect([...skapaDel()!.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['✍ v.34 17–21 augusti', '✍ v.35 24–28 augusti', '✍ v.36 31 augusti–4 september', 'Skapa alla 3']);
+    await act(async () => { [...skapaDel()!.querySelectorAll('button')].find((b) => b.textContent === 'Skapa alla 3')!.click(); });
+    expect(s().veckorapporter!.map((r) => r.vecka).sort()).toEqual([34, 35, 36]);
+    expect(skapaDel()).toBeNull();
+    expect([...larm().querySelectorAll('.st-vecko-bricka')].map((b) => b.textContent)).toEqual(['9 att göra · 3 veckor']);
+
+    // Tabellen: en kolumn per punkt, en rad per vecka (senaste först)
+    const tabell = larm().querySelector('table.st-vecko-matris')!;
+    expect([...tabell.querySelectorAll('thead th')].map((th) => th.textContent)).toEqual(['Vecka', 'Ladda upp inlämningar i Teams', 'Spara inlämningar från Magma', 'Spara inlämningar från Socrative', '']);
+    expect([...tabell.querySelectorAll('tbody th')].map((th) => th.textContent)).toEqual(['v.36 31 augusti–4 september', 'v.35 24–28 augusti', 'v.34 17–21 augusti']);
+    expect(tabell.querySelectorAll('input[type="checkbox"]')).toHaveLength(9);
+
+    // En punkt i taget …
+    await act(async () => { (larm().querySelector('input[aria-label="Spara inlämningar från Magma v.35"]') as HTMLInputElement).click(); });
+    expect(s().veckorapporter!.find((r) => r.vecka === 35)!.todo.map((t) => t.klar)).toEqual([false, true, false]);
+    expect(larm().textContent).toContain('8 punkter kvar');
+    // … eller hela veckan: raden försvinner när allt är klart
+    await act(async () => { (larm().querySelector('button[aria-label="Bocka av allt för v.36"]') as HTMLButtonElement).click(); });
+    expect(s().veckorapporter!.find((r) => r.vecka === 36)!.todo.every((t) => t.klar)).toBe(true);
+    expect([...larm().querySelectorAll('tbody th')].map((th) => th.textContent)).toEqual(['v.35 24–28 augusti', 'v.34 17–21 augusti']);
+    expect([...larm().querySelectorAll('.st-vecko-bricka')].map((b) => b.textContent)).toEqual(['5 att göra · 2 veckor']);
+    stang();
+  });
+
+  it('valet utfälld/hopfälld sparas till nästa gång', async () => {
+    const forsta = starta();
+    await act(async () => { forsta.vaxla().click(); });
+    forsta.stang();
+    const andra = starta();
+    expect(andra.vaxla().getAttribute('aria-expanded')).toBe('true');
+    expect(andra.larm().querySelector('[aria-label="Rapporter att skapa"]')).not.toBeNull();
+    await act(async () => { andra.vaxla().click(); });
+    andra.stang();
+    expect(starta().vaxla().getAttribute('aria-expanded')).toBe('false');
   });
 });

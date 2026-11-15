@@ -1304,7 +1304,22 @@ input.fel { border-color: #B71C1C; }
 .st-samtal-arkivelev { margin: 8px 0 10px; padding-top: 6px; border-top: 1px dashed var(--ram); }
 
 /* Del 194 · Veckorapporter */
-.st-vecko-larm { border: 1px solid #e0a800; background: #fff8e1; border-radius: 8px; padding: 8px 12px; margin: 6px 0 10px; }
+.st-vecko-larm { border: 1px solid #e0a800; background: #fff8e1; border-radius: 8px; padding: 4px 10px; margin: 6px 0 10px; }
+/* Del 247 · Larmet är en rad som fälls ut: rapporter att skapa som knappar, att-göra som tabell */
+.st-vecko-larm.oppen { padding-bottom: 8px; }
+.st-vecko-rad { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; min-height: 30px; }
+.st-vecko-vaxla { background: none; border: 0; padding: 2px 4px; font: inherit; cursor: pointer; color: inherit; }
+.st-vecko-vaxla:hover b { text-decoration: underline; }
+.st-vecko-summa { display: flex; gap: 6px; flex-wrap: wrap; }
+.st-vecko-bricka { background: #fdeeb5; border: 1px solid #ecc94b; border-radius: 999px; padding: 0 9px; font-size: 12px; line-height: 20px; white-space: nowrap; }
+.st-vecko-del { margin-top: 8px; padding-top: 6px; border-top: 1px dashed #e0c36a; }
+.st-vecko-del h4 { margin: 0 0 4px; font-size: 13px; }
+.st-vecko-knappar { display: flex; gap: 6px; flex-wrap: wrap; }
+.st-vecko-knappar .btn small { font-weight: 400; opacity: 0.85; }
+.st-vecko-matris { border-collapse: collapse; font-size: 13px; }
+.st-vecko-matris th, .st-vecko-matris td { padding: 2px 12px 2px 0; text-align: center; white-space: nowrap; }
+.st-vecko-matris thead th { font-weight: 600; font-size: 12px; border-bottom: 1px solid #e0c36a; }
+.st-vecko-matris th[scope="row"], .st-vecko-matris thead th:first-child { text-align: left; font-weight: 600; }
 .st-vecko-todo { list-style: none; margin: 4px 0; padding: 0; display: flex; gap: 14px; flex-wrap: wrap; }
 .st-vecko-todo li.klar label { text-decoration: line-through; opacity: 0.6; }
 .st-veckorapporter details { border: 1px solid var(--ram); border-radius: 8px; padding: 4px 10px; margin-bottom: 6px; }
