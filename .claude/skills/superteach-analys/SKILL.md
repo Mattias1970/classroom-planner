@@ -54,7 +54,7 @@ Bokdata är läsbar men aldrig skrivbar från appen (`classroom-planner-data`). 
 - **Elever i fel klass** — `eleverIFelKlass(s)` hittar elever som finns i två klasser (minst tre gemensamma namn) och pekar ut hemklassen; `rensaEleverIFelKlass` flyttar resultat, filposter, inlämningar m.m. till samma ämne i hemklassen och tar bort dubbletterna. `QuizVakt` frågar läraren först — inget flyttas utan ett ja, och ↩ Ångra lägger tillbaka.
 - **För få svar** — ett quiz med under `LAGSTA_SVARSANDEL` (30 %) av elevernas möjliga svar (`svarsandelForRapport`: besvarade frågor / elever i gruppen × frågor) är ett felstartat quiz. Vid import frågar appen ("Nej — spärra filen" / "Ladda ändå"); redan importerade pekas ut av `filerMedFaSvar` och frågan ställs överst i appen.
 - **Spärrade filer** — `Struktur.sparradeFiler` minns filnamnet (`filnamnsNyckel` tar bort " (1)" och skiftläge). En spärrad fil importeras inte igen, varken från datorn eller från resultatarkivet (`jamforArkiv` räknar den inte som ny). Spärren hävs under Importera eller i granskningstabellen.
-- **Samma svar = samma fråga** — `utanAlternativ` tar bort alternativbokstaven A–J (riktiga rapporter har upp till F), frågor enas på begreppet inom hela ämnet (inte per kapitel — läxförhören är kumulativa), och facit härleds så att nyckeln förklarar allas poäng (`harledSvarsnyckelMedKvalitet`) när ingen hade alla rätt. `rattaFacit` rättar redan importerade quiz vid start (meddelas, går att ångra). Två frågor med samma svar i samma quiz hålls isär.
+- **Samma svar = samma fråga** — `utanAlternativ` tar bort alternativbokstaven A–J (riktiga rapporter har upp till F), frågor enas på begreppet inom kapitlet (se Del 249; kumulativa läxförhör hanteras där), och facit härleds så att nyckeln förklarar allas poäng (`harledSvarsnyckelMedKvalitet`) när ingen hade alla rätt. `rattaFacit` rättar redan importerade quiz vid start (meddelas, går att ångra). Två frågor med samma svar i samma quiz hålls isär.
 - **Bildfrågor är egna frågor (Del 243)** — `arBildfraga` känner igen frågor som pekar i en bild ("Vad pekar nummer 6 på?"). De knyts aldrig till begreppet: en bildfråga och en textfråga med samma rätta svar slås inte ihop. Samma bildtext med ett annat rätt svar (ny bild) blir en egen fråga, visad som "Vad pekar nummer 1 på? (Hornhinna)"; stavningsvarianter av samma begrepp räknas som ett.
 
 ## Rapportlistan från Socrative (Del 244)
@@ -64,6 +64,14 @@ Bokdata är läsbar men aldrig skrivbar från appen (`classroom-planner-data`). 
 - Läge per rapport: importerad (typ + svarsandel; "riktigt test" = minst 30 % av svaren), spärrad, saknas, annat rum, utanför läsåret. `summeraRapporter` ger raden per rum.
 - **Rummen vi använder** (`rumInfo`): klassrum (`socrativeRum`), rum i planeringen, begreppsrum (ämne + siffror), ämnesrum (börjar på ett av lärarens ämnen). Allt annat (t.ex. `SO8BB`) är inte vårt: det sorteras bort i listan, och en sådan fil importeras inte utan "ta med ändå".
 - UI: `Rapportlista.tsx` under 📥 Importera → Socrative — släppruta för filer, tabellen per rum och listan över rapporter som saknas.
+
+## En fråga hör till sitt kapitel (Del 249)
+
+- **Frågor ur olika kapitel blandas aldrig ihop** — inte ens med identisk text. "Cellandning" i 4.2 och samma fråga i ett 6.1-quiz är två frågor, var och en i sitt kapitels kolumner och summor. Inom kapitlet gäller begreppet som förut (omskriven fråga = samma fråga).
+- `enaFragor(rs)` ger `{ resultat, tidigare }`: `tidigare` länkar den senare frågan till **samma kunskap i ett tidigare kapitel** (samma text eller samma begrepp; bildfrågor bara när svaret är detsamma). I matrisen blir det `MatrisFraga.tidigare` och en lila-blå ram — fyllningen visar som vanligt andel rätt, alltså hur många som minns.
+- Ett kumulativt förhör över flera kapitel lägger varje fråga i det av sina kapitel där texten eller begreppet redan finns, annars i förhörets nyaste delkapitel.
+- Samma text i två kapitel skiljs åt av ett **dolt kapitelmärke** sist i texten (` [8 hex]`). Visa alltid frågetext genom `utanKapitelmarke`; para aldrig ihop frågor på den visade texten.
+- Identiteten räknas på ämnets alla Socrative-resultat (`enadeForAmne`), inte på urvalet — annars försvinner länken när bara ett kapitel visas.
 
 ## Delkapitlens ordning i resultat (Del 248)
 

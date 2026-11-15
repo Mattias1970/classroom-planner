@@ -4314,7 +4314,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
   const [visaTkPar, setVisaTkPar] = useState(false);
   const [tkSteg, setTkSteg] = useState<{ elevId: string; index: number } | null>(null);
   const [ledElev, setLedElev] = useState<string | null>(null);
-  const [vald, setVald] = useState<{ nr: number; fraga: string; kod: string; ursprung: string; begrepp?: string } | null>(null);
+  const [vald, setVald] = useState<{ nr: number; fraga: string; kod: string; ursprung: string; begrepp?: string; tidigare?: { kapitel: string; fraga: string; nr?: number; kod?: string } } | null>(null);
   const [fMin, setFMin] = useState(0);
   const [fMax, setFMax] = useState(50);
   const [valdaTest, setValdaTest] = useState<string[]>([]);
@@ -4567,7 +4567,8 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
                   </th>
                 ))}</tr>
                 <tr><th>Vecka</th><th>Datum</th><th>Typ</th><th>{fmVarld === 'socrative' ? 'Quiz' : 'Prov'}</th>{fm.fragor.map((fr) => (
-                  <th key={fr.nr} className={`st-fmnr${fm.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}`} title={`${fr.kod} · ${fr.fraga}`}>{fr.nr}</th>
+                  <th key={fr.nr} className={`st-fmnr${fm.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}${fr.tidigare !== undefined ? ' repris' : ''}`}
+                    title={`${fr.kod} · ${fr.fraga}${fr.tidigare !== undefined ? ` · ↺ samma kunskap som ${fr.tidigare.nr !== undefined ? `fråga ${fr.tidigare.nr} ` : ''}i kapitel ${fr.tidigare.kapitel}` : ''}`}>{fr.nr}</th>
                 ))}</tr>
               </thead>
               <tbody>{fmRader.map((rad) => (
@@ -4582,11 +4583,14 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
                     const bg = c === null ? '#F7F8FA'
                       : ledElev !== null ? (elevSvar === true ? '#4CAF50' : elevSvar === false ? '#D32F2F' : '#F7F8FA')
                         : ratFarg(c.procent);
-                    const titel = c === null ? `Fråga ${fr.nr} ingick inte i ${rad.prov}`
+                    // Del 249: samma kunskap som i ett tidigare kapitel — lila-blå ram; färgen visar hur många som minns
+                    const repris = fr.tidigare !== undefined && c !== null;
+                    const titel = (c === null ? `Fråga ${fr.nr} ingick inte i ${rad.prov}`
                       : ledElev !== null ? `Fråga ${fr.nr}: ${elevSvar === true ? 'rätt' : elevSvar === false ? 'fel' : 'ej gjord'}`
-                        : `Fråga ${fr.nr}: ${c.procent} % rätt (${c.ratt}/${c.bedomda})`;
+                        : `Fråga ${fr.nr}: ${c.procent} % rätt (${c.ratt}/${c.bedomda})`)
+                      + (repris ? ` · ↺ samma kunskap som ${fr.tidigare!.nr !== undefined ? `fråga ${fr.tidigare!.nr} ` : ''}i kapitel ${fr.tidigare!.kapitel}` : '');
                     return (
-                      <td key={fr.nr} className={`st-fmruta${vald?.nr === fr.nr ? ' vald' : ''}${fm.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}`} style={{ background: bg }} title={titel}
+                      <td key={fr.nr} className={`st-fmruta${vald?.nr === fr.nr ? ' vald' : ''}${fm.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}${repris ? ' repris' : ''}`} style={{ background: bg }} title={titel}
                         onClick={() => setVald(vald?.nr === fr.nr ? null : fr)} />
                     );
                   })}
@@ -4603,6 +4607,11 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
               ))}</tbody>
             </table>
           </div>
+          {fm.fragor.some((fr) => fr.tidigare !== undefined) && (
+            <p className="small muted st-fmrepris-forklaring" aria-label="Förklaring samma kunskap">
+              <span className="st-fmruta repris st-fmrepris-prov" aria-hidden="true" /> Lila-blå ram = samma kunskap som i ett tidigare kapitel. Frågan räknas bara i sitt eget kapitel; färgen visar hur många som minns.
+            </p>
+          )}
           {vald !== null && (
             <div className="st-fmvald">
               <b>Fråga {vald.nr}</b> <span className="chip">{vald.kod}</span> <small className="muted">först ställd i {vald.ursprung}</small>
@@ -4621,6 +4630,26 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
                   <span key={i} className="st-fmhist" style={{ background: ratFarg(c.procent) }} title={`${rad.prov}: ${c.procent} %`}>{rad.prov}: {c.procent} %</span>
                 ); })}
               </div>
+              {vald.tidigare !== undefined && (() => {
+                // Del 249: samma kunskap i ett tidigare kapitel — visas bredvid, räknas inte ihop
+                const forr = vald.tidigare;
+                const j = forr.nr === undefined ? -1 : fm.fragor.findIndex((x) => x.nr === forr.nr);
+                return (
+                  <div className="st-fmtidigare" aria-label="Samma kunskap i ett tidigare kapitel">
+                    <b>↺ Samma kunskap som i kapitel {forr.kapitel}</b>{forr.nr !== undefined && <> — fråga {forr.nr} <span className="chip">{forr.kod}</span></>}
+                    <div className="small muted">”{forr.fraga}” · räknas för sig, i sitt eget kapitel</div>
+                    {j >= 0 && (
+                      <div className="small">
+                        <span className="muted">Då: </span>
+                        {fmRader.map((rad, i) => { const c = rad.celler[j]; return c === null ? null : (
+                          <span key={i} className="st-fmhist" style={{ background: ratFarg(c.procent) }} title={`${rad.prov}: ${c.procent} %`}>{rad.prov}: {c.procent} %</span>
+                        ); })}
+                        {forr.nr !== undefined && <button className="linkbtn" onClick={() => setVald(fm.fragor[j])}>visa fråga {forr.nr}</button>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               <button className="btn sm" onClick={() => setVald(null)}>✕ stäng</button>
             </div>
           )}
@@ -5944,7 +5973,7 @@ function RapportVy({ s, kor, meddela, kontext, onKontext }: {
                       const fanns = rad.celler[i] !== null;
                       const svar = rad.elevCeller?.[i];
                       return (
-                        <td key={fr.nr} className={`st-fmruta${analys.matris.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}`}
+                        <td key={fr.nr} className={`st-fmruta${analys.matris.grupper.some((g) => g.fran === fr.nr) ? ' gstart' : ''}${fr.tidigare !== undefined && fanns ? ' repris' : ''}`}
                           style={{ background: !fanns ? '#F7F8FA' : svar === true ? '#4CAF50' : svar === false ? '#D32F2F' : '#E7EAEF' }}
                           title={!fanns ? `Fråga ${fr.nr} ingick inte i ${rad.prov}` : `Fråga ${fr.nr}: ${svar === true ? 'rätt' : svar === false ? 'fel' : 'ej besvarad'} — ${fr.fraga}`}
                           onClick={() => window.alert(`Fråga ${fr.nr} (${fr.kod})\n\n${fr.fraga}`)} />

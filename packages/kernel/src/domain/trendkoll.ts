@@ -18,7 +18,7 @@
 import { elevernaIKlassen } from './struktur.js';
 import type { Elev, Struktur } from './typer.js';
 import type { Resultat, ResultatKalla } from './resultat.js';
-import { enaFragorPaBegrepp, fragenyckel } from './fragaidentitet.js';
+import { enaFragorPaBegrepp, fragenyckel, utanKapitelmarke } from './fragaidentitet.js';
 import { svarNyckel, utanAlternativ } from './svarsform.js';
 
 /** 'B • ekosystem' → 'ekosystem' — svarstexten utan alternativbokstav och punkt (se svarsform.ts). */
@@ -104,7 +104,7 @@ export function jamforProv(
       const f1 = ka.get(n)?.ratt ?? null; const f2 = kb.get(n)?.ratt ?? null;
       const overgang: Overgang | null = f1 === null || f2 === null ? null
         : f1 && f2 ? 'kvar-ratt' : !f1 && f2 ? 'lart' : f1 && !f2 ? 'glomt' : 'kvar-fel';
-      return { fraga: text, fore: f1, efter: f2, overgang };
+      return { fraga: utanKapitelmarke(text), fore: f1, efter: f2, overgang };
     });
     const rakna = (o: Overgang) => fragor.filter((f) => f.overgang === o).length;
     const lart = rakna('lart'); const glomt = rakna('glomt');

@@ -13,7 +13,7 @@ import { elevernaIKlassen } from './struktur.js';
 import type { Elev, Struktur } from './typer.js';
 import { begreppUrFacit, type Resultat, type ResultatKalla } from './resultat.js';
 import { svarText } from './trendkoll.js';
-import { enaFragorPaBegrepp, fragenyckel } from './fragaidentitet.js';
+import { enaFragor, fragenyckel, utanKapitelmarke, type TidigareKunskap } from './fragaidentitet.js';
 import { koderForProv } from './elevrapport.js';
 import { amneMatchar, kapitelMatchar } from './dashboard.js';
 import { magmaKlassFor, magmaTestForProv } from './magmauppgifter.js';
@@ -138,14 +138,18 @@ function ommarkera(s: Struktur, r: Resultat, kod: Map<string, string>): Resultat
 
 function tillfallenForRaknad(s: Struktur, f: DelkapitelFilter): Tillfalle[] {
   const fragaKod = new Map<string, string>();
-  // Del 238: omskrivna Socrative-frågor hålls ihop på begreppet (det rätta svaret), inte på frågetexten
-  const rs = enaFragorPaBegrepp(resultatIFilter(s, f).filter((r) => (r.svar ?? []).length > 0)).map((r) => ommarkera(s, r, fragaKod));
+  // Del 238: omskrivna Socrative-frågor hålls ihop på begreppet (det rätta svaret), inte på frågetexten.
+  // Del 249: bara inom kapitlet — frågor ur olika kapitel hålls isär och får en länk bakåt (tidigareKunskap).
+  // Identiteten räknas på ämnets alla Socrative-resultat — inte bara urvalet — så att en fråga är densamma (och
+  // länken till ett tidigare kapitel finns kvar) även när bara ett kapitel eller en period visas.
+  const enade = enadeForAmne(s, f);
+  const rs = resultatIFilter(s, f).filter((r) => (r.svar ?? []).length > 0).map((r) => ommarkera(s, enade.omskrivna.get(r) ?? r, fragaKod));
   const grupper = new Map<string, Resultat[]>();
   for (const r of rs) {
     const n = `${r.datum}|${r.kalla}|${r.prov}`;
     grupper.set(n, [...(grupper.get(n) ?? []), r]);
   }
-  return [...grupper.values()].map((resultat) => {
+  const ut = [...grupper.values()].map((resultat) => {
     // Klockslag: tidigaste kända bland resultaten (sätts vid filimport)
     const tid = resultat.map((r) => r.tid).filter((t): t is string => t !== undefined).sort()[0];
     return {
@@ -155,7 +159,32 @@ function tillfallenForRaknad(s: Struktur, f: DelkapitelFilter): Tillfalle[] {
       ...(fragaKod.size > 0 && matrisKalla(resultat[0].kalla) !== 'socrative' ? { fragaKod } : {}),
     };
   }).sort(jamforTillfalle);
+  tidigareKunskap.set(ut, enade.tidigare);
+  return ut;
 }
+
+const SOCRATIVE_TYPER: ReadonlySet<ResultatKalla> = new Set<ResultatKalla>(['socrative-laxforhor', 'socrative-exit', 'socrative-ovning']);
+const enadeCache = new WeakMap<Struktur, Map<string, { omskrivna: Map<Resultat, Resultat>; tidigare: Map<string, TidigareKunskap> }>>();
+
+/** Del 249 · Frågornas identitet för klassens ämne(n), räknad på alla Socrative-resultat med svar per fråga. */
+function enadeForAmne(s: Struktur, f: DelkapitelFilter): { omskrivna: Map<Resultat, Resultat>; tidigare: Map<string, TidigareKunskap> } {
+  let per = enadeCache.get(s);
+  if (per === undefined) { per = new Map(); enadeCache.set(s, per); }
+  const nyckel = JSON.stringify([f.klassId, f.amneId ?? '', f.amneIds ?? null]);
+  const c = per.get(nyckel);
+  if (c !== undefined) return c;
+  const elevIds = new Set(elevernaIKlassen(s, f.klassId).map((e) => e.id));
+  const alla = (s.resultat ?? []).filter((r) => elevIds.has(r.elevId) && amneMatchar(f, r.amneId) && SOCRATIVE_TYPER.has(r.kalla) && (r.svar ?? []).length > 0);
+  const enade = enaFragor(alla);
+  const omskrivna = new Map<Resultat, Resultat>();
+  alla.forEach((r, i) => { if (enade.resultat[i] !== r) omskrivna.set(r, enade.resultat[i]); });
+  const ut = { omskrivna, tidigare: enade.tidigare };
+  per.set(nyckel, ut);
+  return ut;
+}
+
+/** Del 249 · Länkarna bakåt för en uppsättning tillfällen: frågenyckel → samma kunskap i ett tidigare kapitel. */
+const tidigareKunskap = new WeakMap<Tillfalle[], Map<string, TidigareKunskap>>();
 
 /**
  * Knyter varje fråga till det delkapitel där den först ställdes.
@@ -330,7 +359,7 @@ function aterkommandeFelUr(
     const rattEfter = efter.filter((h) => h.ratt).length;
     if (rattEfter >= gransRatt) continue; // eleven har visat att den kan det nu
     ut.push({
-      fraga: post.fraga, kod: hemvist.get(n) ?? '—',
+      fraga: utanKapitelmarke(post.fraga), kod: hemvist.get(n) ?? '—',
       antalFel: fel.length, antalRatt: post.historik.length - fel.length,
       senasteFel: post.historik[senasteFelIndex].datum,
       rattEfterSenasteFel: rattEfter, historik: post.historik,
@@ -351,7 +380,7 @@ export function aterkommandeFelKlass(s: Struktur, f: DelkapitelFilter): KlassBeg
   const perElevTillfalle = tillfallen.map((t) => new Map(t.resultat.map((r) => [r.elevId, r])));
   for (const elev of elevernaIKlassen(s, f.klassId)) {
     for (const b of aterkommandeFelUr(elev.id, tillfallen, hemvist, perElevTillfalle)) {
-      const n = fragenyckel(b.fraga);
+      const n = `${b.kod}|${fragenyckel(b.fraga)}`;   // Del 249: samma text i två kapitel är två frågor
       const post = per.get(n) ?? { fraga: b.fraga, kod: b.kod, elever: [], antalElever: 0 };
       post.elever.push({ elev, antalFel: b.antalFel });
       post.antalElever = post.elever.length;
@@ -386,6 +415,11 @@ export interface MatrisFraga {
   ursprungRum?: string;
   /** Begreppet frågan beskriver, ur facit i Socrative-rapporten (finns när frågan importerats med facit). */
   begrepp?: string;
+  /**
+   * Del 249 · Samma kunskap prövades i ett tidigare kapitel. Frågan räknas för sig — i sitt eget kapitel — men
+   * länken visar hur många som minns. `nr`/`kod` finns när den tidigare frågan står i samma matris.
+   */
+  tidigare?: { kapitel: string; fraga: string; nr?: number; kod?: string };
 }
 
 /** Klassens utfall på en fråga i ett tillfälle. */
@@ -442,9 +476,19 @@ export function fragematris(s: Struktur, f: DelkapitelFilter): Fragematris {
   });
   const fragor: MatrisFraga[] = nycklar.map((n, i) => {
     const post = forstaGangen.get(n)!;
-    return { nr: i + 1, fraga: post.fraga.replace(/ \[[0-9a-f]{8}\]$/, ''), kod: hemvist.get(n) ?? '—', ursprung: post.ursprung, ...(post.rum !== undefined ? { ursprungRum: post.rum } : {}), ...(post.begrepp !== undefined ? { begrepp: post.begrepp } : {}) };
+    return { nr: i + 1, fraga: utanKapitelmarke(post.fraga), kod: hemvist.get(n) ?? '—', ursprung: post.ursprung, ...(post.rum !== undefined ? { ursprungRum: post.rum } : {}), ...(post.begrepp !== undefined ? { begrepp: post.begrepp } : {}) };
   });
   const index = new Map(nycklar.map((n, i) => [n, i]));
+  // Del 249: länken till samma kunskap i ett tidigare kapitel
+  const lankar = tidigareKunskap.get(tillfallen);
+  if (lankar !== undefined && lankar.size > 0) {
+    nycklar.forEach((n, i) => {
+      const l = lankar.get(n);
+      if (l === undefined) return;
+      const j = index.get(fragenyckel(l.fraga));
+      fragor[i].tidigare = { kapitel: l.kapitel, fraga: utanKapitelmarke(l.fraga), ...(j !== undefined && j !== i ? { nr: fragor[j].nr, kod: fragor[j].kod } : {}) };
+    });
+  }
   const rader: FragaRad[] = tillfallen.map((t) => {
     const celler: Array<FragaCell | null> = fragor.map(() => null);
     const elevCeller: Array<boolean | null> = fragor.map(() => null);
