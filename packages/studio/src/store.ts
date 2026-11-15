@@ -6,9 +6,12 @@
  * Del 254 · Dokumentet ligger i webbläsarens stora lagring (IndexedDB) när `startaLagring()` har körts —
  * det gör appen innan den ritas. Den lilla lagringen (localStorage, drygt 5 miljoner tecken) är kvar som
  * reserv för webbläsare utan stor lagring, och för inställningarna.
+ *
+ * Del 255 · Dokumentet sparas packat (varje fråge-, svars- och facittext en gång — se kärnans packning.ts):
+ * i den stora lagringen, i backupfilen och i datarepot. Äldre, opackade dokument och filer läses som förut.
  */
 import { useSyncExternalStore } from 'react';
-import { saneraIdn, tomStruktur, uppdateraAmnesnamn, type Struktur } from '@planner/kernel';
+import { arPackad, packaStruktur, packaUpp, radvisJson, saneraIdn, tomStruktur, uppdateraAmnesnamn, type PackadStruktur, type Struktur } from '@planner/kernel';
 import { bedOmSkydd, oppnaIndexedDb, webblasarensUtrymme, type Dokumentlager } from './storlagring.js';
 
 const KEY = 'classroom-planner.studio.v2';
@@ -102,6 +105,31 @@ function slappVilande(): void {
   const v = vilar; vilar = []; for (const f of v) f();
 }
 
+// ── Del 255 · Packad text ─────────────────────────────────────────────────────────────────
+// Första gången i en session kontrolleras att det packade går att packa upp till exakt samma struktur.
+// Stämmer det inte (det ska inte kunna hända) sparas dokumentet opackat resten av sessionen.
+let packningProvad = false;
+let packaInte = false;
+/** Strukturen som text för lagringen: packad när det går, annars som den är. */
+function lagringstext(s: Struktur): string {
+  const plain = (): string => JSON.stringify(s);
+  if (packaInte) return plain();
+  try {
+    const packad = packaStruktur(s);
+    if (packad.fragelistor.length === 0) return plain();   // inget att packa — dokumentet sparas som det är
+    const text = JSON.stringify(packad);
+    if (!packningProvad) {
+      packningProvad = true;
+      if (JSON.stringify(packaUpp(JSON.parse(text) as PackadStruktur)) !== plain()) { packaInte = true; return plain(); }
+    }
+    return text;
+  } catch { packaInte = true; return plain(); }
+}
+/** Läser ett lagrat dokument eller en fil — packat eller inte. Kastar om det inte går att läsa. */
+function upppackad(v: unknown): Struktur {
+  return arPackad(v) ? packaUpp(v) : (v as Struktur);
+}
+
 function planeraSkrivning(): void {
   smutsig = true;
   if (planerad) return;
@@ -115,7 +143,7 @@ async function skrivUt(): Promise<void> {
   try {
     while (smutsig && stor !== null && minne !== null) {
       smutsig = false;
-      const text = JSON.stringify(minne.s);
+      const text = lagringstext(minne.s);
       const st = nyStampel();
       try {
         await stor.lager.skriv([[DOK, text], [STAMPEL, st]]);
@@ -262,7 +290,7 @@ export async function lasReservkopia(nyckel: string): Promise<string | null> {
 }
 /** En undanlagd kopia som backupfil (samma format som ⬇ Backup), så att den kan läsas in med Återställ. Kastar om texten inte går att läsa. */
 export function reservSomBackup(text: string): string {
-  return exportJson({ ...tomStruktur(), ...(JSON.parse(text) as Struktur) });
+  return exportJson({ ...tomStruktur(), ...upppackad(JSON.parse(text)) });
 }
 export async function taBortReservkopia(nyckel: string): Promise<void> {
   if (stor === null || !nyckel.startsWith(RESERV)) return;
@@ -272,7 +300,7 @@ export async function taBortReservkopia(nyckel: string): Promise<void> {
 /** Tolkar ett lagrat dokument. null = går inte att läsa. `andrad`: saneringen ändrade något som ska sparas. */
 function tolka(raw: string): { s: Struktur; andrad: boolean } | null {
   try {
-    const inlast = { ...tomStruktur(), ...(JSON.parse(raw) as Struktur) };
+    const inlast = { ...tomStruktur(), ...upppackad(JSON.parse(raw)) };
     // saneraIdn: äldre sessioner kunde ge dubblett-id:n (t.ex. två ämnen med
     // samma id) — då markeras/öppnas fel ämne i trädet. Dubbletter döps om,
     // och resultatet SPARAS direkt: annars får dubbletterna nya id:n vid varje
@@ -321,20 +349,39 @@ export function sparaStruktur(s: Struktur): void {
   if (stor !== null) { minns(null, s); planeraSkrivning(); return; }
   const text = JSON.stringify(s);
   if (lsSet(KEY, text)) { minns(text, s); sattSparfel(null); return; }
+  // Del 255: den lilla lagringen tog inte emot dokumentet som det är — packat ryms det oftast
+  const packad = lagringstext(s);
+  if (packad.length < text.length && lsSet(KEY, packad)) { minns(packad, s); sattSparfel(null); return; }
   // Lagringen tog inte emot strukturen (full). Minnet gäller resten av sessionen — annars skulle nästa
   // läsning ge den äldre, lagrade versionen och det senast gjorda försvinna utan ett ord — och felet visas.
   minns(lsGet(KEY), s);
   sattSparfel({ tecken: text.length });
 }
 
+/**
+ * Backupfilen och filen i datarepot. Del 255: version 3 — strukturen packad (varje text en gång) och en post
+ * per rad. Innan filen lämnas ut packas den upp igen och jämförs med strukturen; stämmer det inte skrivs den
+ * i det äldre formatet (version 2) i stället.
+ */
 export function exportJson(s: Struktur): string {
-  return JSON.stringify({ schema: 'classroom-planner-studio', version: 2, struktur: s, exportedAt: new Date().toISOString() }, null, 2);
+  const exportedAt = new Date().toISOString();
+  try {
+    const packad = packaStruktur(s);
+    const text = radvisJson({ schema: 'classroom-planner-studio', version: 3, exportedAt, packad });
+    const tillbaka = (JSON.parse(text) as { packad: PackadStruktur }).packad;
+    if (JSON.stringify(packaUpp(tillbaka)) === JSON.stringify(s)) return text;
+  } catch { /* det äldre formatet nedan */ }
+  return JSON.stringify({ schema: 'classroom-planner-studio', version: 2, struktur: s, exportedAt }, null, 2);
 }
 
+/** Läser en backupfil eller datarepots fil: version 3 (packad) eller äldre (version 2, opackad). */
 export function importJson(text: string): Struktur {
-  const raw = JSON.parse(text) as { schema?: string; struktur?: Struktur };
+  const raw = JSON.parse(text) as { schema?: string; struktur?: Struktur; packad?: unknown };
+  if (raw.schema === 'classroom-planner-studio' && arPackad(raw.packad)) {
+    return uppdateraAmnesnamn({ ...tomStruktur(), ...packaUpp(raw.packad) });
+  }
   if (raw.schema !== 'classroom-planner-studio' || !raw.struktur) {
     throw new Error('Filen är inte en Studio-backup (schema "classroom-planner-studio").');
   }
-  return uppdateraAmnesnamn({ ...tomStruktur(), ...raw.struktur });
+  return uppdateraAmnesnamn({ ...tomStruktur(), ...upppackad(raw.struktur) });
 }

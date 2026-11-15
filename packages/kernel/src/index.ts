@@ -20,6 +20,7 @@ export * from './domain/roster.js';
 export * from './domain/elevrapport.js';
 export * from './domain/trendkoll.js';
 export * from './domain/fragaidentitet.js';
+export * from './domain/packning.js';
 export * from './domain/svarsform.js';
 export * from './domain/sparradefiler.js';
 export * from './domain/quizvakt.js';

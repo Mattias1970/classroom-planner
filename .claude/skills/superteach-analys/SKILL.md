@@ -42,6 +42,8 @@ Quiznamnet (`Biologi 4.1 Begrepp`) är bara etikett och visas i sin helhet i tab
 
 Bokdata är läsbar men aldrig skrivbar från appen (`classroom-planner-data`). Allt användarskapat är overlays i localStorage via `lsGet`/`lsSet` med minnesfallback (NFR-005). Filer registreras i `filregister` med `datum`, `rum` och `traffar`; en fil med 0 träffar räknas inte som importerad och erbjuds igen.
 
+**Datarepots `studio/struktur.json` (Del 255)** är packad (version 3): strukturen ligger under `packad`, inte `struktur`, och resultatens svar är nummer i `texter`/`fragelistor`. Läs den med `importJson` (studio) eller `packaUpp` (kärnan) innan analys — äldre filer (version 2) har `struktur` direkt.
+
 ## Resultatarkivet i datarepot (Del 203, 239)
 
 - Varje importerad resultatfil laddas upp till `resultat/ak<årskurs>/<klass>/<ämne>/<källa>/<fil>` (`arkivSokvag`). Går det inte (ingen nyckel, nätet nere) läggs filen i en kö i IndexedDB (`koaUppladdning`) och skickas automatiskt vid nästa kontroll.
