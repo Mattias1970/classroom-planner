@@ -4318,7 +4318,13 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
   const [fMin, setFMin] = useState(0);
   const [fMax, setFMax] = useState(50);
   const [valdaTest, setValdaTest] = useState<string[]>([]);
-  const [fmTyper, setFmTyper] = useState<ResultatKalla[]>([]);
+  // Del 250: frågematrisens typval (tomt = alla tre). Det börjar som källvalet överst på sidan och följer med när
+  // det ändras — men väljs här gäller det här: matrisen visar exakt de typer som är tända.
+  const globalaTyper = (kallor ?? []).filter((k) => FM_TYPER.includes(k));
+  const forvaldaTyper = globalaTyper.length === 0 || globalaTyper.length === FM_TYPER.length ? [] : globalaTyper;
+  const [fmTyper, setFmTyper] = useState<ResultatKalla[]>(forvaldaTyper);
+  const globalaTyperNyckel = globalaTyper.join(',');
+  useEffect(() => { setFmTyper(forvaldaTyper); }, [globalaTyperNyckel]); // eslint-disable-line react-hooks/exhaustive-deps
   // Del 156: frågematrisen visar en värld i taget — Socrative-quiz, DigiExam-prov eller Magma-test
   const [fmVarld, setFmVarld] = useState<'socrative' | 'digiexam' | 'magma'>('socrative');
   const [fmNyastForst, setFmNyastForst] = useState(false);
@@ -4379,9 +4385,10 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
     return {
       led,
       delFarger: new Map([...new Set(led.flatMap((t) => t.segment.map((x) => x.kod)))].sort((a, b) => a.localeCompare(b, 'sv', { numeric: true })).map((kod, i) => [kod, DEL_FARGER[i % DEL_FARGER.length]])),
-      fm: fragematris(s, { ...tkFilter, ...(fmVarld !== 'socrative' ? { kallor: [fmVarld] as ResultatKalla[] } : {}), ...(ledElev !== null ? { elevId: ledElev } : {}) }),
+      // Del 250: Socrative-matrisen byggs av de typer som är tända i matrisens eget typval — inte av källvalet överst
+      fm: fragematris(s, { ...tkFilter, kallor: fmVarld !== 'socrative' ? [fmVarld] as ResultatKalla[] : (fmTyper.length === 0 ? FM_TYPER : fmTyper), ...(ledElev !== null ? { elevId: ledElev } : {}) }),
     };
-  }, [s, filterNyckel, ledElev, fmVarld]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [s, filterNyckel, ledElev, fmVarld, fmTyper.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
   const { led, delFarger, fm } = elevData;
   // Frågematrisens rader: typfilter (tomt = alla) och vald datumordning — billigt, kan köras varje gång
   const fmRader = [...fm.rader]
@@ -4534,19 +4541,22 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
         <div className="rad st-fmverktyg">
           {fmVarld === 'socrative' && (<>
           <small className="muted">Typ:</small>
-          <button className={`chipbtn ${fmTyper.length === 0 ? 'act' : ''}`} title="Visa alla typer" aria-pressed={fmTyper.length === 0}
-            onClick={() => setFmTyper([])}>Alla</button>
-          {FM_TYPER.map((k) => {
-            // Alla = alla typer tända; ett klick på en tänd typ släcker just den, tänds alla igen blir det Alla
-            const tand = fmTyper.length === 0 || fmTyper.includes(k);
-            const klick = () => {
-              const ny = fmTyper.length === 0 ? FM_TYPER.filter((x) => x !== k) : (fmTyper.includes(k) ? fmTyper.filter((x) => x !== k) : [...fmTyper, k]);
-              setFmTyper(ny.length === FM_TYPER.length ? [] : ny);
-            };
-            return (
-              <button key={k} className={`chipbtn ${tand ? 'act' : ''}`} aria-pressed={tand} onClick={klick}>{TYPNAMN[k]}</button>
-            );
-          })}
+          {/* Del 250: "Alla" ligger ovanför typerna och omfamnar dem — tänd när alla tre visas */}
+          <div className={`st-typval${fmTyper.length === 0 ? ' alla' : ''}`} role="group" aria-label="Typ av förhör">
+            <button className={`chipbtn st-typval-alla ${fmTyper.length === 0 ? 'act' : ''}`} title="Visa läxförhör, exit tickets och övningar" aria-pressed={fmTyper.length === 0}
+              onClick={() => setFmTyper([])}>Alla</button>
+            {FM_TYPER.map((k) => {
+              // Alla = alla typer tända; ett klick på en tänd typ släcker just den, tänds alla igen blir det Alla
+              const tand = fmTyper.length === 0 || fmTyper.includes(k);
+              const klick = () => {
+                const ny = fmTyper.length === 0 ? FM_TYPER.filter((x) => x !== k) : (fmTyper.includes(k) ? fmTyper.filter((x) => x !== k) : [...fmTyper, k]);
+                setFmTyper(ny.length === FM_TYPER.length ? [] : ny);
+              };
+              return (
+                <button key={k} className={`chipbtn ${tand ? 'act' : ''}`} aria-pressed={tand} title={tand ? `${TYPNAMN[k]} visas — klicka för att dölja` : `Visa ${TYPNAMN[k].toLowerCase()}`} onClick={klick}>{TYPNAMN[k]}</button>
+              );
+            })}
+          </div>
           </>)}
           <span className="spacer" />
           <small className="muted">Ordning:</small>

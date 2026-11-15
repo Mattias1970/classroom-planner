@@ -3073,6 +3073,9 @@ describe('Del 130: tillfällen utan svar per fråga förklaras i frågematrisen;
 
     // Typ-chipparna: Alla tänder alla; ett klick på Exit släcker bara Exit; tänds den igen är det Alla
     const chip = (t: string) => [...host.querySelectorAll<HTMLButtonElement>('.st-fmverktyg .chipbtn')].find((b) => b.textContent === t)!;
+    // Del 250: typvalet börjar som källvalet överst (läxförhör + exit) — Övning är släckt, alltså inte Alla
+    expect(['Alla', 'Läxförhör', 'Exit', 'Övning'].map((t) => chip(t).classList.contains('act'))).toEqual([false, true, true, false]);
+    act(() => { chip('Övning').click(); });
     expect(['Alla', 'Läxförhör', 'Exit', 'Övning'].map((t) => chip(t).classList.contains('act'))).toEqual([true, true, true, true]);
     act(() => { chip('Exit').click(); });
     expect(['Alla', 'Läxförhör', 'Exit', 'Övning'].map((t) => chip(t).classList.contains('act'))).toEqual([false, true, false, true]);

@@ -13,8 +13,8 @@
  * Skalet äger inga data — det renderar vad App ger det. Vyerna från v2 ligger
  * kvar oförändrade som innehåll, så ingen funktion försvinner.
  */
-import React, { useEffect, useState } from 'react';
-import { amnetGallerKlass, type Struktur } from '@planner/kernel';
+import React, { useEffect, useMemo, useState } from 'react';
+import { amnetGallerKlass, resultatPeriod, type Struktur } from '@planner/kernel';
 import { Ikon, amnesIkon } from './ikoner.js';
 
 export type V3Vy =
@@ -58,6 +58,10 @@ export function Skal({ s, vy, setVy, filter, setFilter, notiser, larareNamn, ver
     });
 
   const klasser = s.klasser;
+  // Del 250: perioden enligt planeringen och förhörens datum — visas i periodfältet när inget är skrivet
+  const idag = new Date().toISOString().slice(0, 10);
+  const helaPerioden = useMemo(() => (filter.klassId === '' ? null : resultatPeriod(s, filter.klassId, filter.amneId, idag)), [s, filter.klassId, filter.amneId, idag]);
+  const datumText = (d: string) => `${Number(d.slice(8, 10))}/${Number(d.slice(5, 7))}`;
   const skolar = s.skolar;
   const amnenIKlass = s.amnen.filter((a) => amnetGallerKlass(a, filter.klassId));
   const skolaNamn = s.tjanster[0]?.namn ?? 'Skolan';
@@ -111,8 +115,10 @@ export function Skal({ s, vy, setVy, filter, setFilter, notiser, larareNamn, ver
             <select aria-label="Filter ämne" value={filter.amneId} onChange={(e) => { const a = s.amnen.find((x) => x.id === e.target.value); setFilter({ ...filter, amneId: e.target.value, klassId: a?.klassId ?? filter.klassId }); }}>
               {vy.typ !== 'planering' && <option value="">alla</option>}{(filter.klassId === '' ? s.amnen : amnenIKlass).map((a) => <option key={a.id} value={a.id}>{filter.klassId === '' ? `${klasser.find((k) => k.id === a.klassId)?.namn ?? ''} ${a.namn}`.trim() : a.namn}</option>)}
             </select></label>}
-          {falt.has('period') && <label className="v3-filter" title="Veckor som resultat och rapporter avgränsas till, t.ex. v.35–43 — tomt = allt"><span className="v3-filter-ikon"><Ikon.kalender storlek={16} /></span>Period:
-            <input aria-label="Filter period" placeholder="v.34–42 (tomt = allt)" value={filter.periodText} onChange={(e) => setFilter({ ...filter, periodText: e.target.value })} /></label>}
+          {falt.has('period') && <label className="v3-filter" title={helaPerioden !== null
+            ? `Hela perioden är ${helaPerioden.veckor} (${datumText(helaPerioden.fran)}–${datumText(helaPerioden.till)}) — ${helaPerioden.kalla === 'forhor' ? 'förhörens datum' : helaPerioden.kalla === 'planering' ? 'enligt planeringen' : 'enligt planeringen och förhörens datum'}. Skriv veckor, t.ex. v.40–43, för att avgränsa; tomt = hela perioden.`
+            : 'Veckor som resultat och rapporter avgränsas till, t.ex. v.35–43 — tomt = allt'}><span className="v3-filter-ikon"><Ikon.kalender storlek={16} /></span>Period:
+            <input aria-label="Filter period" placeholder={helaPerioden !== null ? helaPerioden.veckor : 'alla veckor'} value={filter.periodText} onChange={(e) => setFilter({ ...filter, periodText: e.target.value })} /></label>}
           <span className="spacer" />
           {falt.has('sok') && <label className="v3-sok"><Ikon.sok storlek={16} /><input aria-label="Filter sök" placeholder="Sök elev…" value={filter.sok} onChange={(e) => setFilter({ ...filter, sok: e.target.value })} /></label>}
           {angra !== undefined && <button className="v3-ikonknapp" aria-label="Ångra" title="Ångra senaste ändring (upp till 20 steg)" onClick={angra}>↩</button>}

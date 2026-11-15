@@ -65,6 +65,11 @@ Bokdata är läsbar men aldrig skrivbar från appen (`classroom-planner-data`). 
 - **Rummen vi använder** (`rumInfo`): klassrum (`socrativeRum`), rum i planeringen, begreppsrum (ämne + siffror), ämnesrum (börjar på ett av lärarens ämnen). Allt annat (t.ex. `SO8BB`) är inte vårt: det sorteras bort i listan, och en sådan fil importeras inte utan "ta med ändå".
 - UI: `Rapportlista.tsx` under 📥 Importera → Socrative — släppruta för filer, tabellen per rum och listan över rapporter som saknas.
 
+## Period och typval i resultat (Del 250)
+
+- **Perioden kommer ur planeringen och förhörens datum** (`resultatPeriod`): delämnets period i NO+Tk-blocket, annars första–sista planerade lektion, vidgad så att alla förhör ryms. Periodfältet överst visar den som förval; visa aldrig ett fast exempel som om det vore perioden.
+- **Frågematrisens typval avgör matrisen**: den byggs av de typer som är tända i matrisen (bara Exit, Läxförhör + Exit, eller Alla = alla tre), inte av källvalet överst på sidan. Typvalet börjar som källvalet och följer med när det ändras. "Alla" ligger ovanför typerna.
+
 ## En fråga hör till sitt kapitel (Del 249)
 
 - **Frågor ur olika kapitel blandas aldrig ihop** — inte ens med identisk text. "Cellandning" i 4.2 och samma fråga i ett 6.1-quiz är två frågor, var och en i sitt kapitels kolumner och summor. Inom kapitlet gäller begreppet som förut (omskriven fråga = samma fråga).
