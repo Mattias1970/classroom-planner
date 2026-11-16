@@ -45,6 +45,7 @@ import {
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
   vagTyp,
+  amnesflikBeskrivning, menyBeskrivning,
 } from '@planner/kernel';
 import { exportJson, importJson, lasInstallning, lasStruktur, prenumereraStruktur, sparaInstallning, sparaStruktur, LAGRINGSGRANS_TECKEN, useSparfel } from './store.js';
 import { RapportdesignVy, MallRendering, Trendsteg } from './rapportdesign.js';
@@ -259,7 +260,7 @@ export function App() {
           {vy.typ === 'oversikt' && <Oversikt s={s} filter={filter} setVy={setVy} struktur={struktur} lasaret={<Lasaret s={s} skolarId={filter.skolarId} kor={kor} />} />}
           {vy.typ === 'planering' && (
             <div className="v3-sida-innehall">
-              <Kort rubrik="Planering" under="årsplanering, veckoplanering, lektionskort och begrepp — samma verktyg som förut" hoger={<button className="v3-lank" onClick={() => setVy({ typ: 'kalender' })}>Kalender →</button>}>
+              <Kort rubrik="Planering" under="årsplanering, veckoplanering, lektionskort och begrepp — samma verktyg som förut" hoger={<button className="v3-lank" title={menyBeskrivning('kalender')} onClick={() => setVy({ typ: 'kalender' })}>Kalender →</button>}>
                 <PlaneringVy s={s} kor={kor} setVald={setVald} hopp={lektionsHopp} amneIdIn={filter.amneId} klassIdIn={filter.klassId} meddela={setMsg}
                   onAmneVald={(id) => { const a = s.amnen.find((x) => x.id === id); setFilter((f) => (id === f.amneId && (a === undefined || a.klassId === f.klassId) ? f : { ...f, amneId: id, klassId: a?.klassId ?? f.klassId })); }} />
               </Kort>
@@ -1632,23 +1633,23 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
         <p className="status warn">⚠ {bok!.titel} har {bok!.kapitel.reduce((n, k2) => n + k2.delkapitel.reduce((m, d) => m + d.lektioner.length, 0) + k2.extraLektioner.length, 0)} lektioner men blocket rymmer bara {budget}. De sista lektionerna trängs in i nästa delämnes block — korta boken eller lägg fler NO-pass.</p>
       )}
       <div className="flikar no-print">
-        <button className={`flik ${flik === 'planering' ? 'act' : ''}`} onClick={() => setFlik('planering')}>📝 Lektionsplan</button>
-        <button className={`flik ${flik === 'kortrad' ? 'act' : ''}`} onClick={() => setFlik('kortrad')} disabled={!bok} title={!bok ? 'Koppla en bok först' : 'Alla lektionsplanskort i en rad — klicka, dra, lägg till och ta bort; karta överst'}>🃏 Kortrad</button>
-        <button className={`flik ${flik === 'tavla' ? 'act' : ''}`} onClick={() => setFlik('tavla')} disabled={!bok} title={!bok ? 'Koppla en bok först' : 'Alla lektioner som kort i en rad — dra in kapitel, laborationer och egna kort'}>🗂 Planeringstavla</button>
-        <button className={`flik ${flik === 'detalj' ? 'act' : ''}`} onClick={() => setFlik('detalj')}>🧭 Detaljplanering</button>
+        <button className={`flik ${flik === 'planering' ? 'act' : ''}`} onClick={() => setFlik('planering')} title={menyBeskrivning('planering')}>📝 Lektionsplan</button>
+        <button className={`flik ${flik === 'kortrad' ? 'act' : ''}`} onClick={() => setFlik('kortrad')} disabled={!bok} title={menyBeskrivning('kortrad', !bok ? 'Koppla en bok först' : undefined)}>🃏 Kortrad</button>
+        <button className={`flik ${flik === 'tavla' ? 'act' : ''}`} onClick={() => setFlik('tavla')} disabled={!bok} title={menyBeskrivning('tavla', !bok ? 'Koppla en bok först' : undefined)}>🗂 Planeringstavla</button>
+        <button className={`flik ${flik === 'detalj' ? 'act' : ''}`} onClick={() => setFlik('detalj')} title={menyBeskrivning('detalj')}>🧭 Detaljplanering</button>
         {([['oversikt', 'ℹ Översikt'], ['uppgifter', '✏ Uppgifter'], ['begrepp', '💡 Begrepp'], ['filmer', '🎬 Filmer'], ['magma', '🟫 Magma'], ['anteckningar', '👥 Anteckningar']] as const)
           .filter(([id]) => id !== 'magma' || !arHalvklass(a.namn)) // Magma är mattemjukvara — finns inte i NO/Tk
           .map(([id, txt]) => (
           <button key={id} className={`flik ${flik === id ? 'act' : ''}`} onClick={() => setFlik(id)} disabled={!bok}
-            title={!bok ? 'Koppla en bok först' : ''}>{txt}</button>
+            title={menyBeskrivning(id, !bok ? 'Koppla en bok först' : undefined)}>{txt}</button>
         ))}
-        {halv && <button className={`flik ${flik === 'laborationer' ? 'act' : ''}`} onClick={() => setFlik('laborationer')} disabled={!bok} title={!bok ? 'Koppla en bok först' : 'Laborationsplanering för halvklasspassen'}>🧪 Laborationer</button>}
-        <button className={`flik ${flik === 'provlapp' ? 'act' : ''}`} onClick={() => setFlik('provlapp')} disabled={!bok} title={!bok ? 'Koppla en bok först' : 'Provlappar — en per prov i planeringen'}>📄 Provlapp</button>
-        <button className={`flik ${flik === 'installningar' ? 'act' : ''}`} onClick={() => setFlik('installningar')}>🗓 Schema</button>
-        <button className={`flik ${flik === 'arsoversikt' ? 'act' : ''}`} onClick={() => setFlik('arsoversikt')}>📊 Årsöversikt</button>
+        {halv && <button className={`flik ${flik === 'laborationer' ? 'act' : ''}`} onClick={() => setFlik('laborationer')} disabled={!bok} title={menyBeskrivning('laborationer', !bok ? 'Koppla en bok först' : undefined)}>🧪 Laborationer</button>}
+        <button className={`flik ${flik === 'provlapp' ? 'act' : ''}`} onClick={() => setFlik('provlapp')} disabled={!bok} title={menyBeskrivning('provlapp', !bok ? 'Koppla en bok först' : undefined)}>📄 Provlapp</button>
+        <button className={`flik ${flik === 'installningar' ? 'act' : ''}`} onClick={() => setFlik('installningar')} title={menyBeskrivning('installningar')}>🗓 Schema</button>
+        <button className={`flik ${flik === 'arsoversikt' ? 'act' : ''}`} onClick={() => setFlik('arsoversikt')} title={menyBeskrivning('arsoversikt')}>📊 Årsöversikt</button>
         <span className="spacer" />
-        <button className="flik" onClick={() => window.print()} title="Skriv ut aktiv flik">🖨 Skriv ut</button>
-        <button className="flik" disabled={!bok || plan.length === 0} title={!bok ? 'Koppla en bok först' : 'Veckans lektioner som Word-dokument'}
+        <button className="flik" onClick={() => window.print()} title={menyBeskrivning('skrivUt')}>🖨 Skriv ut</button>
+        <button className="flik" disabled={!bok || plan.length === 0} title={menyBeskrivning('veckaWord', !bok ? 'Koppla en bok först' : plan.length === 0 ? 'Skapa planeringen först' : undefined)}
           onClick={() => {
             if (!bok) return;
             const nu = plan.find((r) => r.datum !== null && r.vecka !== null);
@@ -1658,7 +1659,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
                 `${a.namn}-${klass.namn}-v${nu?.vecka ?? ''}`,
                 vecka.map((rad) => ({ rad, index: plan.indexOf(rad) }))));
           }}>📄 Vecka → Word</button>
-        <button className="flik" disabled={!bok || plan.length === 0} title={!bok ? 'Koppla en bok först' : 'Hela planeringen som Word-dokument'}
+        <button className="flik" disabled={!bok || plan.length === 0} title={menyBeskrivning('kapitelWord', !bok ? 'Koppla en bok först' : plan.length === 0 ? 'Skapa planeringen först' : undefined)}
           onClick={() => {
             if (!bok) return;
             void import('./wordExport.js').then(({ exporteraLektioner }) =>
@@ -1682,7 +1683,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
             return sattLektionsplan(lasStruktur(), { ...bas, ...(namn !== '' ? { avsnittText: namn } : {}), labFraga: fraga });
           }, `Laboration ${i + 1}: namn och frågeställning sparade.`)}
           aktivtKapitel={(plan.find((r) => r.datum !== null && r.datum >= idag) ?? plan[plan.length - 1])?.kapitel ?? null} />
-        <label className="flik file-btn no-print" title="Del 140: slå ihop en planeringsmall (lektionsantal + lektionsplaner per rad) med planeringen — räknar om från terminsstart">📥 Planeringsmall
+        <label className="flik file-btn no-print" title={menyBeskrivning('planeringsmall', !bok ? 'Koppla en bok först' : undefined)}>📥 Planeringsmall
           <input type="file" accept="application/json" hidden aria-label="Planeringsmall" onChange={(e) => {
             const f = e.target.files?.[0]; e.currentTarget.value = '';
             if (!f || !bok) return;
@@ -6802,7 +6803,7 @@ function PlaneringVy({ s, kor, setVald, hopp, amneIdIn, klassIdIn, dolAmnesval, 
                 const akt = a.id === valt;
                 return (
                   <button key={a.id} role="tab" aria-selected={akt} className={`amnesflik${akt ? ' act' : ''}${harPlan.has(a.id) ? '' : ' utan-plan'}`}
-                    title={`${klass.namn} · ${a.namn}${harPlan.has(a.id) ? '' : ' — ingen planering ännu'}`} onClick={() => valj(a.id)}>
+                    title={amnesflikBeskrivning(klass.namn, a.namn, harPlan.has(a.id))} onClick={() => valj(a.id)}>
                     <I storlek={18} /><span className="amnesflik-text"><b>{a.namn}</b><small>{klass.namn}</small></span>
                   </button>
                 );

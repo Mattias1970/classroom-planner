@@ -5,7 +5,7 @@
  * Innehållet byggs av kernel (pedagogiskPlaneringForOmfang) och Word-filen av pedagogiskWord.ts.
  */
 import { useEffect, useState } from 'react';
-import { bokensKapitelOrdning, omfangUrKoder, pedagogiskPlanering, pedagogiskPlaneringForOmfang, planensKapitel, planensKapitelOrdning, tolkaOmfang, valbaraDelkapitel, type KapitelOrdning, type PlanLaboration, type Struktur } from '@planner/kernel';
+import { menyBeskrivning, bokensKapitelOrdning, omfangUrKoder, pedagogiskPlanering, pedagogiskPlaneringForOmfang, planensKapitel, planensKapitelOrdning, tolkaOmfang, valbaraDelkapitel, type KapitelOrdning, type PlanLaboration, type Struktur } from '@planner/kernel';
 import { lasInstallning, lasStruktur, sparaInstallning } from './store.js';
 import { KapitelOrdningRedigerare, fullOrdning } from './KapitelOrdning.js';
 
@@ -91,7 +91,7 @@ export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, m
   };
   return (
     <>
-      <button className="flik" disabled={disabled} title="Pedagogisk planering och provlapp för elever och vårdnadshavare — välj vilka delkapitel som ingår" onClick={oppna}>👨‍👩‍👧 Pedagogisk planering</button>
+      <button className="flik" disabled={disabled} title={menyBeskrivning('pedagogiskPlanering', disabled ? 'Koppla en bok och skapa planeringen först' : undefined)} onClick={oppna}>👨‍👩‍👧 Pedagogisk planering</button>
       {oppen && (
         <div className="st-info-bak" onClick={() => setOppen(false)}>
           <div className="st-info-popup pp-modal" role="dialog" aria-label="Pedagogisk planering" onClick={(e) => e.stopPropagation()}>

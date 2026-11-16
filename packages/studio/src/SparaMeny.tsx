@@ -21,6 +21,7 @@ import {
   forslagPlaneringsNamn, forslagSuperTeachNamn, kopplingFor, laggInSparfiler, oppnaSparadPlanering, oppnaSparadSuperTeach,
   serialiseraSparfil, sparaPlanering, sparaSuperTeach, sparfilSokvag, taBortSparadPlanering, taBortSparadSuperTeach, tolkaSparfil,
   type SparLage, type SparadPlanering, type SparadSuperTeach, type Struktur,
+  menyBeskrivning,
 } from '@planner/kernel';
 import { hamtaFilerFranGitHub, konfigKomplett, lasGitHubConfig, sparaFilTillGitHub } from './github.js';
 import { lasStruktur } from './store.js';
@@ -76,8 +77,10 @@ export function SparaMeny({ typ, s, amneId, kor, meddela }: {
 
   return (
     <div className="sparameny" ref={ref}>
-      <button className="btn sec" aria-haspopup="dialog" aria-expanded={oppen === 'spara'} onClick={() => setOppen(oppen === 'spara' ? 'ingen' : 'spara')}>💾 Spara ▾</button>
-      <button className="btn sec" aria-haspopup="dialog" aria-expanded={oppen === 'hamta'} onClick={() => setOppen(oppen === 'hamta' ? 'ingen' : 'hamta')}>
+      <button className="btn sec" aria-haspopup="dialog" aria-expanded={oppen === 'spara'} onClick={() => setOppen(oppen === 'spara' ? 'ingen' : 'spara')}
+        title={typ === 'planering' ? menyBeskrivning('spara') : `Spara: sparar ${ord.vad} som de är nu under ett eget namn, så att du kan gå tillbaka senare.`}>💾 Spara ▾</button>
+      <button className="btn sec" aria-haspopup="dialog" aria-expanded={oppen === 'hamta'} onClick={() => setOppen(oppen === 'hamta' ? 'ingen' : 'hamta')}
+        title={typ === 'planering' ? menyBeskrivning('hamta') : `Hämta: öppnar ${ord.vad} du sparat tidigare.`}>
         📂 Hämta ▾{alla.length > 0 && <span className="sparameny-antal">{alla.length}</span>}
       </button>
       {oppen === 'spara' && (
