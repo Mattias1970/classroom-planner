@@ -5,14 +5,17 @@
  *     "Ja" flyttar hem dem med resultat och filer; "Inte nu" tystar frågan för just den uppsättningen.
  *   – Quiz med för få svar: importerade quiz med under 30 % av elevernas möjliga svar. "Ta bort" tar bort
  *     filen och dess resultat och spärrar filnamnet; "Behåll" gör att appen inte frågar om filen igen.
+ *   – Förhör med fel datum (Del 256): importerade förhör som fått en avlägsen lektions datum i stället för
+ *     dagen de kördes. "Ja" sätter dagen ur filnamnet på resultaten; "Inte nu" tystar frågan för just de filerna.
  *
  * Inget ändras utan att läraren svarar, och båda går att ångra med ↩.
  */
 import { useMemo, useState } from 'react';
-import { behallFil, eleverIFelKlass, filerMedFaSvar, rensaEleverIFelKlass, sparraFil, type FelKlass, type Struktur } from '@planner/kernel';
+import { behallFil, eleverIFelKlass, feldateradeForhor, filerMedFaSvar, MAX_DAGAR_FRAN_LEKTION, rattaForhorsdatum, rensaEleverIFelKlass, sparraFil, type FelKlass, type Struktur } from '@planner/kernel';
 import { lasInstallning, lasStruktur, sparaInstallning } from './store.js';
 
 const INTE_NU = 'cp.felklass.inteNu';
+const DATUM_INTE_NU = 'cp.forhorsdatum.inteNu';
 const signatur = (f: FelKlass) => `${f.franKlassId}>${f.tillKlassId}:${f.par.map((p) => p.franId).sort().join(',')}`;
 const antal = (n: number, ett: string, flera: string) => `${n} ${n === 1 ? ett : flera}`;
 const kortDag = (datum?: string) => (datum === undefined ? '' : `${Number(datum.slice(8, 10))}/${Number(datum.slice(5, 7))}`);
@@ -21,7 +24,12 @@ export function QuizVakt({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m:
   const [inteNu, setInteNu] = useState<string[]>(() => lasInstallning<string[]>(INTE_NU, []));
   const felKlass = useMemo(() => eleverIFelKlass(s).filter((f) => !inteNu.includes(signatur(f))), [s, inteNu]);
   const faSvar = useMemo(() => filerMedFaSvar(s), [s]);
-  if (felKlass.length === 0 && faSvar.length === 0) return null;
+  // Del 256: förhör som fått en avlägsen lektions datum — frågan gäller just den uppsättningen filer
+  const [datumInteNu, setDatumInteNu] = useState<string>(() => lasInstallning<string>(DATUM_INTE_NU, ''));
+  const felDatum = useMemo(() => feldateradeForhor(s), [s]);
+  const datumSignatur = felDatum.map((f) => f.fil.id).sort().join(',');
+  const visaDatum = felDatum.length > 0 && datumSignatur !== datumInteNu;
+  if (felKlass.length === 0 && faSvar.length === 0 && !visaDatum) return null;
   const klassNamn = (id: string) => s.klasser.find((k) => k.id === id)?.namn ?? '?';
   const amneNamn = (id: string) => { const a = s.amnen.find((x) => x.id === id); return `${klassNamn(a?.klassId ?? '')} ${a?.namn ?? '?'}`.trim(); };
   const idag = new Date().toISOString().slice(0, 10);
@@ -36,8 +44,34 @@ export function QuizVakt({ s, kor }: { s: Struktur; kor: (fn: () => Struktur, m:
   };
   const avvakta = (f: FelKlass) => { const ny = [...inteNu, signatur(f)]; setInteNu(ny); sparaInstallning(INTE_NU, ny); };
 
+  const kordText = (datum: string, tid: string) => `${kortDag(datum)} kl. ${tid}`;
+  const rattaDatum = () => {
+    const resultat = felDatum.reduce((n, f) => n + f.resultat, 0);
+    kor(() => rattaForhorsdatum(lasStruktur()).s, `${antal(felDatum.length, 'förhör har', 'förhör har')} fått dagen de kördes (${antal(resultat, 'resultat', 'resultat')}).`);
+  };
+
   return (
     <div className="quizvakt no-print">
+      {visaDatum && (
+        <div className="quizfraga" role="region" aria-label="Förhör med fel datum">
+          <p><b>📅 {antal(felDatum.length, 'importerat förhör har', 'importerade förhör har')} fått ett annat datum än dagen de kördes.</b> Ska datumen rättas?</p>
+          <p className="small">
+            Förhören knöts vid importen till en lektion i planeringen som låg mer än {MAX_DAGAR_FRAN_LEKTION} dagar bort, och fick lektionens datum. Filnamnet säger när förhöret startades.
+            Rättningen byter bara datumet på {antal(felDatum.reduce((n, f) => n + f.resultat, 0), 'resultat', 'resultat')} — poäng och svar rörs inte. Går att ångra med ↩.
+          </p>
+          <details><summary className="small">Visa förhören ({felDatum.length})</summary>
+            <ul>
+              {felDatum.map((f) => (
+                <li key={f.fil.id} className="small"><b>{f.fil.prov}</b> <span className="muted">({amneNamn(f.fil.amneId)})</span> — sparat {kortDag(f.fil.datum)}, kördes {kordText(f.kord.datum, f.kord.tid)}</li>
+              ))}
+            </ul>
+          </details>
+          <div className="quizknappar">
+            <button className="btn" onClick={rattaDatum}>Ja, rätta datumen</button>
+            <button className="btn sec" onClick={() => { setDatumInteNu(datumSignatur); sparaInstallning(DATUM_INTE_NU, datumSignatur); }} title="Frågan kommer tillbaka om fler förhör får fel datum">Inte nu</button>
+          </div>
+        </div>
+      )}
       {felKlass.map((f) => (
         <div key={signatur(f)} className="quizfraga" role="region" aria-label="Elever i fel klass">
           <p><b>👥 {klassNamn(f.franKlassId)} innehåller {antal(f.par.length, 'elev', 'elever')} som också finns i {klassNamn(f.tillKlassId)} och hör hemma där.</b> Ska de flyttas hem?</p>

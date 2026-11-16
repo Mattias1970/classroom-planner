@@ -640,6 +640,10 @@ input.fel { border-color: #B71C1C; }
 .st-dash .tbl th:first-child, .st-dash .tbl td:first-child,
 .st-rapport .tbl th:first-child, .st-rapport .tbl td:first-child,
 .st-filer .tbl th:first-child, .st-filer .tbl td:first-child { width: auto; }
+/* Del 256 · Trendkoll per elev: stegen (Utveckling) är kolumnen som får växa — inte elevnamnet. Förut trängdes
+   stegen ihop till en ruta i bredd och varje elevrad blev hundratals pixlar hög. */
+.st-dash .tbl.st-tk-elever th:first-child, .st-dash .tbl.st-tk-elever td:first-child { width: 1%; }
+.st-dash .tbl.st-tk-elever th:nth-child(5), .st-dash .tbl.st-tk-elever td:nth-child(5) { width: auto; white-space: normal; }
 /* Siffror högerställs och blir kompakta */
 .st-dash .tbl td.st-diff, .st-dash .tbl th.st-diff,
 .st-dash .st-cell, .st-dash .st-cell-diff { text-align: center; padding-left: 6px; padding-right: 6px; }

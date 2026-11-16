@@ -91,6 +91,12 @@ Bokdata är läsbar men aldrig skrivbar från appen (`classroom-planner-data`). 
 - Samma text i två kapitel skiljs åt av ett **dolt kapitelmärke** sist i texten (` [8 hex]`). Visa alltid frågetext genom `utanKapitelmarke`; para aldrig ihop frågor på den visade texten.
 - Identiteten räknas på ämnets alla Socrative-resultat (`enadeForAmne`), inte på urvalet — annars försvinner länken när bara ett kapitel visas.
 
+## Ett förhör bär dagen det kördes (Del 256)
+
+- `klassificeraViaRum` ger lektionens datum bara när lektionen ligger **högst `MAX_DAGAR_FRAN_LEKTION` (3) dagar** från dagen förhöret kördes (helgkört, dagen efter). Längre bort gäller dagen ur filnamnet; typen (exit/läxförhör) ges fortfarande av rummet, men `lektionsIndex`/`avsnitt` är null. Förut fick alla förhör i en klass vars planering inte täckte tiden samma datum (den närmaste lektionen) — då såg trendkoll, matris och lektionstest ut att ha allt på en dag.
+- Redan importerade förhör: `feldateradeForhor(s)` jämför filregistrets datum med filnamnets (`Class_ÅÅÅÅ_MM_DD__TT_MM_QZ_…`, UTC → svensk tid) och `rattaForhorsdatum(s, filIds?)` sätter dagen på resultaten och i registret (klockslaget skiljer två körningar av samma quiz). Läraren får frågan i QuizVakt ("Förhör med fel datum"); inget ändras utan ja, och det går att ångra.
+- Vyer med "skapa klasser först" får aldrig ha den kontrollen mitt bland sina hooks: lägg den i en yttre komponent (`SuperTeachVy` → `SuperTeachMedKlass`, `RapportVy` → `RapportVyMedKlass`). Annars blir sidan vit när datan kommer efter första ritningen (återställd backup, Ladda strukturen, en annan flik).
+
 ## Omskriven fråga, samma svar (Del 253)
 
 - **Samma svar = samma frågenummer.** En fråga som skrivits om mellan två förhör i samma kapitel står i en kolumn (senaste formuleringen gäller). **Olika svar = olika frågor** — en fråga som tagits bort och en ny med annat svar slås aldrig ihop, även om de bytt plats i quizet.

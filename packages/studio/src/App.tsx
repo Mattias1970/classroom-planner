@@ -4832,7 +4832,7 @@ function SuperTeachDashboard({ s: sIn, klassId, klassNamn, amneId, kallor, omfan
           <p className="st-insikt">{tk.sammanfattning}</p>
           {!visaTkPar ? (
             <div className="st-scroll" style={{ maxHeight: 340 }}>
-              <table className="tbl st-tabell">
+              <table className="tbl st-tabell st-tk-elever">
                 <thead><tr><th>Elev</th><th>Lärt</th><th>Glömt</th><th>Netto</th><th>Utveckling</th><th>Omdöme</th></tr></thead>
                 <tbody>{[...tk.elever].sort((a, b) => a.netto - b.netto).map((e) => (
                   <tr key={e.elev.id}>
@@ -5680,11 +5680,17 @@ function EnkelRapportVy({ s, elev, f, periodText, onTillbaka, onFull, onStudie, 
  * 📄 Rapporter — en elev i taget: hur det går, vad eleven kan göra, och
  * hela underlaget. Samma analys som Word-filen, fast på skärmen.
  */
-function RapportVy({ s, kor, meddela, kontext, onKontext }: {
+interface RapportVyProps {
   s: Struktur; kor: (fn: () => Struktur, m: string) => void; meddela: (m: string) => void;
   /** Del 201: topplistens klass/ämne/period/sök styr vyn, och vyns egna val rapporteras tillbaka. */
   kontext?: Filter; onKontext?: (k: KontextPatch) => void;
-}) {
+}
+/** Del 256 · Utan klasser visas bara beskedet — se SuperTeachVy (annars blir sidan vit när datan kommer). */
+function RapportVy(p: RapportVyProps) {
+  if (p.s.klasser.length === 0) return <div className="card"><h2>📄 Rapporter</h2><p className="muted">Skapa klasser och elever under 🗂 Struktur först.</p></div>;
+  return <RapportVyMedKlass {...p} />;
+}
+function RapportVyMedKlass({ s, kor, meddela, kontext, onKontext }: RapportVyProps) {
   const [design, setDesign] = useState(false);
   const [vecko, setVecko] = useState(false);
   const [mallAlla, setMallAlla] = useState<string | null>(null);
@@ -6176,13 +6182,23 @@ const IMPORT_APPAR: Array<{ id: ImportApp; bokstav: string; namn: string; under:
   { id: 'elever', bokstav: '👥', namn: 'Elever', under: 'Socrative-lista · grupper A/B' },
 ];
 
-function SuperTeachVy({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, onKontext }: {
+interface SuperTeachProps {
   s: Struktur; kor: (fn: () => Struktur, m: string) => void; meddela?: (m: string) => void;
   /** v3: toppradens klass-/ämnesfilter styr vilken klass och vilket ämne som visas (Del 147). */
   klassIdIn?: string; amneIdIn?: string;
   /** Del 201: period och sök ur topplisten; egna val rapporteras tillbaka. */
   periodIn?: string; sokIn?: string; onKontext?: (k: KontextPatch) => void;
-}) {
+}
+/**
+ * Del 256 · Utan klasser visas bara beskedet. Förut låg den kontrollen mitt i vyn, efter en del av dess
+ * tillstånd — när datan sedan kom (en återställd backup, Ladda strukturen, en annan flik som sparade) fick
+ * vyn fler tillstånd än vid förra ritningen och sidan blev vit.
+ */
+function SuperTeachVy(p: SuperTeachProps) {
+  if (p.s.klasser.length === 0) return <div className="card"><h2>📊 SuperTeach</h2><p className="muted">Skapa klasser och elever under 🗂 Struktur först.</p></div>;
+  return <SuperTeachMedKlass {...p} />;
+}
+function SuperTeachMedKlass({ s, kor, meddela, klassIdIn, amneIdIn, periodIn, sokIn, onKontext }: SuperTeachProps) {
   const klasser = [...s.klasser].sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
   const [klassId, setKlassId] = useState(klassIdIn !== undefined && klassIdIn !== '' ? klassIdIn : klasser[0]?.id ?? '');
   const klass = klasser.find((k) => k.id === klassId) ?? klasser[0];

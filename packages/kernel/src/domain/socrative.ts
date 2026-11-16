@@ -257,9 +257,20 @@ export function klassificeraSocrativeAktivitet(startUtc: string, plan: PlaneradL
 function normRum(r: string): string { return r.replace(/\s+/g, '').toUpperCase(); }
 
 /**
+ * Del 256 · Så många dagar från lektionen får ett förhör ha körts för att räknas till lektionens dag (ett
+ * förhör som öppnats över helgen, eller dagen efter för dem som var borta). Längre bort än så hör förhöret
+ * inte till den lektionen: då gäller dagen det kördes.
+ */
+export const MAX_DAGAR_FRAN_LEKTION = 3;
+
+/**
  * Söker rummet i planen. Träff på `exit` ⇒ exit ticket, på `socStart` ⇒ läxförhör.
  * Vid flera lektioner med samma rum väljs den vars datum ligger närmast (och helst
  * senast på eller före) filens datum.
+ *
+ * Del 256 · Ligger närmaste lektion med rummet mer än `MAX_DAGAR_FRAN_LEKTION` dagar bort (planeringen täcker
+ * inte den tiden — t.ex. en klass vars planering börjar senare) får förhöret dagen det kördes, inte lektionens.
+ * Förut fick alla sådana förhör samma datum: den enda lektion som låg närmast. Typen ges fortfarande av rummet.
  */
 export function klassificeraViaRum(rum: string, startUtc: string, plan: PlaneradLektion[]): AktivitetsKlassificering | null {
   const { datum, tid } = svenskTid(startUtc);
@@ -276,6 +287,13 @@ export function klassificeraViaRum(rum: string, startUtc: string, plan: Planerad
     if (bast === null || avstand < bast.avstand) bast = { index, rad, kalla, avstand };
   }
   if (bast === null) return null;
+  const typ = bast.kalla === 'socrative-exit' ? 'exit ticket' : 'läxförhör';
+  if (dagar(bast.rad.datum!, datum) > MAX_DAGAR_FRAN_LEKTION) {
+    return {
+      datum, tid, lektionsIndex: null, avsnitt: null, kalla: bast.kalla,
+      beskrivning: `${typ} via rum ${rum} (körd ${datum} — ingen lektion med rummet inom ${MAX_DAGAR_FRAN_LEKTION} dagar i planeringen)`,
+    };
+  }
   const sammaDag = bast.rad.datum === datum;
   return {
     datum: bast.rad.datum!, tid, lektionsIndex: bast.index, avsnitt: bast.rad.lektion.avsnitt, kalla: bast.kalla,
