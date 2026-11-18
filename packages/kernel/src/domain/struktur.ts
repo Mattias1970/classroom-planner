@@ -854,6 +854,19 @@ export function flyttaKurs(s: Struktur, amneId: string, kursNyckel: string, steg
   return andraPlanering(s, amneId, { kursOrdning: ordning }, idag);
 }
 
+/**
+ * Del 258 · Kapitlet en planrad hör till. Rubriken avgör när den bär en delkapitelkod ('3.1 Omkrets och area'
+ * → kapitel 3) och boken har det kapitlet; annars radens eget kapitel. Egna kort och rader utan egen plats i
+ * boken ärver annars kapitlet av raden före — ett kort med 3.1 direkt efter kapitel 2 räknades då till kapitel 2.
+ */
+export function radensKapitel(rad: { kapitel: number; lektion: { avsnitt: string } }, bokensKapitel: Iterable<number>): number {
+  const kod = delkapitelKod(rad.lektion.avsnitt);
+  if (kod === null) return rad.kapitel;
+  const nr = Number(kod.split('.')[0]);
+  for (const k of bokensKapitel) if (k === nr) return nr;
+  return rad.kapitel;
+}
+
 /** Lägger en lektionsföljd på slots: rad i → slot i (rader som inte ryms får datum null). */
 /**
  * Del 158 · Utkastets teorikö som planrader: bokens rader hämtas ur den vanliga följden
@@ -863,16 +876,18 @@ export function flyttaKurs(s: Struktur, amneId: string, kursNyckel: string, steg
 export function utkastTeoriRader(rader: PlanRad[], u: PlanFranUtkast): PlanRad[] {
   const perNyckel = new Map(rader.map((r) => [r.nyckel, r]));
   const egna = new Map(u.egna.map((k) => [`u:${k.id}`, k]));
+  const bokensKapitel = new Set(rader.map((r) => r.kapitel));
   const ut: PlanRad[] = [];
   for (const n of u.teori) {
     const r = perNyckel.get(n);
     if (r !== undefined) { ut.push(r); continue; }
     const k = egna.get(n);
     if (k !== undefined) {
-      const kapitel = ut[ut.length - 1]?.kapitel ?? rader[0]?.kapitel ?? 1;
+      const arvt = ut[ut.length - 1]?.kapitel ?? rader[0]?.kapitel ?? 1;
       const lektion = k.typ === 'lab' ? laborationTillLektion({ id: n, rubrik: k.rubrik }, 0)
         : egenRadTillLektion({ id: k.id, position: 0, rubrik: k.rubrik, typ: k.typ === 'lektion' ? 'annat' : k.typ, ...(k.beskrivning !== undefined && k.beskrivning !== '' ? { beskrivning: k.beskrivning } : {}) });
-      ut.push({ kapitel, lektion, nyckel: n });
+      // Del 258: ett eget kort med delkapitelkod i rubriken hör till det kapitlet — inte till kapitlet före
+      ut.push({ kapitel: radensKapitel({ kapitel: arvt, lektion }, bokensKapitel), lektion, nyckel: n });
     }
   }
   return ut;

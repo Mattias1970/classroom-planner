@@ -45,7 +45,7 @@ import {
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
   vagTyp,
-  amnesflikBeskrivning, menyBeskrivning,
+  amnesflikBeskrivning, menyBeskrivning, radensKapitel,
 } from '@planner/kernel';
 import { exportJson, importJson, lasInstallning, lasStruktur, prenumereraStruktur, sparaInstallning, sparaStruktur, LAGRINGSGRANS_TECKEN, useSparfel } from './store.js';
 import { RapportdesignVy, MallRendering, Trendsteg } from './rapportdesign.js';
@@ -1445,24 +1445,45 @@ function Elevlista({ s, klassId, klassNamn, kor }: {
 }
 
 // ── Ämne + planering ─────────────────────────────────────────
-/** Kapitelheader som i HTML-förlagan: gradient i aktuella kapitlets färg + badges. */
-function KapitelHeader({ bok, plan, s, amneId }: { bok: Bok; plan: PlaneradLektion[]; s: Struktur; amneId: string }) {
+/**
+ * Kapitelheader som i HTML-förlagan: gradient i aktuella kapitlets färg + badges.
+ *
+ * Del 258 · Rubriken visar kapitlet för dagens eller nästa lektion enligt planeringen — och säger vilken lektion
+ * det är. Visas en lektion ur ett annat kapitel i Detaljplanering (`visad`) följer rubriken den lektionen, så
+ * att rubrik och lektion hör ihop; då står det också vilket kapitel planeringen är i just nu.
+ */
+function KapitelHeader({ bok, plan, s, amneId, visad }: { bok: Bok; plan: PlaneradLektion[]; s: Struktur; amneId: string; visad?: PlaneradLektion }) {
   const idag = new Date().toISOString().slice(0, 10);
-  const nasta = plan.find((r) => r.datum !== null && r.datum >= idag) ?? plan[plan.length - 1];
-  const kap = bok.kapitel.find((k) => k.nr === nasta.kapitel) ?? bok.kapitel[0];
-  const kapPlan = plan.filter((r) => r.kapitel === kap.nr);
+  const bokensKapitel = bok.kapitel.map((k) => k.nr);
+  const kapAv = (r: PlaneradLektion) => radensKapitel(r, bokensKapitel);
+  const kommande = plan.find((r) => r.datum !== null && r.datum >= idag);
+  const nasta = kommande ?? plan[plan.length - 1];
+  const rad = visad ?? nasta;
+  const annatKapitel = visad !== undefined && kapAv(visad) !== kapAv(nasta);
+  const kap = bok.kapitel.find((k) => k.nr === kapAv(rad)) ?? bok.kapitel[0];
+  const kapPlan = plan.filter((r) => kapAv(r) === kap.nr);
   const klara = plan.filter((_r, i) => hamtaLektionsplan(s, amneId, i)?.klar === true).length;
-  const veckor = [...new Set(kapPlan.map((r) => r.vecka).filter((v): v is number => v !== null))];
+  // Veckospannet i tidsordning: första och sista lektionens vecka (ett kapitel över nyår är v.48–3, inte v.3–48)
+  const veckor = kapPlan.filter((r) => r.datum !== null && r.vecka !== null).sort((x, y) => x.datum!.localeCompare(y.datum!)).map((r) => r.vecka!);
   const prov = kapPlan.find((r) => r.lektion.typ === 'exam');
+  const nu = bok.kapitel.find((k) => k.nr === kapAv(nasta));
   return (
     <div className="kap-header" style={{ background: `linear-gradient(135deg, ${kap.farg} 0%, ${kap.farg}cc 100%)` }}>
-      <div className="kap-eyebrow">Aktuellt kapitel</div>
+      <div className="kap-eyebrow" title={annatKapitel ? 'Rubriken följer lektionen som visas i Detaljplanering.' : 'Kapitlet för dagens eller nästa lektion enligt planeringen.'}>
+        {annatKapitel ? 'Kapitel för lektionen som visas' : 'Aktuellt kapitel'}
+      </div>
       <div className="kap-h1">Kapitel {kap.nr} · {kap.namn}</div>
       <div className="kap-badges">
         <span className="kap-badge"><strong>{kapPlan.length}</strong> lektioner i kapitlet</span>
-        <span className="kap-badge"><strong>{veckor.length > 0 ? `v.${Math.min(...veckor)}–${Math.max(...veckor)}` : '—'}</strong> veckospann</span>
+        <span className="kap-badge"><strong>{veckor.length > 0 ? `v.${veckor[0]}–${veckor[veckor.length - 1]}` : '—'}</strong> veckospann</span>
         <span className="kap-badge"><strong>{klara}/{plan.length}</strong> avklarade totalt</span>
         {prov?.datum != null && <span className="kap-badge"><strong>{prov.datum}</strong> {prov.lektion.avsnitt}</span>}
+        {kommande?.datum != null && (
+          <span className="kap-badge kap-nasta" title="Dagens eller nästa lektion enligt planeringen — den avgör vilket kapitel som är aktuellt.">
+            <strong>{kommande.datum === idag ? 'idag' : kortDatum(kommande.datum)}</strong> {kommande.datum === idag ? 'dagens lektion' : 'nästa lektion'}: {kommande.lektion.avsnitt}
+          </span>
+        )}
+        {annatKapitel && nu !== undefined && <span className="kap-badge"><strong>Kapitel {nu.nr}</strong> pågår nu enligt planeringen</span>}
       </div>
     </div>
   );
@@ -1619,7 +1640,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
   return (
     <div className="card">
       <h2>📖 {klass.namn} · {a.namn}{halv ? <span className="pillm">halvklass A/B</span> : null}{a.noGrupp !== undefined ? <span className="pillm">NO+Tk block {(a.noOrder ?? 0) + 1}/4</span> : null}</h2>
-      {bok && harPlanering && plan.length > 0 && <KapitelHeader bok={bok} plan={plan} s={s} amneId={a.id} />}
+      {bok && harPlanering && plan.length > 0 && <KapitelHeader bok={bok} plan={plan} s={s} amneId={a.id} visad={flik === 'detalj' ? plan[detaljIdx] : undefined} />}
       <p className="muted">Socrative-rum: <b>{rum}</b>{halv ? ' (delas av Grupp A och B)' : ''} — läxförhör och exit tickets.
         <button className="linkbtn warn no-print" style={{ marginLeft: 12 }} title="Tar bort hela ämnet med all planering — enskilda lektioner tas bort på lektionssidan" onClick={() => {
           if (!window.confirm(`Vill du ta bort hela ämnet ${a.namn} (${klass.namn}) och alla kurser i det?\n\nAll planering, alla lektionsplaner och arkiverade versioner raderas. Resultaten i SuperTeach finns kvar. Detta går inte att ångra.`)) return;

@@ -10,7 +10,7 @@
  * lektionens detaljplanering. Under det ligger v2:s Planering för ämnet.
  */
 import React, { useMemo, useState } from 'react';
-import { amnesKallor, amnetGallerKlass, frageKort, planForAmne, vagTillProvet, vagTypNamn, type Struktur, type VagBox, type VagLektion } from '@planner/kernel';
+import { amnesKallor, amnetGallerKlass, frageKort, planForAmne, radensKapitel, vagTillProvet, vagTypNamn, type Struktur, type VagBox, type VagLektion } from '@planner/kernel';
 import { Ikon, amnesIkon } from './ikoner.js';
 import { DataSaknas, Kort, Kpi, type Filter, type V3Vy } from './Skal.js';
 
@@ -47,8 +47,11 @@ export function Amnessida({ s, amneNamn, filter, setVy, planering, oppnaLektion 
   // Aktuellt kapitel = kapitlet för nästa lektion (eller det sista genomförda), om läraren inte valt ett annat
   const nasta = plan.find((p) => p.datum !== null && p.datum >= idag) ?? plan[plan.length - 1];
   const bok = s.bocker.find((b) => b.id === amne.bokId);
-  const kapNr = kapVal ?? nasta?.kapitel ?? null;
-  const iKap = plan.filter((p) => p.kapitel === kapNr);
+  // Del 258: kapitlet ges av delkapitelkoden i rubriken när den finns (egna kort ärver annars kapitlet före)
+  const bokensKapitel = (bok?.kapitel ?? []).map((k) => k.nr);
+  const kapAv = (p: (typeof plan)[number]) => radensKapitel(p, bokensKapitel);
+  const kapNr = kapVal ?? (nasta !== undefined ? kapAv(nasta) : null);
+  const iKap = plan.filter((p) => kapAv(p) === kapNr);
   const genomforda = iKap.filter((p) => p.datum !== null && p.datum < idag).length;
   const progression = iKap.length === 0 ? null : Math.round((genomforda / iKap.length) * 100);
   const kapitel = bok?.kapitel.find((k) => k.nr === kapNr);

@@ -332,6 +332,8 @@ body[data-tema="klassisk"] .tema-valj { border-color: var(--ram); background: #f
 .kap-badge { background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.3);
   border-radius: 8px; padding: 4px 10px; font-size: 12px; }
 .kap-badge strong { display: block; font-size: 16px; line-height: 1.2; font-weight: 800; }
+/* Del 258 · nästa lektion: säger varför rubriken visar just det kapitlet */
+.kap-badge.kap-nasta { max-width: 340px; }
 /* Avklarade lektioner */
 .tbl.plan tr.klar td { opacity: .55; }
 .tbl.plan tr.klar td.lekt-avsnitt::before { content: '✓ '; color: #2e7d32; font-weight: 700; }
