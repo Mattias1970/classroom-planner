@@ -1,15 +1,17 @@
 /**
  * Del 202 · Kortraden — alla lektionsplanskort i en rad (horisontell eller vertikal) med veckor och
  * dagar som ram. Klick på ett kort öppnar lektionssidan (Detaljplanering). Korten kan dras för att byta
- * ordning, ➕ lägger in en ny lektion efter ett kort och 🗑 tar bort det — de följande flyttas, fasta kort
- * (prov, diagnoser, laborationer) ligger kvar på sina datum. Kartan överst visar hela terminen i
+ * ordning (Del 259: också prov och diagnoser — korten emellan flyttas ett pass, och får ett prov eller en
+ * diagnos nytt datum på köpet frågas först), ➕ lägger in en ny lektion efter ett kort och 🗑 tar bort det —
+ * de följande flyttas, laborationer ligger kvar på sina pass. Kartan överst visar hela terminen i
  * miniatyr med det synliga fönstret markerat; klick i kartan hoppar dit.
  */
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import {
-  flyttaLektionEfter, hamtaLektionsplan, laggTillLektionEfter, lektionsNamn, taBortLektion,
+  flyttaKortTill, hamtaLektionsplan, laggTillLektionEfter, lektionsNamn, taBortLektion,
   type Bok, type PlaneradLektion, type Struktur,
 } from '@planner/kernel';
+import { flyttaMedFragor } from './flytt.js';
 import { lasInstallning, lasStruktur, sparaInstallning } from './store.js';
 
 const DAG = ['sön', 'mån', 'tis', 'ons', 'tor', 'fre', 'lör'];
@@ -77,7 +79,8 @@ export function Kortrad({ s, amneId, bok, plan, idag, kor, oppnaLektion }: {
   };
   const flytta = (nyckel: string, efter: string | null) => {
     const namn = plan.find((r) => r.nyckel === nyckel)?.lektion.avsnitt ?? nyckel;
-    medBekraftelse((t) => flyttaLektionEfter(lasStruktur(), amneId, nyckel, efter, idag, t).s, `Flytta ${namn}?`, `${namn} flyttad — de andra lektionerna har fått nya pass, fasta kort ligger kvar.`);
+    // Del 259: korten byter plats som de ligger — också prov och diagnoser. Får något av dem nytt datum frågas först.
+    flyttaMedFragor((t) => flyttaKortTill(lasStruktur(), amneId, [nyckel], efter, idag, t), namn, kor);
   };
   const laggTill = (efterNyckel: string, efterNamn: string) => {
     const rubrik = window.prompt(`Rubrik på lektionen som läggs in efter ${efterNamn}:`, 'Övning');

@@ -1458,3 +1458,6 @@ th[title], td[title] { cursor: help; }
 .st-larmonster-namn { min-width: 270px; }
 .st-larmonster-elev { cursor: pointer; border: 1px solid #C9D2E0; background: #fff; }
 .st-larmonster-elev small { color: #5B6B85; margin-left: 4px; }
+
+/* Del 259 · en egen rad som inte syns i planeringen (inlagd planering styr) */
+.egenrad-osynlig { color: #9A5B00; font-size: 12px; font-weight: 600; margin: 0 8px; white-space: nowrap; }

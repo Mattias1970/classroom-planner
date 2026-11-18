@@ -45,7 +45,7 @@ import {
   type LektionsPlan, type OmfattningsPass, type SchemaRad, type TolkatSchema,
   type Kapitel, type Klass, type Pass, type PlaneradLektion, type Skolar, type Struktur,
   vagTyp,
-  amnesflikBeskrivning, menyBeskrivning, radensKapitel,
+  amnesflikBeskrivning, menyBeskrivning, radensKapitel, laggInEgenRadIPlan, laggTillEgenRadIPlan, osynligaEgnaRader,
 } from '@planner/kernel';
 import { exportJson, importJson, lasInstallning, lasStruktur, prenumereraStruktur, sparaInstallning, sparaStruktur, LAGRINGSGRANS_TECKEN, useSparfel } from './store.js';
 import { RapportdesignVy, MallRendering, Trendsteg } from './rapportdesign.js';
@@ -266,7 +266,7 @@ export function App() {
               </Kort>
             </div>
           )}
-          {vy.typ === 'amne' && <Amnessida s={s} amneNamn={vy.amneNamn} filter={filter} setVy={setVy}
+          {vy.typ === 'amne' && <Amnessida s={s} amneNamn={vy.amneNamn} filter={filter} setVy={setVy} kor={kor}
             oppnaLektion={(amneId, i) => setLektionsHopp({ amneId, i, n: Date.now() })}
             planering={(amneId) => <Kort rubrik="Planering och lektioner" under="lektionsplan, detaljplanering, begrepp, filmer, Word"><PlaneringVy s={s} kor={kor} setVald={setVald} hopp={lektionsHopp} amneIdIn={amneId} dolAmnesval meddela={setMsg} /></Kort>} />}
           {vy.typ === 'kalender' && <Kort rubrik="Kalender" hoger={<button className="v3-lank" onClick={() => setVy({ typ: 'planering' })}>Planering →</button>}><KalenderVy s={s} kor={kor} kontext={filter} onKontext={(k) => setFilter((f) => ({ ...f, ...k }))} onOppnaLektion={(amneId, i) => { setLektionsHopp({ amneId, i, n: Date.now() }); setVy({ typ: 'planering' }); }} /></Kort>}
@@ -1945,6 +1945,8 @@ function EgnaRaderRedigerare({ amne, bok, kor, idag }: {
   const [pos, setPos] = useState(grund.length);
   const [beskrivning, setBeskrivning] = useState('');
   const rader = amne.egnaRader ?? [];
+  // Del 259: rader som lades till medan en inlagd planering styrde syntes inte — de pekas ut och kan läggas in
+  const osynliga = new Set(osynligaEgnaRader(lasStruktur(), amne.id, idag).map((r) => r.id));
   const TYPNAMN: Record<EgenRad['typ'], string> = { prov: 'Prov', diagnos: 'Diagnos', ovning: 'Övning', annat: 'Annat' };
   const namn = (r: (typeof grund)[number]) => r.lektion.avsnitt;
   return (
@@ -1958,6 +1960,12 @@ function EgnaRaderRedigerare({ amne, bok, kor, idag }: {
             return (
               <div key={r.id} className="rad film-rad">
                 <span><TypChip typ={r.typ === 'prov' ? 'exam' : r.typ === 'diagnos' ? 'test' : r.typ === 'ovning' ? 'repetition' : 'regular'} /> <b>{r.rubrik}</b> <span className="muted small">— {fore !== undefined ? `före ${namn(fore)}` : 'sist i planeringen'}{r.beskrivning !== undefined && r.beskrivning !== '' ? ` · ${r.beskrivning}` : ''}</span></span>
+                {osynliga.has(r.id) && (
+                  <span className="egenrad-osynlig">⚠ syns inte i planeringen{' '}
+                    <button className="btn sec sm" title="Lägger in raden efter lektionen den står efter i bokens följd — de följande lektionerna flyttas ett pass. Dra den sedan dit du vill ha den i 🃏 Kortrad."
+                      onClick={() => kor(() => laggInEgenRadIPlan(lasStruktur(), amne.id, r.id, idag), `"${r.rubrik}" inlagd i planeringen — dra den till rätt plats i 🃏 Kortrad.`)}>Lägg in i planeringen</button>
+                  </span>
+                )}
                 <button className="icon-btn" title="Ta bort raden" onClick={() => kor(() => taBortEgenRad(lasStruktur(), amne.id, r.id, idag), `Raden "${r.rubrik}" borttagen.`)}>✕</button>
               </div>
             );
@@ -1980,7 +1988,7 @@ function EgnaRaderRedigerare({ amne, bok, kor, idag }: {
           const p = Math.min(pos, grund.length);
           const ny: EgenRad = { id: nyttId('er'), position: p, rubrik: rubrik.trim(), typ,
             ...(beskrivning.trim() !== '' ? { beskrivning: beskrivning.trim() } : {}) };
-          kor(() => laggTillEgenRad(lasStruktur(), amne.id, ny, idag),
+          kor(() => laggTillEgenRadIPlan(lasStruktur(), amne.id, ny, idag),
             `${TYPNAMN[typ]} "${ny.rubrik}" infogad ${grund[p] !== undefined ? `före ${namn(grund[p])}` : 'sist i planeringen'}.`);
           setRubrik(''); setBeskrivning('');
         }}>+ Infoga rad</button>

@@ -136,6 +136,13 @@ body[data-layout="v3"] .studio { max-width: none; padding: 0; }
 .v3-kedja-kort.prov { border-style: dashed; background: #FAFBFE; }
 .v3-kedja-kort small { color: var(--v3-mut); font-size: 12px; }
 .v3-kedja-pil { align-self: center; color: var(--v3-mut); }
+/* Del 259 · dra och släpp rutorna i Vägen till provet */
+.v3-vagbox[draggable="true"] { cursor: grab; }
+.v3-vagbox.dras { opacity: .45; }
+.v3-vagbox.slapp-har { box-shadow: 6px 0 0 -1px var(--v3-bla), 0 0 0 2px var(--v3-bla-ljus); border-color: var(--v3-bla); }
+.v3-kedja-forst { align-self: stretch; display: flex; align-items: center; padding: 0 12px; border: 2px dashed var(--v3-ram); border-radius: 12px; color: var(--v3-mut); font-size: 12px; white-space: nowrap; }
+.v3-kedja-forst.over { border-color: var(--v3-bla); color: var(--v3-bla); background: var(--v3-bla-ljus); }
+.v3-kedja-tips { margin: 8px 0 0; font-size: 12px; color: var(--v3-mut); }
 .v3-progress { display: block; height: 6px; border-radius: 3px; background: var(--v3-ram); overflow: hidden; }
 .v3-progress i { display: block; height: 100%; background: var(--v3-gron); }
 .v3-kedja-kort.pagar .v3-progress i { background: var(--v3-bla); }

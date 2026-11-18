@@ -12,9 +12,9 @@ import { delkapitelKod } from './bok.js';
 import { isoVecka, laggTillAktivitet, skoldagarMellan, taBortAktivitet } from './skolar.js';
 import {
   amnesOffset, amnesPlanFor, andraPlanering, gruppNyckel, hamtaLektionsplan, harLaborationsstandard,
-  kopplaOmLektionsplaner, noFonster, nyttId, planeringsRader, registreraPlanering, samlaSlots, sattAntalLektioner, sattLektionerPerDelkapitel, sattLektionsplan, type PlanRad,
+  kopplaOmLektionsplaner, laggTillEgenRad, noFonster, nyttId, planeringsRader, registreraPlanering, samlaSlots, sattAntalLektioner, sattLektionerPerDelkapitel, sattLektionsplan, type PlanRad,
 } from './struktur.js';
-import type { Amne, LektionsDetaljer, LektionsPlan, LektionsTyp, PlaneradLektion, PlanFranUtkast, PlanUtkast, SchemaAktivitet, Skolar, Struktur, UtkastKort } from './typer.js';
+import type { Amne, EgenRad, LektionsDetaljer, LektionsPlan, LektionsTyp, PlaneradLektion, PlanFranUtkast, PlanUtkast, SchemaAktivitet, Skolar, Struktur, UtkastKort } from './typer.js';
 
 export type UtkastKo = 'teori' | 'labbar';
 
@@ -1066,6 +1066,134 @@ export function flyttaLektionEfter(s: Struktur, amneId: string, nyckel: string, 
   const ut = tillampaUtkast(s, amneId, { ...u0, teori }, dag);
   const efter = amnesPlanFor(ut, amneId, idag, false)?.a ?? [];
   return { s: ut, fran, datum: efter.find((r) => r.nyckel === nyckel)?.datum ?? null };
+}
+
+// ── Del 259 · Dra och släpp: korten byter plats, också prov och diagnoser ─────────────────────────
+//
+// flyttaLektionEfter (Del 202) låter fasta kort ligga kvar på sina datum och de fria flyta runt dem. Det
+// räcker inte när läraren drar ett kort förbi en diagnos eller drar själva diagnosen: då ska korten byta
+// plats som de ligger på raden. Här flyttas korten positionsvis — bara passen mellan gammal och ny plats
+// berörs, och varje kort där hamnar ett pass tidigare eller senare. Flyttas ett prov eller en diagnos med
+// talas det om, så att gränssnittet kan fråga först.
+
+/** Ett prov, en diagnos eller ett annat fast kort som fick ett nytt datum av en flytt. */
+export interface FlyttatFastKort { nyckel: string; rubrik: string; fran: string | null; till: string | null }
+export interface FlyttadeKort {
+  s: Struktur;
+  /** Första passet som berörs (null = korten låg redan där). */
+  fran: string | null;
+  /** Antal lektioner som fick ett nytt datum. */
+  andrade: number;
+  /** Prov, diagnoser och andra fasta kort — utöver de flyttade — som fick ett nytt datum. */
+  flyttadeFasta: FlyttatFastKort[];
+}
+
+/** Planens daterade teorilektioner i ordning (utan laborationer och tomma pass). */
+function dateradeKort(s: Struktur, amneId: string, idag?: string): PlaneradLektion[] {
+  return (amnesPlanFor(s, amneId, idag, false)?.a ?? []).filter((r) => r.datum !== null && r.nyckel !== undefined && !arPass(r.nyckel) && !arLab(r.nyckel));
+}
+
+/**
+ * Flyttar ett eller flera kort så att de hamnar direkt efter `efterNyckel` (null = först), i sin inbördes
+ * ordning. Korten emellan flyttas ett pass; allt före och efter ligger kvar. Fungerar för alla kort — också
+ * prov, diagnoser och egna rader. Berörs pass som har varit krävs `tillatGenomford`.
+ */
+export function flyttaKortTill(s: Struktur, amneId: string, nycklar: string[], efterNyckel: string | null, idag?: string, tillatGenomford = false): FlyttadeKort {
+  const a = hittaAmne(s, amneId);
+  const fore = dateradeKort(s, amneId, idag);
+  const P = fore.map((r) => r.nyckel!);
+  const flyttas = new Set(nycklar);
+  const M = P.filter((n) => flyttas.has(n));
+  if (M.length === 0) throw new Error('Lektionen finns inte i planeringen.');
+  if (efterNyckel !== null && flyttas.has(efterNyckel)) throw new Error('Lektionen ligger redan där.');
+  const O = P.filter((n) => !flyttas.has(n));
+  const j = efterNyckel === null ? -1 : O.indexOf(efterNyckel);
+  if (efterNyckel !== null && j === -1) throw new Error('Lektionen att lägga efter finns inte i planeringen.');
+  const Q = [...O.slice(0, j + 1), ...M, ...O.slice(j + 1)];
+  const d = P.findIndex((n, i) => n !== Q[i]);
+  if (d === -1) return { s, fran: null, andrade: 0, flyttadeFasta: [] };
+  const fran = fore[d].datum!;
+  if (idag !== undefined && fran < idag && !tillatGenomford) throw new Error('Flytten berör pass som har varit — bekräfta att genomförda lektioner får skrivas om.');
+  const dag = idag !== undefined && fran < idag ? undefined : idag;
+  const u0 = utkastFranPlan(s, amneId, fran, dag, `Flytt ${fran}`);
+  // Utkastet börjar vid dagens första pass: ta den nya ordningen därifrån, och behåll det som ligger efter läsårets slut
+  const d0 = fore.findIndex((r) => r.datum! >= fran);
+  const kvar = new Set(u0.teori);
+  const iPlan = new Set(P);
+  const teori = [...Q.slice(d0).filter((n) => kvar.has(n)), ...u0.teori.filter((n) => !iPlan.has(n))];
+  const ut = tillampaUtkast(s, amneId, { ...u0, teori }, dag);
+  const efter = new Map(dateradeKort(ut, amneId, idag).map((r) => [r.nyckel!, r.datum]));
+  const andrade = fore.filter((r) => efter.get(r.nyckel!) !== r.datum).length;
+  const flyttadeFasta = fore
+    .filter((r) => !flyttas.has(r.nyckel!) && (arFastKort(a, r.nyckel!) || r.lektion.typ === 'exam' || r.lektion.typ === 'test') && (efter.get(r.nyckel!) ?? null) !== r.datum)
+    .map((r) => ({ nyckel: r.nyckel!, rubrik: r.lektion.avsnitt, fran: r.datum, till: efter.get(r.nyckel!) ?? null }));
+  return { s: ut, fran, andrade, flyttadeFasta };
+}
+
+/**
+ * Flyttar ett helt avsnitt (ett delkapitels lektioner, eller ett enstaka kort) till höger om ett annat avsnitt —
+ * så som rutorna dras i "Vägen till provet".
+ *
+ *  - Åt vänster: avsnittet läggs direkt efter målets sista lektion.
+ *  - Åt höger: ligger en del av avsnittet redan efter målet samlas hela avsnittet där (lektionerna före målet
+ *    hoppar över och ställer sig före sin första lektion efter målet); annars direkt efter målets sista lektion.
+ */
+export function flyttaAvsnittEfter(s: Struktur, amneId: string, nycklar: string[], malNycklar: string[], idag?: string, tillatGenomford = false): FlyttadeKort {
+  hittaAmne(s, amneId);
+  const P = dateradeKort(s, amneId, idag).map((r) => r.nyckel!);
+  const plats = new Map(P.map((n, i) => [n, i]));
+  const flyttas = new Set(nycklar);
+  const M = P.filter((n) => flyttas.has(n));
+  const T = malNycklar.filter((n) => plats.has(n) && !flyttas.has(n));
+  if (M.length === 0) throw new Error('Avsnittet har inga daterade lektioner att flytta.');
+  if (T.length === 0) throw new Error('Avsnittet att lägga efter har inga daterade lektioner.');
+  const sistaT = Math.max(...T.map((n) => plats.get(n)!));
+  const forstaT = Math.min(...T.map((n) => plats.get(n)!));
+  let efter = P[sistaT];
+  if (plats.get(M[0])! < forstaT) {
+    const redanEfter = M.find((n) => plats.get(n)! > sistaT);
+    if (redanEfter !== undefined) efter = P.slice(0, plats.get(redanEfter)!).filter((n) => !flyttas.has(n)).pop() ?? efter;
+  }
+  return flyttaKortTill(s, amneId, M, efter, idag, tillatGenomford);
+}
+
+// ── Del 259 · En egen rad syns också när en inlagd planering styr ─────────────────────────────────
+
+/** Lägger in nycklar ur bokens följd som saknas i planen — var och en efter sin föregångare i följden. */
+function laggInSaknade(s: Struktur, amneId: string, nycklar: string[], idag?: string): Struktur {
+  const rader = bokensRader(s, amneId);
+  let ut = s;
+  for (const n of nycklar) {
+    const iPlan = new Set((amnesPlanFor(ut, amneId, idag, false)?.a ?? []).map((r) => r.nyckel));
+    if (iPlan.has(n)) continue;
+    const pos = rader.findIndex((r) => r.nyckel === n);
+    if (pos === -1) continue;
+    const foregangare = [...rader.slice(0, pos)].reverse().find((r) => iPlan.has(r.nyckel));
+    if (foregangare === undefined) continue;
+    try { ut = laggInEfter(ut, amneId, foregangare.nyckel, [n], [], idag, true).s; } catch { /* ryms inte — lämnas */ }
+  }
+  return ut;
+}
+
+/**
+ * Egna rader (prov, diagnos, övning) som finns i ämnet men inte syns i planeringen. Det händer när en inlagd
+ * planering styr (t.ex. efter Följ en annan klass planering): den visar bara de lektioner den känner till.
+ */
+export function osynligaEgnaRader(s: Struktur, amneId: string, idag?: string): EgenRad[] {
+  const a = hittaAmne(s, amneId);
+  if (a.planFranUtkast === undefined || (a.egnaRader ?? []).length === 0) return [];
+  const iPlan = new Set((amnesPlanFor(s, amneId, idag, false)?.a ?? []).map((r) => r.nyckel));
+  return (a.egnaRader ?? []).filter((r) => !iPlan.has(`er:${r.id}`));
+}
+
+/** Lägger in en egen rad som inte syns i planeringen — efter sin föregångare i bokens följd. */
+export function laggInEgenRadIPlan(s: Struktur, amneId: string, radId: string, idag?: string): Struktur {
+  return laggInSaknade(s, amneId, [`er:${radId}`], idag);
+}
+
+/** Lägger till en egen rad (prov, diagnos, övning …) — syns också när en inlagd planering styr. */
+export function laggTillEgenRadIPlan(s: Struktur, amneId: string, rad: EgenRad, idag?: string): Struktur {
+  return laggInSaknade(laggTillEgenRad(s, amneId, rad, idag), amneId, [`er:${rad.id}`], idag);
 }
 
 /**

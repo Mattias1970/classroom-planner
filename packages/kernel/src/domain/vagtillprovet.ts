@@ -20,6 +20,8 @@ export type VagLektionStatus = 'klar' | 'idag' | 'kommande' | 'oplanerad';
 export interface VagLektion {
   /** Position i ämnets planering (0-baserad) — nyckel till lektionsplanen. */
   index: number;
+  /** Del 259 · Radens nyckel i planeringen — det som flyttas när rutan dras. */
+  nyckel?: string;
   namn: string;
   del: number;
   typ: LektionsTyp;
@@ -187,7 +189,7 @@ export function vagTillProvet(s: Struktur, amneId: string, kapitelNr?: number, i
     const status: VagLektionStatus = kryss ? 'klar' : r.datum === null ? 'oplanerad' : r.datum < dag ? 'klar' : r.datum === dag ? 'idag' : 'kommande';
     const begrepp = har(lp?.begreppText) ? lp.begreppText.split(',').map((b) => b.trim()).filter((b) => b !== '') : begreppForLektion(bok, r.kapitel, r.lektion);
     box.lektioner.push({
-      index, namn: lektionsNamn(r.lektion, lp), del: r.lektion.del, typ: r.lektion.typ, datum: r.datum, vecka: r.vecka,
+      index, ...(r.nyckel !== undefined ? { nyckel: r.nyckel } : {}), namn: lektionsNamn(r.lektion, lp), del: r.lektion.del, typ: r.lektion.typ, datum: r.datum, vecka: r.vecka,
       ...(grupp !== undefined ? { grupp } : {}), status, kryss,
       sidor: har(lp?.sidorTeori) ? lp.sidorTeori : r.lektion.sidorTeori,
       uppgifter: effektivaNivaer(r.lektion, lp),

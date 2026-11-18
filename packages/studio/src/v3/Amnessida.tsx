@@ -8,9 +8,14 @@
  * är gjord, pågår eller kommer; ett klick öppnar en infopanel med sidor,
  * uppgifter per nivå, mål, begrepp, genomgång och exempel, samt hopp till
  * lektionens detaljplanering. Under det ligger v2:s Planering för ämnet.
+ *
+ * Del 259 · Rutorna kan dras: släpps en ruta på en annan läggs avsnittet till höger om den (flyttaAvsnittEfter).
+ * Berörs pass som har varit, eller får ett prov eller en diagnos nytt datum, frågas först; ↩ ångrar.
  */
 import React, { useMemo, useState } from 'react';
-import { amnesKallor, amnetGallerKlass, frageKort, planForAmne, radensKapitel, vagTillProvet, vagTypNamn, type Struktur, type VagBox, type VagLektion } from '@planner/kernel';
+import { amnesKallor, amnetGallerKlass, flyttaAvsnittEfter, flyttaKortTill, frageKort, planForAmne, radensKapitel, vagTillProvet, vagTypNamn, type Struktur, type VagBox, type VagLektion } from '@planner/kernel';
+import { flyttaMedFragor } from '../flytt.js';
+import { lasStruktur } from '../store.js';
 import { Ikon, amnesIkon } from './ikoner.js';
 import { DataSaknas, Kort, Kpi, type Filter, type V3Vy } from './Skal.js';
 
@@ -24,8 +29,15 @@ function dagText(datum: string | null): string {
 }
 function har(v: string): boolean { return v.trim() !== '' && v.trim() !== '—'; }
 
-export function Amnessida({ s, amneNamn, filter, setVy, planering, oppnaLektion }: {
+/** Nycklarna i planeringen som en ruta står för — det som flyttas när rutan dras (inte laborationer eller tomma pass). */
+function boxensNycklar(box: VagBox): string[] {
+  return [...new Set(box.lektioner.filter((l) => l.datum !== null && l.nyckel !== undefined && !l.nyckel.startsWith('lab:') && !l.nyckel.startsWith('pass:')).map((l) => l.nyckel!))];
+}
+
+export function Amnessida({ s, amneNamn, filter, setVy, planering, oppnaLektion, kor }: {
   s: Struktur; amneNamn: string; filter: Filter; setVy: (v: V3Vy) => void;
+  /** Del 259: genomför en ändring så att den går att ångra — behövs för att rutorna ska kunna dras. */
+  kor?: (fn: () => Struktur, m: string) => void;
   /** v2:s PlaneringVy för valt ämne, renderad av App. */
   planering: (amneId: string) => React.ReactNode;
   /** Hoppa till lektionens detaljplanering (position i ämnets planering). */
@@ -39,6 +51,9 @@ export function Amnessida({ s, amneNamn, filter, setVy, planering, oppnaLektion 
   const klass = amne === undefined ? undefined : s.klasser.find((k) => k.id === amne.klassId);
   const [kapVal, setKapVal] = useState<number | null>(null);
   const [valdBox, setValdBox] = useState<string | null>(null);
+  // Del 259 · dra och släpp: rutan som dras och rutan (eller '__forst__') den hålls över
+  const [dras, setDras] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
 
   if (amne === undefined || klass === undefined) {
     return <div className="v3-sida-innehall"><Kort rubrik={<><I storlek={18} /> {amneNamn}</>}><DataSaknas text={`Inget ämne "${amneNamn}" i vald klass.`} atgard={{ text: 'Öppna struktur', onKlick: () => setVy({ typ: 'oversikt' }) }} /></Kort></div>;
@@ -63,6 +78,34 @@ export function Amnessida({ s, amneNamn, filter, setVy, planering, oppnaLektion 
   const vag = kapNr === null ? null : vagTillProvet(s, amne.id, kapNr, idag);
   const allaBoxar = vag === null ? [] : [...vag.boxar, ...(vag.prov !== null ? [vag.prov] : [])];
   const vald = allaBoxar.find((b) => b.id === valdBox) ?? null;
+  const flyttbar = (b: VagBox) => kor !== undefined && boxensNycklar(b).length > 0;
+  /** Släpper den dragna rutan till höger om `mal` (null = först i raden). */
+  const slapp = (malId: string | null) => {
+    const kalla = allaBoxar.find((b) => b.id === dras);
+    setDras(null); setOver(null);
+    if (kalla === undefined || kor === undefined || amne === undefined || kalla.id === malId) return;
+    const nycklar = boxensNycklar(kalla);
+    if (malId === null) {
+      // Först i raden: före den första rutans första lektion = efter lektionen som ligger närmast före den i planeringen
+      const forsta = allaBoxar.find((b) => b.id !== kalla.id && boxensNycklar(b).length > 0);
+      if (forsta === undefined) return;
+      const rad = lasStruktur();
+      const teori = planForAmne(rad, amne.id, idag).filter((p) => p.datum !== null && p.nyckel !== undefined && !p.nyckel.startsWith('lab:') && !p.nyckel.startsWith('pass:'));
+      const i = teori.findIndex((p) => p.nyckel === boxensNycklar(forsta)[0]);
+      const fore = teori.slice(0, Math.max(0, i)).filter((p) => !nycklar.includes(p.nyckel!)).pop()?.nyckel ?? null;
+      flyttaMedFragor((t) => flyttaKortTill(lasStruktur(), amne.id, nycklar, fore, idag, t), kalla.rubrik, kor);
+      return;
+    }
+    const mal = allaBoxar.find((b) => b.id === malId);
+    if (mal === undefined || boxensNycklar(mal).length === 0) return;
+    flyttaMedFragor((t) => flyttaAvsnittEfter(lasStruktur(), amne.id, nycklar, boxensNycklar(mal), idag, t), kalla.rubrik, kor);
+  };
+  const dra = (b: VagBox) => (flyttbar(b) ? {
+    dras: dras === b.id, over: over === b.id && dras !== null && dras !== b.id,
+    onDragStart: () => setDras(b.id), onDragEnd: () => { setDras(null); setOver(null); },
+    onDragOver: () => { if (dras !== null && dras !== b.id) setOver(b.id); }, onDragLeave: () => setOver((o) => (o === b.id ? null : o)),
+    onDrop: () => slapp(b.id),
+  } : undefined);
 
   return (
     <div className="v3-sida-innehall">
@@ -84,16 +127,21 @@ export function Amnessida({ s, amneNamn, filter, setVy, planering, oppnaLektion 
             </label>
           )}>
           <div className="v3-kedja" role="list" aria-label="Vägen till provet">
+            {kor !== undefined && dras !== null && (
+              <div className={`v3-kedja-forst${over === '__forst__' ? ' over' : ''}`} role="listitem" aria-label="Släpp här för att lägga först"
+                onDragOver={(e) => { e.preventDefault(); setOver('__forst__'); }} onDragLeave={() => setOver((o) => (o === '__forst__' ? null : o))} onDrop={(e) => { e.preventDefault(); slapp(null); }}>⇤ först</div>
+            )}
             {vag.boxar.map((b, i) => (
               <React.Fragment key={b.id}>
-                <VagKort box={b} vald={vald?.id === b.id} onKlick={() => setValdBox(vald?.id === b.id ? null : b.id)} />
+                <VagKort box={b} vald={vald?.id === b.id} onKlick={() => setValdBox(vald?.id === b.id ? null : b.id)} dra={dra(b)} />
                 {(i < vag.boxar.length - 1 || vag.prov !== null) && <span className="v3-kedja-pil" aria-hidden="true">→</span>}
               </React.Fragment>
             ))}
             {vag.prov !== null
-              ? <VagKort box={vag.prov} vald={vald?.id === vag.prov.id} onKlick={() => setValdBox(vald?.id === vag.prov!.id ? null : vag.prov!.id)} />
+              ? <VagKort box={vag.prov} vald={vald?.id === vag.prov.id} onKlick={() => setValdBox(vald?.id === vag.prov!.id ? null : vag.prov!.id)} dra={dra(vag.prov)} />
               : <div className="v3-kedja-kort prov saknas" role="listitem"><b>🏆 Prov</b><small>inte planerat än — lägg till en egen rad i planeringen</small></div>}
           </div>
+          {kor !== undefined && <p className="v3-kedja-tips">✋ Dra en ruta och släpp den på en annan — då läggs avsnittet till höger om den. Enstaka lektioner flyttas, läggs till och tas bort i 🃏 Kortrad längre ner.</p>}
           {vald !== null && <VagInfo box={vald} nivaer={vag.nivaer} onStang={() => setValdBox(null)} oppna={oppnaLektion === undefined ? undefined : (i) => oppnaLektion(amne.id, i)} />}
         </Kort>
       )}
@@ -103,14 +151,24 @@ export function Amnessida({ s, amneNamn, filter, setVy, planering, oppnaLektion 
   );
 }
 
-function VagKort({ box, vald, onKlick }: { box: VagBox; vald: boolean; onKlick: () => void }) {
+/** Del 259 · Det som behövs för att en ruta ska kunna dras och ta emot en annan ruta. */
+interface DraRuta { dras: boolean; over: boolean; onDragStart: () => void; onDragEnd: () => void; onDragOver: () => void; onDragLeave: () => void; onDrop: () => void }
+
+function VagKort({ box, vald, onKlick, dra }: { box: VagBox; vald: boolean; onKlick: () => void; dra?: DraRuta }) {
   const n = box.lektioner.length;
   const andel = n === 0 ? 0 : (box.klara / n) * 100;
   const datum = box.fran === null ? 'ej planerad' : box.fran === box.till || box.till === null ? dagText(box.fran) : `${dagText(box.fran)} – ${dagText(box.till)}`;
   const vecka = box.veckaFran === null ? '' : box.veckaFran === box.veckaTill || box.veckaTill === null ? `v.${box.veckaFran}` : `v.${box.veckaFran}–${box.veckaTill}`;
   return (
-    <button type="button" role="listitem" className={`v3-kedja-kort v3-vagbox ${box.status}${box.typ === 'prov' ? ' prov' : ''}${vald ? ' vald' : ''}`}
-      aria-pressed={vald} aria-label={`${box.rubrik}: ${STATUS_TEXT[box.status]}`} title={`${vagTypNamn(box.typ)} · ${datum} — klicka för uppgifter, mål och begrepp`} onClick={onKlick}>
+    <button type="button" role="listitem" className={`v3-kedja-kort v3-vagbox ${box.status}${box.typ === 'prov' ? ' prov' : ''}${vald ? ' vald' : ''}${dra?.dras === true ? ' dras' : ''}${dra?.over === true ? ' slapp-har' : ''}`}
+      aria-pressed={vald} aria-label={`${box.rubrik}: ${STATUS_TEXT[box.status]}`}
+      title={`${vagTypNamn(box.typ)} · ${datum} — klicka för uppgifter, mål och begrepp${dra !== undefined ? ' · dra rutan för att flytta avsnittet' : ''}`} onClick={onKlick}
+      draggable={dra !== undefined}
+      onDragStart={dra === undefined ? undefined : (e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', box.id); dra.onDragStart(); }}
+      onDragEnd={dra?.onDragEnd}
+      onDragOver={dra === undefined ? undefined : (e) => { e.preventDefault(); dra.onDragOver(); }}
+      onDragLeave={dra?.onDragLeave}
+      onDrop={dra === undefined ? undefined : (e) => { e.preventDefault(); dra.onDrop(); }}>
       <b><span aria-hidden="true">{box.ikon}</span> {box.rubrik}</b>
       <small>{n === 0 ? 'ingen lektion' : n === 1 ? datum : `${n} lektioner · ${datum}`}</small>
       {vecka !== '' && <small className="v3-vag-vecka">📅 {vecka}</small>}
