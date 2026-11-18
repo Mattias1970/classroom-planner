@@ -75,9 +75,57 @@ function lasLektion(raw: RawLektion, kap: number, idx: number): Lektion {
         ? { mal: (raw['mal'] as unknown[]).filter((x): x is string => typeof x === 'string' && x.trim() !== '').map((x) => x.trim()).join('\n') }
         : {}),
     ex: txt(raw['ex'] ?? raw['bam_ex']),
+    ...uppgiftSidorUr(raw),
     socStart: txt(raw['soc_start'] ?? raw['socStart']),
     exit: txt(raw['exit']),
   };
+}
+
+/**
+ * Del 260 · Sidorna där nivåernas uppgifter står. Uttryckligt i `sidor_uppgifter: { ett, två, tre }`, annars ur
+ * `bam_gora`: 'minst ETT (1–10, s. 108), fortsätt TVÅ (11–20, s. 109–110)' → ETT s. 108, TVÅ s. 109–110.
+ */
+function uppgiftSidorUr(raw: RawLektion): { uppgiftSidor?: { niva1?: string; niva2?: string; niva3?: string } } {
+  const ut: { niva1?: string; niva2?: string; niva3?: string } = {};
+  const egna = raw['sidor_uppgifter'] ?? raw['sidorUppgifter'];
+  const nycklar: Array<['niva1' | 'niva2' | 'niva3', string[]]> = [['niva1', ['ett', 'grön', 'gron', 'niva1']], ['niva2', ['två', 'tva', 'blå', 'bla', 'niva2']], ['niva3', ['tre', 'röd', 'rod', 'niva3']]];
+  const sida = (v: unknown): string | null => (typeof v === 'string' && /\d/.test(v) ? v.trim().replace(/^s\.\s*/i, '').replace(/-/g, '–') : null);
+  if (egna !== null && typeof egna === 'object' && !Array.isArray(egna)) {
+    for (const [niva, namn] of nycklar) { for (const k of namn) { const v = sida((egna as Record<string, unknown>)[k]); if (v !== null) { ut[niva] = v; break; } } }
+  }
+  const gora = typeof raw['bam_gora'] === 'string' ? (raw['bam_gora'] as string) : '';
+  if (gora !== '') {
+    for (const [niva, namn] of nycklar) {
+      if (ut[niva] !== undefined) continue;
+      const intervall = namn.map((k) => raw[k]).find((v): v is string => typeof v === 'string' && /\d/.test(v));
+      if (intervall === undefined) continue;
+      // '1–10, s. 108' eller '1–10 (s. 108)' — bindestreck och tankstreck räknas lika
+      const m = new RegExp(`${intervall.trim().replace(/[–-]/g, '[–-]').replace(/\s+/g, '\\s*')}\\s*[,(]\\s*s\\.\\s*(\\d+(?:\\s*[–-]\\s*\\d+)?)`).exec(gora);
+      if (m !== null) ut[niva] = m[1].replace(/\s+/g, '').replace(/-/g, '–');
+    }
+  }
+  return Object.keys(ut).length > 0 ? { uppgiftSidor: ut } : {};
+}
+
+/** Del 260 · kapitelMeta[nr].formagor: { problemlosning: { E: [...], C: [...], A: [...] }, … } — bara det som är text tas med. */
+function lasFormagor(raw: unknown): Kapitel['formagor'] | undefined {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const namn: Record<string, 'begrepp' | 'metod' | 'problemlosning' | 'resonemang' | 'kommunikation'> = {
+    begrepp: 'begrepp', metod: 'metod', problemlosning: 'problemlosning', 'problemlösning': 'problemlosning', resonemang: 'resonemang', kommunikation: 'kommunikation',
+  };
+  const ut: NonNullable<Kapitel['formagor']> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const formaga = namn[k.trim().toLowerCase()];
+    if (formaga === undefined || v === null || typeof v !== 'object' || Array.isArray(v)) continue;
+    const nivaer: Partial<Record<'E' | 'C' | 'A', string[]>> = {};
+    for (const niva of ['E', 'C', 'A'] as const) {
+      const lista = (v as Record<string, unknown>)[niva] ?? (v as Record<string, unknown>)[niva.toLowerCase()];
+      const texter = (Array.isArray(lista) ? lista : typeof lista === 'string' ? [lista] : []).filter((x): x is string => typeof x === 'string' && x.trim() !== '').map((x) => x.trim());
+      if (texter.length > 0) nivaer[niva] = texter;
+    }
+    if (Object.keys(nivaer).length > 0) ut[formaga] = nivaer;
+  }
+  return Object.keys(ut).length > 0 ? ut : undefined;
 }
 
 function detectNivaer(rader: RawLektion[]): NivaEtiketter {
@@ -143,7 +191,7 @@ export function bokFromImport(json: string): Bok {
   const id = txt(b['id']); const titel = txt(b['titel']);
   if (!har(id)) throw new Error('bok.id saknas.');
   if (!har(titel)) throw new Error('bok.titel saknas.');
-  const kapMeta = (b['kapitelMeta'] ?? {}) as Record<string, { name?: unknown; col?: unknown; filmer?: unknown; forklaringar?: unknown; mal?: unknown; malSidor?: unknown }>;
+  const kapMeta = (b['kapitelMeta'] ?? {}) as Record<string, { name?: unknown; col?: unknown; filmer?: unknown; forklaringar?: unknown; mal?: unknown; malSidor?: unknown; formagor?: unknown }>;
   const lekRaw = raw.lektioner ?? {};
   const kapNrs = Object.keys(kapMeta).map(Number).filter((n) => Number.isInteger(n) && n > 0).sort((a, c) => a - c);
   if (kapNrs.length === 0) throw new Error('bok.kapitelMeta är tom — minst ett kapitel krävs.');
@@ -169,6 +217,8 @@ export function bokFromImport(json: string): Bok {
       if (mal.length > 0) kap.mal = mal;
     }
     if (typeof m.malSidor === 'string' && m.malSidor.trim() !== '') kap.malSidor = m.malSidor.trim();
+    const formagor = lasFormagor(m.formagor ?? (m as Record<string, unknown>)['förmågor']);
+    if (formagor !== undefined) kap.formagor = formagor;
     return kap;
   });
   if (kapitel.every((k) => k.delkapitel.length === 0 && k.extraLektioner.length === 0)) {

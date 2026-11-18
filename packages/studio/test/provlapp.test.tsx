@@ -26,13 +26,16 @@ const BOK: Bok = {
 };
 BOK.kapitel[0].resurser.forklaringar = { täljare: 'Talet ovanför bråkstrecket.' };
 
-function bygg(): Struktur {
+/** Samma bok som ett annat ämne än matematik och NO — den allmänna lappen (djup och bredd, övningsförslag per nivå). */
+const ALLMAN: Bok = { ...BOK, id: 'ge-1', titel: 'Geografiboken', amne: 'Geografi' };
+
+function bygg(bok: Bok = BOK, amneNamn = 'Matematik'): Struktur {
   let s = laggTillSkolar(tomStruktur(), { id: 'la', namn: '26/27', start: '2026-09-14', slut: '2027-06-11', dagar: [] });
-  s = sparaBok(s, BOK);
+  s = sparaBok(s, bok);
   s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
   s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
-  s = laggTillAmne(s, { id: 'am', klassId: 'k', namn: 'Matematik', bokId: BOK.id, schema: [{ dag: 1, start: '08:10', slut: '09:10' }] });
-  s = registreraPlanering(s, { id: 'pl', amneId: 'am', bokId: BOK.id, skapad: '2026-09-10' });
+  s = laggTillAmne(s, { id: 'am', klassId: 'k', namn: amneNamn, bokId: bok.id, schema: [{ dag: 1, start: '08:10', slut: '09:10' }] });
+  s = registreraPlanering(s, { id: 'pl', amneId: 'am', bokId: bok.id, skapad: '2026-09-10' });
   // Läraren lägger in ett eget prov efter kapitlet — namnet behöver inte innehålla "prov"
   return laggTillEgenRad(s, 'am', { id: 'er1', position: 2, rubrik: 'Kapiteltest 1', typ: 'prov' }, '2026-09-14');
 }
@@ -55,8 +58,10 @@ describe('Del 151 · Provlapp på provets lektionskort', () => {
     expect(vy.textContent).toContain('1.1 Räkna med bråk');
     expect(vy.textContent).toContain('förkorta och förlänga bråk');
     expect(vy.textContent).toContain('Talet ovanför bråkstrecket.');
-    expect(vy.textContent).toContain('ETT 1–10 (s. 8–10)');
-    expect(vy.textContent).toContain('TRE 21–30 (s. 8–10)');
+    // Del 260: matematik — begreppet med beskrivning och sida, metoden med teorisida, checklistan per nivå
+    expect([...vy.querySelectorAll('section[aria-label="Begrepp"] tbody tr')].map((r) => [...r.querySelectorAll('td')].map((c) => c.textContent))).toEqual([['täljare', 'Talet ovanför bråkstrecket.', 's. 8–10'], ['nämnare', '—', 's. 8–10']]);
+    expect(vy.querySelector('section[aria-label="Metod"] tbody tr')!.textContent).toBe('1.1 Räkna med bråkförkorta och förlänga bråks. 8–10');
+    expect([...vy.querySelectorAll('section[aria-label="Checklista"] .provlapp-kryss')].map((x) => x.textContent)).toEqual(['☐ ETT 1–10 E', '☐ TVÅ 11–20 C', '☐ TRE 21–30 A']);
     expect([...div.querySelectorAll('button')].some((b) => b.textContent?.includes('Ladda ner Word'))).toBe(true);
   });
 
@@ -68,7 +73,8 @@ describe('Del 151 · Provlapp på provets lektionskort', () => {
     const xml = await (await JSZip.loadAsync(buf)).file('word/document.xml')!.async('string');
     const text = xml.replace(/<[^>]+>/g, '');
     for (const del of ['PROVLAPP · MATEMATIK Y · KAPITEL 1', 'Taluppfattning', 'Kapiteltest 1', 'förkorta och förlänga bråk',
-      'Begrepp du ska kunna förklara', 'Talet ovanför bråkstrecket.', 'Övningsförslag för varje nivå', 'ETT 1–10 (s. 8–10)', 'TVÅ 11–20 (s. 8–10)', 'TRE 21–30 (s. 8–10)', 'Checklista inför provet']) {
+      'För betyget E ', '1. Begrepp', 'Talet ovanför bråkstrecket.', '2. Metod', '3. Problemlösning', '4. Resonemang', '5. Kommunikation',
+      '6. Checklista — har du gjort?', '☐  ETT 1–10 — E-nivå', '☐  TVÅ 11–20 — C-nivå', '☐  TRE 21–30 — A-nivå']) {
       expect(text).toContain(del);
     }
   });
@@ -112,7 +118,7 @@ describe('Del 151 · Provlapp på provets lektionskort', () => {
     const buf = await Packer.toBuffer(provlappDokument(p, '#b5532c'));
     const xml = await (await JSZip.loadAsync(buf)).file('word/document.xml')!.async('string');
     const text = xml.replace(/<[^>]+>/g, '');
-    for (const del of ['PROVLAPP · MATEMATIK Y · KAPITEL 1 OCH 2', 'Omfattar', '1.1 · 2.1–2.2', 'Kapitlens mål', 'Kapitel 2 Geometri', '2.1 Vinklar', 'ETT 11–20 (s. 34–37)']) expect(text).toContain(del);
+    for (const del of ['PROVLAPP · MATEMATIK Y · KAPITEL 1 OCH 2', 'Omfattar', '1.1 · 2.1–2.2', 'Kapitlens mål', 'Kapitel 2 Geometri', '2.1 Vinklar', '☐  ETT 11–20 — E-nivå']) expect(text).toContain(del);
     // Fristående: samma lapp utan provlektion
     expect(provlappForOmfang(s, 'am', [{ fran: '2.1', till: '2.2' }], { namn: 'Geometriprov', datum: null, vecka: null, notis: null })!.avsnitt.map((a) => a.rubrik)).toEqual(['2.1 Vinklar', '2.2 Area']);
   });
@@ -120,7 +126,7 @@ describe('Del 151 · Provlapp på provets lektionskort', () => {
 
 describe('Del 206 · Provlappen visar djup och bredd med bild, E-krav och lärarens sammanfattning', () => {
   it('vyn: sammanfattning per avsnitt, djup-/breddfrågor ur begreppen, figuren som bild, E-kraven', async () => {
-    const s = sattLektionsplan(bygg(), { id: 'lp0', amneId: 'am', lektionsIndex: 0, sammanfattning: 'Ett bråk är en del av en helhet.' });
+    const s = sattLektionsplan(bygg(ALLMAN, 'Geografi'), { id: 'lp0', amneId: 'am', lektionsIndex: 0, sammanfattning: 'Ett bråk är en del av en helhet.' });
     sparaStruktur(s);
     const div = document.createElement('div'); document.body.appendChild(div);
     const root = createRoot(div);
@@ -138,11 +144,11 @@ describe('Del 206 · Provlappen visar djup och bredd med bild, E-krav och lärar
     expect(decodeURIComponent(img.src)).toContain('täljare');
     expect(vy.textContent).toContain('För E-nivå krävs');
     expect(vy.textContent).toContain('Kunna begreppen');
-    expect(vy.textContent).not.toContain('laborationsbeskrivning');   // matematik
+    expect(vy.textContent).not.toContain('laborationsbeskrivning');   // inte ett NO-ämne
   });
 
   it('Word-filen får djup/bredd, E-kraven och bilden som PNG när en ges', async () => {
-    const p = provlapp(bygg(), 'am', 2, '2026-09-14')!;
+    const p = provlapp(bygg(ALLMAN, 'Geografi'), 'am', 2, '2026-09-14')!;
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 218, 99, 248, 255, 255, 63, 0, 5, 254, 2, 254, 167, 53, 129, 132, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130]);
     const buf = await Packer.toBuffer(provlappDokument(p, '#b5532c', png));
     const zip = await JSZip.loadAsync(buf);
@@ -154,7 +160,7 @@ describe('Del 206 · Provlappen visar djup och bredd med bild, E-krav och lärar
 
 describe('Del 209 · bokens exempel, labb och filmer på skärm och i Word', () => {
   const BOK209: Bok = {
-    ...BOK, id: 'ma-209',
+    ...BOK, id: 'ge-209', titel: 'Geografiboken', amne: 'Geografi',
     kapitel: [{ ...BOK.kapitel[0], delkapitel: BOK.kapitel[0].delkapitel.map((d) => ({ ...d, lektioner: d.lektioner.map((l) => ({ ...l, sammanfattning: 'Bråk är delar av en helhet.', djup: 'Förklara i flera led varför 1/2 = 2/4.', bredd: 'Ge tre bråk som är lika med en halv.', labb: 'Labb: vad söker vi, hur ser vi, koppling.' })) })), resurser: { ...BOK.kapitel[0].resurser, filmer: [{ titel: '1.1 · Bråk på Binogi', url: 'https://app.binogi.se/l/brak' }] } }],
   };
   function bygg209(): Struktur {
@@ -162,7 +168,7 @@ describe('Del 209 · bokens exempel, labb och filmer på skärm och i Word', () 
     s = sparaBok(s, BOK209);
     s = laggTillTjanst(s, { id: 'tj', skolarId: 'la', namn: 'Ma' });
     s = laggTillKlass(s, { id: 'k', tjanstId: 'tj', namn: '8B' });
-    s = laggTillAmne(s, { id: 'am', klassId: 'k', namn: 'Matematik', bokId: BOK209.id, schema: [{ dag: 1, start: '08:10', slut: '09:10' }] });
+    s = laggTillAmne(s, { id: 'am', klassId: 'k', namn: 'Geografi', bokId: BOK209.id, schema: [{ dag: 1, start: '08:10', slut: '09:10' }] });
     s = registreraPlanering(s, { id: 'pl', amneId: 'am', bokId: BOK209.id, skapad: '2026-09-10' });
     return laggTillEgenRad(s, 'am', { id: 'er1', position: 2, rubrik: 'Kapiteltest 1', typ: 'prov' }, '2026-09-14');
   }

@@ -21,6 +21,7 @@ import { amnesPlanFor, hamtaLektionsplan, lektionsNamn } from './struktur.js';
 import { vagTillProvet, vagTyp, type VagBox, type VagTyp } from './vagtillprovet.js';
 import { delkapitelKod } from './bok.js';
 import { fragematris } from './delkapiteltrend.js';
+import { matteLapp, type MatteLapp } from './provlappmatematik.js';
 
 export type Betygsniva = 'E' | 'C' | 'A';
 
@@ -153,6 +154,11 @@ export interface Provlapp {
    * hamnar sist under "Övriga begrepp". `begrepp` är samma lista platt.
    */
   begreppPerAvsnitt: Array<{ rubrik: string; begrepp: Array<{ begrepp: string; forklaring: string | null }> }>;
+  /**
+   * Del 260 · Matematik: lappen ordnad efter de fem förmågorna (begrepp, metod, problemlösning, resonemang,
+   * kommunikation) med checklista per delkapitel. null för andra ämnen — de har lappen som förut.
+   */
+  matte: MatteLapp | null;
 }
 
 /**
@@ -319,6 +325,12 @@ function byggLapp(s: Struktur, amneId: string, bok: Bok, boxar: VagBox[], kapite
   }
   const forsta = kapitel[0];
   const noOvning = noAmne ? byggNoOvning(s, amneId, bok, kapitel.map((k) => k.nr), avsnitt) : null;
+  // Del 260 · Matematik får en egen lapp efter de fem förmågorna; lärarens egna uppgiftsintervall följer med
+  const matematik = !noAmne && (/^matematik/i.test(bok.amne.trim()) || /^matematik$/i.test(amne.namn.trim()));
+  const koder = boxar.map((b) => b.kod).filter((k): k is string => k !== null);
+  const matte = matematik && koder.length > 0
+    ? matteLapp(bok, koder, new Map(boxar.flatMap((b, i) => (b.kod === null ? [] : [[b.kod, avsnitt[i].uppgifter] as [string, { niva1: string; niva2: string; niva3: string }]]))))
+    : null;
   return {
     amne: amne.namn, klass: klass?.namn ?? '', bok: bok.titel,
     kapitelNr: forsta.nr, kapitelNamn: kapitel.length === 1 ? forsta.namn : kapitel.map((k) => `${k.nr} ${k.namn}`).join(' · '),
@@ -337,6 +349,7 @@ function byggLapp(s: Struktur, amneId: string, bok: Bok, boxar: VagBox[], kapite
     ],
     noOvning,
     begreppPerAvsnitt,
+    matte,
   };
 }
 
@@ -559,6 +572,49 @@ function noOvningText(p: Provlapp): string[] {
 }
 
 /** Provlappen som ren text (förhandsvisning, urklipp, Classroom-inlägg). */
+/** Del 260 · Matematiklappen som textrader: regeln för E, de fem förmågorna och checklistan. */
+function matteText(m: MatteLapp, p: Provlapp): string[] {
+  const r: string[] = [];
+  const medSida = (text: string, sidor: string | null) => `${text}${sidor !== null ? ` (${sidor})` : ''}`;
+  r.push(''); r.push('FÖR BETYGET E'); r.push(m.regelE);
+  for (const f of m.formagor) {
+    r.push(''); r.push(f.namn.toUpperCase()); r.push(f.betyder);
+    for (const niva of ['E', 'C', 'A'] as const) r.push(`${niva}: ${f.krav[niva]}`);
+    for (const a of [...m.avsnitt, ...m.blandat]) {
+      const begrepp = f.id === 'begrepp' ? a.begrepp : [];
+      if (begrepp.length === 0 && a.mal[f.id].length === 0) continue;
+      r.push(medSida(a.rubrik, a.teoriSidor));
+      begrepp.forEach((b) => r.push(`  • ${b.begrepp}${b.forklaring !== null ? ` – ${b.forklaring}` : ''}${b.sidor !== null ? ` (${b.sidor})` : ''}`));
+      a.mal[f.id].forEach((x) => r.push(`  ${begrepp.length > 0 ? '→' : '•'} ${medSida(x.text, x.sidor)}`));
+    }
+    if (f.typiska.E.length + f.typiska.C.length + f.typiska.A.length > 0) {
+      r.push(f.utskrivna ? 'Typiska uppgifter:' : 'Typiska uppgifter i boken:');
+      for (const niva of ['E', 'C', 'A'] as const) f.typiska[niva].forEach((u) => r.push(`  ${niva}-nivå: ${u}`));
+    }
+    f.iBoken.forEach((x) => r.push(`Öva i boken: ${x}`));
+  }
+  // Lärarens (eller bokens) sammanfattning och filmerna — per delkapitel
+  const medStod = p.avsnitt.filter((a) => a.typ === 'delkapitel' && a.sammanfattning.length + a.filmer.length > 0);
+  if (medStod.length > 0) {
+    r.push(''); r.push('REPETERA: SAMMANFATTNING OCH FILMER');
+    for (const a of medStod) {
+      r.push(a.rubrik);
+      a.sammanfattning.forEach((x) => r.push(`  Sammanfattning: ${x}`));
+      a.filmer.forEach((f) => r.push(`  Film: ${f.titel} – ${f.url}`));
+    }
+  }
+  r.push(''); r.push('CHECKLISTA — HAR DU GJORT?');
+  for (const a of m.avsnitt) {
+    r.push(a.rubrik);
+    a.kryss.forEach((k) => r.push(`  ☐ ${k.namn} ${k.uppgifter ?? ''}${k.sidor !== null ? ` (${k.sidor})` : ''} — ${k.betyg.join('/')}-nivå`));
+  }
+  if (m.repetition.length > 0) {
+    r.push('Hela kapitlet');
+    m.repetition.forEach((k) => r.push(`  ☐ ${k.namn}${k.uppgifter !== null ? `: ${k.uppgifter}` : ''}${k.sidor !== null ? ` (${k.sidor})` : ''}`));
+  }
+  return r;
+}
+
 export function provlappText(p: Provlapp): string {
   const r: string[] = [];
   r.push(`PROVLAPP · ${p.amne} ${p.klass} · ${p.bok}`);
@@ -573,6 +629,7 @@ export function provlappText(p: Provlapp): string {
       if (k.viktigaBegrepp.length > 0) r.push(`Några viktiga begrepp: ${k.viktigaBegrepp.join(', ')}`);
     }
   }
+  if (p.matte !== null) { r.push(...matteText(p.matte, p)); return r.join('\n'); }
   r.push(''); r.push('DET HÄR SKA DU KUNNA');
   for (const a of p.avsnitt.filter((x) => x.typ === 'delkapitel' || x.mal.length > 0)) {
     r.push(`${a.rubrik}${har(a.sidor) ? ` (${a.sidor})` : ''}`);

@@ -283,6 +283,11 @@ export interface Lektion {
   labb?: string;
   /** Del 213 · Bokens "Testa dig själv"-frågor för delkapitlet (frågetexterna). */
   testaFragor?: string[];
+  /**
+   * Del 260 · Sidorna där uppgifterna på varje nivå står ('108', '109–110') — till provlappens checklista.
+   * Läses ur bokfilens `sidor_uppgifter` eller ur `bam_gora` ('minst ETT (1–10, s. 108)').
+   */
+  uppgiftSidor?: { niva1?: string; niva2?: string; niva3?: string };
   socStart: string;
   /** Exit ticket-uppgift om boken anger en. */
   exit: string;
@@ -328,6 +333,11 @@ export interface Kapitel {
   malSidor?: string;
   /** Del 218 · Öppningsuppslagets "Några viktiga begrepp" — bokens eget urval, i bokordning. */
   viktigaBegrepp?: string[];
+  /**
+   * Del 260 · Typiska uppgifter per förmåga och betygsnivå för kapitlet — till matematikens provlapp.
+   * Bokfilen: kapitelMeta[nr].formagor = { problemlosning: { E: [...], C: [...], A: [...] }, resonemang: …, kommunikation: … }.
+   */
+  formagor?: Partial<Record<'begrepp' | 'metod' | 'problemlosning' | 'resonemang' | 'kommunikation', Partial<Record<'E' | 'C' | 'A', string[]>>>>;
   resurser: KapitelResurser;
 }
 

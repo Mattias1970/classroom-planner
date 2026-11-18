@@ -4083,9 +4083,10 @@ describe('Del 206: 📄 Provlapp-fliken i ämnespanelen — hittar provet, gener
     act(() => { knapp(host2, '📄 Generera provlapp').click(); });
     const vy = host2.querySelector('[role="document"]')!;
     expect(vy.getAttribute('aria-label')).toBe('Provlapp Prov kapitel 1');
-    expect(vy.textContent).toContain('Djup: Förklara i flera led hur potens hänger ihop med exponent (via bas)');
-    expect(vy.textContent).toContain('För E-nivå krävs');
-    expect(vy.querySelector('img.provlapp-figur')).not.toBeNull();
+    // Del 260: matematikens lapp följer de fem förmågorna — regeln för E överst, checklistan sist
+    expect(vy.querySelector('[aria-label="Regeln för betyget E"]')!.textContent).toContain('alla fem förmågorna på E-nivå');
+    expect([...vy.querySelectorAll('section.provlapp-formaga')].map((x) => x.getAttribute('aria-label'))).toEqual(['Begrepp', 'Metod', 'Problemlösning', 'Resonemang', 'Kommunikation', 'Checklista']);
+    expect(vy.querySelector('img.provlapp-figur')).toBeNull();          // djup/bredd-figuren hör till de andra ämnena
     expect([...host2.querySelectorAll('button')].some((b) => b.textContent?.includes('Ladda ner Word'))).toBe(true);
     vi.useRealTimers();
   });

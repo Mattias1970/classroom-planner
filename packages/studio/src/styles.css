@@ -1174,6 +1174,21 @@ input.fel { border-color: #B71C1C; }
 .provlapp-vy ul { margin: 2px 0 6px; }
 .provlapp-avsnitt { margin: 4px 0 8px; }
 .provlapp-ovningar td:first-child { white-space: nowrap; }
+/* Del 260 · matematikens provlapp: regeln för E, förmågorna och checklistan */
+.provlapp-regel { border-left: 5px solid var(--accent, #b5532c); background: #f7f3ec; padding: 8px 12px; border-radius: 0 6px 6px 0; margin: 10px 0; }
+.provlapp-krav td { vertical-align: top; }
+.provlapp-krav td:first-child { width: 22%; }
+.provlapp-formaga { margin-top: 6px; }
+.provlapp-formaga td { vertical-align: top; }
+.provlapp-begrepp-grupp { margin: 6px 0 10px; }
+.provlapp-begrepp-grupp table, .provlapp-formaga > table { table-layout: fixed; width: 100%; }
+.provlapp-begrepp-grupp th:first-child, .provlapp-formaga > table th:first-child { width: 24%; }
+.provlapp-begrepp-grupp th:last-child, .provlapp-formaga > table th:nth-child(3) { width: 13%; }
+.provlapp-sida, .provlapp-niva { white-space: nowrap; }
+.provlapp-typiska { margin: 6px 0; }
+.provlapp-kryss { display: block; padding: 1px 0; }
+.provlapp-betyg { display: inline-block; font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 8px; background: #eee6d8; margin-left: 4px; }
+
 
 /* ── Del 152 · Provlarm ── */
 .provlarm { border: 2px solid #C62828; background: #FFEBEE; border-radius: 8px; padding: 8px 12px; margin: 8px 0; }

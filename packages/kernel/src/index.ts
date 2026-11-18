@@ -23,6 +23,7 @@ export * from './domain/fragaidentitet.js';
 export * from './domain/packning.js';
 export * from './domain/forhorsdatum.js';
 export * from './domain/planeringsmeny.js';
+export * from './domain/provlappmatematik.js';
 export * from './domain/svarsform.js';
 export * from './domain/sparradefiler.js';
 export * from './domain/quizvakt.js';

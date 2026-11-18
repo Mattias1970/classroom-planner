@@ -6,7 +6,7 @@
  * (hjälpmedel, tider) sparas på lektionsplanen och tas med på lappen.
  */
 import { useState } from 'react';
-import { BINDEORD, labMall, noOvningPunkter, omfangUrKoder, provlapp, provlappDiagnos, provlappText, tolkaOmfang, valbaraDelkapitel, type Betygsniva, type Provlapp as ProvlappData, type Struktur } from '@planner/kernel';
+import { BINDEORD, labMall, noOvningPunkter, omfangUrKoder, provlapp, provlappDiagnos, provlappText, tolkaOmfang, valbaraDelkapitel, type Betygsniva, type MatteLapp, type Provlapp as ProvlappData, type Struktur } from '@planner/kernel';
 import { lasStruktur } from './store.js';
 import { djupBreddDataUrl } from './provlappFigur.js';
 
@@ -93,7 +93,7 @@ export function ProvlappPanel({ s, amneId, lektionsIndex, farg, notis, sattNotis
 }
 
 /** Provlappen för läsning på skärmen — samma delar som Word-filen. */
-function ProvlappVisning({ p, farg }: { p: ProvlappData; farg: string }) {
+export function ProvlappVisning({ p, farg }: { p: ProvlappData; farg: string }) {
   const delkap = p.avsnitt.filter((a) => a.typ === 'delkapitel' || a.mal.length > 0);
   return (
     <div className="provlapp-vy" role="document" aria-label={`Provlapp ${p.provNamn}`}>
@@ -109,6 +109,7 @@ function ProvlappVisning({ p, farg }: { p: ProvlappData; farg: string }) {
         {p.kapitel.map((k) => k.mal.length === 0 ? null : <div key={k.nr}>{p.kapitel.length > 1 && <b className="small">Kapitel {k.nr} {k.namn}</b>}<ul>{k.mal.map((m, i) => <li key={i}>{m}</li>)}</ul>
           {k.viktigaBegrepp.length > 0 && <p className="small provlapp-viktiga"><b>Några viktiga begrepp:</b> {k.viktigaBegrepp.join(', ')}</p>}</div>)}
       </>)}
+      {p.matte !== null ? <MatteVy m={p.matte} p={p} farg={farg} /> : (<>
 
       <h4>1. Det här ska du kunna</h4>
       {delkap.map((a) => (
@@ -169,8 +170,99 @@ function ProvlappVisning({ p, farg }: { p: ProvlappData; farg: string }) {
           ))}</tbody></table>
         {p.repetitionSidor.length > 0 && <p className="small"><b>Läs igenom:</b> {p.repetitionSidor.join(' · ')}</p>}
       </>)}
+      </>)}
     </div>
   );
+}
+
+/**
+ * Del 260 · Matematikens provlapp: regeln för E, de fem förmågorna (begrepp med beskrivning och sida, metoder med
+ * teorisidor, typiska uppgifter på E-, C- och A-nivå) och en checklista per delkapitel.
+ */
+function MatteVy({ m, p, farg }: { m: MatteLapp; p: ProvlappData; farg: string }) {
+  const sida = (x: string | null) => (x === null ? null : <span className="muted"> ({x})</span>);
+  const medStod = p.avsnitt.filter((a) => a.typ === 'delkapitel' && a.sammanfattning.length + a.filmer.length > 0);
+  return (<>
+    <div className="provlapp-regel" role="note" aria-label="Regeln för betyget E" style={{ borderLeftColor: farg }}>
+      <b>För betyget E</b> {m.regelE.replace(/^För betyget E /, '')}
+    </div>
+    <table className="tbl small provlapp-krav" aria-label="Vad som krävs i varje förmåga">
+      <thead><tr><th>Förmåga</th><th>E</th><th>C</th><th>A</th></tr></thead>
+      <tbody>{m.formagor.map((f) => <tr key={f.id}><td><b>{f.namn}</b><div className="muted">{f.betyder}</div></td><td>{f.krav.E}</td><td>{f.krav.C}</td><td>{f.krav.A}</td></tr>)}</tbody>
+    </table>
+
+    {m.formagor.map((f, nr) => {
+      const avsnitt = [...m.avsnitt, ...m.blandat].filter((a) => (f.id === 'begrepp' && a.begrepp.length > 0) || a.mal[f.id].length > 0);
+      const harTypiska = f.typiska.E.length + f.typiska.C.length + f.typiska.A.length > 0;
+      return (
+        <section key={f.id} className="provlapp-formaga" aria-label={f.namn}>
+          <h4>{nr + 1}. {f.namn}</h4>
+          <p className="small muted">{f.betyder}</p>
+          {f.id === 'begrepp' && avsnitt.map((a) => (
+            <div key={a.rubrik} className="provlapp-begrepp-grupp">
+              <b className="small">{a.rubrik}</b>{a.teoriSidor !== null && <span className="muted small"> · teori {a.teoriSidor}</span>}
+              {a.begrepp.length > 0 && (
+                <table className="tbl small"><thead><tr><th>Begrepp</th><th>Beskrivning</th><th>Sida</th></tr></thead>
+                  <tbody>{a.begrepp.map((b) => <tr key={b.begrepp}><td><b>{b.begrepp}</b></td><td>{b.forklaring ?? <span className="muted">—</span>}</td><td className="provlapp-sida">{b.sidor ?? '—'}</td></tr>)}</tbody></table>
+              )}
+              {a.mal.begrepp.length > 0 && <ul>{a.mal.begrepp.map((x, i) => <li key={i}>{x.text}{sida(x.sidor)}</li>)}</ul>}
+            </div>
+          ))}
+          {f.id !== 'begrepp' && avsnitt.length > 0 && (
+            <table className="tbl small"><thead><tr><th>Delkapitel</th><th>{f.id === 'metod' ? 'Metoder du ska kunna' : 'Det här ska du kunna'}</th><th>Teori</th></tr></thead>
+              <tbody>{avsnitt.map((a) => (
+                <tr key={a.rubrik}><td><b>{a.rubrik}</b></td>
+                  <td><ul style={{ margin: 0, paddingLeft: 18 }}>{a.mal[f.id].map((x, i) => <li key={i}>{x.text}</li>)}</ul></td>
+                  <td className="provlapp-sida">{a.teoriSidor ?? '—'}</td></tr>
+              ))}</tbody></table>
+          )}
+          {harTypiska && (
+            <div className="provlapp-typiska">
+              <b className="small">{f.utskrivna ? 'Typiska uppgifter' : 'Typiska uppgifter i boken'}</b>
+              <table className="tbl small"><tbody>{NIVAER.map((n) => (
+                <tr key={n}><td className="provlapp-niva"><b>{n}-nivå</b></td>
+                  <td>{f.typiska[n].length === 0 ? <span className="muted">—</span> : <ul style={{ margin: 0, paddingLeft: 18 }}>{f.typiska[n].map((u, i) => <li key={i}>{u}</li>)}</ul>}</td></tr>
+              ))}</tbody></table>
+            </div>
+          )}
+          {f.iBoken.map((x, i) => <p key={i} className="small"><b>Öva i boken:</b> {x}</p>)}
+        </section>
+      );
+    })}
+
+    {medStod.length > 0 && (
+      <section className="provlapp-formaga" aria-label="Repetera">
+        <h4>Repetera: sammanfattning och filmer</h4>
+        <table className="tbl small">
+          <thead><tr><th>Delkapitel</th><th>Sammanfattning och filmer</th></tr></thead>
+          <tbody>{medStod.map((a) => (
+            <tr key={a.rubrik}><td><b>{a.rubrik}</b></td>
+              <td>
+                {a.sammanfattning.map((x, i) => <div key={`s${i}`}><b>Sammanfattning:</b> {x}</div>)}
+                {a.filmer.length > 0 && <div><b>Filmer:</b> {a.filmer.map((f, i) => <span key={f.url}>{i > 0 ? ' · ' : ''}<a href={f.url} target="_blank" rel="noreferrer">{f.titel}</a></span>)}</div>}
+              </td></tr>
+          ))}</tbody>
+        </table>
+      </section>
+    )}
+    <section className="provlapp-formaga" aria-label="Checklista">
+      <h4>{m.formagor.length + 1}. Checklista — har du gjort?</h4>
+      <p className="small muted">Kryssa för det du har gjort. Rutorna för E-nivå behöver vara ifyllda i varje delkapitel.</p>
+      <table className="tbl small provlapp-checklista">
+        <thead><tr><th>Delkapitel</th><th>Uppgifter i boken</th></tr></thead>
+        <tbody>
+          {m.avsnitt.map((a) => (
+            <tr key={a.kod}><td><b>{a.rubrik}</b></td>
+              <td>{a.kryss.map((k) => <span key={k.namn} className="provlapp-kryss">☐ <b>{k.namn}</b> {k.uppgifter}{sida(k.sidor)} <span className="provlapp-betyg">{k.betyg.join('/')}</span></span>)}</td></tr>
+          ))}
+          {m.repetition.length > 0 && (
+            <tr><td><b>Hela kapitlet</b></td>
+              <td>{m.repetition.map((k) => <span key={k.namn} className="provlapp-kryss">☐ <b>{k.namn}</b>{k.uppgifter !== null ? ` ${k.uppgifter}` : ''}{sida(k.sidor)}</span>)}</td></tr>
+          )}
+        </tbody>
+      </table>
+    </section>
+  </>);
 }
 
 /** Del 213 · NO: Så övar du för E, så övar du för C och A, Testa dig själv-frågorna och alla filmer. */

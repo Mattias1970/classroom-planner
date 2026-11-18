@@ -82,7 +82,9 @@ describe('Del 151 · Provlappen ur planeringen', () => {
     expect(text).toContain('PROVLAPP · Matematik 8B · Matematik Y');
     expect(text).toContain('Prov: Prov kapitel 1 · 2026-10-09 (v. 41)');
     expect(text).toContain('• bråk – Ett tal skrivet som täljare över nämnare.');
-    expect(text).toContain('E-nivå\n  • 1.1 Räkna med bråk: ETT 1–8 (s. 8–13)');
+    // Del 260: matematikens lapp — begreppen med sida under förmågan Begrepp, nivåerna i checklistan
+    expect(text).toContain('  • bråk – Ett tal skrivet som täljare över nämnare. (s. 8–10)');
+    expect(text).toContain('1.1 Räkna med bråk\n  ☐ ETT 1–8 — E-nivå\n  ☐ TVÅ 9–22 — C-nivå\n  ☐ TRE 23–30 — A-nivå');
     expect(text).toContain('Miniräknare tillåten på del 2.');
   });
 
@@ -185,10 +187,20 @@ describe('Del 206 · Provlappen: sammanfattning, djup och bredd, E-krav och labo
     expect(p.avsnitt[1].djupBredd?.kedja).toEqual(['potens', 'bas', 'exponent']);
     expect(p.avsnitt[2].djupBredd?.kedja).toEqual(['Repetera hela kapitlet inför diagnosen.']);  // bara mål
     const text = provlappText(p);
-    expect(text).toContain('SÅ VISAR DU DJUP OCH BREDD');
-    expect(text).toContain('Djup: Förklara i flera led hur bråk hänger ihop med täljare');
-    expect(text).toContain('FÖR E-NIVÅ KRÄVS');
+    // Del 260: matematikens lapp följer förmågorna — djup/bredd-delen hör till de andra ämnena, sammanfattningen står kvar
+    expect(text).not.toContain('SÅ VISAR DU DJUP OCH BREDD');
+    expect(text).toContain('FÖR BETYGET E');
+    expect(text).toContain('REPETERA: SAMMANFATTNING OCH FILMER\n1.1 Räkna med bråk\n  Sammanfattning: Bråk är delar av en helhet.');
     expect(text).not.toContain('Laborationsbeskrivning');
+    // Samma bok i ett annat ämne än matematik: den allmänna lappen med djup och bredd
+    let g = laggTillEgenRad(bygg({ ...MATTE, id: 'ge', amne: 'Geografi' }, 'Geografi'), 'am', { id: 'er1', position: 7, rubrik: 'Prov kapitel 1', typ: 'prov' }, '2026-09-14');
+    g = sattLektionsplan(g, { id: 'lp0', amneId: 'am', lektionsIndex: 0, sammanfattning: 'Bråk är delar av en helhet.' });
+    const allman = provlappText(provlapp(g, 'am', 7, '2026-09-14')!);
+    expect(provlapp(g, 'am', 7, '2026-09-14')!.matte).toBeNull();
+    expect(allman).toContain('SÅ VISAR DU DJUP OCH BREDD');
+    expect(allman).toContain('Djup: Förklara i flera led hur bråk hänger ihop med täljare');
+    expect(allman).toContain('FÖR E-NIVÅ KRÄVS');
+    expect(allman).toContain('E-nivå\n  • 1.1 Räkna med bråk: ETT 1–8 (s. 8–13)');
   });
 
   it('Biologi: tre E-krav inkl. laborationsbeskrivning, labfrågan ur lektionsplanen tas med', () => {
@@ -368,8 +380,7 @@ describe('Del 214 · välj delkapitel med kryssrutor; omfång ur koder; diagnos 
 
 describe('Del 215 · bindeord i stället för pilar på lappen', () => {
   it('listan finns i textversionen', () => {
-    const s = laggTillEgenRad(bygg(MATTE, 'Matematik'), 'am', { id: 'er1', position: 7, rubrik: 'Prov', typ: 'prov' }, '2026-09-14');
-    const text = provlappText(provlapp(s, 'am', 7, '2026-09-14')!);
+    const text = provlappText(provlapp(bygg(SPEKTRUM, 'Biologi'), 'am', 8, '2026-09-14')!);
     expect(text).toContain('Bindeord i stället för pilar: eftersom · därför att');
     expect(BINDEORD).toContain('vilket leder till att');
   });
