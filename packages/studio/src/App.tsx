@@ -1624,6 +1624,8 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
     }
   }, [a?.id, a?.planFrystTill, a?.laborationsstandard, harPlanering]); // eslint-disable-line react-hooks/exhaustive-deps
   const [flik, setFlik] = useState<'planering' | 'kortrad' | 'tavla' | 'detalj' | 'oversikt' | 'uppgifter' | 'begrepp' | 'filmer' | 'magma' | 'anteckningar' | 'arsoversikt' | 'installningar' | 'laborationer' | 'provlapp'>('planering');
+  // Del 262 · räknar klicken på fliken Lektionsplan: varje öppning går till aktuell lektion, också när fliken redan är öppen
+  const [planOppnad, setPlanOppnad] = useState(0);
   // Om planen krymper (t.ex. laboration borttagen) får detaljindex inte peka utanför
   useEffect(() => { if (detaljIdxRef.current >= plan.length && plan.length > 0) setDetaljIdx(plan.length - 1); }, [plan.length]); // eslint-disable-line react-hooks/exhaustive-deps
   // Del 133: detaljplaneringen öppnar på dagens/nästa lektion, inte lektion 1
@@ -1654,7 +1656,7 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
         <p className="status warn">⚠ {bok!.titel} har {bok!.kapitel.reduce((n, k2) => n + k2.delkapitel.reduce((m, d) => m + d.lektioner.length, 0) + k2.extraLektioner.length, 0)} lektioner men blocket rymmer bara {budget}. De sista lektionerna trängs in i nästa delämnes block — korta boken eller lägg fler NO-pass.</p>
       )}
       <div className="flikar no-print">
-        <button className={`flik ${flik === 'planering' ? 'act' : ''}`} onClick={() => setFlik('planering')} title={menyBeskrivning('planering')}>📝 Lektionsplan</button>
+        <button className={`flik ${flik === 'planering' ? 'act' : ''}`} onClick={() => { setFlik('planering'); setPlanOppnad((n) => n + 1); }} title={menyBeskrivning('planering')}>📝 Lektionsplan</button>
         <button className={`flik ${flik === 'kortrad' ? 'act' : ''}`} onClick={() => setFlik('kortrad')} disabled={!bok} title={menyBeskrivning('kortrad', !bok ? 'Koppla en bok först' : undefined)}>🃏 Kortrad</button>
         <button className={`flik ${flik === 'tavla' ? 'act' : ''}`} onClick={() => setFlik('tavla')} disabled={!bok} title={menyBeskrivning('tavla', !bok ? 'Koppla en bok först' : undefined)}>🗂 Planeringstavla</button>
         <button className={`flik ${flik === 'detalj' ? 'act' : ''}`} onClick={() => setFlik('detalj')} title={menyBeskrivning('detalj')}>🧭 Detaljplanering</button>
@@ -1832,10 +1834,10 @@ function AmnePanel({ s, id, kor, setVald, hopp }: { s: Struktur; id: string; kor
         </div>
       )}
       {bok && !halv && <GruppPlanering plan={plan} bok={bok} amnesNamn={a.namn} klassNamn={klass.namn} rum={rum}
-        s={s} amneId={a.id} kor={kor} amne={harPlanering ? a : undefined} idag={idag} />}
+        s={s} amneId={a.id} kor={kor} amne={harPlanering ? a : undefined} idag={idag} oppnad={planOppnad} />}
       {bok && halv && (
         <GruppPlanering plan={plan} planB={planB} bok={bok} amnesNamn={a.namn} klassNamn={klass.namn}
-          rum={rum} rubrik={`${klass.namn} · rum ${rum} — en klass, gemensam planering`} s={s} amneId={a.id} kor={kor} amne={harPlanering ? a : undefined} idag={idag} />
+          rum={rum} rubrik={`${klass.namn} · rum ${rum} — en klass, gemensam planering`} s={s} amneId={a.id} kor={kor} amne={harPlanering ? a : undefined} idag={idag} oppnad={planOppnad} />
       )}
       </>)}
     </div>
@@ -3083,8 +3085,10 @@ function GruppPlanering(props: {
   s?: Struktur; amneId?: string; kor?: (fn: () => Struktur, m: string) => void;
   /** Del 129: med ämnet och dagens datum kan lektioner tas bort, ersättas och utökas (bara framåt i tiden). */
   amne?: Amne; idag?: string;
+  /** Del 262 · ökar varje gång fliken Lektionsplan öppnas — då visas aktuell lektion högst upp. */
+  oppnad?: number;
 }) {
-  const { plan, planB, bok, amnesNamn, klassNamn, rum, rubrik, s, amneId, kor, amne, idag } = props;
+  const { plan, planB, bok, amnesNamn, klassNamn, rum, rubrik, s, amneId, kor, amne, idag, oppnad } = props;
   const [valdRad, setValdRad] = useState<number | null>(null);
   const angra = useContext(AngraContext);
   // Del 198: välj flera lektioner (även genomförda) och ta bort dem på en gång
@@ -3192,6 +3196,20 @@ function GruppPlanering(props: {
     }
     return ut.sort((x, y) => (x.r.datum ?? '9999').localeCompare(y.r.datum ?? '9999') || (x.r.start ?? '').localeCompare(y.r.start ?? ''));
   })();
+  // Del 262 · Lektionsplan öppnas på aktuell del: dagens lektion (annars nästa kommande, annars den sista) hamnar
+  // högst upp. Bara när fliken öppnas eller ämnet byts — inte vid varje ändring i planeringen.
+  const aktuellRad = (() => {
+    if (idag === undefined) return -1;
+    const forst = rader.findIndex((x) => x.r.datum !== null && x.r.datum >= idag);
+    if (forst >= 0) return forst;
+    return rader.map((x, k) => (x.r.datum !== null ? k : -1)).filter((k) => k >= 0).pop() ?? -1;
+  })();
+  const aktuellRef = useRef<HTMLTableRowElement | null>(null);
+  const harRader = plan.length > 0;
+  useEffect(() => {
+    const el = aktuellRef.current;
+    if (el !== null && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'start' });
+  }, [amneId, harRader, oppnad]);
   if (plan.length === 0) return null;
   return (
     <>
@@ -3225,7 +3243,7 @@ function GruppPlanering(props: {
           const iBoken = grupp !== null && amne !== undefined && !r.nyckel!.startsWith('er:') && r.lektion.typ !== 'exam' && !ersatt ? antalIBoken(bok, amne, grupp) : null;
           const minst = grupp !== null && iBoken !== null ? Math.max(iBoken, genomfordaIGrupp(grupp)) : 0;
           return (
-          <tr key={radNr} className={`${r.datum === null ? 'saknas' : ''} ${valdRad === radNr || (valjLage && r.nyckel !== undefined && valda.has(r.nyckel)) ? 'vald' : ''} ${klar ? 'klar' : ''} ${ersatt ? 'ersatt' : ''} ${idag !== undefined && i === aktuellLektionsIndex(plan, idag) ? 'aktuell' : ''}`}
+          <tr key={radNr} ref={radNr === aktuellRad ? aktuellRef : undefined} data-aktuell-rad={radNr === aktuellRad ? 'ja' : undefined} className={`${r.datum === null ? 'saknas' : ''} ${valdRad === radNr || (valjLage && r.nyckel !== undefined && valda.has(r.nyckel)) ? 'vald' : ''} ${klar ? 'klar' : ''} ${ersatt ? 'ersatt' : ''} ${idag !== undefined && i === aktuellLektionsIndex(plan, idag) ? 'aktuell' : ''}`}
             onClick={() => { if (valjLage) { if (bokRad(r)) setValda((v) => { const n = new Set(v); if (n.has(r.nyckel!)) n.delete(r.nyckel!); else n.add(r.nyckel!); return n; }); } else setValdRad(valdRad === radNr ? null : radNr); }} title={valjLage ? 'Välj / avmarkera' : 'Öppna lektionskort'}>
             {valjLage ? (
               <td onClick={(e) => e.stopPropagation()}>

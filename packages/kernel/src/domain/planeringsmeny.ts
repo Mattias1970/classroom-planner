@@ -5,7 +5,7 @@
  * beskrivning (det kontrolleras i testerna). (Ring 1, I2: ren data.)
  */
 export const PLANERINGSMENY = {
-  planering: 'Lektionsplan: alla lektioner i tur och ordning med datum, tid och avsnitt. Här väljer du bok, skapar planeringen, bockar av genomförda lektioner och lägger in egna rader som prov.',
+  planering: 'Lektionsplan: alla lektioner i tur och ordning med datum, tid och avsnitt — öppnas på aktuell lektion. Här väljer du bok, skapar planeringen, bockar av genomförda lektioner och lägger in egna rader som prov.',
   kortrad: 'Kortrad: lektionerna som kort på en rad, vecka för vecka. Dra ett kort för att byta ordning, lägg till eller ta bort en lektion. Kartan överst visar hela terminen.',
   tavla: 'Planeringstavla: bygg ett utkast till planeringen. Dra in kapitel, laborationer och egna kort, och lägg sedan in utkastet från ett datum. Det som redan är genomfört ändras inte.',
   detalj: 'Detaljplanering: en lektion i taget. Skriv genomgång, exempel, uppgifter, läxa och exit ticket, och bläddra mellan lektionerna.',
