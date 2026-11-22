@@ -7,7 +7,8 @@ import {
   AlignmentType, BorderStyle, Document, ExternalHyperlink, Footer, Header, HeadingLevel, ImageRun, LevelFormat, Packer, PageNumber,
   Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType,
 } from 'docx';
-import { BINDEORD, labMall, noOvningPunkter, type Betygsniva, type MatteLapp, type Provlapp } from '@planner/kernel';
+import { BINDEORD, labMall, noOvningPunkter, type Betygsniva, type Provlapp } from '@planner/kernel';
+import { matteInnehall } from './matteWord.js';
 import { djupBreddSvg, svgTillPng } from './provlappFigur.js';
 
 const FONT = 'Calibri';
@@ -44,68 +45,6 @@ const datumText = (iso: string) => {
   const man = ['januari', 'februari', 'mars', 'april', 'maj', 'juni', 'juli', 'augusti', 'september', 'oktober', 'november', 'december'][d.getUTCMonth()];
   return `${dag} ${d.getUTCDate()} ${man}`;
 };
-
-/**
- * Del 260 · Matematiklappens innehåll: regeln för E, kravtabellen, en del per förmåga (begrepp med beskrivning
- * och sida, metoder med teorisidor, typiska uppgifter per nivå) och checklistan per delkapitel.
- */
-function matteDelar(ut: Array<Paragraph | Table>, pl: Provlapp, m: MatteLapp, F: string, h1: (x: string) => Paragraph, h2: (x: string) => Paragraph): void {
-  ut.push(new Paragraph({
-    spacing: { before: 80, after: 160 }, indent: { left: 160 },
-    border: { left: { style: BorderStyle.SINGLE, size: 24, color: F, space: 8 } },
-    shading: { type: ShadingType.CLEAR, fill: 'F7F3EC', color: 'auto' },
-    children: [t('För betyget E ', { bold: true, size: 24 }), t(m.regelE.replace(/^För betyget E /, ''), { size: 24 })],
-  }));
-  ut.push(tabell([1838, 2600, 2600, 2600], [['Förmåga', 'E', 'C', 'A'], ...m.formagor.map((f) => [f.namn, f.krav.E, f.krav.C, f.krav.A])], F));
-
-  m.formagor.forEach((f, nr) => {
-    ut.push(h1(`${nr + 1}. ${f.namn}`));
-    ut.push(p([t(f.betyder, { italics: true, color: '555555' })]));
-    const avsnitt = [...m.avsnitt, ...m.blandat].filter((a) => (f.id === 'begrepp' && a.begrepp.length > 0) || a.mal[f.id].length > 0);
-    if (f.id === 'begrepp') {
-      for (const a of avsnitt) {
-        ut.push(h2(`${a.rubrik}${a.teoriSidor !== null ? `  (teori ${a.teoriSidor})` : ''}`));
-        if (a.begrepp.length > 0) ut.push(tabell([2300, 6038, 1300], [['Begrepp', 'Beskrivning', 'Sida'], ...a.begrepp.map((b) => [b.begrepp, b.forklaring ?? '', b.sidor ?? ''])], F));
-        a.mal.begrepp.forEach((x) => ut.push(punkt(`${x.text}${x.sidor !== null ? ` (${x.sidor})` : ''}`)));
-      }
-    } else if (avsnitt.length > 0) {
-      ut.push(tabell([2500, 5838, 1300], [
-        ['Delkapitel', f.id === 'metod' ? 'Metoder du ska kunna' : 'Det här ska du kunna', 'Teori'],
-        ...avsnitt.map((a) => [a.rubrik, a.mal[f.id].map((x) => `• ${x.text}`), a.teoriSidor ?? '']),
-      ], F));
-    }
-    if (f.typiska.E.length + f.typiska.C.length + f.typiska.A.length > 0) {
-      ut.push(h2(f.utskrivna ? 'Typiska uppgifter' : 'Typiska uppgifter i boken'));
-      ut.push(tabell([1100, 8538], [['Nivå', 'Uppgift'], ...(['E', 'C', 'A'] as Betygsniva[]).map((n) => [`${n}-nivå`, f.typiska[n].length > 0 ? f.typiska[n].map((u) => `• ${u}`) : ['—']])], F));
-    }
-    f.iBoken.forEach((x) => ut.push(new Paragraph({ spacing: { before: 100, after: 80 }, children: [t('Öva i boken: ', { bold: true }), t(x)] })));
-  });
-
-  const medStod = pl.avsnitt.filter((a) => a.typ === 'delkapitel' && a.sammanfattning.length + a.filmer.length > 0);
-  if (medStod.length > 0) {
-    ut.push(h1('Repetera: sammanfattning och filmer'));
-    for (const a of medStod) {
-      ut.push(h2(a.rubrik));
-      a.sammanfattning.forEach((x) => ut.push(p([t('Sammanfattning: ', { bold: true }), t(x)])));
-      if (a.filmer.length > 0) {
-        ut.push(new Paragraph({ spacing: { after: 80 }, children: [t('Filmer: ', { bold: true }), ...a.filmer.flatMap((f, i) => [
-          ...(i > 0 ? [t(' · ')] : []),
-          new ExternalHyperlink({ link: f.url, children: [new TextRun({ text: f.titel, font: FONT, size: 22, style: 'Hyperlink' })] }),
-        ])] }));
-      }
-    }
-  }
-
-  ut.push(h1(`${m.formagor.length + 1}. Checklista — har du gjort?`));
-  ut.push(p('Kryssa för det du har gjort. Rutorna för E-nivå behöver vara ifyllda i varje delkapitel.'));
-  const ruta = (k: MatteLapp['avsnitt'][number]['kryss'][number], medBetyg: boolean) =>
-    `☐  ${k.namn}${k.uppgifter !== null ? ` ${k.uppgifter}` : ''}${k.sidor !== null ? ` (${k.sidor})` : ''}${medBetyg ? ` — ${k.betyg.join('/')}-nivå` : ''}`;
-  ut.push(tabell([2900, 6738], [
-    ['Delkapitel', 'Uppgifter i boken'],
-    ...m.avsnitt.map((a) => [a.rubrik, a.kryss.length > 0 ? a.kryss.map((k) => ruta(k, true)) : ['☐  Uppgifterna i delkapitlet']]),
-    ...(m.repetition.length > 0 ? [['Hela kapitlet', m.repetition.map((k) => ruta(k, false))]] : []),
-  ], F));
-}
 
 /** Bygger provlappens Word-dokument. `farg` = kapitlets färg ur boken. */
 export function provlappDokument(pl: Provlapp, farg: string, figur: Uint8Array | null = null): Document {
@@ -148,7 +87,9 @@ export function provlappDokument(pl: Provlapp, farg: string, figur: Uint8Array |
   }
 
   if (pl.matte !== null) {
-    matteDelar(ut, pl, pl.matte, F, h1, h2);
+    // Del 261: samma innehåll som i den pedagogiska planeringen (matteWord.ts)
+    ut.push(...matteInnehall(pl.matte, { farg: F, bredd: BRED, h1, h2, punkt: (x) => punkt(x),
+      stod: pl.avsnitt.filter((a) => a.typ === 'delkapitel' && a.sammanfattning.length + a.filmer.length > 0) }));
   } else {
   ut.push(h1('1. Det här ska du kunna'));
   for (const a of pl.avsnitt) {

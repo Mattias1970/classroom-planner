@@ -11,7 +11,8 @@ import {
   AlignmentType, Document, ExternalHyperlink, Footer, HeadingLevel, Packer, PageNumber, Paragraph, ShadingType,
   BorderStyle, Table, TableCell, TableRow, TextRun, WidthType,
 } from 'docx';
-import type { PedagogiskPlanering, PlanDag, PlanFilm } from '@planner/kernel';
+import { MATTE_STUDIETEKNIK, matteOvaInforProv, type MatteLapp, type PedagogiskPlanering, type PlanDag, type PlanFilm } from '@planner/kernel';
+import { matteInnehall } from './matteWord.js';
 
 function ladda(namn: string, blob: Blob): void {
   const a = document.createElement('a');
@@ -104,6 +105,38 @@ function provOchBedomning(pl: PedagogiskPlanering): Paragraph[] {
   ];
 }
 
+/** Textytans bredd (A4 minus sidmarginalerna 1247 + 1247), DXA. */
+const TEXTBREDD = 11906 - 2 * 1247;
+
+/**
+ * Del 261 · Prov och bedömning i matematik — de fem förmågorna (begrepp, metod, problemlösning, resonemang,
+ * kommunikation) i stället för NO-ämnenas B, U och R. Innehållet är provlappens (matteWord.ts): regeln för E,
+ * kraven per förmåga, begrepp med beskrivning och sida, metoder med teorisidor, typiska uppgifter per nivå och
+ * checklistan per delkapitel. Sedan hur man övar inför provet och studieteknik i matematik.
+ */
+function matteProvOchBedomning(pl: PedagogiskPlanering, m: MatteLapp): Array<Paragraph | Table> {
+  const under = (text: string) => new Paragraph({ spacing: { before: 160, after: 60 }, keepNext: true, children: [new TextRun({ text, bold: true, color: MORK })] });
+  const ova = matteOvaInforProv(m);
+  return [
+    h2('Prov och bedömning'),
+    p('Förmågor och betygsnivåer i matematik', { italics: true }),
+    p('I matematik bedöms fem förmågor: begrepp, metod, problemlösning, resonemang och kommunikation. Här står vad som krävs för E, C och A i varje förmåga, vad du ska kunna i de här delkapitlen och var teorin står i boken. Samma information finns på provlappen.'),
+    ...matteInnehall(m, { farg: ACCENT, bredd: TEXTBREDD, h1: h3, h2: under, punkt: (x) => punkt(x) }),
+    h2('Studera inför provet'),
+    ...(pl.sammanfattningSidor !== null ? [p(`Kapitlet i boken: ${pl.sammanfattningSidor}.`)] : []),
+    p('E-nivå', { bold: true }),
+    ...ova.E.map((x) => punkt(x)),
+    p('För högre nivå (C)', { bold: true }),
+    ...ova.C.map((x) => punkt(x)),
+    p('För högsta nivå (A)', { bold: true }),
+    ...ova.A.map((x) => punkt(x)),
+    tom(),
+    p('Titta på Binogi-filmerna för bättre förståelse – se länkarna ovan eller i tidsplaneringen längst ner.'),
+    h2('Studieteknik – så övar du matematik'),
+    ...MATTE_STUDIETEKNIK.map((x) => numrerad(x)),
+  ];
+}
+
 /** Del 220 · Begreppen för ett delkapitel som punktlista i två kolumner (utan kantlinjer). */
 function begreppTvaKolumner(begrepp: string[]): Table {
   const halva = Math.ceil(begrepp.length / 2);
@@ -117,6 +150,13 @@ function begreppTvaKolumner(begrepp: string[]): Table {
 
 /** Del 220 · Socrative-rummen: hur man hittar dit, rumsnamn och vilka delkapitel som övas. */
 function socrativeAvsnitt(pl: PedagogiskPlanering): Array<Paragraph | Table> {
+  // Del 261 · matematik: ett enda rum per klass — inga övningsrum per delkapitel att lista
+  if (pl.matte !== null) return [
+    h2('Socrative – läxförhör och exit ticket'),
+    p('Läxförhör och exit tickets görs på lektionen i klassens eget rum: gå till socrative.com, välj Student Login och skriv rumsnamnet (Room Name) — läraren säger vilket.'),
+    p('Läxförhöret prövar begreppen från förra lektionen. Lär dig förklara dem med egna ord — beskrivningarna står under Begrepp längre ner.'),
+    tom(),
+  ];
   const rad = (celler: string[], fet = false) => new TableRow({ ...(fet ? { tableHeader: true } : {}), children: celler.map((c, i) => cell([p(c, { bold: fet, color: fet ? MORK : undefined })], [30, 30, 40][i], fet ? 'EAF1F8' : undefined)) });
   return [
     h2('Socrative – öva begreppen'),
@@ -186,7 +226,7 @@ function medLuft(delar: Paragraph[][]): Paragraph[] {
 }
 
 /** En dag i planeringstabellen — fyra kolumner som förlagan. */
-function dagRad(d: PlanDag, pl: PlanDag[]): TableRow {
+function dagRad(d: PlanDag, pl: PlanDag[], matematik = false): TableRow {
   const inlamning = pl.filter((x) => x !== d && x.datum < d.datum && x.kod !== null).slice(-1)[0];
   const kol1 = medLuft([
     [p(`${d.dag}${d.grupp !== undefined ? ` · Grupp ${d.grupp}` : ''}`, { bold: true })],
@@ -194,7 +234,8 @@ function dagRad(d: PlanDag, pl: PlanDag[]): TableRow {
       ? [p('Läxa:', { bold: true }), p(d.laxforhor.begrepp),
         ...(d.laxforhor.ovaRum !== null ? [p(`Begrepp övas i Socrative: ${d.laxforhor.ovaRum}`)] : [])]
       : [],
-    d.typ === 'lektion' && inlamning !== undefined && inlamning.kod !== null
+    // Del 261 · matematik: vad som lämnas in står i läxan ('Lämna in ETT …') — 'Begrepp' och 'Frågor' är NO-ämnenas inlämningar
+    !matematik && d.typ === 'lektion' && inlamning !== undefined && inlamning.kod !== null
       ? [p('Inlämning:', { bold: true }), p(`Kap ${inlamning.kod} Begrepp`), p(`Kap ${inlamning.kod} Frågor`)]
       : [],
   ]);
@@ -208,7 +249,7 @@ function dagRad(d: PlanDag, pl: PlanDag[]): TableRow {
     d.typ === 'prov' ? [p(`Prov – ${d.avsnitt}`, { bold: true }), ...d.provText.map((x) => p(x, { italics: true }))] : [],
     d.laxforhor !== null
       ? [p('Läxförhör:', { bold: true }), p(d.laxforhor.begrepp), p('Socrative: klassens rum'),
-        p('(börja med frågorna när du är klar med förhöret)', { italics: true })]
+        p(matematik ? '(börja med uppgifterna när du är klar med förhöret)' : '(börja med frågorna när du är klar med förhöret)', { italics: true })]
       : [],
     [
       ...(d.typ === 'lektion' && d.kod !== null
@@ -218,7 +259,7 @@ function dagRad(d: PlanDag, pl: PlanDag[]): TableRow {
       ...(d.genomgang !== null && d.genomgangKalla === 'lektionsplan' && d.typ !== 'prov'
         ? d.genomgang.split('\n').filter((x) => x.trim() !== '').map((rad) => punkt(rad)) : []),
     ],
-    d.arbete !== null ? [p('Arbete:', { bold: true }), p(d.arbete)] : [],
+    d.arbete !== null ? [p('Arbete:', { bold: true }), ...d.arbete.split('\n').filter((x) => x.trim() !== '').map((x) => p(x))] : [],
     d.exit !== null ? [p('Avslut:', { bold: true }), p(`Exit ticket · Socrative: klassens rum (${d.exit.begrepp})`)] : [],
   ]);
   const kol4 = medLuft([
@@ -242,7 +283,7 @@ function planeringsTabell(pl: PedagogiskPlanering): Table {
   const alla = pl.veckor.flatMap((v) => v.dagar);
   for (const v of pl.veckor) {
     rader.push(new TableRow({ children: [cell([p(`v${v.vecka}`, { bold: true })], 20, GRON), cell([p('Avsnitt')], 15, GRON), cell([p('Lektion')], 35, GRON), cell([p('Begrepp, läxor och filmer')], 30, GRON)] }));
-    for (const d of v.dagar) rader.push(dagRad(d, alla));
+    for (const d of v.dagar) rader.push(dagRad(d, alla, pl.matte !== null));
   }
   return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: rader });
 }
@@ -268,8 +309,11 @@ export function byggPedagogiskPlanering(pl: PedagogiskPlanering): Document {
         ...pl.kapitelLista.flatMap((k) => (k.viktigaBegrepp.length > 0 ? [p(`Några viktiga begrepp: ${k.viktigaBegrepp.join(', ')}`)] : []))]),
     h2('Innehåll – sammanfattning av varje delkapitel'),
     ...pl.innehall.flatMap((d) => [h3(`${d.kod} ${d.namn}${d.sidor !== '—' ? ` ${d.sidor}` : ''}`), ...d.text.split('\n').filter((x) => x.trim() !== '').map((x) => p(x))]),
-    h2('Viktiga begrepp per delkapitel'),
-    ...pl.begreppPerDelkapitel.flatMap((d) => (d.begrepp.length > 0 ? [h3(`${d.kod} ${d.namn}`), begreppTvaKolumner(d.begrepp)] : [])),
+    // Del 261 · matematik: begreppen står med beskrivning och sida under förmågan Begrepp (Prov och bedömning)
+    ...(pl.matte !== null ? [] : [
+      h2('Viktiga begrepp per delkapitel'),
+      ...pl.begreppPerDelkapitel.flatMap((d) => (d.begrepp.length > 0 ? [h3(`${d.kod} ${d.namn}`), begreppTvaKolumner(d.begrepp)] : [])),
+    ]),
     ...(pl.prov !== null || pl.sammanfattningSidor !== null ? [tom(), infoRuta([
       ...(pl.prov !== null ? [{ etikett: 'Prov:', text: `${pl.prov.rubrik}${pl.prov.datum !== null ? ` – ${pl.prov.datum}` : ''}` }] : []),
       ...(pl.sammanfattningSidor !== null ? [{ etikett: 'Sammanfattning i boken:', text: pl.sammanfattningSidor }] : []),
@@ -278,9 +322,8 @@ export function byggPedagogiskPlanering(pl: PedagogiskPlanering): Document {
     h2('Binogi – filmer'),
     p('Filmer om kapitlets innehåll. Man kan välja olika språk för tal och undertexter för ökad förståelse. Notera att ni behöver kunna begreppen på svenska.'),
     ...pl.filmer.map((d) => filmRad(d.filmer, d.kod, d.namn)),
-    ...provOchBedomning(pl),
-    bindeordTabell(),
-    ...kortOmFormagorna(),
+    // Del 261 · matematik har sina fem förmågor; NO-ämnena B, U och R med bindeord och laborationsmall
+    ...(pl.matte !== null ? matteProvOchBedomning(pl, pl.matte) : [...provOchBedomning(pl), bindeordTabell(), ...kortOmFormagorna()]),
     tom(),
     h2('Planering'),
     planeringsTabell(pl),

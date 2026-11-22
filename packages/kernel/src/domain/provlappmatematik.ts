@@ -18,6 +18,7 @@
 import { delkapitelKod } from './bok.js';
 import type { Bok, Kapitel, Lektion, NivaEtiketter } from './typer.js';
 import { vagTyp, type VagTyp } from './vagtillprovet.js';
+import { NO_TK_AMNEN } from './amnen.js';
 
 export type Formaga = 'begrepp' | 'metod' | 'problemlosning' | 'resonemang' | 'kommunikation';
 type Niva = 'E' | 'C' | 'A';
@@ -137,6 +138,14 @@ function betygFor(n: NivaEtiketter, i: 1 | 2 | 3): Niva[] {
   if (ettTvaTre) return [i === 1 ? 'E' : i === 2 ? 'C' : 'A'];
   return i === 3 ? ['C', 'A'] : ['E'];
 }
+
+/** Del 261 · Matematik? Bokens ämne börjar på "Matematik", eller ämnet heter Matematik — aldrig ett NO- eller teknikämne. */
+export function arMatematik(bokAmne: string, amneNamn: string): boolean {
+  return !(NO_TK_AMNEN as readonly string[]).includes(amneNamn.trim()) && (/^matematik/i.test(bokAmne.trim()) || /^matematik$/i.test(amneNamn.trim()));
+}
+
+/** Del 261 · Flera lektioners uppgiftsintervall som ett: '1–10' + '11–20' → '1–20'; '' när inget står. */
+export function slaIhopUppgifter(intervall: string[]): string { return slaIhop(intervall) ?? ''; }
 
 /** '1–10' + '11–20' → '1–20'; olika intervall utan kontakt skrivs med punkt emellan. */
 function slaIhop(intervall: string[]): string | null {
@@ -277,3 +286,43 @@ export function matteLapp(bok: Bok, koder: string[], uppgifter: Map<string, { ni
   });
   return { regelE: REGEL_E, formagor, avsnitt, blandat, repetition };
 }
+
+/** Del 261 · Så övar du inför ett matematikprov — nivå för nivå, med bokens egna namn på nivåerna och kapitlets delar. */
+export function matteOvaInforProv(m: MatteLapp): Record<Niva, string[]> {
+  const namn = (niva: Niva): string => {
+    const alla = [...new Set(m.avsnitt.flatMap((a) => a.kryss.filter((k) => k.betyg.includes(niva)).map((k) => k.namn)))];
+    return alla.length === 0 ? 'uppgifterna' : alla.join(' och ');
+  };
+  const del = (re: RegExp): MatteKryss | undefined => m.repetition.find((k) => re.test(k.namn));
+  const medSida = (k: MatteKryss): string => `${k.namn}${k.sidor !== null ? ` (${k.sidor})` : ''}`;
+  const diagnos = del(/^diagnos/i); const trana = del(/^träna/i); const blandade = del(/^blandade/i); const utveckla = del(/^utveckla/i); const fokus = del(/^förmågorna i fokus/i);
+  return {
+    E: [
+      'Lär dig begreppen: förklara vart och ett med egna ord och ge ett exempel (tabellen under Begrepp).',
+      'Gå igenom metoderna: läs de lösta exemplen på teorisidorna, täck över lösningen och räkna själv.',
+      `Gör ${namn('E')} i varje delkapitel (checklistan) och rätta mot facit.`,
+      ...(diagnos !== undefined ? [`Gör diagnosen${diagnos.sidor !== null ? ` (${diagnos.sidor})` : ''}${trana !== undefined ? ` och öva mer på det som blev fel i ${medSida(trana)}` : ''}.`] : []),
+      'Redovisa så att lösningen går att följa: figur eller uppställning, uträkning, enhet och svar.',
+    ],
+    C: [
+      `Gör ${namn('C')} i varje delkapitel${blandade !== undefined ? ` och ${medSida(blandade)}` : ''}.`,
+      'Lös problem i flera steg och kontrollera att svaret är rimligt.',
+      'Motivera dina svar: skriv varför, inte bara vad.',
+    ],
+    A: [
+      `Gör ${namn('A')} i varje delkapitel${utveckla !== undefined ? ` och ${medSida(utveckla)}` : ''}.`,
+      ...(fokus !== undefined ? [`Arbeta med ${medSida(fokus)}.`] : []),
+      'Pröva olika strategier, förklara varför lösningen håller och redovisa fullständigt med korrekt matematiskt språk.',
+    ],
+  };
+}
+
+/** Del 261 · Studieteknik i matematik — i den ordning man övar. */
+export const MATTE_STUDIETEKNIK: readonly string[] = [
+  'Läs kapitlets mål — de står som Syfte högst upp i planeringen. Provet prövar om du kan det.',
+  'Läs teorirutan och de lösta exemplen innan du räknar. Täck över lösningen, lös själv och jämför.',
+  'Räkna med penna och papper. Skriv varje steg på en egen rad, med likhetstecknen under varandra.',
+  'Rätta mot facit efter några uppgifter i taget. Blev det fel: leta upp felet i din lösning innan du går vidare.',
+  'Förklara ett begrepp eller en metod högt för någon annan. Kan du förklara det, kan du det.',
+  'Öva en stund varje dag hellre än länge kvällen före provet.',
+];

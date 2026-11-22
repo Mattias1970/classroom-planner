@@ -9,7 +9,8 @@
  * ändras dokumentet. (Ring 1, I2: ingen DOM, ingen docx-generering här.)
  */
 import { delkapitelKod } from './bok.js';
-import { begreppForLektion } from './lektionskort.js';
+import { begreppForLektion, effektivaNivaer } from './lektionskort.js';
+import { arMatematik, matteLapp, slaIhopUppgifter, type MatteLapp } from './provlappmatematik.js';
 import { NO_TK_AMNEN, socrativeRum } from './amnen.js';
 import { binogiFilmerFor } from './binogifilmer.js';
 import { foreslaBinogiFilmer } from './binogikatalog.js';
@@ -101,6 +102,12 @@ export interface PedagogiskPlanering {
    * om den är genomförd — lärarens val (genomforda) eller, utan val, datum före idag.
    */
   laborationer: PlanLaboration[];
+  /**
+   * Del 261 · Matematik: provinformationen efter de fem förmågorna — samma underlag som provlappen (matteLapp):
+   * regeln för E, kraven per förmåga, begrepp med beskrivning och sida, metoder med teorisidor, typiska
+   * uppgifter per nivå och checklistan per delkapitel. null i alla andra ämnen (NO har B, U och R).
+   */
+  matte: MatteLapp | null;
 }
 
 /** Del 224 · En laboration i planeringen. */
@@ -186,6 +193,23 @@ function filmerFor(bok: Bok, kapitelNr: number, kod: string | null, lpFilmer: st
 }
 
 /**
+ * Del 261 · Matematikens provinformation för de valda delkapitlen (i given ordning). Lärarens egna
+ * uppgiftsintervall i lektionsplanerna går före bokens — precis som på provlappen. null när ämnet inte är matematik.
+ */
+function matteFor(s: Struktur, amneId: string, idag: string | undefined, koder: string[]): MatteLapp | null {
+  const amne = s.amnen.find((a) => a.id === amneId);
+  const bok = s.bocker.find((b) => b.id === amne?.bokId);
+  if (amne === undefined || bok === undefined || koder.length === 0 || !arMatematik(bok.amne, amne.namn)) return null;
+  const ap = amnesPlanFor(s, amneId, idag, false);
+  const egna = new Map<string, { niva1: string; niva2: string; niva3: string }>();
+  for (const kod of koder) {
+    const nivaer = (ap?.a ?? []).flatMap((r, index) => (delkapitelKod(r.lektion.avsnitt) === kod ? [effektivaNivaer(r.lektion, hamtaLektionsplan(s, amneId, index))] : []));
+    if (nivaer.length > 0) egna.set(kod, { niva1: slaIhopUppgifter(nivaer.map((x) => x.niva1)), niva2: slaIhopUppgifter(nivaer.map((x) => x.niva2)), niva3: slaIhopUppgifter(nivaer.map((x) => x.niva3)) });
+  }
+  return matteLapp(bok, koder, egna);
+}
+
+/**
  * Bygger underlaget för ett kapitel. `kapitelNr` undefined = det kapitel som pågår
  * (första lektionen på eller efter `idag`, annars den sista). null när ämnet saknar
  * bok eller planering.
@@ -259,6 +283,8 @@ export function pedagogiskPlaneringForOmfang(s: Struktur, amneId: string, spann:
     sammanfattningSidor: delar.map((pl) => pl.sammanfattningSidor).filter((x): x is string => x !== null).join(', ') || null,
     veckor,
     laborationer: delar.flatMap((pl) => pl.laborationer).filter((l, i, arr) => arr.findIndex((x) => x.nyckel === l.nyckel) === i).sort((a, b) => (a.datum ?? '').localeCompare(b.datum ?? '')),
+    // Del 261 · matematik: en gemensam provinformation för alla valda delkapitel, i dokumentets ordning
+    matte: forsta.matte === null ? null : matteFor(s, amneId, idag, delar.flatMap((pl) => pl.innehall.map((d) => d.kod))),
   };
 }
 
@@ -286,6 +312,9 @@ function pedagogiskPlaneringKapitel(s: Struktur, amneId: string, kapitelNr: numb
   const kap = bok.kapitel.find((k) => k.nr === nr);
   if (kap === undefined) return null;
   const klassRum = socrativeRum(amne.namn, klass.namn);
+  // Del 261 · Matematik har ett enda Socrative-rum per klass (inga övningsrum per delkapitel), läxan står i
+  // bokfilen ('Begreppen 3.1. Lämna in ETT …') och arbetet är bokens nivåer — NO-reglerna nedan gäller inte där
+  const matematik = arMatematik(bok.amne, amne.namn);
 
   // Rader i kapitlet: grupp A i ordning, plus grupp B:s pass som inte finns i A (halvklass)
   const aDatum = new Set(ap.a.map((r) => `${r.datum}|${r.start}`));
@@ -340,30 +369,41 @@ function pedagogiskPlaneringKapitel(s: Struktur, amneId: string, kapitelNr: numb
     const begrepp = lp?.begreppText !== undefined && lp.begreppText.trim() !== ''
       ? lp.begreppText.split(',').map((b) => b.trim()).filter((b) => b !== '')
       : begreppForLektion(bok, r.kapitel, r.lektion);
-    const laxRum = klipp(har(r.lektion.socStart) ? rumUr(r.lektion.socStart) : null);
+    const laxRum = matematik ? null : klipp(har(r.lektion.socStart) ? rumUr(r.lektion.socStart) : null);
+    // Del 261 · matematik: läxförhöret prövar begreppen från förra lektionens delkapitel; efter sista delkapitlet hela kapitlets
+    const forraKod = rader.slice(0, i).map((x) => delkapitelKod(x.r.lektion.avsnitt)).filter((x): x is string => x !== null).pop() ?? null;
+    const matteForhor = matematik && typ !== 'laboration' && har(r.lektion.socStart) && forraKod !== null
+      ? { begrepp: kod !== null ? `Begrepp ${forraKod}` : `Begrepp kapitel ${nr}`, rum: klassRum, ovaRum: har(lp?.laxforhorRum) ? lp!.laxforhorRum! : null }
+      : null;
     // Del 236 · Laborationer har aldrig läxförhör eller läxa: läxan går till nästa teorilektion i stället
-    const laxforhor = typ !== 'laboration' && (laxRum !== null || har(lp?.laxforhorRum))
+    const laxforhor = matematik ? matteForhor : typ !== 'laboration' && (laxRum !== null || har(lp?.laxforhorRum))
       ? { begrepp: `Begrepp ${rumTillKoder(lp?.laxforhorRum ?? laxRum ?? '') ?? (lp?.laxforhorRum ?? laxRum ?? '')}`, rum: klassRum, ovaRum: lp?.laxforhorRum ?? laxRum }
       : null;
     const exitRum = har(r.lektion.exit) ? rumUr(r.lektion.exit) : null;
     const exit = typ === 'lektion' && (exitRum !== null || har(lp?.exitQuiz))
-      ? { rum: klassRum, begrepp: kod !== null ? `Begrepp ${kod}` : (lp?.exitQuiz ?? r.lektion.exit) }
+      ? { rum: klassRum, begrepp: kod !== null ? `Begrepp ${kod}` : matematik ? `Begrepp kapitel ${nr}` : (lp?.exitQuiz ?? r.lektion.exit) }
       : null;
     const nastaRad = rader.slice(i + 1).find((x) => typFor(x.r) !== 'laboration' && (x.grupp === grupp || x.grupp === undefined || grupp === undefined));
     // Läxan är ALLTID kumulativ: alla begrepp till och med det här delkapitlet, i det
     // kumulativa rummet (Biologi612) — samma begrepp och rum som nästa lektions läxförhör.
-    const laxaRum = klipp((har(r.lektion.laxa) ? rumITexten(r.lektion.laxa) : null) ?? exitRum);
+    const laxaRum = matematik ? null : klipp((har(r.lektion.laxa) ? rumITexten(r.lektion.laxa) : null) ?? exitRum);
     const laxaKoder = laxaRum !== null ? rumTillKoder(laxaRum) : null;
     const laxa = typ === 'lektion' && begrepp.length > 0 && nastaRad !== undefined && nastaRad.r.datum !== null
       ? {
         till: `${veckodag(nastaRad.r.datum).toLowerCase()} v${isoVecka(nastaRad.r.datum)}`,
-        text: har(lp?.laxa) ? lp!.laxa! : `Begrepp ${laxaKoder ?? kod ?? ''}`.trim(),
+        // Del 261 · matematik: bokfilens läxtext gäller ('Begreppen 3.1. Lämna in ETT …') när läraren inte skrivit en egen
+        text: har(lp?.laxa) ? lp!.laxa! : matematik && har(r.lektion.laxa) ? r.lektion.laxa.trim() : `Begrepp ${laxaKoder ?? kod ?? ''}`.trim(),
         ovaRum: laxaRum,
       }
       : null;
     const genomgang = har(lp?.genomgang) ? lp!.genomgang! : (har(r.lektion.genomgang) && r.lektion.genomgang !== r.lektion.avsnitt ? r.lektion.genomgang : null);
     const genomgangKalla = genomgang === null ? null : (har(lp?.genomgang) ? 'lektionsplan' as const : 'bok' as const);
-    const arbete = har(lp?.uppgNiva1) ? lp!.uppgNiva1! : (har(r.lektion.ex) ? r.lektion.ex : (har(r.lektion.niva1) ? `Uppgifter ${r.lektion.niva1}` : null));
+    // Del 261 · matematik: exemplen som räknas gemensamt, och på en egen rad den egna räkningen med bokens nivåer
+    const niv = effektivaNivaer(r.lektion, lp);
+    const egenRakning = ([[bok.nivaer.niva1, niv.niva1], [bok.nivaer.niva2, niv.niva2], [bok.nivaer.niva3, niv.niva3]] as const).filter(([, u]) => har(u)).map(([namn, u]) => `${namn} ${u.trim()}`).join(' · ');
+    const matteArbete = [har(r.lektion.ex) ? r.lektion.ex.trim() : null, egenRakning !== '' ? `Egen räkning: ${egenRakning}` : null].filter((x): x is string => x !== null).join('\n');
+    const arbete = matematik ? (matteArbete !== '' ? matteArbete : null)
+      : har(lp?.uppgNiva1) ? lp!.uppgNiva1! : (har(r.lektion.ex) ? r.lektion.ex : (har(r.lektion.niva1) ? `Uppgifter ${r.lektion.niva1}` : null));
     const provText = typ !== 'prov' ? [] : (har(lp?.genomgang) ? lp!.genomgang!.split('\n').map((x) => x.trim()).filter((x) => x !== '')
       : ((NO_TK_AMNEN as readonly string[]).includes(amne.namn) ? [...PROV_UPPLAGG_NO] : []));
     if (typ === 'lektion') laggRum(exitRum, kod, 'exit');
@@ -418,7 +458,8 @@ function pedagogiskPlaneringKapitel(s: Struktur, amneId: string, kapitelNr: numb
     return { kod: d.kod, namn: d.namn, sidor: d.sidor, text, kalla };
   });
   const begreppPerDelkapitel = valdaDelkapitel.map((d) => ({ kod: d.kod, namn: d.namn, begrepp: [...new Set(d.begrepp.map((b) => b.trim()).filter((b) => b !== ''))] }));
-  const rumLista = [...rumKarta.entries()]
+  // Del 261 · matematik har inga övningsrum per delkapitel — bara klassens eget rum, som läraren säger på lektionen
+  const rumLista = matematik ? [] : [...rumKarta.entries()]
     .map(([rum, f]) => ({ rum, delkapitel: f.delkapitel, anvands: f.exit && f.lax ? 'exit ticket och läxförhör' as const : f.exit ? 'exit ticket' as const : 'läxförhör' as const }))
     .sort((a, b) => a.delkapitel.localeCompare(b.delkapitel, 'sv') || a.rum.localeCompare(b.rum, 'sv'));
   const filmer = valdaDelkapitel.map((d) => {
@@ -426,10 +467,10 @@ function pedagogiskPlaneringKapitel(s: Struktur, amneId: string, kapitelNr: numb
     return { kod: d.kod, namn: d.namn, filmer: filmerFor(bok, nr, d.kod, idx >= 0 ? hamtaLektionsplan(s, amneId, idx)?.filmer ?? [] : []) };
   });
   const valdaLektioner = inom === null ? alla : [...valdaDelkapitel.flatMap((d) => d.lektioner), ...kap.extraLektioner];
-  const ovaRum = [...new Set(valdaLektioner.map((l) => (har(l.exit) ? rumUr(l.exit) : null)).filter((x): x is string => x !== null))];
+  const ovaRum = matematik ? [] : [...new Set(valdaLektioner.map((l) => (har(l.exit) ? rumUr(l.exit) : null)).filter((x): x is string => x !== null))];
   // Del 222 · rummet för alla valda delkapitel: prefixet ur första exit-rummet + kapitel + delkapitelnumren
   const prefixM = ovaRum.length > 0 ? /^([^\d]+)\d/.exec(ovaRum[0]) : null;
-  const ovaRumAlla = prefixM !== null && valdaNr.length > 0 ? [`${prefixM[1]}${nr}${valdaNr.join('')}`] : ovaRum.slice(-1);
+  const ovaRumAlla = matematik ? [] : prefixM !== null && valdaNr.length > 0 ? [`${prefixM[1]}${nr}${valdaNr.join('')}`] : ovaRum.slice(-1);
   const begreppslista = inom === null ? kap.begreppslista : [...new Set(valdaDelkapitel.flatMap((d) => d.begrepp))];
   const provRad = dagar.find((d) => d.typ === 'prov') ?? null;
   const provLektion = alla.find((l) => l.typ === 'exam');
@@ -440,5 +481,6 @@ function pedagogiskPlaneringKapitel(s: Struktur, amneId: string, kapitelNr: numb
     kapitelLista: [{ nr, namn: kap.namn, sidor: kap.sidor, syfte, syfteSidor: kap.malSidor ?? null, viktigaBegrepp: kap.viktigaBegrepp ?? [], omfang: inom === null ? null : omfangText(valdaNr.map((n) => `${nr}.${n}`)) }],
     omfang: null,
     syfte, syfteSidor: kap.malSidor ?? null, syfteFranDelkapitel, begrepp: begreppslista, begreppPerDelkapitel, innehall, socrativeRum: rumLista, filmer, ovaRum, ovaRumAlla, klassRum, prov, sammanfattningSidor, veckor, laborationer,
+    matte: matteFor(s, amneId, idag, valdaDelkapitel.map((d) => d.kod)),
   };
 }

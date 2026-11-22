@@ -21,7 +21,7 @@ import { amnesPlanFor, hamtaLektionsplan, lektionsNamn } from './struktur.js';
 import { vagTillProvet, vagTyp, type VagBox, type VagTyp } from './vagtillprovet.js';
 import { delkapitelKod } from './bok.js';
 import { fragematris } from './delkapiteltrend.js';
-import { matteLapp, type MatteLapp } from './provlappmatematik.js';
+import { arMatematik, matteLapp, type MatteLapp } from './provlappmatematik.js';
 
 export type Betygsniva = 'E' | 'C' | 'A';
 
@@ -326,7 +326,7 @@ function byggLapp(s: Struktur, amneId: string, bok: Bok, boxar: VagBox[], kapite
   const forsta = kapitel[0];
   const noOvning = noAmne ? byggNoOvning(s, amneId, bok, kapitel.map((k) => k.nr), avsnitt) : null;
   // Del 260 · Matematik får en egen lapp efter de fem förmågorna; lärarens egna uppgiftsintervall följer med
-  const matematik = !noAmne && (/^matematik/i.test(bok.amne.trim()) || /^matematik$/i.test(amne.namn.trim()));
+  const matematik = arMatematik(bok.amne, amne.namn);
   const koder = boxar.map((b) => b.kod).filter((k): k is string => k !== null);
   const matte = matematik && koder.length > 0
     ? matteLapp(bok, koder, new Map(boxar.flatMap((b, i) => (b.kod === null ? [] : [[b.kod, avsnitt[i].uppgifter] as [string, { niva1: string; niva2: string; niva3: string }]]))))

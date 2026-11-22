@@ -97,6 +97,7 @@ export function PedagogiskPlaneringKnapp({ s, amneId, aktivtKapitel, disabled, m
           <div className="st-info-popup pp-modal" role="dialog" aria-label="Pedagogisk planering" onClick={(e) => e.stopPropagation()}>
             <h3 style={{ margin: '0 0 4px' }}>👨‍👩‍👧 Pedagogisk planering</h3>
             <p className="small muted" style={{ margin: '0 0 8px' }}>Kryssa i delkapitlen som planeringen ska täcka — gärna över flera kapitel. Dokumentet får syfte, begrepp, innehåll, filmer, prov och bedömning samt veckoplaneringen för just de delkapitlen.</p>
+            {forhand?.matte != null && <p className="small" role="note" aria-label="Matematikens förmågor" style={{ margin: '0 0 8px' }}>🧮 <b>Matematik:</b> prov och bedömning följer de fem förmågorna — begrepp, metod, problemlösning, resonemang och kommunikation — med samma innehåll som provlappen: regeln för E, begrepp med beskrivning och sida, metoder, typiska uppgifter på E-, C- och A-nivå och checklistan per delkapitel.</p>}
             {harPlanering
               ? <p className="small muted" style={{ margin: '0 0 8px' }}>📋 Dokumentet följer klassens planering: delkapitlens ordning, datum, laborationer och prov hämtas ur lektionsplanen.</p>
               : <p className="status warn small" style={{ margin: '0 0 8px' }}>⚠ Ämnet har ingen planering än — dokumentet bygger på förhandsvisningen. Med kryssrutan nedan skapas planeringen i appen från dokumentet (förval).</p>}
