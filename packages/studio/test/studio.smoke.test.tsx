@@ -398,7 +398,8 @@ describe('Lektionskort i planeringen', () => {
     expect(kort.textContent).toContain('ETT – introduktion');              // bokens nivånamn
     expect(kort.textContent).toContain('minimum: ETT');                    // del 1
     expect(kort.textContent).toContain('täljare');                         // delkapitlets begrepp
-    expect(kort.textContent).toContain('Teams, Classroom m.fl.');          // plattformsneutral inlämning
+    expect(kort.textContent).toContain('laddas upp i Teams');              // Del 263: inlämningar görs i Teams
+    expect(kort.textContent).not.toContain('Classroom');
     // Del 2-raden: minimum TVÅ
     act(() => { rad.click(); });                                           // stäng
     const rad2 = [...host.querySelectorAll('table.plan tbody tr')][1] as HTMLTableRowElement;

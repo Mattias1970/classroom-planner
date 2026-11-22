@@ -2238,8 +2238,8 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx, meddela
           {har(eff.niva3) && <div className={`uppg-niva ${farg ? 'niva-rod' : 'niva-neutral2'}`}><div className="un-rubrik">{N.niva3} – C/A-nivå</div><div className="un-uppg">Uppg. <b><input aria-label={`Uppgifter ${N.niva3}`} value={lp?.uppgNiva3 ?? ''} placeholder={rad.lektion.niva3} onChange={(e) => satt('uppgNiva3', e.target.value)} style={{ width: 80 }} /></b></div><div className="un-obl">Frivillig / vid lektionstid</div></div>}
         </div>
         {arNo
-          ? <div className="ls-inlamning">📷 <b>Inlämning via Google Classroom</b> — skriftliga svar på Testa dig själv (obligatoriskt). Görs klart hemma om de ej hunnits med. Läxförhören är kumulativa: alla begrepp hittills — godkänt krävs.</div>
-          : <div className="ls-inlamning">📷 <b>Inlämning via Google Classroom</b> — foto på beräkningarna, minst <b>{N.niva1} + {N.niva2}</b> (obligatoriskt). {N.niva3} är frivillig. Görs klart hemma eller på stödtid om de ej hunnits med.</div>}
+          ? <div className="ls-inlamning">📷 <b>Inlämning via Teams</b> — skriftliga svar på Testa dig själv (obligatoriskt). Görs klart hemma om de ej hunnits med. Läxförhören är kumulativa: alla begrepp hittills — godkänt krävs.</div>
+          : <div className="ls-inlamning">📷 <b>Inlämning via Teams</b> — foto på beräkningarna, minst <b>{N.niva1} + {N.niva2}</b> (obligatoriskt). {N.niva3} är frivillig. Görs klart hemma eller på stödtid om de ej hunnits med.</div>}
       </section>}
 
       {/* ── MAGMA (mattemjukvara — finns inte i NO/Tk) ── */}
@@ -2281,7 +2281,7 @@ function DetaljFlik({ s, amneId, plan, bok, amnesNamn, kor, idx, setIdx, meddela
           <div className="rad" style={{ flexWrap: 'wrap', gap: 5 }}>{begrepp.map((b) => <span key={b} className="chip">{b}</span>)}</div>
         </>)}
         <textarea aria-label="Läxa" rows={2} value={lp?.laxa ?? ''}
-          placeholder={har(rad.lektion.laxa) ? rad.lektion.laxa : `${N.niva1} och ${N.niva2} uppgifter klara och inlämnade via Google Classroom innan nästa lektion.`}
+          placeholder={har(rad.lektion.laxa) ? rad.lektion.laxa : `${N.niva1} och ${N.niva2} uppgifter klara och inlämnade via Teams innan nästa lektion.`}
           onChange={(e) => satt('laxa', e.target.value)} />
       </section>}
 
@@ -2406,7 +2406,7 @@ function UppgifterFlik({ plan, bok, s, amneId, oppnaLektion }: { plan: PlaneradL
       <div className="regel" style={{ marginBottom: 10 }}>
         <h4>📌 Inlämning</h4>
         {nivaer
-          ? <p>Foto på beräkningar laddas upp i klassens inlämningsyta (Teams, Classroom m.fl.). <b>{N.niva1} + {N.niva2} är obligatoriska.</b> {N.niva3} görs och lämnas in om lektionstid finns, annars frivillig fördjupning.</p>
+          ? <p>Foto på beräkningar laddas upp i Teams. <b>{N.niva1} + {N.niva2} är obligatoriska.</b> {N.niva3} görs och lämnas in om lektionstid finns, annars frivillig fördjupning.</p>
           : <p>Skriftliga <b>Testa dig själv-svar</b> laddas upp i klassens inlämningsyta (obligatoriskt). Läxförhören är kumulativa — alla begrepp hittills; både läxförhör och exit ticket ska bli godkända.</p>}
         {stod.length > 0 && (
           <p>🧩 Inte klar på lektionen? Gör klart hemma eller på {stod.map((sp, i) => (
@@ -3487,7 +3487,7 @@ function Lektionskort(props: {
             </div>
           ))}
         </div>
-        <p className="note">Klara uppgifter fotograferas och laddas upp i klassens inlämningsyta (Teams, Classroom m.fl.). Minst {nivaNamn[0]}- och {nivaNamn[1]}-uppgifter är obligatoriska; {nivaNamn[2]} är frivillig fördjupning. Ej klart görs hemma eller på stödtid.</p>
+        <p className="note">Klara uppgifter fotograferas och laddas upp i Teams. Minst {nivaNamn[0]}- och {nivaNamn[1]}-uppgifter är obligatoriska; {nivaNamn[2]} är frivillig fördjupning. Ej klart görs hemma eller på stödtid.</p>
       </div>
 
       {begrepp.length > 0 && (

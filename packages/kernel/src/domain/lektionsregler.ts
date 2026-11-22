@@ -32,7 +32,7 @@ export function standardLektionsregler(bok: Bok): Lektionsregel[] {
       },
       {
         rubrik: 'Inlämning',
-        text: `${N.niva1}- och ${N.niva2}-uppgifter är obligatoriska: fotografera beräkningarna och ladda upp i Google Classroom. ${N.niva3} är frivillig fördjupning när lektionstiden räcker. Det som inte hinns med görs klart hemma eller på stödtid.`,
+        text: `${N.niva1}- och ${N.niva2}-uppgifter är obligatoriska: fotografera beräkningarna och ladda upp i Teams. ${N.niva3} är frivillig fördjupning när lektionstiden räcker. Det som inte hinns med görs klart hemma eller på stödtid.`,
       },
       laxor,
     ];
@@ -45,7 +45,7 @@ export function standardLektionsregler(bok: Bok): Lektionsregel[] {
     },
     {
       rubrik: 'Inlämning',
-      text: 'Svaren på "Testa dig själv" lämnas in i Google Classroom (fotografi eller text). Det som inte hinns med görs klart hemma eller på stödtid.',
+      text: 'Svaren på "Testa dig själv" lämnas in i Teams (fotografi eller text). Det som inte hinns med görs klart hemma eller på stödtid.',
     },
     laxor,
   ];
