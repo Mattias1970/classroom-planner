@@ -31,6 +31,94 @@ export function sparaGitHubConfig(cfg: GitHubConfig): void {
   try { window.localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch { /* ignoreras */ }
 }
 
+/**
+ * Del 264 · En sparad version på GitHub: varje gång strukturen sparas blir det en ny version (en commit på
+ * filen), och de äldre finns kvar — därför går det att rulla tillbaka.
+ */
+export interface GitHubVersion {
+  /** Versionens identitet (commitens sha). */
+  sha: string;
+  /** När versionen sparades (ISO). */
+  datum: string;
+  /** Vad den innehöll när den sparades ('2 klasser · 58 elever · …'), eller '' för äldre versioner utan beskrivning. */
+  text: string;
+}
+
+/**
+ * Del 264 · Vad den här webbläsaren senast sparade till eller hämtade från GitHub: vilken version, när och åt
+ * vilket håll. Med den syns det om en annan dator har sparat sedan dess — då frågar appen innan något skrivs över.
+ */
+export interface GitHubSynk {
+  /** Den version på GitHub som den här webbläsaren senast var överens med. */
+  sha: string;
+  /** När synken gjordes här (ISO). */
+  tid: string;
+  riktning: 'sparat' | 'hamtat';
+  /** Satt när en ÄLDRE version har hämtats in (återställning): den versionens datum. */
+  aterstalld?: string;
+}
+const SYNK_KEY = 'classroom-planner.studio.github.synk';
+/** Tidpunkten för den första ändringen som inte är sparad till GitHub (ISO), eller inget när allt är sparat. */
+const OSPARAT_KEY = 'classroom-planner.studio.github.osparat';
+const synkLyssnare = new Set<() => void>();
+let synkVersion = 0;
+const synkAndrad = () => { synkVersion += 1; for (const cb of synkLyssnare) cb(); };
+/** För useSyncExternalStore: knapparna ritas om när synkläget ändras, var det än sker i appen. */
+export function prenumereraSynk(cb: () => void): () => void { synkLyssnare.add(cb); return () => { synkLyssnare.delete(cb); }; }
+export function synkLage(): number { return synkVersion; }
+
+export function lasSynk(): GitHubSynk | null {
+  try {
+    const raw = window.localStorage.getItem(SYNK_KEY);
+    const v = raw === null ? null : (JSON.parse(raw) as Partial<GitHubSynk>);
+    return v !== null && typeof v.sha === 'string' && typeof v.tid === 'string'
+      ? { sha: v.sha, tid: v.tid, riktning: v.riktning === 'hamtat' ? 'hamtat' : 'sparat', ...(typeof v.aterstalld === 'string' ? { aterstalld: v.aterstalld } : {}) } : null;
+  } catch { return null; }
+}
+function noteraSynk(synk: Omit<GitHubSynk, 'tid'> | null, osparat: boolean): void {
+  try {
+    if (synk === null) window.localStorage.removeItem(SYNK_KEY);
+    else window.localStorage.setItem(SYNK_KEY, JSON.stringify({ ...synk, tid: new Date().toISOString() } satisfies GitHubSynk));
+    if (osparat) window.localStorage.setItem(OSPARAT_KEY, new Date().toISOString()); else window.localStorage.removeItem(OSPARAT_KEY);
+  } catch { /* ignoreras */ }
+  synkAndrad();
+}
+export function lasOsparat(): string | null {
+  try { return window.localStorage.getItem(OSPARAT_KEY); } catch { return null; }
+}
+/** Noterar att det finns ändringar som inte är sparade till GitHub (första gången efter en synk). */
+export function markeraOsparat(): void {
+  try { if (window.localStorage.getItem(OSPARAT_KEY) === null) { window.localStorage.setItem(OSPARAT_KEY, new Date().toISOString()); synkAndrad(); } } catch { /* ignoreras */ }
+}
+
+/**
+ * En ändring har gjorts i appen: den är osparad, och det som visas är inte längre exakt en återställd
+ * version (också ↩ Ångra efter en återställning är en sådan ändring).
+ */
+export function noteraAndring(): void {
+  try {
+    const synk = lasSynk();
+    if (synk?.aterstalld !== undefined) {
+      window.localStorage.setItem(SYNK_KEY, JSON.stringify({ sha: synk.sha, tid: synk.tid, riktning: synk.riktning } satisfies GitHubSynk));
+      synkAndrad();
+    }
+  } catch { /* ignoreras */ }
+  markeraOsparat();
+}
+
+/** Nästa ändring av strukturen i appen är en hämtning från GitHub — den räknas inte som en osparad ändring. */
+let hamtningPagar = false;
+export function tagHamtningsmarke(): boolean { const v = hamtningPagar; hamtningPagar = false; return v; }
+/**
+ * Anropas precis innan en hämtad version läggs in i appen. Är det den senaste är GitHub och den här
+ * webbläsaren lika; är det en äldre (återställning) räknas den som osparad tills den sparas som ny senaste.
+ */
+export function bekraftaHamtning(version: GitHubVersion, senaste: GitHubVersion): void {
+  hamtningPagar = true;
+  const aldre = version.sha !== senaste.sha;
+  noteraSynk({ sha: senaste.sha, riktning: 'hamtat', ...(aldre ? { aterstalld: version.datum } : {}) }, aldre);
+}
+
 export function konfigKomplett(cfg: GitHubConfig): boolean {
   return cfg.owner.trim() !== '' && cfg.repo.trim() !== '' && cfg.path.trim() !== '' && cfg.token.trim() !== '';
 }
@@ -78,12 +166,50 @@ export async function hamtaSha(cfg: GitHubConfig): Promise<string | null> {
   return data.sha ?? null;
 }
 
-/** Sparar JSON till datarepot (skapar eller uppdaterar filen). */
-export async function sparaTillGitHub(cfg: GitHubConfig, json: string): Promise<void> {
+/** Början på meddelandet för en sparning med beskrivning — resten är beskrivningen som visas i versionslistan. */
+const SPARAT_FORLED = 'Studio: sparat · ';
+
+/**
+ * Del 264 · De sparade versionerna av strukturen på GitHub, nyast först (filens commits). Tom lista när
+ * ingenting är sparat där än.
+ */
+export async function hamtaVersioner(cfg: GitHubConfig, antal = 30): Promise<GitHubVersion[]> {
+  if (!konfigKomplett(cfg)) throw new Error('GitHub-konfigurationen är ofullständig.');
+  const r = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/commits?path=${encodeURIComponent(cfg.path)}&sha=${encodeURIComponent(cfg.branch)}&per_page=${antal}`, { headers: headers(cfg) });
+  if (r.status === 404 || r.status === 409) return [];          // 409: tomt repo
+  if (r.status === 401 || r.status === 403) throw new Error(`GitHub ${r.status}: nyckeln ger inte åtkomst till ${cfg.owner}/${cfg.repo} — kontrollera den under Datarepo.`);
+  if (!r.ok) throw new Error(`GitHub ${r.status}: kunde inte läsa versionerna`);
+  const lista = (await r.json()) as Array<{ sha?: string; commit?: { message?: string; committer?: { date?: string } } }>;
+  if (!Array.isArray(lista)) return [];
+  return lista.flatMap((c) => {
+    const datum = c.commit?.committer?.date;
+    if (typeof c.sha !== 'string' || typeof datum !== 'string') return [];
+    const rad = (c.commit?.message ?? '').split('\n')[0];
+    return [{ sha: c.sha, datum, text: rad.startsWith(SPARAT_FORLED) ? rad.slice(SPARAT_FORLED.length) : '' }];
+  });
+}
+
+/** Del 264 · Strukturen som den såg ut i en viss version (också filer över 1 MB). */
+export async function laddaVersion(cfg: GitHubConfig, version: GitHubVersion): Promise<string> {
+  if (!konfigKomplett(cfg)) throw new Error('GitHub-konfigurationen är ofullständig.');
+  const r = await fetch(`${api(cfg)}?ref=${encodeURIComponent(version.sha)}`, { headers: headers(cfg) });
+  if (!r.ok) throw new Error(`GitHub ${r.status}: kunde inte hämta versionen`);
+  const data = (await r.json()) as { content?: string; encoding?: string; sha?: string; size?: number };
+  const text = await innehallUr(cfg, data, cfg.path);
+  if (text.trim() === '') throw new Error('Versionen är tom på GitHub.');
+  return text;
+}
+
+/**
+ * Sparar JSON till datarepot (skapar eller uppdaterar filen). Varje sparning blir en ny version; `beskrivning`
+ * ('2 klasser · 58 elever …') följer med och visas i versionslistan. Returnerar den nya versionens sha när
+ * GitHub anger den.
+ */
+export async function sparaTillGitHub(cfg: GitHubConfig, json: string, beskrivning?: string): Promise<string | null> {
   if (!konfigKomplett(cfg)) throw new Error('GitHub-konfigurationen är ofullständig.');
   const sha = await hamtaSha(cfg);
   const body = {
-    message: `Studio: uppdatera ${cfg.path} (${new Date().toISOString()})`,
+    message: beskrivning !== undefined && beskrivning.trim() !== '' ? `${SPARAT_FORLED}${beskrivning.trim()}` : `Studio: uppdatera ${cfg.path} (${new Date().toISOString()})`,
     content: toBase64(json),
     branch: cfg.branch,
     ...(sha !== null ? { sha } : {}),
@@ -91,8 +217,15 @@ export async function sparaTillGitHub(cfg: GitHubConfig, json: string): Promise<
   const r = await fetch(api(cfg), { method: 'PUT', headers: headers(cfg), body: JSON.stringify(body) });
   if (!r.ok) {
     const t = await r.text();
+    // Del 264 · en nyckel som bara får läsa ger 403 — säg vad som behövs i stället för GitHubs råa svar
+    if (r.status === 403 || r.status === 401) throw new Error(`GitHub ${r.status}: nyckeln får inte skriva till ${cfg.owner}/${cfg.repo}. Den behöver "Contents: Read and write" för datarepot — byt nyckel under Datarepo.`);
     throw new Error(`GitHub ${r.status}: ${t.slice(0, 120)}`);
   }
+  // Del 264 · minns vilken version den här webbläsaren nu har gemensam med GitHub
+  let nySha: string | null = null;
+  try { nySha = ((await r.json()) as { commit?: { sha?: string } }).commit?.sha ?? null; } catch { nySha = null; }
+  noteraSynk(nySha === null ? null : { sha: nySha, riktning: 'sparat' }, false);
+  return nySha;
 }
 
 /** Laddar JSON från datarepot; kastar om filen saknas. */

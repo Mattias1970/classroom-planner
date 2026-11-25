@@ -73,6 +73,7 @@ import { Lasaret } from './Lasaret.js';
 import { PeriodFilter } from './PeriodFilter.js';
 import { Amnessida } from './v3/Amnessida.js';
 import { Classroom } from './v3/Classroom.js';
+import { GitHubKnappar } from './GitHubSynk.js';
 import { Foraldrakontakt } from './v3/Foraldrakontakt.js';
 import { Datarepo } from './v3/Datarepo.js';
 import { amnesIkon } from './v3/ikoner.js';
@@ -251,7 +252,8 @@ export function App() {
     return (
       <AngraContext.Provider value={angra}>
       <div className="studio">
-        <Skal s={s} vy={vy} setVy={setVy} filter={filter} setFilter={setFilter} notiser={notiser} larareNamn={larare} verktyg={verktyg} angra={angra}>
+        <Skal s={s} vy={vy} setVy={setVy} filter={filter} setFilter={setFilter} notiser={notiser} larareNamn={larare} verktyg={verktyg} angra={angra}
+          moln={<GitHubKnappar s={s} kor={kor} meddela={setMsg} oppnaDatarepo={() => setVy({ typ: 'datarepo' })} />}>
           {msg && <p className="status">{msg}</p>}
           {sparfelRuta}
           <QuizVakt s={s} kor={kor} />
@@ -3208,7 +3210,11 @@ function GruppPlanering(props: {
   const harRader = plan.length > 0;
   useEffect(() => {
     const el = aktuellRef.current;
-    if (el !== null && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'start' });
+    if (el === null || typeof el.scrollIntoView !== 'function') return;
+    // Del 264 · toppraden kan vara olika hög (knappar, radbrytning) — raden ska hamna strax under den
+    const topprad = document.querySelector('.v3-topp');
+    if (topprad !== null) el.style.scrollMarginTop = `${Math.ceil(topprad.getBoundingClientRect().height) + 3}px`;
+    el.scrollIntoView({ block: 'start' });
   }, [amneId, harRader, oppnad]);
   if (plan.length === 0) return null;
   return (

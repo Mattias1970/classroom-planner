@@ -26,7 +26,7 @@ export function vyNyckel(v: V3Vy): string { return v.typ === 'amne' ? `amne:${v.
 /** Globala filter i toppraden. Vyerna som har egna väljare fortsätter med dem; de nya vyerna läser härifrån. */
 export interface Filter { klassId: string; skolarId: string; amneId: string; periodText: string; sok: string }
 
-export function Skal({ s, vy, setVy, filter, setFilter, notiser, larareNamn, verktyg, detalj, angra, children }: {
+export function Skal({ s, vy, setVy, filter, setFilter, notiser, larareNamn, verktyg, detalj, angra, moln, children }: {
   s: Struktur; vy: V3Vy; setVy: (v: V3Vy) => void;
   filter: Filter; setFilter: (f: Filter) => void;
   /** Antal varningar (t.ex. förväntade prov utan resultat) — visas på klockan. */
@@ -34,6 +34,8 @@ export function Skal({ s, vy, setVy, filter, setFilter, notiser, larareNamn, ver
   larareNamn: string;
   /** Knappar i användarmenyn: Ångra, tema, GitHub, Backup, Återställ. */
   verktyg: React.ReactNode;
+  /** Del 264 · Spara till / Hämta från GitHub — står i toppraden på alla sidor. */
+  moln?: React.ReactNode;
   /** Del 200 · ↩ Ångra synlig i topplisten (fanns tidigare bara i användarmenyn). */
   angra?: () => void;
   /** Valfri detaljpanel till höger. */
@@ -120,6 +122,7 @@ export function Skal({ s, vy, setVy, filter, setFilter, notiser, larareNamn, ver
             : 'Veckor som resultat och rapporter avgränsas till, t.ex. v.35–43 — tomt = allt'}><span className="v3-filter-ikon"><Ikon.kalender storlek={16} /></span>Period:
             <input aria-label="Filter period" placeholder={helaPerioden !== null ? helaPerioden.veckor : 'alla veckor'} value={filter.periodText} onChange={(e) => setFilter({ ...filter, periodText: e.target.value })} /></label>}
           <span className="spacer" />
+          {moln}
           {falt.has('sok') && <label className="v3-sok"><Ikon.sok storlek={16} /><input aria-label="Filter sök" placeholder="Sök elev…" value={filter.sok} onChange={(e) => setFilter({ ...filter, sok: e.target.value })} /></label>}
           {angra !== undefined && <button className="v3-ikonknapp" aria-label="Ångra" title="Ångra senaste ändring (upp till 20 steg)" onClick={angra}>↩</button>}
           <div className="v3-meny-anker">

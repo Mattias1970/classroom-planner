@@ -10,11 +10,12 @@ import { ARKIV_KALLA_NAMN, arkivMappar, arkivStatus, bokFromValfriImport, jamfor
 import { Ikon } from './ikoner.js';
 import { DataSaknas, Kort, Kpi } from './Skal.js';
 import {
-  githubLank, hamtaBockerFranGitHub, hamtaFilerFranGitHub, konfigKomplett, laddaFranGitHub, lasGitHubConfig, lokalSokvag, sparaGitHubConfig, sparaTillGitHub, testaAnslutning,
+  bekraftaHamtning, githubLank, hamtaBockerFranGitHub, hamtaFilerFranGitHub, hamtaVersioner, konfigKomplett, laddaFranGitHub, laddaVersion, lasGitHubConfig, lokalSokvag, sparaGitHubConfig, sparaTillGitHub, testaAnslutning,
   type GitHubConfig,
 } from '../github.js';
 import { exportJson, importJson, LAGRINGSGRANS_TECKEN, lagradeTecken, lagringsinfo, lasReservkopia, lasStruktur, reservSomBackup, storLagring, taBortReservkopia, vantaPaLagring, type Lagringsinfo } from '../store.js';
 import { hamtaTillImport, listaArkiv, skickaKoade, useUppladdningsko } from '../resultatarkiv.js';
+import { versionsbeskrivning } from '../GitHubSynk.js';
 
 type Test = Awaited<ReturnType<typeof testaAnslutning>>;
 
@@ -65,13 +66,19 @@ export function Datarepo({ s, spara, kor, meddela }: {
   };
   const sparaStruktur = () => {
     setArbetar('spara');
-    void sparaTillGitHub(cfg, exportJson(s)).then(() => { skriv(`✅ Strukturen sparad till ${cfg.path}`); meddela(`✓ Sparat till ${cfg.owner}/${cfg.repo}/${cfg.path}.`); })
+    void sparaTillGitHub(cfg, exportJson(s), versionsbeskrivning(s)).then(() => { skriv(`✅ Strukturen sparad till ${cfg.path}`); meddela(`✓ Sparat till ${cfg.owner}/${cfg.repo}/${cfg.path}.`); })
       .catch((e: unknown) => { const m = e instanceof Error ? e.message : String(e); skriv(`❌ Spara: ${m}`); meddela(`✗ ${m}`); }).finally(() => setArbetar(''));
   };
   const laddaStruktur = () => {
     if (!window.confirm('Ladda strukturen från datarepot? Det ersätter det som finns i den här webbläsaren (en Backup-fil är en bra försäkring).')) return;
     setArbetar('ladda');
-    void laddaFranGitHub(cfg).then((json) => { spara(importJson(json), `✓ Laddat från ${cfg.owner}/${cfg.repo}/${cfg.path}.`); skriv('✅ Strukturen laddad'); })
+    // Del 264 · samma väg som ⬇ Hämta från GitHub i toppraden, så att läget där (datum, "samma här") stämmer
+    void hamtaVersioner(cfg, 1).then(async (lista) => {
+      if (lista.length === 0) { spara(importJson(await laddaFranGitHub(cfg)), `✓ Laddat från ${cfg.owner}/${cfg.repo}/${cfg.path}.`); skriv('✅ Strukturen laddad'); return; }
+      const ny = importJson(await laddaVersion(cfg, lista[0]));
+      bekraftaHamtning(lista[0], lista[0]);
+      spara(ny, `✓ Laddat från ${cfg.owner}/${cfg.repo}/${cfg.path}.`); skriv('✅ Strukturen laddad');
+    })
       .catch((e: unknown) => { const m = e instanceof Error ? e.message : String(e); skriv(`❌ Ladda: ${m}`); meddela(`✗ ${m}`); }).finally(() => setArbetar(''));
   };
   const hamtaBocker = () => {
